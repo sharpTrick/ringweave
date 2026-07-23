@@ -69,32 +69,32 @@ def constrained_greedy(n, k, cons, mind=5, rng=None):
                 and pair(u, v) not in proh
                 and g.degree(u) < k and g.degree(v) < k)
 
-    # 2) greedy completion: lowest-degree vertex connects to farthest allowed partner
+    # 2) greedy completion: most-deficient vertex connects to farthest allowed
+    #    partner. If that vertex has no legal partner, skip it and try the next
+    #    most-deficient one — a single stuck vertex must not starve the rest.
     guard = 0
     while guard < n * k * 6:
         guard += 1
-        # most-deficient vertex
         under = [v for v in range(n) if g.degree(v) < k]
         if not under:
             break
         under.sort(key=lambda v: (g.degree(v), v))
-        u = under[0]
-        _, far, dist = _ecc_and_far(g, u, proh, k)
-        # candidate partners: allowed, farthest first (prefer joining components),
-        # then lower degree
-        cands = [v for v in range(n) if allowed(u, v)]
-        if not cands:
+        progressed = False
+        for u in under:
+            cands = [v for v in range(n) if allowed(u, v)]
+            if not cands:
+                continue
+            _, far, dist = _ecc_and_far(g, u, proh, k)
+            # allowed partners, farthest first (prefer joining components), then
+            # lower degree, then index; respect mind softly (prefer dist>=cur_mind).
+            cands.sort(key=lambda v: (-(dist[v] if dist[v] >= 0 else 10**9),
+                                      g.degree(v), v))
+            good = [v for v in cands if (dist[v] == -1 or dist[v] >= cur_mind)]
+            g.add_edge(u, (good or cands)[0])
+            progressed = True
             break
-        def score(v):
-            d = dist[v]
-            far_val = d if d >= 0 else 10**9
-            near_enough = far_val >= min(cur_mind, far_val)  # soft
-            return (-far_val, g.degree(v), v)
-        cands.sort(key=score)
-        # respect mind softly: prefer dist>=cur_mind, else demote
-        good = [v for v in cands if (dist[v] == -1 or dist[v] >= cur_mind)]
-        pick = (good or cands)[0]
-        g.add_edge(u, pick)
+        if not progressed:
+            break
 
     # 3) force-connect components under the degree cap. Connectivity beats
     #    girth/regularity, but never exceed k: repeatedly add any legal
@@ -269,18 +269,18 @@ def polish_constrained(g, cons, rng=None, iters=8000, prior_weight=0.0):
     proh, req = cons.prohibited, cons.required
     priors = cons.priors
 
-    def energy():
+    def measure():
         aspl, _, conn = all_pairs_summary(g)
         e = aspl if conn else aspl + 10 * g.n
         if prior_weight and priors:
             kept = sum(1 for p in priors if g.has_edge(*p))
             e += prior_weight * (len(priors) - kept)
-        return e
+        return e, conn
 
     def edges():
         return [(u, v) for u in range(g.n) for v in g.adj[u] if u < v]
 
-    cur = energy()
+    cur, was_connected = measure()
     best = g.copy(); beste = cur
     for _ in range(iters):
         E = edges()
@@ -298,7 +298,12 @@ def polish_constrained(g, cons, rng=None, iters=8000, prior_weight=0.0):
         if pair(x1, y1) in proh or pair(x2, y2) in proh: continue
         g.remove_edge(a, b); g.remove_edge(c, d)
         g.add_edge(x1, y1); g.add_edge(x2, y2)
-        ne = energy()
+        ne, conn = measure()
+        # never trade connectivity away, however large the prior weight
+        if was_connected and not conn:
+            g.remove_edge(x1, y1); g.remove_edge(x2, y2)
+            g.add_edge(a, b); g.add_edge(c, d)
+            continue
         if ne < cur - 1e-12:
             cur = ne
             if ne < beste: beste = ne; best = g.copy()

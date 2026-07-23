@@ -14,8 +14,10 @@
  * least `minSeparation` away, `choosePartner` falls back to the closest legal
  * partner instead of iteratively shrinking the target (matches the reference).
  *
- * Callers that skip `buildConstrainedBuddyGraph` must run `validate` first —
- * these functions assume well-formed, feasible input (checked only in dev mode).
+ * These are low-level primitives; the safe entry point is
+ * `buildConstrainedBuddyGraph`, which runs `validate` first. Called directly
+ * they throw a clear error on malformed input (out-of-range ids, bad k,
+ * required-degree over k) but otherwise assume feasibility.
  */
 import { Graph } from "./graph.js";
 import {
@@ -29,7 +31,6 @@ import { Constraints } from "./constraints.js";
 import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 const UNREACHABLE = -1;
-const NO_VERTEX = -1;
 
 // Unreachable vertices score as +infinity so completion prefers joining
 // disconnected pieces before shortening already-connected ones.
@@ -38,8 +39,10 @@ const INFINITE_DISTANCE = 1e9;
 /** True when u–v may legally be added: distinct, absent, allowed, both under k. */
 type EdgePredicate = (u: number, v: number) => boolean;
 
-/** The scalar objective `polishConstrained` minimizes over a graph. */
-type Objective = (g: Graph) => number;
+interface Measured {
+  energy: number;
+  connected: boolean;
+}
 
 export interface ConstrainedGreedyOptions {
   /** Separation to aim for during completion. Default 5, clamped to floor(n/2). */
@@ -68,7 +71,7 @@ export function constrainedGreedy(
   cons: Constraints,
   opts: ConstrainedGreedyOptions = {},
 ): Graph {
-  assertWellFormed(n, k, cons);
+  checkWellFormed(n, k, cons);
 
   const g = new Graph(n);
   const legal = legalEdge(g, cons, k);
@@ -77,18 +80,14 @@ export function constrainedGreedy(
 
   const minSep = Math.min(opts.minSeparation ?? 5, Math.floor(n / 2));
 
-  // Each iteration adds one edge, so a completion needs far fewer than n*k*6
-  // steps; this is an unreachable safety bound (the loop exits earlier when no
-  // deficient vertex or no legal partner remains).
+  // Most-deficient vertex connects to its farthest legal partner. A vertex with
+  // no legal partner is skipped, not fatal — one stuck person must not starve
+  // the rest. Stop only when no deficient vertex can be paired at all.
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
-    const u = mostDeficient(g, k);
-    if (u === NO_VERTEX) break;
-    const dist = bfsDistances(g, u);
-    const candidates: number[] = [];
-    for (let v = 0; v < n; v++) if (legal(u, v)) candidates.push(v);
-    if (candidates.length === 0) break;
-    g.addEdge(u, choosePartner(candidates, dist, g, minSep));
+    const under = deficientVertices(g, k);
+    if (under.length === 0) break;
+    if (!extendOne(g, under, legal, minSep)) break;
   }
 
   forceConnect(g, cons, k);
@@ -100,24 +99,29 @@ export function constrainedGreedy(
 
 /**
  * Constraint-preserving swap polish: degree-preserving double edge swaps that
- * never break a required edge nor create a prohibited one, keeping only
- * strictly-improving moves. The objective is ASPL (with a large disconnection
- * penalty) plus an optional prior-preservation penalty for churn.
+ * never break a required edge, create a prohibited one, or disconnect an
+ * already-connected graph — keeping only strictly-improving moves. The objective
+ * is ASPL (with a large disconnection penalty) plus an optional
+ * prior-preservation penalty for churn.
  */
 export function polishConstrained(
   input: Graph,
   cons: Constraints,
   opts: PolishConstrainedOptions = {},
 ): Graph {
+  checkConstraintIds(input.n, cons);
+
   const rng = new RNG(opts.seed ?? 0);
   const iters = opts.iters ?? 8000;
   const priorWeight = opts.priorWeight ?? 0;
-  const energy = constrainedEnergy(cons, priorWeight);
+  const measure = constrainedMeasure(cons, priorWeight);
   const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);
 
   const startDegrees = input.degrees();
   const g = input.copy();
-  let current = energy(g);
+  const start = measure(g);
+  const wasConnected = start.connected;
+  let current = start.energy;
   let best = g.copy();
   let bestEnergy = current;
 
@@ -128,11 +132,16 @@ export function polishConstrained(
     if (swap === null) continue;
 
     applySwap(g, swap);
-    const next = energy(g);
-    if (next < current - 1e-12) {
-      current = next;
-      if (next < bestEnergy) {
-        bestEnergy = next;
+    const next = measure(g);
+    // never trade connectivity away, however large the prior weight
+    if (wasConnected && !next.connected) {
+      revertSwap(g, swap);
+      continue;
+    }
+    if (next.energy < current - 1e-12) {
+      current = next.energy;
+      if (next.energy < bestEnergy) {
+        bestEnergy = next.energy;
         best = g.copy();
       }
     } else {
@@ -156,18 +165,30 @@ function legalEdge(g: Graph, cons: Constraints, k: number): EdgePredicate {
     g.degree(v) < k;
 }
 
-/** Lowest-degree under-k vertex, ties broken by lowest index; NO_VERTEX if none. */
-function mostDeficient(g: Graph, k: number): number {
-  let best = NO_VERTEX;
-  let bestDegree = Infinity;
-  for (let v = 0; v < g.n; v++) {
-    const d = g.degree(v);
-    if (d < k && d < bestDegree) {
-      bestDegree = d;
-      best = v;
-    }
+/** Under-k vertices, most-deficient first (lower degree, then lower index). */
+function deficientVertices(g: Graph, k: number): number[] {
+  const under: number[] = [];
+  for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
+  under.sort((a, b) => g.degree(a) - g.degree(b) || a - b);
+  return under;
+}
+
+/** Add one edge from the first (most-deficient) vertex that has a legal partner. */
+function extendOne(
+  g: Graph,
+  under: number[],
+  legal: EdgePredicate,
+  minSep: number,
+): boolean {
+  for (const u of under) {
+    const candidates: number[] = [];
+    for (let v = 0; v < g.n; v++) if (legal(u, v)) candidates.push(v);
+    if (candidates.length === 0) continue;
+    const dist = bfsDistances(g, u);
+    g.addEdge(u, choosePartner(candidates, dist, g, minSep));
+    return true;
   }
-  return best;
+  return false;
 }
 
 /**
@@ -262,16 +283,20 @@ function components(g: Graph): number[][] {
 
 // --- polish helpers ---------------------------------------------------------
 
-/** Objective: ASPL, a heavy penalty when disconnected, plus a prior penalty. */
-function constrainedEnergy(cons: Constraints, priorWeight: number): Objective {
+/** Objective + connectivity in one pass: ASPL, disconnection penalty, prior penalty. */
+function constrainedMeasure(
+  cons: Constraints,
+  priorWeight: number,
+): (g: Graph) => Measured {
   const priors = cons.priorPairs();
   const usePriorPenalty = priorWeight !== 0 && priors.length > 0;
   return (g) => {
-    let e = penalizedAspl(allPairsSummary(g), g.n);
+    const summary = allPairsSummary(g);
+    let energy = penalizedAspl(summary, g.n);
     if (usePriorPenalty) {
-      e += priorWeight * (priors.length - countPresentEdges(g, priors));
+      energy += priorWeight * (priors.length - countPresentEdges(g, priors));
     }
-    return e;
+    return { energy, connected: summary.connected };
   };
 }
 
@@ -285,31 +310,49 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
   );
 }
 
-// --- contracts (dev-mode only) ----------------------------------------------
+// --- preconditions (always-on) ----------------------------------------------
+// These make the documented hard guarantees hold in production too, turning a
+// direct-call contract violation into a clear error instead of a cryptic crash
+// or a silent degree-cap breach. Cheap: O(#constraints), off the hot path.
 
-// Postcondition/precondition checks run under test/dev but are compiled out of
-// production bundles where `process` is absent, so they never cost the hot path.
-// NOTE: any new hard-constraint kind must be enforced in legalEdge,
-// joinAnyComponents, swapBreaksConstraint, AND asserted here — keep the four in sync.
-const CONTRACTS_ENABLED =
-  typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
-
-/** Turn the "call validate first" contract into a clear dev-mode error. */
-function assertWellFormed(n: number, k: number, cons: Constraints): void {
-  if (!CONTRACTS_ENABLED) return;
-  if (!Number.isInteger(k) || k < 0) {
-    throw new Error(`constrainedGreedy: k must be a non-negative integer, got ${k}`);
-  }
+function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
     !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;
-  for (const [a, b] of [...cons.requiredPairs(), ...cons.prohibitedPairs()]) {
+  for (const [a, b] of [
+    ...cons.requiredPairs(),
+    ...cons.prohibitedPairs(),
+    ...cons.priorPairs(),
+  ]) {
     if (outOfRange(a, b)) {
       throw new Error(
-        `constrainedGreedy: constraint references person out of range (${a},${b}) for n=${n} — call validate() first`,
+        `constraint references person out of range (${a},${b}) for n=${n} — call validate() first`,
       );
     }
   }
 }
+
+function checkWellFormed(n: number, k: number, cons: Constraints): void {
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
+  }
+  checkConstraintIds(n, cons);
+  const reqd = cons.requiredDegree();
+  for (let v = 0; v < n; v++) {
+    if (reqd[v] > k) {
+      throw new Error(
+        `person ${v} has ${reqd[v]} required buddies but k=${k} — call validate() first`,
+      );
+    }
+  }
+}
+
+// --- postconditions (dev-mode only) -----------------------------------------
+// Compiled out of production bundles where `process` is absent, so they never
+// cost the hot path. NOTE: any new hard-constraint kind must be enforced in
+// legalEdge, joinAnyComponents, swapBreaksConstraint, AND asserted here —
+// keep the four in sync.
+const CONTRACTS_ENABLED =
+  typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
 
 function assertHardConstraints(g: Graph, cons: Constraints, where: string): void {
   if (!CONTRACTS_ENABLED) return;

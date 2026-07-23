@@ -23,6 +23,9 @@ export function mooreLowerBounds(n: number, k: number): MooreBounds {
     remaining -= take;
     diameterLb = dist;
     dist += 1;
+    // Moore-tree branching is (k-1) per shell, but that degenerates at low k:
+    // k=1 has no onward neighbors (a single edge); k=2 is a cycle whose shell
+    // size stays 2 rather than shrinking to 1.
     if (k === 1) {
       shell = 0;
     } else if (k === 2) {

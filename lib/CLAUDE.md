@@ -47,6 +47,18 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 - **Tests:** every core change keeps `test/identity.test.ts` (regression oracle) green, and new
   algorithm code earns property-based invariants (`test/*.props.test.ts`) plus oracle-parity checks.
 
+## Known limitations / tracked follow-ons
+
+Surfaced by review, deliberately deferred (not silently ignored):
+- **Large-k performance:** `constrainedGreedy` runs one BFS per edge added, so `k` near `n` (a
+  near-complete graph) is O(n³)-ish — n=500,k=250 ≈ 15 s. Realistic buddy counts (k≈4) are fast.
+  The fix is the incremental-distance cache already on the plan's follow-on list.
+- **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
+  column (thousands sharing one label) is slow/heap-heavy. Guard when the F6 import path lands.
+- **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
+  `null`. Normalize or special-case at the export boundary (F6).
+- **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.
+
 ## Review (required before commit)
 
 Non-trivial changes get **adversarial sub-agent review** using the committed critics in

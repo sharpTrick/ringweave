@@ -40,7 +40,12 @@ export {
 import { Graph } from "./graph.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
-import { allPairsSummary, girth, countPresentEdges } from "./metrics.js";
+import {
+  allPairsSummary,
+  girth,
+  countPresentEdges,
+  type Summary,
+} from "./metrics.js";
 import { asplGap } from "./bounds.js";
 import { Constraints, validate } from "./constraints.js";
 import { constrainedGreedy, polishConstrained } from "./constrainedGreedy.js";
@@ -107,10 +112,7 @@ export function buildBuddyGraph(
     }
   }
 
-  const degrees = g.degrees();
-  const [degreeMin, degreeMax] = degreeExtent(degrees);
-  const summary = allPairsSummary(g);
-  const buddies = g.adj.map((s) => Array.from(s).sort((a, b) => a - b));
+  const { degreeMin, degreeMax, summary, buddies } = summarize(g);
 
   return {
     buddies,
@@ -163,7 +165,7 @@ export interface ConstraintReport {
  *
  * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}):
  * Moore's bound assumes a k-regular target, which constrained graphs only
- * approximate. Compute `girth(edges)` directly if a UI needs it.
+ * approximate. Build a Graph from `edges` and call `girth(g)` if a UI needs it.
  */
 export interface ConstrainedBuddyResult {
   buddies: number[][];
@@ -226,10 +228,7 @@ export function buildConstrainedBuddyGraph(
     polished = true;
   }
 
-  const degrees = g.degrees();
-  const [degreeMin, degreeMax] = degreeExtent(degrees);
-  const summary = allPairsSummary(g);
-  const buddies = g.adj.map((s) => Array.from(s).sort((a, b) => a - b));
+  const { degreeMin, degreeMax, summary, buddies } = summarize(g);
 
   return {
     buddies,
@@ -247,14 +246,28 @@ export function buildConstrainedBuddyGraph(
 /** Priors promoted to hard become required edges on a copy (input untouched). */
 function withHardPriors(cons: Constraints): Constraints {
   if (!cons.priorHard) return cons;
+  // merge() carries priorHard across; then priors also become required edges.
   const promoted = new Constraints(cons.n).merge(cons);
-  promoted.priorHard = true;
   for (const [a, b] of cons.priorPairs()) promoted.require(a, b);
   return promoted;
 }
 
-// Empirically keeps ~half-plus of prior buddies without hurting ASPL much —
-// see the "prior weight preserves churn buddies" test. A product-tunable dial.
+/** Shared post-generation summary for both builders (degrees, metrics, buddies). */
+function summarize(g: Graph): {
+  degreeMin: number;
+  degreeMax: number;
+  summary: Summary;
+  buddies: number[][];
+} {
+  const [degreeMin, degreeMax] = degreeExtent(g.degrees());
+  const summary = allPairsSummary(g);
+  const buddies = g.adj.map((s) => Array.from(s).sort((a, b) => a - b));
+  return { degreeMin, degreeMax, summary, buddies };
+}
+
+// The churn-bench default (docs/CONSTRAINT_FINDINGS.md: ~47–81% of prior buddies
+// preserved without hurting ASPL). Tests check monotonicity in the weight, not
+// this specific value. A product-tunable dial.
 const DEFAULT_PRIOR_WEIGHT = 2;
 
 /** Resolve the polish option: "auto" (default) enables polish for n <= 120. */

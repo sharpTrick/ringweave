@@ -194,6 +194,19 @@ describe("polishConstrained preserves hard constraints and degrees", () => {
       allPairsSummary(base).aspl + 1e-9,
     );
   });
+
+  it("never disconnects a connected graph, even at extreme prior weight", () => {
+    const g = new Graph(6);
+    for (let i = 0; i < 6; i++) g.addEdge(i, (i + 1) % 6); // connected 2-regular cycle
+    const cons = new Constraints(6);
+    // priors only fully satisfiable by two disjoint triangles (a disconnected graph)
+    const tri: [number, number][] = [
+      [0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5],
+    ];
+    for (const [a, b] of tri) cons.addPrior(a, b);
+    const polished = polishConstrained(g, cons, { seed: 1, iters: 4000, priorWeight: 100 });
+    expect(isConnected(polished)).toBe(true);
+  });
 });
 
 describe("prior weight preserves churn buddies", () => {
@@ -297,5 +310,30 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     const r = buildConstrainedBuddyGraph(20, 2, c, { seed: 0 });
     expect(r.degreeMax).toBeLessThanOrEqual(2); // no runaway hub
     expect(r.report.prohViolations).toBe(0);
+  });
+
+  it("one stuck person does not starve the rest of the roster", () => {
+    const n = 30;
+    const k = 6;
+    const c = new Constraints(n);
+    for (const r of [10, 11, 12, 13, 14, 15]) c.require(5, r); // saturate person 5 to k
+    for (let j = 0; j < n - 1; j++) if (j !== 5) c.prohibit(n - 1, j); // 29 can only reach (full) 5
+    expect(validate(c, k)).toEqual([]); // validate can't see the degree-budget trap
+    const r = buildConstrainedBuddyGraph(n, k, c, { polish: false, seed: 0 });
+    // the bulk still get buddies — far above the ~n-1 edges of a starved run
+    expect(r.edges.length).toBeGreaterThan(50);
+    expect(r.degreeMax).toBe(k);
+  });
+});
+
+describe("constrainedGreedy precondition (always-on)", () => {
+  it("throws a clear error on out-of-range or over-k input, even without validate", () => {
+    const oob = new Constraints(5);
+    oob.require(0, 99);
+    expect(() => constrainedGreedy(5, 2, oob)).toThrow(/out of range/);
+
+    const overK = new Constraints(6);
+    overK.require(0, 1).require(0, 2).require(0, 3);
+    expect(() => constrainedGreedy(6, 2, overK)).toThrow(/required buddies/);
   });
 });

@@ -14,13 +14,26 @@
 // Pairs live as normalized "min,max" string keys (JS Set compares by reference).
 // The keys are held privately so every stored pair is guaranteed canonical — an
 // un-normalized key can never reach the legality checks that look pairs up.
-export function pairKey(a: number, b: number): string {
+function pairKey(a: number, b: number): string {
   return a < b ? `${a},${b}` : `${b},${a}`;
 }
 
 function keyToPair(key: string): [number, number] {
   const comma = key.indexOf(",");
   return [Number(key.slice(0, comma)), Number(key.slice(comma + 1))];
+}
+
+function pairsOf(set: Set<string>): [number, number][] {
+  return Array.from(set, keyToPair);
+}
+
+function degreeOf(n: number, pairs: [number, number][]): number[] {
+  const d = new Array<number>(n).fill(0);
+  for (const [a, b] of pairs) {
+    d[a] += 1;
+    d[b] += 1;
+  }
+  return d;
 }
 
 export type TagPolicy = "prohibit_same";
@@ -33,6 +46,8 @@ export class Constraints {
   #required = new Set<string>();
   #prohibited = new Set<string>();
   #priors = new Set<string>();
+  // A plain boolean with no canonicalization invariant to protect, so it stays
+  // public (unlike the pair sets); toggling it promotes priors to required.
   priorHard = false;
 
   constructor(n: number) {
@@ -60,14 +75,6 @@ export class Constraints {
 
   isProhibited(a: number, b: number): boolean {
     return this.#prohibited.has(pairKey(a, b));
-  }
-
-  isPrior(a: number, b: number): boolean {
-    return this.#priors.has(pairKey(a, b));
-  }
-
-  get requiredCount(): number {
-    return this.#required.size;
   }
 
   get prohibitedCount(): number {
@@ -107,41 +114,31 @@ export class Constraints {
   }
 
   merge(other: Constraints): this {
-    for (const k of other.#required) this.#required.add(k);
-    for (const k of other.#prohibited) this.#prohibited.add(k);
-    for (const k of other.#priors) this.#priors.add(k);
+    for (const key of other.#required) this.#required.add(key);
+    for (const key of other.#prohibited) this.#prohibited.add(key);
+    for (const key of other.#priors) this.#priors.add(key);
     this.priorHard ||= other.priorHard;
     return this;
   }
 
   requiredPairs(): [number, number][] {
-    return Array.from(this.#required, keyToPair);
+    return pairsOf(this.#required);
   }
 
   prohibitedPairs(): [number, number][] {
-    return Array.from(this.#prohibited, keyToPair);
+    return pairsOf(this.#prohibited);
   }
 
   priorPairs(): [number, number][] {
-    return Array.from(this.#priors, keyToPair);
+    return pairsOf(this.#priors);
   }
 
   requiredDegree(): number[] {
-    const d = new Array<number>(this.n).fill(0);
-    for (const [a, b] of this.requiredPairs()) {
-      d[a] += 1;
-      d[b] += 1;
-    }
-    return d;
+    return degreeOf(this.n, this.requiredPairs());
   }
 
   prohibitedDegree(): number[] {
-    const d = new Array<number>(this.n).fill(0);
-    for (const [a, b] of this.prohibitedPairs()) {
-      d[a] += 1;
-      d[b] += 1;
-    }
-    return d;
+    return degreeOf(this.n, this.prohibitedPairs());
   }
 }
 
