@@ -76,7 +76,9 @@ Protocol (learned the hard way):
 - **Unfocused, full-surface, every round.** Point critics at the whole component under review, not
   a diff. Critics anchor on the first/biggest issue they see; a diff-scoped review hides everything
   the anchor is sitting on top of.
-- **Run all four critics each round**, in parallel.
+- **Run all four critics each round**, in parallel. They run on `model: opus` at `effort: medium`
+  (set in each `.claude/agents/critic-*.md` frontmatter) — a deliberate cost/thoroughness balance;
+  raise a critic's effort in its frontmatter for a deeper pass when a change warrants it.
 - **Verify each finding against the code before acting on it** — reproduce or trace it — to filter
   false positives (LLM negation-blindness). Fix confirmed blocking findings or justify them
   explicitly; log suggestions.
