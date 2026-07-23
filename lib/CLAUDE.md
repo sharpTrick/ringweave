@@ -31,10 +31,16 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 - **SOLID, scoped:** single-responsibility modules. The genuine open/closed seam is the tag policy
   in `constraints.ts` — add a `case`, don't edit callers. The edge-legality predicate (`legalEdge`)
   and polish objective (`constrainedMeasure`) are isolated as single-responsibility factory
-  functions, so changing a rule touches one function, not the greedy/polish loops; they are
-  deliberately **not** caller-injectable (an arbitrary predicate/objective would undercut the
-  determinism contract and the hard-constraint postconditions). Do not force LSP/ISP or wrap free
-  functions in classes for OO's sake.
+  functions, so a new *tag policy* or *objective term* touches one function, not the greedy/polish
+  loops; they are deliberately **not** caller-injectable (an arbitrary predicate/objective would
+  undercut the determinism contract and the hard-constraint postconditions). (A genuinely new hard
+  constraint *category* — one not reducible to required/prohibited pairs — is the exception: it must
+  be kept in sync across `legalEdge`, `swapBreaksConstraint`, `assertHardConstraints`, and
+  `buildReport`, as their comments note.) Do not force LSP/ISP or wrap free functions in classes for
+  OO's sake.
+- **Vocabulary:** core terms — `Graph`, `adj`, `degree`, `aspl`, `mind` (min separation; mirrors the
+  Python kwarg). The constrained path's public option spells the same concept `minSeparation`; they
+  are aliases, not different knobs.
 - **Clean Code:** clear names, DRY, small public API. Code is self-documenting — the *what* is
   evident without comments; add a short comment only when the *why* is non-obvious. Prefer small
   extracted functions, but a hot loop may stay un-extracted when decomposition costs measurable

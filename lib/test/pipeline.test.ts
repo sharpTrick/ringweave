@@ -4,12 +4,9 @@ import { polish } from "../src/core/polish.js";
 import { ringGreedy, MAX_CACHED_N } from "../src/core/greedy.js";
 import { allPairsSummary, isConnected } from "../src/core/metrics.js";
 import { Graph, ring } from "../src/core/graph.js";
+import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
 
-// Malformed-input class (negative / fractional / NaN / Infinity / oversized).
 // The unconstrained path has no report channel, so it THROWS a clear error.
-const BAD_N = [-1, 2.5, Number.NaN, Infinity, 5e9];
-const BAD_K = [-1, 2.5, Number.NaN, Infinity];
-
 describe("malformed inputs throw a clear error (unconstrained path)", () => {
   it.each(BAD_N)("new Graph(%p) throws a clear (non-RangeError) message", (n) => {
     expect(() => new Graph(n)).toThrow(/integer/);
@@ -27,6 +24,17 @@ describe("malformed inputs throw a clear error (unconstrained path)", () => {
     // the O(n^2) distance cache must be capped tighter than MAX_ROSTER
     expect(() => ringGreedy(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
     expect(() => buildBuddyGraph(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
+  });
+
+  // The ring seed floors degree at 2, so k<2 can't be honored — reject rather
+  // than silently return a 2-regular graph. (Constrained path handles k<2; see
+  // constrained.test.ts.)
+  it.each([0, 1])("buildBuddyGraph/ringGreedy reject k=%i (ring floors degree at 2)", (k) => {
+    expect(() => buildBuddyGraph(20, k)).toThrow(/needs k >= 2/);
+    expect(() => ringGreedy(20, k)).toThrow(/needs k >= 2/);
+  });
+  it.each([2, 3, 4])("buildBuddyGraph respects the degree cap for k=%i", (k) => {
+    expect(buildBuddyGraph(20, k, { polish: false }).degreeMax).toBeLessThanOrEqual(k);
   });
 });
 

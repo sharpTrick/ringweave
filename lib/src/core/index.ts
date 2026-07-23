@@ -88,6 +88,9 @@ export interface BuddyResult {
  * options) always yields the same assignment (greedy is RNG-free; polish uses a
  * fixed seed).
  *
+ * Requires `buddies >= 2`: the ring seed floors every degree at 2, so smaller
+ * values throw (use `buildConstrainedBuddyGraph` for the empty graph / matching).
+ *
  * Contract note: this unconstrained builder has no report channel, so malformed
  * `n`/`k` **throw** a clear error. The constraint-aware
  * `buildConstrainedBuddyGraph` instead **refuses** (populating `report.refusals`)

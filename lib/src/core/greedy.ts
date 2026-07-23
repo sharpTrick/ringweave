@@ -45,6 +45,15 @@ export function ringGreedy(
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
+  // The ring seed gives every vertex degree 2 and completion only ADDS edges, so
+  // ringGreedy structurally cannot honor k < 2 — it would silently return a
+  // 2-regular graph. Refuse and point to the constrained path, which builds the
+  // empty graph (k=0) / matching (k=1) correctly.
+  if (k < 2) {
+    throw new Error(
+      `ringGreedy needs k >= 2 (its ring seed floors degree at 2); for k < 2 use buildConstrainedBuddyGraph`,
+    );
+  }
   // ringGreedy allocates a flat n×n distance cache (O(n²) memory, and completion
   // is ~O(n³) time), so it is capped far tighter than MAX_ROSTER — beyond ~a few
   // thousand the Int32Array allocation would throw a native RangeError. Refuse

@@ -3,6 +3,12 @@
  * `swap.ts`). Deterministic given a seed (via RNG). Two modes: "hill" (accept
  * only improvements) and "anneal" (Metropolis). Cost is O(n·m) per iteration
  * (full re-measure), so it is impractical much past a few hundred vertices.
+ *
+ * No dev-mode postconditions here (unlike `polishConstrained`): swaps are
+ * structurally degree-preserving and `best` is monotonically non-increasing on
+ * penalized ASPL, so a connected input can never end disconnected (the 10n
+ * penalty dominates any connected ASPL) — provable by construction, no runtime
+ * check needed.
  */
 import { Graph } from "./graph.js";
 import { allPairsSummary, penalizedAspl } from "./metrics.js";

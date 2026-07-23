@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Graph } from "../src/core/graph.js";
 import { allPairsSummary, isConnected } from "../src/core/metrics.js";
+import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
 import {
   Constraints,
   validate,
@@ -152,12 +153,9 @@ describe("validate infeasibility messages", () => {
   });
 });
 
-// Same malformed-input class as pipeline.test.ts, but the constraint-aware path
-// REFUSES (report.refusals) rather than throwing — validate must never throw,
-// even on an astronomically large roster (the n-sized allocation must be gated).
-const BAD_N = [-1, 2.5, Number.NaN, Infinity, 5e9];
-const BAD_K = [-1, 2.5, Number.NaN, Infinity];
-
+// Same malformed-input class as pipeline.test.ts (shared fixture), but the
+// constraint-aware path REFUSES (report.refusals) rather than throwing — validate
+// must never throw, even on an astronomically large roster.
 describe("malformed inputs are refused, never thrown (constrained path)", () => {
   it.each(BAD_N)("validate never throws for roster size %p", (n) => {
     const errs = validate(new Constraints(n), 4);
@@ -183,6 +181,21 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
   it("validate accepts exactly MAX_ROSTER and refuses MAX_ROSTER+1 (boundary)", () => {
     expect(validate(new Constraints(MAX_ROSTER), 4)).toEqual([]);
     expect(validate(new Constraints(MAX_ROSTER + 1), 4).length).toBeGreaterThan(0);
+  });
+
+  it.each(BAD_N)(
+    "Constraints(%p).requiredDegree() throws a clear error, not a native RangeError",
+    (n) => {
+      expect(() => new Constraints(n).requiredDegree()).toThrow(/valid count/);
+    },
+  );
+});
+
+describe("constrained path honors low buddy counts (cross-path with buildBuddyGraph)", () => {
+  // Where buildBuddyGraph rejects k<2, the constrained path builds it correctly.
+  it.each([0, 1, 2])("buildConstrainedBuddyGraph(12, %i) keeps every degree <= k", (k) => {
+    const r = buildConstrainedBuddyGraph(12, k, new Constraints(12));
+    expect(r.degreeMax).toBeLessThanOrEqual(k);
   });
 });
 

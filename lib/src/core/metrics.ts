@@ -3,9 +3,12 @@
  */
 import { Graph } from "./graph.js";
 
-/** Distance vector from s; unreachable = -1. */
+/** Sentinel for an unreachable vertex in a `bfsDistances` result. */
+export const UNREACHABLE = -1;
+
+/** Distance vector from s; unreachable = UNREACHABLE (-1). */
 export function bfsDistances(g: Graph, s: number): Int32Array {
-  const dist = new Int32Array(g.n).fill(-1);
+  const dist = new Int32Array(g.n).fill(UNREACHABLE);
   dist[s] = 0;
   const q: number[] = [s];
   let head = 0;
@@ -99,17 +102,8 @@ export function connectedComponents(g: Graph): number[][] {
   return comps;
 }
 
-/**
- * Fraction of vertices in the largest connected component. Mirrors the Python
- * reference; reserved for the M2 "how connected did it stay" churn-resilience
- * report (docs/stress_test_plan.md), so it has no caller in the core yet.
- */
-export function largestComponentFraction(g: Graph): number {
-  if (g.n === 0) return 1;
-  let best = 0;
-  for (const comp of connectedComponents(g)) if (comp.length > best) best = comp.length;
-  return best / g.n;
-}
+// (largestComponentFraction removed as dead code — reintroduce with a test when
+// the M2 churn-resilience report needs it; connectedComponents makes it a one-liner.)
 
 /** Length of the shortest cycle, or Infinity for a forest. Matches Python girth. */
 export function girth(g: Graph): number {

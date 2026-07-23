@@ -29,6 +29,11 @@ function pairsOf(set: Set<string>): [number, number][] {
 }
 
 function degreeOf(n: number, pairs: [number, number][]): number[] {
+  // Guard the allocation so a directly-constructed Constraints with a malformed n
+  // (bypassing validate) gets a clear message, not a native RangeError.
+  if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
+    throw new Error(`roster size ${n} is not a valid count`);
+  }
   const d = new Array<number>(n).fill(0);
   for (const [a, b] of pairs) {
     d[a] += 1;

@@ -27,12 +27,11 @@ import {
   penalizedAspl,
   countPresentEdges,
   connectedComponents,
+  UNREACHABLE,
 } from "./metrics.js";
 import { RNG } from "./rng.js";
 import { Constraints } from "./constraints.js";
 import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
-
-const UNREACHABLE = -1;
 
 // Unreachable vertices score as +infinity so completion prefers joining
 // disconnected pieces before shortening already-connected ones.
