@@ -30,7 +30,7 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 
 - **SOLID, scoped:** single-responsibility modules. The genuine open/closed seam is the tag policy
   in `constraints.ts` — add a `case`, don't edit callers. The edge-legality predicate (`legalEdge`)
-  and polish objective (`constrainedEnergy`) are isolated as single-responsibility factory
+  and polish objective (`constrainedMeasure`) are isolated as single-responsibility factory
   functions, so changing a rule touches one function, not the greedy/polish loops; they are
   deliberately **not** caller-injectable (an arbitrary predicate/objective would undercut the
   determinism contract and the hard-constraint postconditions). Do not force LSP/ISP or wrap free
@@ -56,7 +56,12 @@ Surfaced by review, deliberately deferred (not silently ignored):
   distance scheme (a tracked follow-on) — and note the constrained path only ever needs
   single-source distances, so it wants a lighter scheme than `ringGreedy`'s full all-pairs cache.
 - **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
-  column (thousands sharing one label) is slow/heap-heavy. Guard when the F6 import path lands.
+  column (thousands sharing one label) is slow/heap-heavy, and at tens of millions of pairs the
+  `Set` construction itself throws before `validate` can refuse it. A `NaN` tag value never groups
+  (`NaN !== NaN`), silently inverting `prohibit_same`. Sanitize + size-check tags when F6 lands.
+- **Polish is O(n·m) per iteration** — `polish`/`polishConstrained` recompute the full all-pairs
+  summary every swap, so they are impractical much past a few hundred vertices (why auto-polish is
+  capped at n≤120 in `index.ts`). Needs incremental/sampled energy for larger n.
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
   `null`. Normalize or special-case at the export boundary (F6).
 - **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.

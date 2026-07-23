@@ -3,6 +3,21 @@ import { buildBuddyGraph } from "../src/core/index.js";
 import { polish } from "../src/core/polish.js";
 import { ringGreedy } from "../src/core/greedy.js";
 import { allPairsSummary } from "../src/core/metrics.js";
+import { Graph } from "../src/core/graph.js";
+
+describe("input validation (unconstrained path)", () => {
+  it("rejects a non-integer or negative roster size instead of crashing", () => {
+    expect(() => buildBuddyGraph(2.5, 3)).toThrow(/non-negative integer/);
+    expect(() => new Graph(2.5)).toThrow(/non-negative integer/);
+    expect(() => new Graph(-3)).toThrow(/non-negative integer/);
+  });
+
+  it("rejects a NaN/Infinity buddy count instead of silently uncapping degree", () => {
+    expect(() => buildBuddyGraph(300, Number.NaN)).toThrow(/non-negative integer/);
+    expect(() => buildBuddyGraph(300, Infinity)).toThrow(/non-negative integer/);
+    expect(() => ringGreedy(30, -1)).toThrow(/non-negative integer/);
+  });
+});
 
 describe("buildBuddyGraph", () => {
   it("produces a valid symmetric buddy assignment", () => {

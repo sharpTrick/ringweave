@@ -1,9 +1,8 @@
 /**
- * Swap-polish: improve ASPL by degree-preserving double edge swaps.
- * The swap (a-b, c-d) -> (a-c, b-d) never changes any vertex degree, so a
- * regular graph stays regular. Deterministic given a seed (via RNG).
- *
- * Two modes: "hill" (accept only improvements) and "anneal" (Metropolis).
+ * Swap-polish: improve ASPL by degree-preserving double edge swaps (mechanics in
+ * `swap.ts`). Deterministic given a seed (via RNG). Two modes: "hill" (accept
+ * only improvements) and "anneal" (Metropolis). Cost is O(n·m) per iteration
+ * (full re-measure), so it is impractical much past a few hundred vertices.
  */
 import { Graph } from "./graph.js";
 import { allPairsSummary, penalizedAspl } from "./metrics.js";
@@ -17,7 +16,9 @@ export interface PolishOptions {
   mode?: PolishMode;
   /** Seed for the swap RNG. Default 12345. */
   seed?: number;
-  /** Iteration budget (browser-friendly; not wall-clock). Default 20000. */
+  /** Iteration budget (browser-friendly; not wall-clock). Default 20000. Same
+   * concept as `PolishConstrainedOptions.iters`; named `maxIters` here because
+   * `PolishResult.iters` reports the count actually run. */
   maxIters?: number;
 }
 
@@ -69,7 +70,7 @@ export function polish(
 
   let iters = 0;
   let rejects = 0;
-  const rejectCap = 200 * g.n;
+  const rejectCap = 200 * g.n; // empirically-tuned early-stop for "hill" mode
   while (iters < maxIters) {
     iters++;
     edges = g.edgeList();

@@ -75,7 +75,11 @@ export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
   return count;
 }
 
-/** Fraction of vertices in the largest connected component. */
+/**
+ * Fraction of vertices in the largest connected component. Mirrors the Python
+ * reference; reserved for the M2 "how connected did it stay" churn-resilience
+ * report (docs/stress_test_plan.md), so it has no caller in the core yet.
+ */
 export function largestComponentFraction(g: Graph): number {
   if (g.n === 0) return 1;
   const seen = new Uint8Array(g.n);

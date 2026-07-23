@@ -33,11 +33,16 @@ export function ringGreedy(
   k: number,
   opts: GreedyOptions = {},
 ): GreedyResult {
+  // k must be a real cap: `deg >= NaN` is always false, which would silently
+  // disable the degree limit and blow past the "degree <= k" guarantee.
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`buddy count ${k} must be a non-negative integer`);
+  }
   const mind = opts.mind ?? 5;
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 
-  const g = ring(n);
+  const g = ring(n); // throws on a non-integer/negative n
   const INF = n + 5;
 
   // Flat n*n distance matrix; dist[i*n + j].

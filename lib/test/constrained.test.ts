@@ -67,10 +67,11 @@ describe("constrainedGreedy oracle parity vs Python", () => {
       const cons = consFrom(fx);
       const g = constrainedGreedy(fx.n, fx.k, cons, { minSeparation: fx.mind });
 
-      // hard guarantees
+      // hard guarantees + oracle parity on connectivity/satisfaction
       expect(hasNoProhibited(g, cons)).toBe(true);
       expect(hasAllRequired(g, cons)).toBe(true);
-      expect(isConnected(g)).toBe(true);
+      expect(isConnected(g)).toBe(fx.connected);
+      expect(fx.satisfied).toBe(true);
 
       // quality parity with the reference implementation
       const { aspl, diameter } = allPairsSummary(g);
@@ -323,6 +324,22 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     // the bulk still get buddies — far above the ~n-1 edges of a starved run
     expect(r.edges.length).toBeGreaterThan(50);
     expect(r.degreeMax).toBe(k);
+  });
+
+  it("stays fast on a many-stuck sink-bottleneck (guards the cubic regression)", () => {
+    const n = 400;
+    const k = 4;
+    const c = new Constraints(n);
+    // half the roster can only reach the soon-saturated sink 0 => many stuck
+    for (let v = 1; v <= n / 2; v++) {
+      for (let w = 1; w < n; w++) if (w !== v) c.prohibit(v, w);
+    }
+    expect(validate(c, k)).toEqual([]);
+    const t0 = Date.now();
+    const r = buildConstrainedBuddyGraph(n, k, c, { polish: false });
+    const ms = Date.now() - t0;
+    expect(r.degreeMax).toBeLessThanOrEqual(k);
+    expect(ms).toBeLessThan(1500); // ~0.13s in practice; a rescan regression is ~4.6s
   });
 });
 

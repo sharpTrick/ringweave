@@ -114,6 +114,9 @@ export class Constraints {
   }
 
   merge(other: Constraints): this {
+    if (other.n !== this.n) {
+      throw new Error(`cannot merge constraints for ${other.n} people into ${this.n}`);
+    }
     for (const key of other.#required) this.#required.add(key);
     for (const key of other.#prohibited) this.#prohibited.add(key);
     for (const key of other.#priors) this.#priors.add(key);
@@ -196,7 +199,11 @@ export function validate(cons: Constraints, k: number): string[] {
   return Array.from(new Set(errs)).sort();
 }
 
-/** Ill-formed roster size or constraint endpoints (unknown ids, self-pairs). */
+/**
+ * Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
+ * Mirrored as throws in constrainedGreedy's `checkConstraintIds` for direct
+ * callers that skip validate, and in reference-python `_structural_errors`.
+ */
 function structuralErrors(cons: Constraints): string[] {
   const errs: string[] = [];
   const n = cons.n;

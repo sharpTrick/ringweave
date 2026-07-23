@@ -106,7 +106,9 @@ export function constrainedGreedy(
  * never break a required edge, create a prohibited one, or disconnect an
  * already-connected graph — keeping only strictly-improving moves. The objective
  * is ASPL (with a large disconnection penalty) plus an optional
- * prior-preservation penalty for churn.
+ * prior-preservation penalty for churn. Returns just the graph — run-level
+ * metrics (unlike `polish`'s `PolishResult`) come from the caller's report in
+ * `buildConstrainedBuddyGraph`.
  */
 export function polishConstrained(
   input: Graph,
@@ -325,6 +327,8 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 // direct-call contract violation into a clear error instead of a cryptic crash
 // or a silent degree-cap breach. Cheap: O(#constraints), off the hot path.
 
+// Throw-on-first mirror of constraints.ts `structuralErrors` (which collects
+// reasons for validate); keep the two checks in step.
 function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
     !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;
@@ -364,9 +368,11 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
 
 // --- postconditions (dev-mode only) -----------------------------------------
 // Compiled out of production bundles where `process` is absent, so they never
-// cost the hot path. NOTE: any new hard-constraint kind must be enforced in
+// cost the hot path. NOTE: a new hard-constraint kind must be enforced in
 // legalEdge (used by both completion and forceConnect), swapBreaksConstraint,
-// AND asserted here — keep the three in sync.
+// AND asserted here — keep the three in sync. A genuinely new constraint
+// *category* (not a new tag policy — those only emit required/prohibited pairs
+// already handled) would also need reporting in index.ts buildReport.
 const CONTRACTS_ENABLED =
   typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
 

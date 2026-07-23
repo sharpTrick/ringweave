@@ -13,6 +13,12 @@ export class Graph {
   readonly adj: ReadonlyArray<ReadonlySet<number>>;
 
   constructor(n: number) {
+    // Guard the invariant n === adj.length: Array.from clamps a fractional or
+    // negative length while `this.n` would keep the raw value, so later indexing
+    // walks off the end. Refuse the bad input with a clear message instead.
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`Graph size ${n} must be a non-negative integer`);
+    }
     this.n = n;
     this.adj = Array.from({ length: n }, () => new Set<number>());
   }
@@ -50,6 +56,7 @@ export class Graph {
   numEdges(): number {
     let s = 0;
     for (const a of this.adj) s += a.size;
+    // The degree sum is even by the symmetry invariant; floor is a cheap guard.
     return Math.floor(s / 2);
   }
 

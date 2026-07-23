@@ -73,6 +73,10 @@ def validate(cons, k):
     """Return list of human-readable infeasibility reasons (empty = feasible).
     These are the cases where NO valid graph exists; everything else we handle
     by sacrificing regularity."""
+    structural = _structural_errors(cons)
+    if structural:
+        return sorted(set(structural))
+
     errs = []
     n = cons.n
 
@@ -106,6 +110,28 @@ def validate(cons, k):
         errs += _connectivity_errors(cons)
 
     return sorted(set(errs))
+
+
+def _structural_errors(cons):
+    """Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
+    Mirrors the TypeScript port's structural validation layer."""
+    n = cons.n
+    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        return [f"roster size {n} is not a valid count"]
+    errs = []
+
+    def scan(pairs):
+        for (a, b) in pairs:
+            for x in (a, b):
+                if not isinstance(x, int) or isinstance(x, bool) or x < 0 or x >= n:
+                    errs.append(f"constraint references unknown person {x} (roster has {n})")
+            if a == b:
+                errs.append(f"person {a} cannot be paired with themselves")
+
+    scan(cons.required)
+    scan(cons.prohibited)
+    scan(cons.priors)
+    return errs
 
 
 def _connectivity_errors(cons):
