@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Graph, ring } from "../src/core/graph.js";
 import { allPairsSummary, girth, connectedComponents } from "../src/core/metrics.js";
-import { mooreLowerBounds, cycleAspl } from "../src/core/bounds.js";
+import { mooreLowerBounds, cycleAspl, asplGap } from "../src/core/bounds.js";
 
 function petersen(): Graph {
   const g = new Graph(10);
@@ -91,4 +91,22 @@ describe("connectedComponents", () => {
     expect(connectedComponents(ring(7)).length).toBe(1);
     expect(connectedComponents(new Graph(0)).length).toBe(0);
   });
+});
+
+// Ratchet: malformed n/k fed directly to the bounds exports must return a finite
+// result quickly — a non-integer k in ~(1.6,1.98) used to spin forever (denormal
+// fixed point). Per-test timeout so a regression fails as a timeout, not a hang.
+describe("mooreLowerBounds / asplGap reject malformed n,k (no infinite loop)", () => {
+  const BAD = [-1, 0, 1.5, 1.9, 1.95, 2.5, Number.NaN, Infinity];
+  it.each(BAD)("mooreLowerBounds(50, %p) is finite and terminates", (k) => {
+    const b = mooreLowerBounds(50, k);
+    expect(Number.isFinite(b.asplLb)).toBe(true);
+    expect(Number.isFinite(b.diameterLb)).toBe(true);
+  }, 1000);
+  it.each(BAD)("asplGap(1, 50, %p) is finite", (k) => {
+    expect(Number.isFinite(asplGap(1, 50, k))).toBe(true);
+  }, 1000);
+  it("caps an oversized n instead of an O(n) stall", () => {
+    expect(Number.isFinite(mooreLowerBounds(5e9, 2).asplLb)).toBe(true);
+  }, 1000);
 });

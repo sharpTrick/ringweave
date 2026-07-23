@@ -183,7 +183,11 @@ def moore_lower_bounds(n, k):
     n-1 other vertices are accounted for. This is the best-case (tree-like)
     neighborhood expansion; any k-regular graph's ASPL is >= this.
     """
-    if k <= 0 or n <= 1:
+    # n and k must be whole numbers: a non-integer k drives shell *= (k-1) into a
+    # denormal floating-point fixed point that never reaches 0 (infinite loop).
+    if (not isinstance(n, int) or isinstance(n, bool)
+            or not isinstance(k, int) or isinstance(k, bool)
+            or k <= 0 or n <= 1):
         return 0.0, 0
     remaining = n - 1
     total = 0

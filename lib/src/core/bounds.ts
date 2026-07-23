@@ -3,13 +3,25 @@
  * vertices. This is the 0%-reference every result is scored against.
  * Faithful port of Python `moore_lower_bounds`, edge cases included.
  */
+import { MAX_ROSTER } from "./graph.js";
+
 export interface MooreBounds {
   asplLb: number;
   diameterLb: number;
 }
 
 export function mooreLowerBounds(n: number, k: number): MooreBounds {
-  if (!Number.isFinite(n) || !Number.isFinite(k) || k <= 0 || n <= 1) {
+  // n and k must be whole numbers: a non-integer k drives the shell recurrence
+  // (`shell *= k-1`, with k-1 < 1) into a denormal floating-point fixed point
+  // that never reaches 0 — an infinite loop. Cap n so the k=2 O(n) branch can't
+  // stall on an absurd size. Degenerate/out-of-range inputs score as no bound.
+  if (
+    !Number.isInteger(n) ||
+    !Number.isInteger(k) ||
+    k <= 0 ||
+    n <= 1 ||
+    n > MAX_ROSTER
+  ) {
     return { asplLb: 0, diameterLb: 0 };
   }
   let remaining = n - 1;

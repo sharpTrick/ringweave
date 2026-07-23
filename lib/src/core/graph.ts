@@ -16,6 +16,10 @@
 // Shared by every entry point that validates n. Mirrored in reference-python.
 export const MAX_ROSTER = 1_000_000;
 
+// Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
+// option). Shared so the three generation entry points can't drift apart.
+export const DEFAULT_MIN_SEPARATION = 5;
+
 export class Graph {
   readonly n: number;
   readonly adj: ReadonlyArray<ReadonlySet<number>>;

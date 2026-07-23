@@ -42,7 +42,7 @@ export {
   type PolishConstrainedOptions,
 } from "./constrainedGreedy.js";
 
-import { Graph, MAX_ROSTER } from "./graph.js";
+import { Graph, MAX_ROSTER, DEFAULT_MIN_SEPARATION } from "./graph.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
 import {
@@ -56,13 +56,13 @@ import { Constraints, validate } from "./constraints.js";
 import { constrainedGreedy, polishConstrained } from "./constrainedGreedy.js";
 
 export interface BuddyOptions {
-  /** Minimum degrees of separation to aim for (girth-flavored soft floor). */
+  /** Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5. */
   minSeparation?: number;
   /** Run a fixed-seed polish pass to tighten ASPL. Default: auto (n <= 120). */
   polish?: boolean | "auto";
-  /** Seed for the polish pass (keeps output reproducible). */
+  /** Seed for the polish pass. Default 12345 (matches the `polish` backend). */
   seed?: number;
-  /** Iteration budget for polish. */
+  /** Iteration budget for polish. Default 20000 (the `polish` backend's budget). */
   polishIters?: number;
 }
 
@@ -102,7 +102,7 @@ export function buildBuddyGraph(
   options: BuddyOptions = {},
 ): BuddyResult {
   const k = buddiesPerPerson;
-  const mind = options.minSeparation ?? 5;
+  const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
   const seed = options.seed ?? 12345;
   const wantPolish = resolveWantPolish(options.polish, n);
 
@@ -137,13 +137,13 @@ export function buildBuddyGraph(
 }
 
 export interface ConstrainedBuddyOptions {
-  /** Minimum degrees of separation to aim for during completion. */
+  /** Minimum degrees of separation to aim for during completion. Default 5. */
   minSeparation?: number;
   /** Run constraint-preserving polish. Default: auto (n <= 120). */
   polish?: boolean | "auto";
-  /** Seed for the polish pass (keeps output reproducible). */
+  /** Seed for the polish pass. Default 0 (matches the `polishConstrained` backend). */
   seed?: number;
-  /** Iteration budget for polish. */
+  /** Iteration budget for polish. Default 8000 (the `polishConstrained` backend's budget). */
   polishIters?: number;
   /**
    * Soft penalty weight for keeping prior buddies (churn). Ignored when priors

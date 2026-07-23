@@ -184,18 +184,32 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
   });
 
   it.each(BAD_N)(
-    "Constraints(%p).requiredDegree() throws a clear error, not a native RangeError",
+    "Constraints(%p) degree accessors throw a clear error, not a native RangeError",
     (n) => {
       expect(() => new Constraints(n).requiredDegree()).toThrow(/valid count/);
+      expect(() => new Constraints(n).prohibitedDegree()).toThrow(/valid count/);
     },
   );
 });
 
 describe("constrained path honors low buddy counts (cross-path with buildBuddyGraph)", () => {
   // Where buildBuddyGraph rejects k<2, the constrained path builds it correctly.
-  it.each([0, 1, 2])("buildConstrainedBuddyGraph(12, %i) keeps every degree <= k", (k) => {
-    const r = buildConstrainedBuddyGraph(12, k, new Constraints(12));
-    expect(r.degreeMax).toBeLessThanOrEqual(k);
+  // Pin the STRUCTURE, not just the degree cap (a 0-edge graph caps trivially).
+  // Even and odd n so the k=1 odd-n leftover vertex is covered too.
+  it.each([12, 13])("k=0 -> empty graph (n=%i)", (n) => {
+    const r = buildConstrainedBuddyGraph(n, 0, new Constraints(n));
+    expect(r.edges.length).toBe(0);
+    expect(r.degreeMax).toBe(0);
+  });
+  it.each([12, 13])("k=1 -> a matching of floor(n/2) edges (n=%i)", (n) => {
+    const r = buildConstrainedBuddyGraph(n, 1, new Constraints(n));
+    expect(r.edges.length).toBe(Math.floor(n / 2));
+    expect(r.degreeMax).toBeLessThanOrEqual(1);
+  });
+  it.each([12, 13])("k=2 -> 2-regular, every degree exactly 2 (n=%i)", (n) => {
+    const r = buildConstrainedBuddyGraph(n, 2, new Constraints(n));
+    expect(r.degreeMin).toBe(2);
+    expect(r.degreeMax).toBe(2);
   });
 });
 

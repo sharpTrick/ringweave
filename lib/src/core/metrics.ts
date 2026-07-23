@@ -16,7 +16,7 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
     const u = q[head++];
     const du = dist[u];
     for (const w of g.adj[u]) {
-      if (dist[w] === -1) {
+      if (dist[w] === UNREACHABLE) {
         dist[w] = du + 1;
         q.push(w);
       }
@@ -28,7 +28,7 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
 export function isConnected(g: Graph): boolean {
   if (g.n === 0) return true;
   const d = bfsDistances(g, 0);
-  for (let i = 0; i < g.n; i++) if (d[i] === -1) return false;
+  for (let i = 0; i < g.n; i++) if (d[i] === UNREACHABLE) return false;
   return true;
 }
 
@@ -101,9 +101,6 @@ export function connectedComponents(g: Graph): number[][] {
   }
   return comps;
 }
-
-// (largestComponentFraction removed as dead code — reintroduce with a test when
-// the M2 churn-resilience report needs it; connectedComponents makes it a one-liner.)
 
 /** Length of the shortest cycle, or Infinity for a forest. Matches Python girth. */
 export function girth(g: Graph): number {

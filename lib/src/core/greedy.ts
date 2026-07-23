@@ -7,7 +7,7 @@
  * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
  * shortest-path identity is classical (see CONCEPT_LINEAGE).
  */
-import { Graph, ring } from "./graph.js";
+import { Graph, ring, DEFAULT_MIN_SEPARATION } from "./graph.js";
 import { bfsDistances } from "./metrics.js";
 
 // Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
@@ -64,7 +64,7 @@ export function ringGreedy(
       `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
     );
   }
-  const mind = opts.mind ?? 5;
+  const mind = opts.mind ?? DEFAULT_MIN_SEPARATION;
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 
@@ -149,6 +149,8 @@ export function ringGreedy(
   for (;;) {
     const pair = findPair();
     if (pair === null) {
+      // Floor demotion at 3: below that the target is smaller than any cycle, so
+      // relaxing it buys nothing (mirrors the Python reference).
       if (demote && curMind > 3) {
         curMind -= 1;
         continue;

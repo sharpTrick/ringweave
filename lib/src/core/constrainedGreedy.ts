@@ -20,7 +20,7 @@
  * they throw a clear error on malformed input (out-of-range ids, bad k,
  * required-degree over k) but otherwise assume feasibility.
  */
-import { Graph } from "./graph.js";
+import { Graph, DEFAULT_MIN_SEPARATION } from "./graph.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -79,7 +79,10 @@ export function constrainedGreedy(
 
   for (const [a, b] of cons.requiredPairs()) g.addEdge(a, b);
 
-  const minSep = Math.min(opts.minSeparation ?? 5, Math.floor(n / 2));
+  const minSep = Math.min(
+    opts.minSeparation ?? DEFAULT_MIN_SEPARATION,
+    Math.floor(n / 2),
+  );
 
   // Most-deficient vertex connects to its farthest legal partner. A vertex with
   // no legal partner is skipped, not fatal — one stuck person must not starve
