@@ -10,6 +10,11 @@
 import { Graph, ring } from "./graph.js";
 import { bfsDistances } from "./metrics.js";
 
+// Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
+// ints capped well below the typed-array limit). Far tighter than MAX_ROSTER,
+// which bounds only the O(n) structures (Graph adjacency, the constrained path).
+export const MAX_CACHED_N = 5000;
+
 export interface GreedyResult {
   graph: Graph;
   /** The mind (min-separation) target actually achieved after any demotion. */
@@ -39,6 +44,16 @@ export function ringGreedy(
   // 2, so this path targets ~k, not a hard cap — unlike the constrained path.)
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
+  }
+  // ringGreedy allocates a flat n×n distance cache (O(n²) memory, and completion
+  // is ~O(n³) time), so it is capped far tighter than MAX_ROSTER — beyond ~a few
+  // thousand the Int32Array allocation would throw a native RangeError. Refuse
+  // with a clear message; a malformed n (non-integer/negative) is left to ring()
+  // → the Graph ctor for the canonical "must be an integer" message.
+  if (Number.isInteger(n) && n > MAX_CACHED_N) {
+    throw new Error(
+      `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
+    );
   }
   const mind = opts.mind ?? 5;
   const demote = opts.demote ?? true;

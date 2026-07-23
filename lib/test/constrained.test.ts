@@ -16,6 +16,7 @@ import {
   constrainedGreedy,
   polishConstrained,
   buildConstrainedBuddyGraph,
+  MAX_ROSTER,
 } from "../src/core/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -177,6 +178,11 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
 
   it("merge fails fast on an n mismatch", () => {
     expect(() => new Constraints(5).merge(new Constraints(6))).toThrow(/cannot merge/);
+  });
+
+  it("validate accepts exactly MAX_ROSTER and refuses MAX_ROSTER+1 (boundary)", () => {
+    expect(validate(new Constraints(MAX_ROSTER), 4)).toEqual([]);
+    expect(validate(new Constraints(MAX_ROSTER + 1), 4).length).toBeGreaterThan(0);
   });
 });
 

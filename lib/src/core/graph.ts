@@ -8,10 +8,12 @@
  * `adj` is typed read-only to callers so the symmetry invariant can only be
  * mutated through `addEdge`/`removeEdge`; internal mutators cast past it.
  */
-// A sane upper bound on roster size: far beyond the product scale (n ~ hundreds)
-// but small enough that `new Array(n)` / `Array.from({length:n})` can't overflow
-// (JS array length maxes at 2**32-1) or exhaust memory. Shared by every entry
-// point that validates n. Mirrored in reference-python.
+// Upper bound on roster size for the O(n) structures — Graph adjacency, the
+// constrained path's per-BFS arrays, refusedResult. Bounds `new Array(n)` /
+// `Array.from({length:n})` below the JS length limit and keeps allocation sane.
+// NOTE: ringGreedy's O(n²) distance cache needs a much tighter cap of its own
+// (see MAX_CACHED_N in greedy.ts) — this does not make that path memory-safe.
+// Shared by every entry point that validates n. Mirrored in reference-python.
 export const MAX_ROSTER = 1_000_000;
 
 export class Graph {

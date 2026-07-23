@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "../src/core/index.js";
 import { polish } from "../src/core/polish.js";
-import { ringGreedy } from "../src/core/greedy.js";
-import { allPairsSummary } from "../src/core/metrics.js";
-import { Graph } from "../src/core/graph.js";
+import { ringGreedy, MAX_CACHED_N } from "../src/core/greedy.js";
+import { allPairsSummary, isConnected } from "../src/core/metrics.js";
+import { Graph, ring } from "../src/core/graph.js";
 
 // Malformed-input class (negative / fractional / NaN / Infinity / oversized).
 // The unconstrained path has no report channel, so it THROWS a clear error.
@@ -14,12 +14,27 @@ describe("malformed inputs throw a clear error (unconstrained path)", () => {
   it.each(BAD_N)("new Graph(%p) throws a clear (non-RangeError) message", (n) => {
     expect(() => new Graph(n)).toThrow(/integer/);
   });
-  it.each(BAD_N)("buildBuddyGraph(%p, 3) throws", (n) => {
-    expect(() => buildBuddyGraph(n, 3)).toThrow(/integer/);
+  it.each(BAD_N)("buildBuddyGraph(%p, 3) throws a clear error", (n) => {
+    // malformed n -> "integer"; oversized-but-valid n -> the O(n^2) cache cap
+    expect(() => buildBuddyGraph(n, 3)).toThrow(/integer|supports up to/);
   });
   it.each(BAD_K)("buildBuddyGraph(30, %p) and ringGreedy(30, %p) throw", (k) => {
     expect(() => buildBuddyGraph(30, k)).toThrow(/integer/);
     expect(() => ringGreedy(30, k)).toThrow(/integer/);
+  });
+
+  it("refuses a roster above MAX_CACHED_N with a clear (non-RangeError) message", () => {
+    // the O(n^2) distance cache must be capped tighter than MAX_ROSTER
+    expect(() => ringGreedy(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
+    expect(() => buildBuddyGraph(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
+  });
+});
+
+describe("polish connectivity", () => {
+  it("reports connectivity and never disconnects a connected input", () => {
+    const res = polish(ring(20), { seed: 1, maxIters: 2000 });
+    expect(res.connected).toBe(true);
+    expect(isConnected(res.graph)).toBe(true);
   });
 });
 

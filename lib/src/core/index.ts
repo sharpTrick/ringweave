@@ -6,7 +6,7 @@
  * n where it reaches provable-optimal ASPL cheaply. Greedy is the spine —
  * deterministic, explainable, incremental — with polish as an optional layer.
  */
-export { Graph, ring } from "./graph.js";
+export { Graph, ring, MAX_ROSTER } from "./graph.js";
 export {
   bfsDistances,
   isConnected,
@@ -18,6 +18,7 @@ export { mooreLowerBounds, asplGap, type MooreBounds } from "./bounds.js";
 export {
   ringGreedy,
   repairDegrees,
+  MAX_CACHED_N,
   type GreedyResult,
   type GreedyOptions,
 } from "./greedy.js";

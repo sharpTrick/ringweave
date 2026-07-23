@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Graph, ring } from "../src/core/graph.js";
-import { allPairsSummary, girth } from "../src/core/metrics.js";
+import { allPairsSummary, girth, connectedComponents } from "../src/core/metrics.js";
 import { mooreLowerBounds, cycleAspl } from "../src/core/bounds.js";
 
 function petersen(): Graph {
@@ -71,5 +71,24 @@ describe("girth of a tree", () => {
     g.addEdge(1, 2);
     g.addEdge(2, 3);
     expect(girth(g)).toBe(Infinity);
+  });
+});
+
+describe("connectedComponents", () => {
+  it("partitions vertices into connected components", () => {
+    const g = new Graph(6);
+    g.addEdge(0, 1); // {0,1,2}
+    g.addEdge(1, 2);
+    g.addEdge(3, 4); // {3,4}
+    // vertex 5 isolated
+    const sizes = connectedComponents(g)
+      .map((c) => c.length)
+      .sort((a, b) => a - b);
+    expect(sizes).toEqual([1, 2, 3]);
+  });
+
+  it("returns one component for a connected graph and none for n=0", () => {
+    expect(connectedComponents(ring(7)).length).toBe(1);
+    expect(connectedComponents(new Graph(0)).length).toBe(0);
   });
 });
