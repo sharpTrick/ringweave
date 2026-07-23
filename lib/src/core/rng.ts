@@ -32,22 +32,4 @@ export class RNG {
     if (b >= a) b += 1;
     return [a, b];
   }
-
-  /** Fisher–Yates shuffle in place. */
-  shuffle<T>(arr: T[]): T[] {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = this.int(i + 1);
-      const tmp = arr[i];
-      arr[i] = arr[j];
-      arr[j] = tmp;
-    }
-    return arr;
-  }
-
-  /** k distinct samples from [0, n) (small k; reservoir not needed here). */
-  sample(n: number, k: number): number[] {
-    const idx = Array.from({ length: n }, (_, i) => i);
-    this.shuffle(idx);
-    return idx.slice(0, k);
-  }
 }

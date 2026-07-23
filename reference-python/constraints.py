@@ -113,6 +113,8 @@ def _connectivity_errors(cons):
     disconnected — then no edge selection can ever connect everyone."""
     n = cons.n
     proh = cons.prohibited
+    if not proh:
+        return []  # nothing prohibited => allowed graph is complete, connected
     seen = [False] * n
     seen[0] = True
     stack = [0]

@@ -11,8 +11,9 @@
  * byte-for-byte structure.
  *
  * Unlike `ringGreedy`, completion has no `demote` step: when no partner sits at
- * least `minSeparation` away, `choosePartner` falls back to the closest legal
- * partner instead of iteratively shrinking the target (matches the reference).
+ * least `minSeparation` away, `choosePartner` falls back to the farthest legal
+ * partner available (even if closer than the target) instead of iteratively
+ * shrinking the target (matches the reference).
  *
  * These are low-level primitives; the safe entry point is
  * `buildConstrainedBuddyGraph`, which runs `validate` first. Called directly
@@ -82,12 +83,15 @@ export function constrainedGreedy(
 
   // Most-deficient vertex connects to its farthest legal partner. A vertex with
   // no legal partner is skipped, not fatal — one stuck person must not starve
-  // the rest. Stop only when no deficient vertex can be paired at all.
+  // the rest. A stuck vertex stays stuck (completion only ever saturates
+  // partners, never frees one), so we mark it once and never rescan it — that
+  // is what keeps the loop from going cubic on many-stuck inputs.
+  const stuck = new Uint8Array(n);
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
-    const under = deficientVertices(g, k);
+    const under = deficientVertices(g, k, stuck);
     if (under.length === 0) break;
-    if (!extendOne(g, under, legal, minSep)) break;
+    if (!extendOne(g, under, legal, minSep, stuck)) break;
   }
 
   forceConnect(g, cons, k);
@@ -165,25 +169,32 @@ function legalEdge(g: Graph, cons: Constraints, k: number): EdgePredicate {
     g.degree(v) < k;
 }
 
-/** Under-k vertices, most-deficient first (lower degree, then lower index). */
-function deficientVertices(g: Graph, k: number): number[] {
+/** Under-k, not-yet-stuck vertices, most-deficient first (degree, then index). */
+function deficientVertices(g: Graph, k: number, stuck: Uint8Array): number[] {
   const under: number[] = [];
-  for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
+  for (let v = 0; v < g.n; v++) if (!stuck[v] && g.degree(v) < k) under.push(v);
   under.sort((a, b) => g.degree(a) - g.degree(b) || a - b);
   return under;
 }
 
-/** Add one edge from the first (most-deficient) vertex that has a legal partner. */
+/**
+ * Add one edge from the first vertex that has a legal partner. Vertices found to
+ * have none are marked permanently stuck (see the invariant at the call site).
+ */
 function extendOne(
   g: Graph,
   under: number[],
   legal: EdgePredicate,
   minSep: number,
+  stuck: Uint8Array,
 ): boolean {
   for (const u of under) {
     const candidates: number[] = [];
     for (let v = 0; v < g.n; v++) if (legal(u, v)) candidates.push(v);
-    if (candidates.length === 0) continue;
+    if (candidates.length === 0) {
+      stuck[u] = 1;
+      continue;
+    }
     const dist = bfsDistances(g, u);
     g.addEdge(u, choosePartner(candidates, dist, g, minSep));
     return true;
@@ -227,11 +238,12 @@ function choosePartner(
  * cannot be connected within k buddies each, and surfaces as report.connected.
  */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
+  const legal = legalEdge(g, cons, k); // same predicate as completion
   // At most n-1 joins are ever needed; each pass adds one edge or stops.
   for (let pass = 0; pass < g.n; pass++) {
     const comps = components(g);
     if (comps.length <= 1) return;
-    if (!joinAnyComponents(g, comps, cons, k)) return;
+    if (!joinAnyComponents(g, comps, legal)) return;
   }
 }
 
@@ -239,15 +251,13 @@ function forceConnect(g: Graph, cons: Constraints, k: number): void {
 function joinAnyComponents(
   g: Graph,
   comps: number[][],
-  cons: Constraints,
-  k: number,
+  legal: EdgePredicate,
 ): boolean {
   for (let i = 0; i < comps.length; i++) {
     for (let j = i + 1; j < comps.length; j++) {
       for (const u of comps[i]) {
-        if (g.degree(u) >= k) continue;
         for (const v of comps[j]) {
-          if (g.degree(v) < k && !cons.isProhibited(u, v) && !g.hasEdge(u, v)) {
+          if (legal(u, v)) {
             g.addEdge(u, v);
             return true;
           }
@@ -328,10 +338,16 @@ function checkConstraintIds(n: number, cons: Constraints): void {
         `constraint references person out of range (${a},${b}) for n=${n} — call validate() first`,
       );
     }
+    if (a === b) {
+      throw new Error(`person ${a} cannot be paired with themselves — call validate() first`);
+    }
   }
 }
 
 function checkWellFormed(n: number, k: number, cons: Constraints): void {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`roster size ${n} is not a valid count — call validate() first`);
+  }
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
   }
@@ -349,8 +365,8 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
 // --- postconditions (dev-mode only) -----------------------------------------
 // Compiled out of production bundles where `process` is absent, so they never
 // cost the hot path. NOTE: any new hard-constraint kind must be enforced in
-// legalEdge, joinAnyComponents, swapBreaksConstraint, AND asserted here —
-// keep the four in sync.
+// legalEdge (used by both completion and forceConnect), swapBreaksConstraint,
+// AND asserted here — keep the three in sync.
 const CONTRACTS_ENABLED =
   typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
 

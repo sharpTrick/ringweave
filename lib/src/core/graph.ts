@@ -1,28 +1,38 @@
 /**
- * Graph container: adjacency as an array of Sets, vertices 0..n-1.
- * Mirrors the Python reference `core.Graph` exactly so that the deterministic
- * generators produce byte-identical edge sets across languages.
+ * Graph container: adjacency as an array of Sets, vertices 0..n-1. Mirrors the
+ * Python reference `core.Graph`. The RNG-free `ringGreedy`/`repairDegrees` (whose
+ * decisions don't depend on Set iteration order) produce byte-identical edge sets
+ * to Python; `constrainedGreedy` traverses adjacency Sets during component
+ * discovery and so is validated on invariants/metrics, not byte identity.
+ *
+ * `adj` is typed read-only to callers so the symmetry invariant can only be
+ * mutated through `addEdge`/`removeEdge`; internal mutators cast past it.
  */
 export class Graph {
   readonly n: number;
-  readonly adj: Set<number>[];
+  readonly adj: ReadonlyArray<ReadonlySet<number>>;
 
   constructor(n: number) {
     this.n = n;
     this.adj = Array.from({ length: n }, () => new Set<number>());
   }
 
+  // The public `adj` type is read-only; mutation goes through this internal view.
+  #mut(u: number): Set<number> {
+    return this.adj[u] as Set<number>;
+  }
+
   addEdge(u: number, v: number): boolean {
     if (u === v) return false;
     if (this.adj[u].has(v)) return false;
-    this.adj[u].add(v);
-    this.adj[v].add(u);
+    this.#mut(u).add(v);
+    this.#mut(v).add(u);
     return true;
   }
 
   removeEdge(u: number, v: number): void {
-    this.adj[u].delete(v);
-    this.adj[v].delete(u);
+    this.#mut(u).delete(v);
+    this.#mut(v).delete(u);
   }
 
   hasEdge(u: number, v: number): boolean {
@@ -58,7 +68,7 @@ export class Graph {
   copy(): Graph {
     const g = new Graph(this.n);
     for (let u = 0; u < this.n; u++) {
-      for (const v of this.adj[u]) g.adj[u].add(v);
+      for (const v of this.adj[u]) g.#mut(u).add(v);
     }
     return g;
   }

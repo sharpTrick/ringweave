@@ -50,9 +50,11 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 ## Known limitations / tracked follow-ons
 
 Surfaced by review, deliberately deferred (not silently ignored):
-- **Large-k performance:** `constrainedGreedy` runs one BFS per edge added, so `k` near `n` (a
-  near-complete graph) is O(n³)-ish — n=500,k=250 ≈ 15 s. Realistic buddy counts (k≈4) are fast.
-  The fix is the incremental-distance cache already on the plan's follow-on list.
+- **Generation scales ~O(n²) even at small k:** `constrainedGreedy` runs one BFS per edge added,
+  so cost grows quadratically in n regardless of k (n=500,k=4 ≈ 120 ms — within the n≤500 product
+  target; n=4000 ≈ 7 s), and worse as k approaches n. Beyond ~1–2k people it needs an incremental
+  distance scheme (a tracked follow-on) — and note the constrained path only ever needs
+  single-source distances, so it wants a lighter scheme than `ringGreedy`'s full all-pairs cache.
 - **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
   column (thousands sharing one label) is slow/heap-heavy. Guard when the F6 import path lands.
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into

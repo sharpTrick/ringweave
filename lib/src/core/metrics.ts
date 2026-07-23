@@ -124,7 +124,7 @@ export function girth(g: Graph): number {
         }
       }
     }
-    if (best === 3) break;
+    if (best === 3) break; // 3 is the smallest possible cycle; no source can beat it
   }
   return best;
 }

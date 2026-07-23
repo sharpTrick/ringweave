@@ -16,8 +16,15 @@ export interface GreedyResult {
 }
 
 export interface GreedyOptions {
+  /**
+   * Minimum degrees of separation to aim for. Default 5, clamped to floor(n/2).
+   * `mind` mirrors the Python reference kwarg; the constrained path spells the
+   * same concept `minSeparation`.
+   */
   mind?: number;
+  /** When no pair is `mind` apart, shrink the target by 1 and retry rather than stop. Default true. */
   demote?: boolean;
+  /** Run `repairDegrees` after completion to close degree gaps. Default false. */
   repair?: boolean;
 }
 

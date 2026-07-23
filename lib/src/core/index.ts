@@ -11,18 +11,22 @@ export {
   bfsDistances,
   isConnected,
   allPairsSummary,
-  largestComponentFraction,
   girth,
   type Summary,
 } from "./metrics.js";
+export { mooreLowerBounds, asplGap, type MooreBounds } from "./bounds.js";
 export {
-  mooreLowerBounds,
-  asplGap,
-  cycleAspl,
-  type MooreBounds,
-} from "./bounds.js";
-export { ringGreedy, repairDegrees, type GreedyResult } from "./greedy.js";
-export { polish, type PolishResult, type PolishMode } from "./polish.js";
+  ringGreedy,
+  repairDegrees,
+  type GreedyResult,
+  type GreedyOptions,
+} from "./greedy.js";
+export {
+  polish,
+  type PolishResult,
+  type PolishMode,
+  type PolishOptions,
+} from "./polish.js";
 export { RNG } from "./rng.js";
 export {
   Constraints,

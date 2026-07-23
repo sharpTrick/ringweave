@@ -336,4 +336,12 @@ describe("constrainedGreedy precondition (always-on)", () => {
     overK.require(0, 1).require(0, 2).require(0, 3);
     expect(() => constrainedGreedy(6, 2, overK)).toThrow(/required buddies/);
   });
+
+  it("throws a clear error on a self-pair or invalid n", () => {
+    const selfPair = new Constraints(5);
+    selfPair.require(2, 2);
+    expect(() => constrainedGreedy(5, 3, selfPair)).toThrow(/themselves/);
+    const badN = new Constraints(Number.NaN);
+    expect(() => constrainedGreedy(Number.NaN, 2, badN)).toThrow(/valid count/);
+  });
 });

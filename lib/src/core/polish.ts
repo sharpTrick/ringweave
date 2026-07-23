@@ -13,10 +13,12 @@ import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 export type PolishMode = "hill" | "anneal";
 
 export interface PolishOptions {
+  /** Acceptance rule: "anneal" (Metropolis, default) or "hill" (improvements only). */
   mode?: PolishMode;
+  /** Seed for the swap RNG. Default 12345. */
   seed?: number;
-  maxIters?: number; // iteration budget (browser-friendly; not wall-clock)
-  sampledSources?: number; // if set, use sampled-ASPL energy from this many sources
+  /** Iteration budget (browser-friendly; not wall-clock). Default 20000. */
+  maxIters?: number;
 }
 
 export interface PolishResult {
@@ -25,37 +27,7 @@ export interface PolishResult {
   iters: number;
 }
 
-function sampledAspl(g: Graph, srcs: number[]): number {
-  let total = 0;
-  let count = 0;
-  for (const s of srcs) {
-    // local BFS
-    const dist = new Int32Array(g.n).fill(-1);
-    dist[s] = 0;
-    const q = [s];
-    let head = 0;
-    while (head < q.length) {
-      const u = q[head++];
-      for (const w of g.adj[u]) {
-        if (dist[w] === -1) {
-          dist[w] = dist[u] + 1;
-          q.push(w);
-        }
-      }
-    }
-    for (let t = 0; t < g.n; t++) {
-      const d = dist[t];
-      if (d > 0) {
-        total += d;
-        count += 1;
-      }
-    }
-  }
-  return count ? total / count : Infinity;
-}
-
-function energy(g: Graph, srcs: number[] | null): number {
-  if (srcs) return sampledAspl(g, srcs);
+function energy(g: Graph): number {
   return penalizedAspl(allPairsSummary(g), g.n);
 }
 
@@ -66,14 +38,10 @@ export function polish(
   const mode = opts.mode ?? "anneal";
   const rng = new RNG(opts.seed ?? 12345);
   const maxIters = opts.maxIters ?? 20000;
-  const srcs =
-    opts.sampledSources && opts.sampledSources < input.n
-      ? rng.sample(input.n, opts.sampledSources)
-      : null;
 
   const g = input.copy();
   let edges = g.edgeList();
-  let curE = energy(g, srcs);
+  let curE = energy(g);
   let best = g.copy();
   let bestE = curE;
 
@@ -88,7 +56,7 @@ export function polish(
       const sw = proposeSwap(g, edges, rng);
       if (!sw) continue;
       applySwap(g, sw);
-      deltas.push(Math.abs(energy(g, srcs) - curE));
+      deltas.push(Math.abs(energy(g) - curE));
       revertSwap(g, sw);
     }
     const T0 = Math.max(
@@ -109,7 +77,7 @@ export function polish(
     const sw = proposeSwap(g, edges, rng);
     if (!sw) continue;
     applySwap(g, sw);
-    const newE = energy(g, srcs);
+    const newE = energy(g);
     const delta = newE - curE;
 
     let accept: boolean;

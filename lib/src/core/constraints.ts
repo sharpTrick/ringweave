@@ -226,6 +226,9 @@ function structuralErrors(cons: Constraints): string[] {
  * condition only; degree-budget infeasibility is handled elsewhere.
  */
 function connectivityErrors(cons: Constraints): string[] {
+  // With nothing prohibited the allowed graph is complete, hence connected —
+  // skip the O(n^2) walk (the common case, and keeps validate cheap at scale).
+  if (cons.prohibitedCount === 0) return [];
   const n = cons.n;
   const seen = new Uint8Array(n);
   seen[0] = 1;
