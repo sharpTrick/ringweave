@@ -6,6 +6,11 @@
  * n where it reaches provable-optimal ASPL cheaply. Greedy is the spine —
  * deterministic, explainable, incremental — with polish as an optional layer.
  */
+// `validate()` is the authoritative feasibility gate — it refuses on BOTH the
+// roster cap and the (intentionally internal) work budget. `MAX_CONSTRAINED_N` is
+// re-exported as a user-facing dial for UI preflight; `MAX_CONSTRAINED_WORK` /
+// `constrainedWork` stay unexported on purpose (a replaceable heuristic), so N is
+// deliberately not the only ceiling. Call `validate()` rather than the constant.
 export { Graph, ring, MAX_ROSTER, MAX_CONSTRAINED_N } from "./graph.js";
 export {
   bfsDistances,
