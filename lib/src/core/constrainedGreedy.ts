@@ -20,7 +20,13 @@
  * they throw a clear error on malformed input (out-of-range ids, bad k,
  * required-degree over k) but otherwise assume feasibility.
  */
-import { Graph, DEFAULT_MIN_SEPARATION, MAX_CONSTRAINED_N } from "./graph.js";
+import {
+  Graph,
+  DEFAULT_MIN_SEPARATION,
+  MAX_CONSTRAINED_N,
+  MAX_CONSTRAINED_WORK,
+  constrainedWork,
+} from "./graph.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -239,11 +245,18 @@ function choosePartner(
 }
 
 /**
- * Force-connect leftover components under the degree cap. Connectivity outranks
- * girth and regularity, but never exceed k: repeatedly add any legal
- * (non-prohibited, both-under-k) cross-component edge until one component
- * remains or none exists. Residual disconnection is honest — it means the roster
- * cannot be connected within k buddies each, and surfaces as report.connected.
+ * Force-connect leftover components under the degree cap: repeatedly add any legal
+ * (non-prohibited, both-under-k) cross-component edge until one component remains
+ * or no legal edge exists. Connectivity outranks girth and regularity, but never
+ * exceed k. Residual disconnection is honest — the roster cannot be connected
+ * within k buddies each, and it surfaces as report.connected.
+ *
+ * In practice this is an inert backstop: completion (above) exits only once every
+ * under-k vertex is stuck — has no legal partner at all — and a stuck vertex never
+ * regains one, so no legal edge (cross-component or otherwise) is left for this to
+ * add. It fires zero times across the test corpus. Retained for parity with the
+ * reference and to keep the connectivity guarantee if completion's termination is
+ * ever weakened.
  */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion
@@ -335,14 +348,20 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
   if (!Number.isInteger(n) || n < 0) {
     throw new Error(`roster size ${n} is not a valid count — call validate() first`);
   }
-  if (!Number.isInteger(k) || k < 0) {
-    throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
-  }
-  // O(n²) generation; refuse an oversized roster that would hang (validate()
-  // returns the same ceiling as a plain-language refusal for the safe path).
+  // O(n²) generation; refuse an oversized roster before the k-check, mirroring
+  // validate's order (rationale on MAX_CONSTRAINED_N in graph.ts).
   if (n > MAX_CONSTRAINED_N) {
     throw new Error(
       `roster size ${n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} — call validate() first`,
+    );
+  }
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
+  }
+  // Dense k blows generation up past the n-cap (see MAX_CONSTRAINED_WORK).
+  if (constrainedWork(n, k) > MAX_CONSTRAINED_WORK) {
+    throw new Error(
+      `roster size ${n} with k=${k} is too large to generate in reasonable time — call validate() first`,
     );
   }
   checkConstraintIds(n, cons);

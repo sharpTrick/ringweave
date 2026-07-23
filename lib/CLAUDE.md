@@ -56,13 +56,14 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 ## Known limitations / tracked follow-ons
 
 Surfaced by review, deliberately deferred (not silently ignored):
-- **Generation scales ~O(n²) even at small k:** `constrainedGreedy` runs one BFS per edge added,
-  so cost grows quadratically in n regardless of k (n=500,k=4 ≈ 120 ms — within the n≤500 product
-  target; n=4000 ≈ 7–13 s), and worse as k approaches n. The whole constrained path is now capped
-  at `MAX_CONSTRAINED_N` (5000, in `graph.ts`) — enforced as a refusal in `validate` and a throw in
-  `constrainedGreedy` — so a legal-but-huge roster is refused, not left to hang; raising that ceiling
-  needs an incremental distance scheme first (a tracked follow-on). The constrained path only ever
-  needs single-source distances, so it wants a lighter scheme than `ringGreedy`'s full all-pairs cache.
+- **Generation cost scales as n²·min(k,n-1):** `constrainedGreedy` runs one BFS (~O(n)) per edge
+  added and adds ~n·min(k,n-1)/2 edges (n=500,k=4 ≈ 120 ms; n=5000,k=4 ≈ 13 s; the dense corner
+  n=500,k=499 ≈ 89 s). Two caps bound it, both in `graph.ts` and enforced as a refusal in `validate`
+  + a throw in `constrainedGreedy`: `MAX_CONSTRAINED_N` (5000) bounds the n-only costs (the O(n²)
+  baseline and validate's prohibited-pair connectivity walk); `MAX_CONSTRAINED_WORK` (1e8, compared
+  against `constrainedWork(n,k)`) bounds the dense-k blow-up the n-cap misses. Worst-case generation
+  is held to ~13 s (sparse) / ≲~40 s (near-complete). Lifting either needs an incremental
+  single-source distance scheme (a tracked follow-on) — lighter than `ringGreedy`'s all-pairs cache.
 - **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
   column (thousands sharing one label) is slow/heap-heavy, and at tens of millions of pairs the
   `Set` construction itself throws before `validate` can refuse it. A `NaN` tag value never groups
@@ -73,8 +74,10 @@ Surfaced by review, deliberately deferred (not silently ignored):
 - **`girth` (and the other exported all-pairs metrics) are O(n²)** and uncapped — deliberately, since
   they are pure diagnostics run on a `Graph` the caller already built (n bounded by `MAX_ROSTER`), not
   generation entry points fed untrusted `(n,k,constraints)`. The generators that *are* the untrusted
-  surface are capped (`MAX_CACHED_N`, `MAX_CONSTRAINED_N`); `girth`'s sole internal use is on those
-  already-bounded outputs. Documented, not guarded, to avoid a contract change on every metric.
+  surface are capped (`MAX_CACHED_N`, `MAX_CONSTRAINED_N`, `MAX_CONSTRAINED_WORK`). `girth`'s only
+  internal call is in `buildBuddyGraph` on the `ringGreedy` output (bounded by `MAX_CACHED_N`); the
+  constrained path deliberately omits `girth`. Documented, not guarded, to avoid a contract change on
+  every metric.
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
   `null`. Normalize or special-case at the export boundary (F6).
 - **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.

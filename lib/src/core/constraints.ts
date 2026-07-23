@@ -10,7 +10,12 @@
  * possible, and refuse (with a specific reason) only when a graph is genuinely
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
-import { MAX_ROSTER, MAX_CONSTRAINED_N } from "./graph.js";
+import {
+  MAX_ROSTER,
+  MAX_CONSTRAINED_N,
+  MAX_CONSTRAINED_WORK,
+  constrainedWork,
+} from "./graph.js";
 
 // Pairs live as normalized "min,max" string keys (JS Set compares by reference).
 // The keys are held privately so every stored pair is guaranteed canonical — an
@@ -162,9 +167,8 @@ export function validate(cons: Constraints, k: number): string[] {
   const structural = structuralErrors(cons);
   if (structural.length > 0) return Array.from(new Set(structural)).sort();
 
-  // Refuse an oversized roster before the O(n²) connectivity walk and generation:
-  // the constrained path is O(n²) in time, so a legal-but-huge roster would hang
-  // rather than crash. This ceiling (well under MAX_ROSTER) keeps it tractable.
+  // Roster too large for the O(n²) constrained path (rationale on MAX_CONSTRAINED_N
+  // in graph.ts); refuse before the O(n²) connectivity walk and generation.
   if (cons.n > MAX_CONSTRAINED_N) {
     return [
       `roster size ${cons.n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} (generation is O(n²))`,
@@ -173,6 +177,15 @@ export function validate(cons: Constraints, k: number): string[] {
 
   if (!Number.isInteger(k) || k < 0) {
     return [`buddy count ${k} must be a non-negative whole number`];
+  }
+
+  // Dense k blows generation up past the n-cap (rationale on MAX_CONSTRAINED_WORK
+  // in graph.ts); refuse when the estimated work exceeds the budget. Mirrored as a
+  // throw in constrainedGreedy's checkWellFormed.
+  if (constrainedWork(cons.n, k) > MAX_CONSTRAINED_WORK) {
+    return [
+      `roster size ${cons.n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
+    ];
   }
 
   const errs: string[] = [];

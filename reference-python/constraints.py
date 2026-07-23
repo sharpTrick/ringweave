@@ -91,6 +91,13 @@ def validate(cons, k):
     if not isinstance(k, int) or isinstance(k, bool) or k < 0:
         return [f"buddy count {k} must be a non-negative whole number"]
 
+    # Dense k blows generation up past the n-cap (one BFS per edge, ~n*min(k,n-1)/2
+    # edges); refuse when the estimated work exceeds the budget. Mirrors the TS port.
+    if _constrained_work(cons.n, k) > MAX_CONSTRAINED_WORK:
+        return [
+            f"roster size {cons.n} with {k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count"
+        ]
+
     reqd = cons.required_degree()
     prod = cons.prohibited_degree()
 
@@ -126,6 +133,16 @@ MAX_ROSTER = 1_000_000
 # Constrained generation runs one BFS per edge added (O(n^2) in time), so it is
 # capped far tighter than MAX_ROSTER to keep worst-case generation bounded.
 MAX_CONSTRAINED_N = 5000
+
+# Work budget bounding the dense-k blow-up that MAX_CONSTRAINED_N misses. Wall-clock
+# tracks n^2 * min(k, n-1); this ceiling holds worst-case generation to tens of
+# seconds. Mirrors the TS port (see MAX_CONSTRAINED_WORK in graph.ts).
+MAX_CONSTRAINED_WORK = 100_000_000
+
+
+def _constrained_work(n, k):
+    """Estimated constrained-generation cost, proportional to vertices x edges-added."""
+    return n * n * min(k, max(0, n - 1))
 
 
 def _structural_errors(cons):

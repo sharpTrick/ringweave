@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Graph } from "../src/core/graph.js";
+import { Graph, constrainedWork, MAX_CONSTRAINED_WORK } from "../src/core/graph.js";
 import { allPairsSummary, isConnected } from "../src/core/metrics.js";
 import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
 import {
@@ -206,6 +206,34 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
     });
     it("validate still refuses (never throws) an astronomically large roster", () => {
       expect(validate(new Constraints(MAX_ROSTER + 1), 4).length).toBeGreaterThan(0);
+    });
+  });
+
+  // Cost scales as n²·min(k,n-1), so a dense k blows generation up even under the
+  // n-cap. MAX_CONSTRAINED_WORK refuses such inputs at all three entry points
+  // BEFORE any generation runs (so this table is fast). Cases span the dense
+  // corner and oversized-work sparse-large; the boundary is re-derived from the
+  // exported constant, so a future threshold change keeps the guard honest.
+  describe("constrained work budget (MAX_CONSTRAINED_WORK)", () => {
+    const OVER: [number, number][] = [
+      [5000, 10], // sparse but large-n
+      [3000, 20],
+      [1000, 200],
+      [500, 499], // near-complete (dense)
+    ];
+    it.each(OVER)("refuses n=%i, k=%i whose estimated work exceeds the budget", (n, k) => {
+      expect(constrainedWork(n, k)).toBeGreaterThan(MAX_CONSTRAINED_WORK);
+      expect(validate(new Constraints(n), k).some((m) => /too large to generate/.test(m))).toBe(
+        true,
+      );
+      const r = buildConstrainedBuddyGraph(n, k, new Constraints(n));
+      expect(r.report.refusals.some((m) => /too large to generate/.test(m))).toBe(true);
+      expect(r.edges).toEqual([]);
+      expect(() => constrainedGreedy(n, k, new Constraints(n))).toThrow(/too large to generate/);
+    });
+    it("accepts a roster at exactly the budget (work not strictly over)", () => {
+      expect(constrainedWork(5000, 4)).toBe(MAX_CONSTRAINED_WORK);
+      expect(validate(new Constraints(5000), 4)).toEqual([]);
     });
   });
 

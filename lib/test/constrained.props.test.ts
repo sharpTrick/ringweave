@@ -86,9 +86,11 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         // determinism: RNG-free, so a rerun is identical
         const rerun = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         expect(rerun.edgeList()).toEqual(g.edgeList());
-        // stronger: insertion ORDER must not leak into output via Set-ordered
-        // adjacency traversal (component discovery in forceConnect). Rebuild the
-        // same constraints with every pair inserted in reversed order.
+        // stronger: constraint insertion ORDER must not leak into output. Every
+        // decision routes through explicit index tie-breaks and order-invariant BFS
+        // distances, so the same set rebuilt in reversed order must be identical —
+        // a regression guard against a future change that consumes adjacency-Set
+        // iteration order directly.
         const reordered = buildReversed(s);
         const g2 = constrainedGreedy(s.n, s.k, reordered, { minSeparation: 5 });
         expect(g2.edgeList()).toEqual(g.edgeList());

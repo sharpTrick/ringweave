@@ -127,6 +127,8 @@ export function girth(g: Graph): number {
           parent[w] = u;
           q.push(w);
         } else if (parent[u] !== w) {
+          // a non-parent already-seen neighbour closes a cycle; skip the tree edge
+          // back to the parent, which isn't one
           const cyc = dist[u] + dist[w] + 1;
           if (cyc < best) best = cyc;
         }

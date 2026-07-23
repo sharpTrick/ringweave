@@ -17,14 +17,35 @@
 export const MAX_ROSTER = 1_000_000;
 
 // Upper bound on roster size for the constrained path (constrainedGreedy /
-// buildConstrainedBuddyGraph / validate). That path runs one BFS per edge added,
-// so generation is O(n²) in time even at small k — n≈8000 already takes ~a
-// minute, and MAX_ROSTER-sized input would run for hours. This caps worst-case
-// generation to the low tens of seconds (~10× the n≤500 product target) and is
-// enforced as a refusal in `validate` and a throw in `constrainedGreedy`'s
-// precondition. Distinct from MAX_CACHED_N despite the similar magnitude: that
-// bounds ringGreedy's O(n²) distance-cache *memory*; this bounds O(n²) *time*.
+// buildConstrainedBuddyGraph / validate). Bounds the costs that scale with n
+// alone: generation's O(n²) baseline (one BFS per edge) and validate's O(n²)
+// prohibited-pair connectivity walk. The extra blow-up from dense k is bounded
+// separately by MAX_CONSTRAINED_WORK — this cap alone does not make a large-k
+// roster tractable. Enforced as a refusal in `validate` and a throw in
+// `constrainedGreedy`'s precondition. Its value coincides with MAX_CACHED_N but
+// is unrelated — do not merge them: that one bounds ringGreedy's distance-cache
+// *memory*, this one bounds roster size on the constrained path.
 export const MAX_CONSTRAINED_N = 5000;
+
+// Work budget for constrained generation, bounding the cost that MAX_CONSTRAINED_N
+// misses: dense k. `constrainedGreedy` runs one BFS (~O(n)) per edge added and
+// adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n²·min(k,n-1) — measured at
+// ~5M work-units/second regardless of the sparse/dense split. A dense roster
+// (e.g. n=500,k=499) clears the n-cap but then runs for minutes-to-days; this
+// budget refuses it, holding worst-case generation to ~13 s for sparse rosters
+// and ≲~40 s in the (unrealistic) near-complete corner. Enforced in `validate`
+// (refuse) and `checkWellFormed` (throw); mirrored in reference-python. The real
+// fix — an incremental single-source distance scheme — is a tracked follow-on.
+export const MAX_CONSTRAINED_WORK = 100_000_000;
+
+/**
+ * Estimated constrained-generation cost, ∝ vertices × edges-added. Monotone in n
+ * and k; compared against MAX_CONSTRAINED_WORK to refuse rosters that would hang.
+ * `min(k, n-1)` mirrors the effective degree cap (k is silently capped at n-1).
+ */
+export function constrainedWork(n: number, k: number): number {
+  return n * n * Math.min(k, Math.max(0, n - 1));
+}
 
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
 // option). Shared so the three generation entry points can't drift apart.
