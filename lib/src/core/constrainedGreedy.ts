@@ -161,7 +161,8 @@ function choosePartner(
   g: Graph,
   minSep: number,
 ): number {
-  const farness = (v: number) => (dist[v] >= 0 ? dist[v] : INFINITE_DISTANCE);
+  const farness = (v: number) =>
+    dist[v] !== UNREACHABLE ? dist[v] : INFINITE_DISTANCE;
   candidates.sort((a, b) => {
     const fa = farness(a);
     const fb = farness(b);

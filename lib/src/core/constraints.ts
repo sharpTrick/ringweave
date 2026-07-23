@@ -11,11 +11,6 @@
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
 
-/** Ordered undirected pair [min, max]. */
-export function pair(a: number, b: number): [number, number] {
-  return a < b ? [a, b] : [b, a];
-}
-
 // JS Set compares by reference, so pairs live as normalized "min,max" keys.
 export function pairKey(a: number, b: number): string {
   return a < b ? `${a},${b}` : `${b},${a}`;
