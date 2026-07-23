@@ -61,6 +61,8 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         // hard guarantees
         for (const [a, b] of cons.prohibitedPairs()) expect(g.hasEdge(a, b)).toBe(false);
         for (const [a, b] of cons.requiredPairs()) expect(g.hasEdge(a, b)).toBe(true);
+        // degree cap is hard (forceConnect respects it)
+        for (let v = 0; v < s.n; v++) expect(g.degree(v)).toBeLessThanOrEqual(s.k);
         // no self-loops, no isolated vertices, connected
         for (let v = 0; v < s.n; v++) expect(g.hasEdge(v, v)).toBe(false);
         expect(isConnected(g)).toBe(true);
@@ -91,6 +93,30 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         }
       }),
       { numRuns: 40 },
+    );
+  });
+
+  it("a higher prior weight never keeps fewer priors than zero weight", () => {
+    fc.assert(
+      fc.property(scenario, (s) => {
+        const cons = build(s);
+        fc.pre(validate(cons, s.k).length === 0);
+
+        // treat the generated graph's own edges as the prior buddies (churn)
+        const base = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
+        for (const [a, b] of base.edgeList()) cons.addPrior(a, b);
+
+        const kept = (weight: number) => {
+          const g = polishConstrained(base, cons, {
+            seed: 5,
+            iters: 800,
+            priorWeight: weight,
+          });
+          return cons.priorPairs().filter(([a, b]) => g.hasEdge(a, b)).length;
+        };
+        expect(kept(50)).toBeGreaterThanOrEqual(kept(0));
+      }),
+      { numRuns: 25 },
     );
   });
 });

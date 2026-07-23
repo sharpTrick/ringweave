@@ -1,18 +1,31 @@
 /**
  * Constrained buddy-graph generation (algorithm B) plus constraint-preserving
  * polish. Both guarantee the hard constraints — required edges are present,
- * prohibited edges never are — while minimizing average shortest path length,
- * with an optional soft penalty that preserves prior buddies across churn.
+ * prohibited edges never are, and no vertex exceeds k buddies — while minimizing
+ * average shortest path length, with an optional soft penalty that preserves
+ * prior buddies across churn.
  *
  * `constrainedGreedy` is RNG-free and deterministic. `polishConstrained` uses
  * the seeded RNG, so it is reproducible within JS for a given seed. Validated
  * against the Python reference on invariants and aggregate metrics rather than
  * byte-for-byte structure.
+ *
+ * Unlike `ringGreedy`, completion has no `demote` step: when no partner sits at
+ * least `minSeparation` away, `choosePartner` falls back to the closest legal
+ * partner instead of iteratively shrinking the target (matches the reference).
+ *
+ * Callers that skip `buildConstrainedBuddyGraph` must run `validate` first —
+ * these functions assume well-formed, feasible input (checked only in dev mode).
  */
 import { Graph } from "./graph.js";
-import { bfsDistances, allPairsSummary } from "./metrics.js";
+import {
+  bfsDistances,
+  allPairsSummary,
+  penalizedAspl,
+  countPresentEdges,
+} from "./metrics.js";
 import { RNG } from "./rng.js";
-import { Constraints, pairKey } from "./constraints.js";
+import { Constraints } from "./constraints.js";
 import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 const UNREACHABLE = -1;
@@ -29,19 +42,24 @@ type EdgePredicate = (u: number, v: number) => boolean;
 type Objective = (g: Graph) => number;
 
 export interface ConstrainedGreedyOptions {
+  /** Separation to aim for during completion. Default 5, clamped to floor(n/2). */
   minSeparation?: number;
 }
 
 export interface PolishConstrainedOptions {
+  /** Seed for the swap RNG (reproducible within JS). Default 0. */
   seed?: number;
+  /** Iteration budget. Default 8000. */
   iters?: number;
+  /** Soft penalty weight for keeping prior buddies. Default 0 (off). */
   priorWeight?: number;
 }
 
 /**
  * Lay required edges first (never removed), greedily complete toward degree k
  * while honoring prohibited pairs and a soft minimum-separation target, then
- * force-connect any leftover components. Sacrifices regularity, never a hard
+ * force-connect leftover components without exceeding k. Sacrifices regularity
+ * and, when the degree budget won't allow it, connectivity — never a hard
  * constraint.
  */
 export function constrainedGreedy(
@@ -50,17 +68,18 @@ export function constrainedGreedy(
   cons: Constraints,
   opts: ConstrainedGreedyOptions = {},
 ): Graph {
+  assertWellFormed(n, k, cons);
+
   const g = new Graph(n);
-  const legal = legalEdge(g, cons.prohibited, k);
+  const legal = legalEdge(g, cons, k);
 
   for (const [a, b] of cons.requiredPairs()) g.addEdge(a, b);
 
   const minSep = Math.min(opts.minSeparation ?? 5, Math.floor(n / 2));
 
-  // Each iteration adds one new edge, so a feasible completion needs far fewer
-  // than n*k*6 steps; this is a safety bound that cannot be reached on valid
-  // input. If it ever were, forceConnect still guarantees connectivity and only
-  // degree regularity would be at risk.
+  // Each iteration adds one edge, so a completion needs far fewer than n*k*6
+  // steps; this is an unreachable safety bound (the loop exits earlier when no
+  // deficient vertex or no legal partner remains).
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
     const u = mostDeficient(g, k);
@@ -72,9 +91,10 @@ export function constrainedGreedy(
     g.addEdge(u, choosePartner(candidates, dist, g, minSep));
   }
 
-  forceConnect(g, cons.prohibited);
+  forceConnect(g, cons, k);
 
   assertHardConstraints(g, cons, "constrainedGreedy");
+  assertWithinDegreeCap(g, k, "constrainedGreedy");
   return g;
 }
 
@@ -127,11 +147,11 @@ export function polishConstrained(
 
 // --- generation helpers -----------------------------------------------------
 
-function legalEdge(g: Graph, prohibited: Set<string>, k: number): EdgePredicate {
+function legalEdge(g: Graph, cons: Constraints, k: number): EdgePredicate {
   return (u, v) =>
     u !== v &&
     !g.hasEdge(u, v) &&
-    !prohibited.has(pairKey(u, v)) &&
+    !cons.isProhibited(u, v) &&
     g.degree(u) < k &&
     g.degree(v) < k;
 }
@@ -178,32 +198,39 @@ function choosePartner(
   return candidates[0];
 }
 
-/** Connect leftover components; connectivity outranks girth and regularity. */
-function forceConnect(g: Graph, prohibited: Set<string>): void {
-  const comps = components(g);
-  if (comps.length <= 1) return;
-  let main = comps[0];
-  for (let i = 1; i < comps.length; i++) {
-    const comp = comps[i];
-    joinComponents(g, main, comp, prohibited);
-    // Merge unconditionally: even when every main×comp pair is prohibited, comp
-    // still becomes reachable-target territory for a later component to attach
-    // to (a graceful degradation, not a lost component).
-    main = main.concat(comp);
+/**
+ * Force-connect leftover components under the degree cap. Connectivity outranks
+ * girth and regularity, but never exceed k: repeatedly add any legal
+ * (non-prohibited, both-under-k) cross-component edge until one component
+ * remains or none exists. Residual disconnection is honest — it means the roster
+ * cannot be connected within k buddies each, and surfaces as report.connected.
+ */
+function forceConnect(g: Graph, cons: Constraints, k: number): void {
+  // At most n-1 joins are ever needed; each pass adds one edge or stops.
+  for (let pass = 0; pass < g.n; pass++) {
+    const comps = components(g);
+    if (comps.length <= 1) return;
+    if (!joinAnyComponents(g, comps, cons, k)) return;
   }
 }
 
-function joinComponents(
+/** Add one legal edge bridging two distinct components; true if one was added. */
+function joinAnyComponents(
   g: Graph,
-  main: number[],
-  comp: number[],
-  prohibited: Set<string>,
+  comps: number[][],
+  cons: Constraints,
+  k: number,
 ): boolean {
-  for (const u of main) {
-    for (const v of comp) {
-      if (!prohibited.has(pairKey(u, v)) && !g.hasEdge(u, v)) {
-        g.addEdge(u, v);
-        return true;
+  for (let i = 0; i < comps.length; i++) {
+    for (let j = i + 1; j < comps.length; j++) {
+      for (const u of comps[i]) {
+        if (g.degree(u) >= k) continue;
+        for (const v of comps[j]) {
+          if (g.degree(v) < k && !cons.isProhibited(u, v) && !g.hasEdge(u, v)) {
+            g.addEdge(u, v);
+            return true;
+          }
+        }
       }
     }
   }
@@ -240,12 +267,9 @@ function constrainedEnergy(cons: Constraints, priorWeight: number): Objective {
   const priors = cons.priorPairs();
   const usePriorPenalty = priorWeight !== 0 && priors.length > 0;
   return (g) => {
-    const { aspl, connected } = allPairsSummary(g);
-    let e = connected ? aspl : aspl + 10 * g.n;
+    let e = penalizedAspl(allPairsSummary(g), g.n);
     if (usePriorPenalty) {
-      let kept = 0;
-      for (const [a, b] of priors) if (g.hasEdge(a, b)) kept++;
-      e += priorWeight * (priors.length - kept);
+      e += priorWeight * (priors.length - countPresentEdges(g, priors));
     }
     return e;
   };
@@ -254,19 +278,38 @@ function constrainedEnergy(cons: Constraints, priorWeight: number): Objective {
 /** A swap is illegal when it would break a required edge or create a prohibited one. */
 function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
   return (
-    cons.required.has(pairKey(s.a, s.b)) ||
-    cons.required.has(pairKey(s.c, s.d)) ||
-    cons.prohibited.has(pairKey(s.x1, s.y1)) ||
-    cons.prohibited.has(pairKey(s.x2, s.y2))
+    cons.isRequired(s.a, s.b) ||
+    cons.isRequired(s.c, s.d) ||
+    cons.isProhibited(s.x1, s.y1) ||
+    cons.isProhibited(s.x2, s.y2)
   );
 }
 
 // --- contracts (dev-mode only) ----------------------------------------------
 
-// Postcondition checks run under test/dev but are compiled out of production
-// bundles where `process` is absent, so they never cost the hot path.
+// Postcondition/precondition checks run under test/dev but are compiled out of
+// production bundles where `process` is absent, so they never cost the hot path.
+// NOTE: any new hard-constraint kind must be enforced in legalEdge,
+// joinAnyComponents, swapBreaksConstraint, AND asserted here — keep the four in sync.
 const CONTRACTS_ENABLED =
   typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+
+/** Turn the "call validate first" contract into a clear dev-mode error. */
+function assertWellFormed(n: number, k: number, cons: Constraints): void {
+  if (!CONTRACTS_ENABLED) return;
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`constrainedGreedy: k must be a non-negative integer, got ${k}`);
+  }
+  const outOfRange = (a: number, b: number) =>
+    !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;
+  for (const [a, b] of [...cons.requiredPairs(), ...cons.prohibitedPairs()]) {
+    if (outOfRange(a, b)) {
+      throw new Error(
+        `constrainedGreedy: constraint references person out of range (${a},${b}) for n=${n} — call validate() first`,
+      );
+    }
+  }
+}
 
 function assertHardConstraints(g: Graph, cons: Constraints, where: string): void {
   if (!CONTRACTS_ENABLED) return;
@@ -278,6 +321,15 @@ function assertHardConstraints(g: Graph, cons: Constraints, where: string): void
   for (const [a, b] of cons.requiredPairs()) {
     if (!g.hasEdge(a, b)) {
       throw new Error(`${where}: required edge ${a}–${b} missing`);
+    }
+  }
+}
+
+function assertWithinDegreeCap(g: Graph, k: number, where: string): void {
+  if (!CONTRACTS_ENABLED) return;
+  for (let v = 0; v < g.n; v++) {
+    if (g.degree(v) > k) {
+      throw new Error(`${where}: degree of ${v} is ${g.degree(v)} > k=${k}`);
     }
   }
 }

@@ -40,7 +40,7 @@ export {
 import { Graph } from "./graph.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
-import { allPairsSummary, girth } from "./metrics.js";
+import { allPairsSummary, girth, countPresentEdges } from "./metrics.js";
 import { asplGap } from "./bounds.js";
 import { Constraints, validate } from "./constraints.js";
 import { constrainedGreedy, polishConstrained } from "./constrainedGreedy.js";
@@ -86,10 +86,7 @@ export function buildBuddyGraph(
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? 5;
   const seed = options.seed ?? 12345;
-  const wantPolish =
-    options.polish === undefined || options.polish === "auto"
-      ? n <= 120
-      : options.polish === true;
+  const wantPolish = resolveWantPolish(options.polish, n);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
 
@@ -163,6 +160,10 @@ export interface ConstraintReport {
  * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is
  * non-empty the input was refused: `buddies`/`edges` are empty and the metric
  * fields are placeholders — read `report` first.
+ *
+ * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}):
+ * Moore's bound assumes a k-regular target, which constrained graphs only
+ * approximate. Compute `girth(edges)` directly if a UI needs it.
  */
 export interface ConstrainedBuddyResult {
   buddies: number[][];
@@ -189,6 +190,14 @@ export function buildConstrainedBuddyGraph(
 ): ConstrainedBuddyResult {
   const k = buddiesPerPerson;
 
+  // n and cons.n are two sources of roster size; a mismatch would otherwise
+  // dereference a missing vertex during generation. Refuse cleanly instead.
+  if (n !== cons.n) {
+    return refusedResult(n, [
+      `roster size ${n} does not match the constraints (built for ${cons.n})`,
+    ]);
+  }
+
   // Promote hard priors to required BEFORE validating, so an infeasibility that
   // only exists after promotion (e.g. a prior that is also prohibited, or one
   // that pushes required-degree over k) is refused rather than silently emitted.
@@ -200,18 +209,13 @@ export function buildConstrainedBuddyGraph(
     minSeparation: options.minSeparation,
   });
 
-  const wantPolish =
-    options.polish === undefined || options.polish === "auto"
-      ? n <= 120
-      : options.polish === true;
-
   let g = graph;
   let polished = false;
-  if (wantPolish) {
+  if (resolveWantPolish(options.polish, n)) {
     // priorHard already promoted priors to required, so no soft penalty then.
     const priorWeight = active.priorHard
       ? 0
-      : (options.priorWeight ?? (cons.priors.size > 0 ? 2 : 0));
+      : (options.priorWeight ?? (cons.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0));
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
     g = polishConstrained(g, active, {
@@ -249,6 +253,15 @@ function withHardPriors(cons: Constraints): Constraints {
   return promoted;
 }
 
+// Empirically keeps ~half-plus of prior buddies without hurting ASPL much —
+// see the "prior weight preserves churn buddies" test. A product-tunable dial.
+const DEFAULT_PRIOR_WEIGHT = 2;
+
+/** Resolve the polish option: "auto" (default) enables polish for n <= 120. */
+function resolveWantPolish(option: boolean | "auto" | undefined, n: number): boolean {
+  return option === undefined || option === "auto" ? n <= 120 : option === true;
+}
+
 /** Min and max of a degree sequence, loop-based to avoid arg-spread limits. */
 function degreeExtent(degrees: number[]): [number, number] {
   if (degrees.length === 0) return [0, 0];
@@ -272,12 +285,8 @@ function buildReport(
   for (const [a, b] of cons.requiredPairs()) if (!g.hasEdge(a, b)) reqViolations++;
 
   const priors = cons.priorPairs();
-  let priorsKeptFraction: number | null = null;
-  if (priors.length > 0) {
-    let kept = 0;
-    for (const [a, b] of priors) if (g.hasEdge(a, b)) kept++;
-    priorsKeptFraction = kept / priors.length;
-  }
+  const priorsKeptFraction =
+    priors.length > 0 ? countPresentEdges(g, priors) / priors.length : null;
 
   return {
     satisfied: reqViolations === 0 && prohViolations === 0 && connected,

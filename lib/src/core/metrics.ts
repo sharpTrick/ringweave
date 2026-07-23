@@ -63,6 +63,18 @@ export function allPairsSummary(g: Graph): Summary {
   return { aspl, diameter, connected };
 }
 
+/** ASPL with a heavy penalty when disconnected — a single scalar for optimizers. */
+export function penalizedAspl(summary: Summary, n: number): number {
+  return summary.connected ? summary.aspl : summary.aspl + 10 * n;
+}
+
+/** How many of `pairs` are currently present as edges in `g`. */
+export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
+  let count = 0;
+  for (const [a, b] of pairs) if (g.hasEdge(a, b)) count++;
+  return count;
+}
+
 /** Fraction of vertices in the largest connected component. */
 export function largestComponentFraction(g: Graph): number {
   if (g.n === 0) return 1;

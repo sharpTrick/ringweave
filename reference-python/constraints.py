@@ -75,6 +75,10 @@ def validate(cons, k):
     by sacrificing regularity."""
     errs = []
     n = cons.n
+
+    if not isinstance(k, int) or isinstance(k, bool) or k < 0:
+        return [f"buddy count {k} must be a non-negative whole number"]
+
     reqd = cons.required_degree()
     prod = cons.prohibited_degree()
 
@@ -90,9 +94,35 @@ def validate(cons, k):
         allowed = (n - 1) - prod[v]
         if allowed < reqd[v]:
             errs.append(f"person {v} cannot meet required buddies within their prohibited set")
-        if allowed <= 0 and n > 1:
+        # only a real problem when people actually need buddies (k > 0)
+        if allowed <= 0 and n > 1 and k > 0:
             errs.append(f"person {v} is prohibited from everyone — they'd have no buddies")
 
-    # global edge budget sanity: required edges alone must fit under degree caps
-    # (already covered per-vertex by reqd[v] <= k)
+    # connectivity feasibility: if prohibited pairs split the roster so that some
+    # people can never be linked to the rest (even ignoring degree caps), no
+    # connected buddy graph exists. Necessary condition; degree-budget shortfalls
+    # are handled by sacrificing regularity, not refused here.
+    if k > 0 and n > 1:
+        errs += _connectivity_errors(cons)
+
     return sorted(set(errs))
+
+
+def _connectivity_errors(cons):
+    """Refuse when the allowed-pairs graph (all non-prohibited pairs) is itself
+    disconnected — then no edge selection can ever connect everyone."""
+    n = cons.n
+    proh = cons.prohibited
+    seen = [False] * n
+    seen[0] = True
+    stack = [0]
+    while stack:
+        u = stack.pop()
+        for v in range(n):
+            if not seen[v] and v != u and pair(u, v) not in proh:
+                seen[v] = True
+                stack.append(v)
+    if all(seen):
+        return []
+    stranded = next(v for v in range(n) if not seen[v])
+    return [f"prohibited pairs split the group — person {stranded} can never be connected to everyone"]

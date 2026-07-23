@@ -6,7 +6,7 @@
  * Two modes: "hill" (accept only improvements) and "anneal" (Metropolis).
  */
 import { Graph } from "./graph.js";
-import { allPairsSummary } from "./metrics.js";
+import { allPairsSummary, penalizedAspl } from "./metrics.js";
 import { RNG } from "./rng.js";
 import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
@@ -56,8 +56,7 @@ function sampledAspl(g: Graph, srcs: number[]): number {
 
 function energy(g: Graph, srcs: number[] | null): number {
   if (srcs) return sampledAspl(g, srcs);
-  const { aspl, connected } = allPairsSummary(g);
-  return connected ? aspl : aspl + 10 * g.n;
+  return penalizedAspl(allPairsSummary(g), g.n);
 }
 
 export function polish(

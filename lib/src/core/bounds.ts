@@ -9,7 +9,9 @@ export interface MooreBounds {
 }
 
 export function mooreLowerBounds(n: number, k: number): MooreBounds {
-  if (k <= 0 || n <= 1) return { asplLb: 0, diameterLb: 0 };
+  if (!Number.isFinite(n) || !Number.isFinite(k) || k <= 0 || n <= 1) {
+    return { asplLb: 0, diameterLb: 0 };
+  }
   let remaining = n - 1;
   let total = 0;
   let shell = k;

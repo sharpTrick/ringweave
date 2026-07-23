@@ -51,6 +51,16 @@ function hasNoProhibited(g: Graph, c: Constraints): boolean {
   return c.prohibitedPairs().every(([a, b]) => !g.hasEdge(a, b));
 }
 
+function extent(xs: number[]): [number, number] {
+  let lo = xs[0];
+  let hi = xs[0];
+  for (const x of xs) {
+    if (x < lo) lo = x;
+    if (x > hi) hi = x;
+  }
+  return [lo, hi];
+}
+
 describe("constrainedGreedy oracle parity vs Python", () => {
   for (const fx of ref.constrained as ConstrainedFixture[]) {
     it(`${fx.scenario} n=${fx.n} k=${fx.k}`, () => {
@@ -67,13 +77,13 @@ describe("constrainedGreedy oracle parity vs Python", () => {
       expect(Math.abs(aspl - fx.aspl) / fx.aspl).toBeLessThan(0.1);
       expect(Math.abs(diameter - fx.diameter)).toBeLessThanOrEqual(1);
 
-      // quality parity: degree spread matches the reference on these fixtures
-      // (spread <= 1 is a quality expectation here, not a hard guarantee —
-      // forceConnect can widen it on prohibition-dense inputs).
+      // degree is a hard cap now (forceConnect respects k), and spread matches
+      // the reference on these fixtures. Loop, not Math.max(...), to stay safe
+      // at large n (see degreeExtent).
       const degs = g.degrees();
-      expect(Math.max(...degs) - Math.min(...degs)).toBeLessThanOrEqual(
-        fx.deg_max - fx.deg_min + 1,
-      );
+      const [dMin, dMax] = extent(degs);
+      expect(dMax).toBeLessThanOrEqual(fx.k);
+      expect(dMax - dMin).toBeLessThanOrEqual(fx.deg_max - fx.deg_min + 1);
     });
   }
 });
@@ -124,18 +134,45 @@ describe("validate infeasibility messages", () => {
       "person 2 cannot be paired with themselves",
     );
   });
+
+  it("rejects a non-integer or negative buddy count", () => {
+    expect(validate(new Constraints(5), Number.NaN).length).toBeGreaterThan(0);
+    expect(validate(new Constraints(5), 2.5).length).toBeGreaterThan(0);
+    expect(validate(new Constraints(5), -1).length).toBeGreaterThan(0);
+    expect(validate(new Constraints(5), Infinity).length).toBeGreaterThan(0);
+  });
+
+  it("accepts an all-prohibited roster when k=0 (nobody needs buddies)", () => {
+    const c = new Constraints(3);
+    c.prohibit(0, 1).prohibit(0, 2).prohibit(1, 2);
+    expect(validate(c, 0)).toEqual([]);
+  });
+
+  it("refuses when prohibited pairs split the group into unconnectable parts", () => {
+    // {0,1} vs {2,3}, every cross pair prohibited: no connected graph exists
+    const c = new Constraints(4);
+    for (const a of [0, 1]) for (const b of [2, 3]) c.prohibit(a, b);
+    const errs = validate(c, 1);
+    expect(errs.some((e) => e.includes("split the group"))).toBe(true);
+  });
 });
 
 describe("fromTags compiles same-group to prohibited", () => {
   it("prohibits household members", () => {
     const tags = [0, 0, 1, 1, 1, null, null];
     const c = Constraints.fromTags(7, tags, "prohibit_same");
-    expect(c.prohibited.has("0,1")).toBe(true); // group 0
-    expect(c.prohibited.has("2,3")).toBe(true); // group 1
-    expect(c.prohibited.has("2,4")).toBe(true);
-    expect(c.prohibited.has("3,4")).toBe(true);
-    expect(c.prohibited.has("5,6")).toBe(false); // null tags never prohibited
-    expect(c.prohibited.has("0,2")).toBe(false); // different groups
+    expect(c.isProhibited(0, 1)).toBe(true); // group 0
+    expect(c.isProhibited(2, 3)).toBe(true); // group 1
+    expect(c.isProhibited(2, 4)).toBe(true);
+    expect(c.isProhibited(3, 4)).toBe(true);
+    expect(c.isProhibited(5, 6)).toBe(false); // null tags never prohibited
+    expect(c.isProhibited(0, 2)).toBe(false); // different groups
+  });
+
+  it("treats a short/sparse tags array as ungrouped past its end", () => {
+    // only 2 of 5 entries present — indices 2..4 have no tag and must not group
+    const c = Constraints.fromTags(5, [0, 1], "prohibit_same");
+    expect(c.prohibitedCount).toBe(0);
   });
 });
 
@@ -166,7 +203,7 @@ describe("prior weight preserves churn buddies", () => {
     const base = constrainedGreedy(n, k, new Constraints(n), { minSeparation: 5 });
     const cons = new Constraints(n);
     for (const [a, b] of base.edgeList()) cons.addPrior(a, b);
-    const total = cons.priors.size;
+    const total = cons.priorCount;
 
     const keptWith = (weight: number) => {
       const g = polishConstrained(base, cons, {
@@ -241,5 +278,24 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     const r = buildConstrainedBuddyGraph(5, 3, c);
     expect(r.report.refusals.length).toBeGreaterThan(0);
     expect(r.edges).toEqual([]);
+  });
+
+  it("refuses (not crashes) when n disagrees with the constraints' size", () => {
+    const c = new Constraints(10);
+    c.require(8, 9);
+    const r = buildConstrainedBuddyGraph(3, 2, c);
+    expect(r.report.refusals.length).toBeGreaterThan(0);
+    expect(r.edges).toEqual([]);
+  });
+
+  it("never exceeds the buddy count k, even under heavy prohibition", () => {
+    // person 0 free, everyone else mutually prohibited: can't all connect at k=2
+    const c = new Constraints(20);
+    for (let a = 1; a < 20; a++) {
+      for (let b = a + 1; b < 20; b++) c.prohibit(a, b);
+    }
+    const r = buildConstrainedBuddyGraph(20, 2, c, { seed: 0 });
+    expect(r.degreeMax).toBeLessThanOrEqual(2); // no runaway hub
+    expect(r.report.prohViolations).toBe(0);
   });
 });

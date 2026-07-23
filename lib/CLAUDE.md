@@ -50,7 +50,19 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 ## Review (required before commit)
 
 Non-trivial changes get **adversarial sub-agent review** using the committed critics in
-`.claude/agents/` (correctness, SOLID, maintainability, security). Run 2–3 rounds; the critics
-default to skepticism and try to break the change. **Verify each finding against the code before
-acting on it** (guards against false positives); fix blocking findings or justify them explicitly;
-keep tests green at the end of every round.
+`.claude/agents/` (correctness, SOLID, maintainability, security). The critics default to
+skepticism and try to break the change.
+
+Protocol (learned the hard way):
+- **Unfocused, full-surface, every round.** Point critics at the whole component under review, not
+  a diff. Critics anchor on the first/biggest issue they see; a diff-scoped review hides everything
+  the anchor is sitting on top of.
+- **Run all four critics each round**, in parallel.
+- **Verify each finding against the code before acting on it** — reproduce or trace it — to filter
+  false positives (LLM negation-blindness). Fix confirmed blocking findings or justify them
+  explicitly; log suggestions.
+- **Keep going, round after round, until either the critics give a unanimous green light or it is
+  clear they would give contradictory suggestions next round** — in which case use judgment and
+  adjudicate. Do not stop at a fixed round count: clearing the anchor frees critics to find the
+  next layer, so a clean round only counts after a round that changed nothing substantive.
+- Keep tests green at the end of every round.

@@ -40,7 +40,7 @@ export class Graph {
   numEdges(): number {
     let s = 0;
     for (const a of this.adj) s += a.size;
-    return s >> 1;
+    return Math.floor(s / 2);
   }
 
   /** Undirected edges as sorted [u, v] pairs with u < v, in ascending order. */

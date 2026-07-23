@@ -96,21 +96,33 @@ def constrained_greedy(n, k, cons, mind=5, rng=None):
         pick = (good or cands)[0]
         g.add_edge(u, pick)
 
-    # 3) force-connect components (connectivity beats girth/regularity)
-    comps = _components(g)
-    if len(comps) > 1:
-        # connect successive components via any allowed (non-prohibited) pair,
-        # relaxing the degree cap only if unavoidable
-        main = comps[0]
-        for comp in comps[1:]:
-            done = False
-            for u in main:
-                for v in comp:
-                    if pair(u, v) not in proh and not g.has_edge(u, v):
-                        g.add_edge(u, v); done = True; break
-                if done: break
-            main = main + comp
+    # 3) force-connect components under the degree cap. Connectivity beats
+    #    girth/regularity, but never exceed k: repeatedly add any legal
+    #    (non-prohibited, both-under-k) cross-component edge until one component
+    #    remains or no such edge exists. Residual disconnection is honest — it
+    #    means the roster cannot be connected within k buddies each.
+    for _ in range(n):
+        comps = _components(g)
+        if len(comps) <= 1:
+            break
+        if not _join_any(g, comps, proh, k):
+            break
     return g
+
+
+def _join_any(g, comps, proh, k):
+    """Add one legal edge bridging two distinct components; True if one was added."""
+    for i in range(len(comps)):
+        for j in range(i + 1, len(comps)):
+            for u in comps[i]:
+                if g.degree(u) >= k:
+                    continue
+                for v in comps[j]:
+                    if (g.degree(v) < k and pair(u, v) not in proh
+                            and not g.has_edge(u, v)):
+                        g.add_edge(u, v)
+                        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
