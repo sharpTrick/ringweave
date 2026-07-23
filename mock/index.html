@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BuddyGraph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e1a; --bg2:#0e1626; --panel:rgba(14,22,38,.66); --panel-solid:#0e1626;
+    --line:#1d2b46; --line2:#26375a;
+    --ink:#eef2fb; --ink-dim:#9fb0c8; --ink-faint:#6d7d95;
+    --warm:#f6b26b; --warm-glow:rgba(246,178,107,.45);
+    --cool:#8bd3dd; --cool2:#a9b1f7; --cool-glow:rgba(139,211,221,.5);
+    --node:#cfd6e6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 30%, rgba(246,178,107,.06), transparent 55%),
+      radial-gradient(ellipse 130% 100% at 50% 34%, #14203a, #0a0e1a 72%);
+    color:var(--ink); font-family:'Instrument Sans',system-ui,sans-serif;
+    overflow:hidden;
+  }
+  /* ambient sunburst layer behind the graph — subtle, alive */
+  #sunburst{position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(circle at 50% 46%,
+      rgba(246,178,107,.10), rgba(139,211,221,.05) 30%, transparent 62%);
+    transition:background .6s ease,opacity .6s ease;opacity:.9}
+  .tabnum{font-variant-numeric:tabular-nums}
+  button{font-family:inherit}
+
+  /* ---------- app shell ---------- */
+  #app{position:fixed;inset:0;display:flex;flex-direction:column}
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:15px 22px;z-index:5;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:28px;height:28px;position:relative}
+  .mark .r{position:absolute;inset:0;border-radius:50%;border:2px solid var(--warm);
+    box-shadow:0 0 14px var(--warm-glow)}
+  .mark .d{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--cool);
+    box-shadow:0 0 8px var(--cool)}
+  .mark .d1{top:-3px;left:11px}.mark .d2{bottom:-3px;left:11px}.mark .d3{top:11px;left:-3px}
+  .brand h1{font-family:'Fraunces',serif;font-weight:600;font-size:22px;letter-spacing:-.01em;margin:0}
+  .privacy{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-dim);
+    background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line2);
+    padding:7px 13px;border-radius:999px}
+  .privacy .dot{width:7px;height:7px;border-radius:50%;background:var(--cool);box-shadow:0 0 8px var(--cool)}
+
+  main{flex:1;position:relative;min-height:0}
+
+  /* graph canvas fills main (full-bleed, 1c) */
+  #stage{position:absolute;inset:0}
+  svg{width:100%;height:100%;display:block;touch-action:none}
+  .edge{stroke:var(--cool);stroke-opacity:.16;stroke-width:1.2;transition:stroke-opacity .25s,stroke .25s}
+  .edge.lit{stroke-opacity:.9;stroke:var(--warm);stroke-width:2}
+  .edge.lit2{stroke-opacity:.4;stroke:var(--cool2)}
+  .edge.dim{stroke-opacity:.05}
+  .node{cursor:pointer}
+  .node circle{fill:var(--node);transition:fill .2s,r .2s,opacity .25s;filter:drop-shadow(0 0 5px rgba(207,214,230,.25))}
+  .node.hi circle{fill:var(--warm);r:9;filter:drop-shadow(0 0 12px var(--warm-glow))}
+  .node.hi2 circle{fill:var(--cool2);filter:drop-shadow(0 0 9px rgba(169,177,247,.5))}
+  .node.sel circle{fill:var(--cool);r:10;filter:drop-shadow(0 0 16px var(--cool-glow))}
+  .node.faded circle{opacity:.22}
+  .node text{fill:var(--ink);font-size:10.5px;font-family:'Instrument Sans';paint-order:stroke;
+    stroke:#0a0e1a;stroke-width:3px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .node.hi text,.node.sel text,.node.hi2 text{opacity:1}
+  .showlabels .node text{opacity:.7}
+
+  /* ---------- floating glass panels (1c) over structured slots (1a) ---------- */
+  .glass{background:var(--panel);backdrop-filter:blur(16px);border:1px solid var(--line2);
+    border-radius:14px}
+
+  /* left rail */
+  #rail{position:absolute;top:14px;left:18px;width:198px;padding:16px;z-index:4;
+    display:flex;flex-direction:column;gap:3px}
+  .step{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;
+    color:var(--ink-dim);font-size:13px;cursor:pointer;transition:background .15s,color .15s}
+  .step:hover{background:rgba(255,255,255,.03);color:var(--ink)}
+  .step .n{width:20px;height:20px;border-radius:6px;background:#13203a;display:grid;place-items:center;
+    font-size:11px;color:var(--ink-dim)}
+  .step.active{background:#182849;color:var(--ink);font-weight:600}
+  .step.active .n{background:var(--warm);color:#0e1626;font-weight:700}
+  .rail-foot{margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
+  .rail-foot .lbl{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .rail-foot .big{font-family:'Fraunces',serif;font-size:30px;font-weight:500;line-height:1}
+  .rail-foot .sub{font-size:12.5px;color:var(--ink-dim);margin-top:2px}
+  .rail-btns{margin-top:15px;display:flex;flex-direction:column;gap:7px}
+  .btn{all:unset;text-align:center;font-size:13px;padding:10px;border-radius:9px;cursor:pointer;transition:filter .15s,background .15s}
+  .btn-warm{background:var(--warm);color:#0e1626;font-weight:600}
+  .btn-warm:hover{filter:brightness(1.08)}
+  .btn-ghost{border:1px solid var(--line2);color:var(--ink-dim)}
+  .btn-ghost:hover{background:rgba(255,255,255,.03);color:var(--ink)}
+  .btn-cool{background:var(--cool);color:#08131a;font-weight:600}
+  .btn-cool:hover{filter:brightness(1.08)}
+
+  /* top-center layout toggle */
+  #toggle{position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:4;
+    display:flex;padding:3px}
+  #toggle button{all:unset;font-size:12.5px;font-weight:500;color:var(--ink-dim);
+    padding:7px 18px;border-radius:9px;cursor:pointer;transition:all .15s}
+  #toggle button.on{color:#0a0e1a;font-weight:600}
+  #toggle button.on.ring{background:var(--warm);box-shadow:0 0 16px var(--warm-glow)}
+  #toggle button.on.force{background:var(--cool);box-shadow:0 0 16px var(--cool-glow)}
+  #toggle button.on.focus{background:var(--cool2);box-shadow:0 0 16px rgba(169,177,247,.5)}
+
+  /* search bottom-left */
+  #search{position:absolute;left:18px;bottom:96px;width:236px;z-index:4;
+    display:flex;align-items:center;gap:9px;padding:10px 14px}
+  #search span{color:var(--ink-faint)}
+  #search input{all:unset;font-size:12.5px;color:var(--ink);width:100%}
+  #results{position:absolute;left:18px;bottom:150px;width:236px;z-index:6;max-height:220px;overflow:auto;
+    padding:5px;display:none}
+  #results.show{display:block}
+  #results .r{padding:8px 10px;border-radius:8px;font-size:12.5px;color:var(--ink-dim);cursor:pointer}
+  #results .r:hover,#results .r.k{background:#182849;color:var(--ink)}
+
+  /* right buddy panel */
+  #buddies{position:absolute;top:14px;right:18px;bottom:96px;width:270px;z-index:4;
+    display:flex;flex-direction:column;overflow:hidden}
+  .bp-head{padding:15px 17px 12px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;justify-content:space-between}
+  .bp-head h3{margin:0;font-size:13.5px;font-weight:600}
+  .bp-acts{display:flex;gap:5px}
+  .chipbtn{font-size:11px;color:var(--ink-dim);border:1px solid var(--line2);border-radius:6px;
+    padding:3px 8px;cursor:pointer;background:none}
+  .chipbtn:hover{color:var(--ink);border-color:var(--cool)}
+  .bp-list{flex:1;overflow:auto;padding:6px 8px}
+  .brow{padding:9px 9px;border-radius:9px;cursor:pointer;transition:background .12s}
+  .brow:hover{background:rgba(255,255,255,.04)}
+  .brow .nm{font-size:13px;font-weight:600;color:var(--ink)}
+  .brow .bd{font-size:11.5px;color:var(--ink-dim);line-height:1.4;margin-top:3px}
+
+  /* footer metrics bar */
+  #metrics{position:absolute;left:18px;right:18px;bottom:16px;height:66px;z-index:4;
+    display:flex;align-items:center;padding:0 22px;gap:28px}
+  .metric{display:flex;align-items:baseline;gap:9px}
+  .metric .v{font-family:'Fraunces',serif;font-size:23px;font-weight:500;color:var(--cool)}
+  .metric .l{font-size:11.5px;color:var(--ink-dim);max-width:104px;line-height:1.25}
+  .sep{width:1px;height:28px;background:var(--line)}
+  .gauge{width:42px;height:42px;border-radius:50%;display:grid;place-items:center}
+  .gauge .inner{width:31px;height:31px;border-radius:50%;background:#0b1220;display:grid;place-items:center;
+    font-size:11px;font-weight:700;color:var(--cool2)}
+  .m-acts{margin-left:auto;display:flex;gap:9px}
+
+  /* ---------- People modal (start state) ---------- */
+  #modal{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+    background:rgba(6,9,16,.72);backdrop-filter:blur(4px)}
+  #modal.hide{display:none}
+  .sheet{width:min(560px,92vw);padding:28px;border-radius:18px}
+  .sheet h2{font-family:'Fraunces',serif;font-weight:600;font-size:24px;margin:0 0 6px}
+  .sheet p{color:var(--ink-dim);font-size:13.5px;margin:0 0 18px;line-height:1.5}
+  .sheet textarea{width:100%;height:168px;resize:none;background:#0b1322;border:1px solid var(--line2);
+    border-radius:11px;color:var(--ink);font-family:'Instrument Sans';font-size:13.5px;padding:13px;line-height:1.55}
+  .sheet textarea:focus{outline:none;border-color:var(--cool)}
+  .sheet-row{display:flex;align-items:center;gap:16px;margin-top:16px}
+  .field{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-dim)}
+  .stepper{display:flex;align-items:center;gap:2px;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
+  .stepper button{all:unset;width:30px;height:30px;display:grid;place-items:center;color:var(--ink);cursor:pointer}
+  .stepper button:hover{background:rgba(255,255,255,.05)}
+  .stepper .val{width:34px;text-align:center;font-weight:600}
+  .sheet-cta{margin-left:auto}
+  .note{margin-top:12px;font-size:12px;color:var(--warm);min-height:16px}
+  .zoombtns{position:absolute;left:18px;bottom:170px;display:flex;flex-direction:column;gap:6px;z-index:4}
+  .zoombtns button{all:unset;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+    color:var(--ink-dim);cursor:pointer;background:var(--panel);border:1px solid var(--line2);backdrop-filter:blur(8px)}
+  .zoombtns button:hover{color:var(--ink)}
+  .hint{position:absolute;right:18px;bottom:96px;font-size:11px;color:var(--ink-faint);z-index:3;
+    transform:translateY(-8px)}
+
+  /* node detail popover */
+  #detail{position:absolute;z-index:8;width:230px;padding:15px 16px;display:none}
+  #detail.show{display:block}
+  #detail .dh{display:flex;align-items:center;justify-content:space-between}
+  #detail h4{margin:0;font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+  #detail .x{cursor:pointer;color:var(--ink-faint);font-size:16px}
+  #detail .sec{margin-top:11px}
+  #detail .sec .t{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{font-size:11.5px;padding:4px 9px;border-radius:7px;cursor:pointer;transition:all .12s}
+  .chip.b1{background:rgba(246,178,107,.14);color:var(--warm);border:1px solid rgba(246,178,107,.3)}
+  .chip.b1:hover{background:rgba(246,178,107,.24)}
+  .chip.b2{background:rgba(169,177,247,.12);color:var(--cool2);border:1px solid rgba(169,177,247,.28)}
+  .chip.b2:hover{background:rgba(169,177,247,.22)}
+  #detail .plain{margin-top:11px;font-size:12px;color:var(--ink-dim);line-height:1.45}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ---------- mobile ---------- */
+  @media (max-width:760px){
+    header{padding:12px 15px}
+    .brand h1{font-size:19px}
+    .privacy{font-size:10.5px;padding:5px 9px}
+    /* rail becomes a compact top-left card without the step list */
+    #rail{top:auto;bottom:210px;left:12px;right:12px;width:auto;flex-direction:row;
+      align-items:center;gap:14px;padding:11px 14px}
+    #rail .step{display:none}
+    #rail .rail-foot{margin:0;padding:0;border:0;display:flex;align-items:center;gap:14px;flex:1}
+    #rail .rail-foot .lbl{display:none}
+    #rail .rail-foot .big{font-size:22px}
+    #rail .rail-btns{margin:0;flex-direction:row;flex:1;justify-content:flex-end}
+    #rail .btn{padding:9px 12px;font-size:12px}
+    #editPeople{display:none}
+    /* buddy panel becomes a bottom sheet */
+    #buddies{top:auto;bottom:88px;left:12px;right:12px;width:auto;height:120px}
+    .hint{display:none}
+    /* search top */
+    #search{top:64px;bottom:auto;left:12px;right:12px;width:auto}
+    #results{top:112px;bottom:auto;left:12px;right:12px;width:auto}
+    /* toggle under search */
+    #toggle{top:112px}
+    /* metrics: horizontal scroll, compact */
+    #metrics{left:12px;right:12px;bottom:12px;height:auto;padding:11px 14px;gap:16px;
+      overflow-x:auto;flex-wrap:nowrap}
+    .metric .v{font-size:19px}
+    .metric .l{font-size:10px;max-width:78px}
+    .sep{display:none}
+    .m-acts{gap:6px}
+    .m-acts .btn{padding:7px 10px!important;font-size:11px}
+    .zoombtns{display:none}
+    #detail{width:200px}
+    .sheet{padding:20px}
+    .sheet h2{font-size:20px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="mark"><div class="r"></div><div class="d d1"></div><div class="d d2"></div><div class="d d3"></div></div>
+      <h1>BuddyGraph</h1>
+    </div>
+    <div class="privacy"><span class="dot"></span>Runs on your device · roster never uploaded</div>
+  </header>
+
+  <main>
+    <div id="sunburst"></div>
+    <div id="stage"><svg id="svg"></svg></div>
+
+    <!-- left rail (1a structure) -->
+    <div id="rail" class="glass">
+      <div class="step" data-step="people"><span class="n">1</span>People</div>
+      <div class="step" data-step="constraints"><span class="n">2</span>Constraints</div>
+      <div class="step" data-step="settings"><span class="n">3</span>Settings</div>
+      <div class="step active" data-step="results"><span class="n">4</span>Results</div>
+      <div class="rail-foot">
+        <div class="lbl">This roster</div>
+        <div class="big tabnum" id="rosterN">18</div>
+        <div class="sub" id="rosterSub">people · 4 buddies each</div>
+        <div class="rail-btns">
+          <button class="btn btn-warm" id="reroll">↻ Different arrangement</button>
+          <button class="btn btn-ghost" id="editPeople">Edit people</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- layout toggle (1c center) -->
+    <div id="toggle" class="glass">
+      <button class="ring on" data-layout="ring">Ring</button>
+      <button class="force" data-layout="force">Force</button>
+      <button class="focus" data-layout="focus">Focus</button>
+    </div>
+    <div id="focusHint" class="glass" style="position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:4;font-size:11.5px;color:var(--ink-dim);padding:6px 12px;display:none">Pick a person to center the view on them</div>
+
+    <!-- search (1c bottom-left) -->
+    <div id="results" class="glass"></div>
+    <div id="search" class="glass"><span>⌕</span><input id="searchInput" placeholder="Find a person…  (try 'jsmi')"></div>
+
+    <div class="zoombtns">
+      <button id="zin">+</button><button id="zout">−</button>
+    </div>
+    <div class="hint">Hover a person to light their buddies</div>
+
+    <!-- right buddy panel (1a) as glass (1c) -->
+    <div id="buddies" class="glass">
+      <div class="bp-head">
+        <h3>Buddy list</h3>
+        <div class="bp-acts">
+          <button class="chipbtn" id="copyBtn">Copy</button>
+          <button class="chipbtn" id="csvBtn">CSV</button>
+        </div>
+      </div>
+      <div class="bp-list" id="bpList"></div>
+    </div>
+
+    <!-- node detail popover -->
+    <div id="detail" class="glass">
+      <div class="dh"><h4 id="dName">—</h4><span class="x" id="dClose">✕</span></div>
+      <div class="sec"><div class="t">Buddies</div><div class="chips" id="dB1"></div></div>
+      <div class="sec"><div class="t">Two steps away</div><div class="chips" id="dB2"></div></div>
+      <div class="plain" id="dPlain"></div>
+    </div>
+
+    <!-- metrics footer -->
+    <div id="metrics" class="glass">
+      <div class="metric"><span class="v tabnum" id="mAspl">2.3</span><span class="l">avg hops between any two people</span></div>
+      <div class="sep"></div>
+      <div class="metric"><span class="v tabnum" id="mDiam">4</span><span class="l">most steps between anyone</span></div>
+      <div class="sep"></div>
+      <div class="metric">
+        <div class="gauge" id="gauge"><div class="inner tabnum" id="mQual">96</div></div>
+        <span class="l">connection quality — everyone's well-linked</span>
+      </div>
+      <div class="m-acts">
+        <button class="btn btn-ghost" id="watchBtn" style="padding:8px 15px">◐ Watch it build</button>
+        <button class="btn btn-cool" id="exportBtn" style="padding:8px 15px">Export ↓</button>
+      </div>
+    </div>
+
+    <!-- People modal -->
+    <div id="modal">
+      <div class="sheet glass">
+        <h2>Who's in your group?</h2>
+        <p>Paste names, one per line. Everyone gets an equal set of buddies, and the whole group stays closely connected. Nothing you type is uploaded.</p>
+        <textarea id="names"></textarea>
+        <div class="sheet-row">
+          <div class="field">Buddies each
+            <div class="stepper">
+              <button id="kMinus">−</button><span class="val tabnum" id="kVal">4</span><button id="kPlus">+</button>
+            </div>
+          </div>
+          <button class="btn btn-warm sheet-cta" id="generate" style="padding:11px 22px">Generate buddy graph</button>
+        </div>
+        <div class="note" id="note"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
