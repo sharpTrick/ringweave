@@ -41,7 +41,7 @@ export {
   type PolishConstrainedOptions,
 } from "./constrainedGreedy.js";
 
-import { Graph } from "./graph.js";
+import { Graph, MAX_ROSTER } from "./graph.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
 import {
@@ -86,6 +86,11 @@ export interface BuddyResult {
  * Returns adjacency plus quality metrics. Deterministic: the same (n, buddies,
  * options) always yields the same assignment (greedy is RNG-free; polish uses a
  * fixed seed).
+ *
+ * Contract note: this unconstrained builder has no report channel, so malformed
+ * `n`/`k` **throw** a clear error. The constraint-aware
+ * `buildConstrainedBuddyGraph` instead **refuses** (populating `report.refusals`)
+ * because it already carries a report — a deliberate, if asymmetric, split.
  */
 export function buildBuddyGraph(
   n: number,
@@ -102,18 +107,12 @@ export function buildBuddyGraph(
   let g: Graph = graph;
   let polished = false;
   if (wantPolish) {
-    const res = polish(g, {
-      mode: "anneal",
-      seed,
-      maxIters: options.polishIters ?? 20000,
-    });
-    // polish preserves degrees; only adopt it if it did not hurt connectivity
-    const before = allPairsSummary(g);
-    const after = allPairsSummary(res.graph);
-    if (after.connected && after.aspl <= before.aspl + 1e-9) {
-      g = res.graph;
-      polished = true;
-    }
+    // polish returns the lowest penalized-ASPL graph it saw, never worse than its
+    // input (disconnection is penalized, so a connected input stays connected) —
+    // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
+    // polishConstrained.
+    g = polish(g, { mode: "anneal", seed, maxIters: options.polishIters ?? 20000 }).graph;
+    polished = true;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);
@@ -196,6 +195,18 @@ export function buildConstrainedBuddyGraph(
 ): ConstrainedBuddyResult {
   const k = buddiesPerPerson;
 
+  // Refuse a malformed roster size FIRST, before the n !== cons.n check (which
+  // would fire on NaN via NaN !== NaN and mask the clearer reason) and before any
+  // n-sized allocation. This entry point refuses (never throws) — see the
+  // throw-vs-refuse note on buildBuddyGraph.
+  if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
+    const why =
+      Number.isInteger(n) && n > MAX_ROSTER
+        ? `roster size ${n} exceeds the maximum of ${MAX_ROSTER}`
+        : `roster size ${n} is not a valid count`;
+    return refusedResult(n, [why]);
+  }
+
   // n and cons.n are two sources of roster size; a mismatch would otherwise
   // dereference a missing vertex during generation. Refuse cleanly instead.
   if (n !== cons.n) {
@@ -243,6 +254,9 @@ export function buildConstrainedBuddyGraph(
     aspl: summary.aspl,
     diameter: summary.diameter,
     polished,
+    // report from the ORIGINAL cons (not active): reqViolations reflects the
+    // caller's declared requireds, not priors promoted to required — safe because
+    // the postconditions guarantee every active-required edge is present.
     report: buildReport(g, cons, summary.connected),
   };
 }
@@ -316,8 +330,11 @@ function buildReport(
 }
 
 function refusedResult(n: number, refusals: string[]): ConstrainedBuddyResult {
+  // A malformed/oversized n reaches here (that IS what's being refused), so never
+  // allocate an n-sized array from it — the caller reads `report.refusals` anyway.
+  const size = Number.isInteger(n) && n >= 0 && n <= MAX_ROSTER ? n : 0;
   return {
-    buddies: Array.from({ length: n }, () => []),
+    buddies: Array.from({ length: size }, () => []),
     edges: [],
     regular: false,
     degreeMin: 0,

@@ -28,5 +28,9 @@ Method: read the diff and the touched files, construct concrete failing inputs, 
 specific code or reproduce — no speculation.
 
 Report findings as a list, each: `severity (blocking|suggestion)`, `location (file:line)`,
-`why-it-fails (concrete input → wrong output)`, `remediation`, `test-that-would-catch-it`. If you
-find nothing after a genuine attempt to break it, say so explicitly and name what you checked.
+`why-it-fails (concrete input → wrong output)`, `remediation`, and `test-upgrade`. For
+`test-upgrade`, don't just give the one failing input — name the *class* it belongs to and how to
+cover it durably: a parameterized (table-driven) case or a widened property-test generator that
+would also catch inputs you didn't try, plus any existing generator too narrow to have caught this.
+The goal is that a future critic re-running finds this class already guarded. If you find nothing
+after a genuine attempt to break it, say so explicitly and name what you checked.

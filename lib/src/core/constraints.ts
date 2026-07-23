@@ -10,6 +10,7 @@
  * possible, and refuse (with a specific reason) only when a graph is genuinely
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
+import { MAX_ROSTER } from "./graph.js";
 
 // Pairs live as normalized "min,max" string keys (JS Set compares by reference).
 // The keys are held privately so every stored pair is guaranteed canonical — an
@@ -114,6 +115,8 @@ export class Constraints {
   }
 
   merge(other: Constraints): this {
+    // TS-only fail-fast (the Python reference has no size check) — a mismatch
+    // would otherwise surface as an out-of-range pair at a later call site.
     if (other.n !== this.n) {
       throw new Error(`cannot merge constraints for ${other.n} people into ${this.n}`);
     }
@@ -209,6 +212,10 @@ function structuralErrors(cons: Constraints): string[] {
   const n = cons.n;
   if (!Number.isInteger(n) || n < 0) {
     return [`roster size ${n} is not a valid count`];
+  }
+  if (n > MAX_ROSTER) {
+    // Refuse before any n-sized allocation would overflow — validate must not throw.
+    return [`roster size ${n} exceeds the maximum of ${MAX_ROSTER}`];
   }
 
   const scan = (pairs: [number, number][]) => {

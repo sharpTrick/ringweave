@@ -84,4 +84,12 @@ Protocol (learned the hard way):
   clear they would give contradictory suggestions next round** — in which case use judgment and
   adjudicate. Do not stop at a fixed round count: clearing the anchor frees critics to find the
   next layer, so a clean round only counts after a round that changed nothing substantive.
+- **Ratchet every confirmed finding into the suite before closing it.** Review is expensive,
+  non-deterministic discovery; tests are cheap, deterministic regression — a class caught once
+  should never need re-discovering. Codify the *class*, not the one input: prefer widening a
+  property-test generator or adding a parameterized (table-driven) case over a bespoke `it()`, so
+  the test also guards inputs the critic didn't try. Fight sprawl by consolidating near-duplicate
+  cases into tables and widening generators — not by testing less; a parameterized suite is cheaper
+  to read than a pile of examples. The payoff compounds: as the suite hardens, later rounds
+  converge faster because the critics stop tripping over already-guarded ground.
 - Keep tests green at the end of every round.

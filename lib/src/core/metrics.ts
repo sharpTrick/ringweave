@@ -75,6 +75,30 @@ export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
   return count;
 }
 
+/** Partition vertices into connected components (each a list of vertex indices). */
+export function connectedComponents(g: Graph): number[][] {
+  const seen = new Uint8Array(g.n);
+  const comps: number[][] = [];
+  for (let s = 0; s < g.n; s++) {
+    if (seen[s]) continue;
+    const stack = [s];
+    seen[s] = 1;
+    const comp: number[] = [];
+    while (stack.length > 0) {
+      const u = stack.pop() as number;
+      comp.push(u);
+      for (const w of g.adj[u]) {
+        if (!seen[w]) {
+          seen[w] = 1;
+          stack.push(w);
+        }
+      }
+    }
+    comps.push(comp);
+  }
+  return comps;
+}
+
 /**
  * Fraction of vertices in the largest connected component. Mirrors the Python
  * reference; reserved for the M2 "how connected did it stay" churn-resilience
@@ -82,26 +106,8 @@ export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
  */
 export function largestComponentFraction(g: Graph): number {
   if (g.n === 0) return 1;
-  const seen = new Uint8Array(g.n);
   let best = 0;
-  for (let start = 0; start < g.n; start++) {
-    if (seen[start]) continue;
-    let size = 0;
-    const q = [start];
-    let head = 0;
-    seen[start] = 1;
-    while (head < q.length) {
-      const u = q[head++];
-      size++;
-      for (const w of g.adj[u]) {
-        if (!seen[w]) {
-          seen[w] = 1;
-          q.push(w);
-        }
-      }
-    }
-    if (size > best) best = size;
-  }
+  for (const comp of connectedComponents(g)) if (comp.length > best) best = comp.length;
   return best / g.n;
 }
 

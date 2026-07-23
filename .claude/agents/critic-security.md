@@ -27,6 +27,8 @@ Method: read the touched files, construct adversarial inputs, and where cheap, *
 small script or `npm test`. Only report what you can trace or reproduce.
 
 Report findings as a list, each: `severity (blocking|suggestion)`, `location (file:line)`,
-`why-it-fails (hostile input → hang/crash/wrong)`, `remediation`, `test-that-would-catch-it`.
-Distinguish present-day risks from forward-looking ones. If it is robust, say so and name the
-inputs you tried.
+`why-it-fails (hostile input → hang/crash/wrong)`, `remediation`, and `test-upgrade`. For
+`test-upgrade`, name the *class* of hostile input (not just the one value) and how to guard it
+durably — a parameterized malformed-input table or a widened fuzz generator that also covers inputs
+you didn't try — so a future critic finds this class already guarded. Distinguish present-day risks
+from forward-looking ones. If it is robust, say so and name the inputs you tried.

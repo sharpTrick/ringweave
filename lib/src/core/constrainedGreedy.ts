@@ -26,6 +26,7 @@ import {
   allPairsSummary,
   penalizedAspl,
   countPresentEdges,
+  connectedComponents,
 } from "./metrics.js";
 import { RNG } from "./rng.js";
 import { Constraints } from "./constraints.js";
@@ -243,7 +244,7 @@ function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion
   // At most n-1 joins are ever needed; each pass adds one edge or stops.
   for (let pass = 0; pass < g.n; pass++) {
-    const comps = components(g);
+    const comps = connectedComponents(g);
     if (comps.length <= 1) return;
     if (!joinAnyComponents(g, comps, legal)) return;
   }
@@ -268,29 +269,6 @@ function joinAnyComponents(
     }
   }
   return false;
-}
-
-function components(g: Graph): number[][] {
-  const seen = new Uint8Array(g.n);
-  const comps: number[][] = [];
-  for (let s = 0; s < g.n; s++) {
-    if (seen[s]) continue;
-    const stack = [s];
-    seen[s] = 1;
-    const comp: number[] = [];
-    while (stack.length > 0) {
-      const u = stack.pop() as number;
-      comp.push(u);
-      for (const w of g.adj[u]) {
-        if (!seen[w]) {
-          seen[w] = 1;
-          stack.push(w);
-        }
-      }
-    }
-    comps.push(comp);
-  }
-  return comps;
 }
 
 // --- polish helpers ---------------------------------------------------------

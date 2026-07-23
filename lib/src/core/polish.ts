@@ -25,6 +25,7 @@ export interface PolishOptions {
 export interface PolishResult {
   graph: Graph;
   aspl: number;
+  connected: boolean;
   iters: number;
 }
 
@@ -108,6 +109,6 @@ export function polish(
     if (mode === "hill" && rejects >= rejectCap) break;
   }
 
-  const { aspl } = allPairsSummary(best);
-  return { graph: best, aspl, iters };
+  const { aspl, connected } = allPairsSummary(best);
+  return { graph: best, aspl, connected, iters };
 }

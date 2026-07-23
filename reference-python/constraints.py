@@ -112,12 +112,18 @@ def validate(cons, k):
     return sorted(set(errs))
 
 
+# Far beyond product scale but bounded so n-sized allocation can't blow up.
+MAX_ROSTER = 1_000_000
+
+
 def _structural_errors(cons):
     """Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
     Mirrors the TypeScript port's structural validation layer."""
     n = cons.n
     if not isinstance(n, int) or isinstance(n, bool) or n < 0:
         return [f"roster size {n} is not a valid count"]
+    if n > MAX_ROSTER:
+        return [f"roster size {n} exceeds the maximum of {MAX_ROSTER}"]
     errs = []
 
     def scan(pairs):

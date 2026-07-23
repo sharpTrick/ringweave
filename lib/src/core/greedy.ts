@@ -12,6 +12,7 @@ import { bfsDistances } from "./metrics.js";
 
 export interface GreedyResult {
   graph: Graph;
+  /** The mind (min-separation) target actually achieved after any demotion. */
   finalMind: number;
 }
 
@@ -33,8 +34,9 @@ export function ringGreedy(
   k: number,
   opts: GreedyOptions = {},
 ): GreedyResult {
-  // k must be a real cap: `deg >= NaN` is always false, which would silently
-  // disable the degree limit and blow past the "degree <= k" guarantee.
+  // k must be a real number: `deg >= NaN` is always false, silently disabling the
+  // degree-cap logic in findPair. (The ring seed still gives every vertex degree
+  // 2, so this path targets ~k, not a hard cap — unlike the constrained path.)
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }

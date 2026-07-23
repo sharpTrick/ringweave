@@ -136,13 +136,6 @@ describe("validate infeasibility messages", () => {
     );
   });
 
-  it("rejects a non-integer or negative buddy count", () => {
-    expect(validate(new Constraints(5), Number.NaN).length).toBeGreaterThan(0);
-    expect(validate(new Constraints(5), 2.5).length).toBeGreaterThan(0);
-    expect(validate(new Constraints(5), -1).length).toBeGreaterThan(0);
-    expect(validate(new Constraints(5), Infinity).length).toBeGreaterThan(0);
-  });
-
   it("accepts an all-prohibited roster when k=0 (nobody needs buddies)", () => {
     const c = new Constraints(3);
     c.prohibit(0, 1).prohibit(0, 2).prohibit(1, 2);
@@ -155,6 +148,35 @@ describe("validate infeasibility messages", () => {
     for (const a of [0, 1]) for (const b of [2, 3]) c.prohibit(a, b);
     const errs = validate(c, 1);
     expect(errs.some((e) => e.includes("split the group"))).toBe(true);
+  });
+});
+
+// Same malformed-input class as pipeline.test.ts, but the constraint-aware path
+// REFUSES (report.refusals) rather than throwing — validate must never throw,
+// even on an astronomically large roster (the n-sized allocation must be gated).
+const BAD_N = [-1, 2.5, Number.NaN, Infinity, 5e9];
+const BAD_K = [-1, 2.5, Number.NaN, Infinity];
+
+describe("malformed inputs are refused, never thrown (constrained path)", () => {
+  it.each(BAD_N)("validate never throws for roster size %p", (n) => {
+    const errs = validate(new Constraints(n), 4);
+    expect(errs.length).toBeGreaterThan(0);
+  });
+  it.each(BAD_K)("validate never throws for buddy count %p", (k) => {
+    expect(validate(new Constraints(10), k).length).toBeGreaterThan(0);
+  });
+  it.each(BAD_N)("buildConstrainedBuddyGraph refuses roster size %p", (n) => {
+    const r = buildConstrainedBuddyGraph(n, 4, new Constraints(n));
+    expect(r.report.refusals.length).toBeGreaterThan(0);
+    expect(r.edges).toEqual([]);
+  });
+  it.each(BAD_K)("buildConstrainedBuddyGraph refuses buddy count %p", (k) => {
+    const r = buildConstrainedBuddyGraph(10, k, new Constraints(10));
+    expect(r.report.refusals.length).toBeGreaterThan(0);
+  });
+
+  it("merge fails fast on an n mismatch", () => {
+    expect(() => new Constraints(5).merge(new Constraints(6))).toThrow(/cannot merge/);
   });
 });
 

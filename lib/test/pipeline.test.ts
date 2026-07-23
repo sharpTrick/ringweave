@@ -5,17 +5,21 @@ import { ringGreedy } from "../src/core/greedy.js";
 import { allPairsSummary } from "../src/core/metrics.js";
 import { Graph } from "../src/core/graph.js";
 
-describe("input validation (unconstrained path)", () => {
-  it("rejects a non-integer or negative roster size instead of crashing", () => {
-    expect(() => buildBuddyGraph(2.5, 3)).toThrow(/non-negative integer/);
-    expect(() => new Graph(2.5)).toThrow(/non-negative integer/);
-    expect(() => new Graph(-3)).toThrow(/non-negative integer/);
-  });
+// Malformed-input class (negative / fractional / NaN / Infinity / oversized).
+// The unconstrained path has no report channel, so it THROWS a clear error.
+const BAD_N = [-1, 2.5, Number.NaN, Infinity, 5e9];
+const BAD_K = [-1, 2.5, Number.NaN, Infinity];
 
-  it("rejects a NaN/Infinity buddy count instead of silently uncapping degree", () => {
-    expect(() => buildBuddyGraph(300, Number.NaN)).toThrow(/non-negative integer/);
-    expect(() => buildBuddyGraph(300, Infinity)).toThrow(/non-negative integer/);
-    expect(() => ringGreedy(30, -1)).toThrow(/non-negative integer/);
+describe("malformed inputs throw a clear error (unconstrained path)", () => {
+  it.each(BAD_N)("new Graph(%p) throws a clear (non-RangeError) message", (n) => {
+    expect(() => new Graph(n)).toThrow(/integer/);
+  });
+  it.each(BAD_N)("buildBuddyGraph(%p, 3) throws", (n) => {
+    expect(() => buildBuddyGraph(n, 3)).toThrow(/integer/);
+  });
+  it.each(BAD_K)("buildBuddyGraph(30, %p) and ringGreedy(30, %p) throw", (k) => {
+    expect(() => buildBuddyGraph(30, k)).toThrow(/integer/);
+    expect(() => ringGreedy(30, k)).toThrow(/integer/);
   });
 });
 

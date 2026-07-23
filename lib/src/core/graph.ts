@@ -8,6 +8,12 @@
  * `adj` is typed read-only to callers so the symmetry invariant can only be
  * mutated through `addEdge`/`removeEdge`; internal mutators cast past it.
  */
+// A sane upper bound on roster size: far beyond the product scale (n ~ hundreds)
+// but small enough that `new Array(n)` / `Array.from({length:n})` can't overflow
+// (JS array length maxes at 2**32-1) or exhaust memory. Shared by every entry
+// point that validates n. Mirrored in reference-python.
+export const MAX_ROSTER = 1_000_000;
+
 export class Graph {
   readonly n: number;
   readonly adj: ReadonlyArray<ReadonlySet<number>>;
@@ -16,8 +22,8 @@ export class Graph {
     // Guard the invariant n === adj.length: Array.from clamps a fractional or
     // negative length while `this.n` would keep the raw value, so later indexing
     // walks off the end. Refuse the bad input with a clear message instead.
-    if (!Number.isInteger(n) || n < 0) {
-      throw new Error(`Graph size ${n} must be a non-negative integer`);
+    if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
+      throw new Error(`Graph size ${n} must be an integer in [0, ${MAX_ROSTER}]`);
     }
     this.n = n;
     this.adj = Array.from({ length: n }, () => new Set<number>());
