@@ -1,0 +1,59 @@
+# Deploys the built site to GitHub Pages.
+#
+# This is scaffolded for the UI phase. Once a Vite app is added (e.g. under
+# `app/` with `vite build` emitting to `app/dist`), point the upload path at it
+# and enable Pages in repo Settings -> Pages -> Source: GitHub Actions.
+#
+# Until the UI exists, this workflow is inert (only runs on manual dispatch).
+
+name: Deploy Pages
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main, master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: lib
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: lib/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # UI phase: build the front-end here, e.g.
+      #   - run: npm --prefix app ci
+      #   - run: npm --prefix app run build   # emits app/dist
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          # Path is relative to the repo root (not the `defaults` working-directory).
+          # UI phase: change to app/dist once the front-end exists.
+          path: lib/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
