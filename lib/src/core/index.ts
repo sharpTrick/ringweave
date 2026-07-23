@@ -27,8 +27,6 @@ export { RNG } from "./rng.js";
 export {
   Constraints,
   validate,
-  pair,
-  pairKey,
   type TagPolicy,
   type Tag,
 } from "./constraints.js";
@@ -37,8 +35,6 @@ export {
   polishConstrained,
   type ConstrainedGreedyOptions,
   type PolishConstrainedOptions,
-  type EdgePredicate,
-  type Objective,
 } from "./constrainedGreedy.js";
 
 import { Graph } from "./graph.js";
@@ -115,8 +111,7 @@ export function buildBuddyGraph(
   }
 
   const degrees = g.degrees();
-  const degreeMin = Math.min(...degrees);
-  const degreeMax = Math.max(...degrees);
+  const [degreeMin, degreeMax] = degreeExtent(degrees);
   const summary = allPairsSummary(g);
   const buddies = g.adj.map((s) => Array.from(s).sort((a, b) => a - b));
 
@@ -158,12 +153,17 @@ export interface ConstraintReport {
   reqViolations: number;
   prohViolations: number;
   connected: boolean;
-  /** Fraction of prior buddies preserved, or null when there are no priors. */
-  priorsKept: number | null;
+  /** Fraction (0..1) of prior buddies preserved, or null when there are no priors. */
+  priorsKeptFraction: number | null;
   /** Plain-language reasons the input was refused (empty when generated). */
   refusals: string[];
 }
 
+/**
+ * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is
+ * non-empty the input was refused: `buddies`/`edges` are empty and the metric
+ * fields are placeholders — read `report` first.
+ */
 export interface ConstrainedBuddyResult {
   buddies: number[][];
   edges: [number, number][];
@@ -189,10 +189,13 @@ export function buildConstrainedBuddyGraph(
 ): ConstrainedBuddyResult {
   const k = buddiesPerPerson;
 
-  const refusals = validate(cons, k);
+  // Promote hard priors to required BEFORE validating, so an infeasibility that
+  // only exists after promotion (e.g. a prior that is also prohibited, or one
+  // that pushes required-degree over k) is refused rather than silently emitted.
+  const active = withHardPriors(cons);
+  const refusals = validate(active, k);
   if (refusals.length > 0) return refusedResult(n, refusals);
 
-  const active = withHardPriors(cons);
   const graph = constrainedGreedy(n, k, active, {
     minSeparation: options.minSeparation,
   });
@@ -220,8 +223,7 @@ export function buildConstrainedBuddyGraph(
   }
 
   const degrees = g.degrees();
-  const degreeMin = Math.min(...degrees);
-  const degreeMax = Math.max(...degrees);
+  const [degreeMin, degreeMax] = degreeExtent(degrees);
   const summary = allPairsSummary(g);
   const buddies = g.adj.map((s) => Array.from(s).sort((a, b) => a - b));
 
@@ -242,8 +244,21 @@ export function buildConstrainedBuddyGraph(
 function withHardPriors(cons: Constraints): Constraints {
   if (!cons.priorHard) return cons;
   const promoted = new Constraints(cons.n).merge(cons);
+  promoted.priorHard = true;
   for (const [a, b] of cons.priorPairs()) promoted.require(a, b);
   return promoted;
+}
+
+/** Min and max of a degree sequence, loop-based to avoid arg-spread limits. */
+function degreeExtent(degrees: number[]): [number, number] {
+  if (degrees.length === 0) return [0, 0];
+  let lo = degrees[0];
+  let hi = degrees[0];
+  for (const d of degrees) {
+    if (d < lo) lo = d;
+    if (d > hi) hi = d;
+  }
+  return [lo, hi];
 }
 
 function buildReport(
@@ -257,11 +272,11 @@ function buildReport(
   for (const [a, b] of cons.requiredPairs()) if (!g.hasEdge(a, b)) reqViolations++;
 
   const priors = cons.priorPairs();
-  let priorsKept: number | null = null;
+  let priorsKeptFraction: number | null = null;
   if (priors.length > 0) {
     let kept = 0;
     for (const [a, b] of priors) if (g.hasEdge(a, b)) kept++;
-    priorsKept = kept / priors.length;
+    priorsKeptFraction = kept / priors.length;
   }
 
   return {
@@ -269,7 +284,7 @@ function buildReport(
     reqViolations,
     prohViolations,
     connected,
-    priorsKept,
+    priorsKeptFraction,
     refusals: [],
   };
 }
@@ -289,7 +304,7 @@ function refusedResult(n: number, refusals: string[]): ConstrainedBuddyResult {
       reqViolations: 0,
       prohViolations: 0,
       connected: false,
-      priorsKept: null,
+      priorsKeptFraction: null,
       refusals,
     },
   };

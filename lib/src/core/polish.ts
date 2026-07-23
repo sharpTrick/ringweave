@@ -8,6 +8,7 @@
 import { Graph } from "./graph.js";
 import { allPairsSummary } from "./metrics.js";
 import { RNG } from "./rng.js";
+import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 export type PolishMode = "hill" | "anneal";
 
@@ -141,46 +142,4 @@ export function polish(
 
   const { aspl } = allPairsSummary(best);
   return { graph: best, aspl, iters };
-}
-
-interface Swap {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-}
-
-function proposeSwap(g: Graph, edges: [number, number][], rng: RNG): Swap | null {
-  const [i, j] = rng.twoDistinct(edges.length);
-  const [a, b] = edges[i];
-  const [c, d] = edges[j];
-  let x1: number, y1: number, x2: number, y2: number;
-  if (rng.random() < 0.5) {
-    x1 = a; y1 = c; x2 = b; y2 = d;
-  } else {
-    x1 = a; y1 = d; x2 = b; y2 = c;
-  }
-  const distinct = new Set([a, b, c, d]);
-  if (distinct.size < 4) return null;
-  if (g.hasEdge(x1, y1) || g.hasEdge(x2, y2)) return null;
-  if (x1 === y1 || x2 === y2) return null;
-  return { a, b, c, d, x1, y1, x2, y2 };
-}
-
-function applySwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.a, s.b);
-  g.removeEdge(s.c, s.d);
-  g.addEdge(s.x1, s.y1);
-  g.addEdge(s.x2, s.y2);
-}
-
-function revertSwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.x1, s.y1);
-  g.removeEdge(s.x2, s.y2);
-  g.addEdge(s.a, s.b);
-  g.addEdge(s.c, s.d);
 }

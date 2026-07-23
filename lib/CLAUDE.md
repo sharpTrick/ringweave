@@ -28,10 +28,13 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 
 ## Quality bar (tuned to this codebase — not applied dogmatically)
 
-- **SOLID, scoped:** single-responsibility modules; open for extension at the real seams (tag
-  policies in `constraints.ts`, the edge-legality predicate and polish objective in
-  `constrainedGreedy.ts`) — add a case, don't edit callers; depend on injected predicate/objective
-  abstractions. Do not force LSP/ISP or wrap free functions in classes for OO's sake.
+- **SOLID, scoped:** single-responsibility modules. The genuine open/closed seam is the tag policy
+  in `constraints.ts` — add a `case`, don't edit callers. The edge-legality predicate (`legalEdge`)
+  and polish objective (`constrainedEnergy`) are isolated as single-responsibility factory
+  functions, so changing a rule touches one function, not the greedy/polish loops; they are
+  deliberately **not** caller-injectable (an arbitrary predicate/objective would undercut the
+  determinism contract and the hard-constraint postconditions). Do not force LSP/ISP or wrap free
+  functions in classes for OO's sake.
 - **Clean Code:** clear names, DRY, small public API. Code is self-documenting — the *what* is
   evident without comments; add a short comment only when the *why* is non-obvious. Prefer small
   extracted functions, but a hot loop may stay un-extracted when decomposition costs measurable

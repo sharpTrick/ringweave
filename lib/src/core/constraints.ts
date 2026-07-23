@@ -125,6 +125,12 @@ export class Constraints {
  * regularity. Sorted and deduplicated, mirroring the Python reference.
  */
 export function validate(cons: Constraints, k: number): string[] {
+  // Structural sanity first: malformed ids would otherwise crash generation
+  // (an out-of-range index dereferences a missing adjacency set) or produce a
+  // silently unsatisfiable result. Refuse them with a plain-language reason.
+  const structural = structuralErrors(cons);
+  if (structural.length > 0) return Array.from(new Set(structural)).sort();
+
   const errs: string[] = [];
   const n = cons.n;
   const reqd = cons.requiredDegree();
@@ -158,4 +164,28 @@ export function validate(cons: Constraints, k: number): string[] {
   }
 
   return Array.from(new Set(errs)).sort();
+}
+
+/** Ill-formed roster size or constraint endpoints (unknown ids, self-pairs). */
+function structuralErrors(cons: Constraints): string[] {
+  const errs: string[] = [];
+  const n = cons.n;
+  if (!Number.isInteger(n) || n < 0) {
+    return [`roster size ${n} is not a valid count`];
+  }
+
+  const scan = (pairs: [number, number][]) => {
+    for (const [a, b] of pairs) {
+      for (const x of [a, b]) {
+        if (!Number.isInteger(x) || x < 0 || x >= n) {
+          errs.push(`constraint references unknown person ${x} (roster has ${n})`);
+        }
+      }
+      if (a === b) errs.push(`person ${a} cannot be paired with themselves`);
+    }
+  };
+  scan(cons.requiredPairs());
+  scan(cons.prohibitedPairs());
+  scan(cons.priorPairs());
+  return errs;
 }

@@ -13,17 +13,20 @@ import { Graph } from "./graph.js";
 import { bfsDistances, allPairsSummary } from "./metrics.js";
 import { RNG } from "./rng.js";
 import { Constraints, pairKey } from "./constraints.js";
+import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 const UNREACHABLE = -1;
+const NO_VERTEX = -1;
+
 // Unreachable vertices score as +infinity so completion prefers joining
 // disconnected pieces before shortening already-connected ones.
 const INFINITE_DISTANCE = 1e9;
 
-/** True when u–v may be added given current degrees and the prohibited set. */
-export type EdgePredicate = (u: number, v: number) => boolean;
+/** True when u–v may legally be added: distinct, absent, allowed, both under k. */
+type EdgePredicate = (u: number, v: number) => boolean;
 
-/** The single objective `polishConstrained` minimizes over a graph. */
-export type Objective = (g: Graph) => number;
+/** The scalar objective `polishConstrained` minimizes over a graph. */
+type Objective = (g: Graph) => number;
 
 export interface ConstrainedGreedyOptions {
   minSeparation?: number;
@@ -54,10 +57,14 @@ export function constrainedGreedy(
 
   const minSep = Math.min(opts.minSeparation ?? 5, Math.floor(n / 2));
 
+  // Each iteration adds one new edge, so a feasible completion needs far fewer
+  // than n*k*6 steps; this is a safety bound that cannot be reached on valid
+  // input. If it ever were, forceConnect still guarantees connectivity and only
+  // degree regularity would be at risk.
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
     const u = mostDeficient(g, k);
-    if (u === UNREACHABLE) break;
+    if (u === NO_VERTEX) break;
     const dist = bfsDistances(g, u);
     const candidates: number[] = [];
     for (let v = 0; v < n; v++) if (legal(u, v)) candidates.push(v);
@@ -86,6 +93,7 @@ export function polishConstrained(
   const iters = opts.iters ?? 8000;
   const priorWeight = opts.priorWeight ?? 0;
   const energy = constrainedEnergy(cons, priorWeight);
+  const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);
 
   const startDegrees = input.degrees();
   const g = input.copy();
@@ -96,7 +104,7 @@ export function polishConstrained(
   for (let it = 0; it < iters; it++) {
     const edges = g.edgeList();
     if (edges.length < 2) break;
-    const swap = proposeSwap(g, edges, cons, rng);
+    const swap = proposeSwap(g, edges, rng, breaksConstraint);
     if (swap === null) continue;
 
     applySwap(g, swap);
@@ -128,9 +136,9 @@ function legalEdge(g: Graph, prohibited: Set<string>, k: number): EdgePredicate 
     g.degree(v) < k;
 }
 
-/** Lowest-degree under-k vertex, ties broken by lowest index; -1 if none. */
+/** Lowest-degree under-k vertex, ties broken by lowest index; NO_VERTEX if none. */
 function mostDeficient(g: Graph, k: number): number {
-  let best = UNREACHABLE;
+  let best = NO_VERTEX;
   let bestDegree = Infinity;
   for (let v = 0; v < g.n; v++) {
     const d = g.degree(v);
@@ -176,9 +184,11 @@ function forceConnect(g: Graph, prohibited: Set<string>): void {
   let main = comps[0];
   for (let i = 1; i < comps.length; i++) {
     const comp = comps[i];
-    if (joinComponents(g, main, comp, prohibited)) {
-      main = main.concat(comp);
-    }
+    joinComponents(g, main, comp, prohibited);
+    // Merge unconditionally: even when every main×comp pair is prohibited, comp
+    // still becomes reachable-target territory for a later component to attach
+    // to (a graceful degradation, not a lost component).
+    main = main.concat(comp);
   }
 }
 
@@ -240,64 +250,14 @@ function constrainedEnergy(cons: Constraints, priorWeight: number): Objective {
   };
 }
 
-interface Swap {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-}
-
-/**
- * Pick two edges (a,b),(c,d) and one of the two degree-preserving rewirings.
- * Rejects (null) any swap that is degenerate, would duplicate an edge, would
- * break a required edge, or would create a prohibited one.
- */
-function proposeSwap(
-  g: Graph,
-  edges: [number, number][],
-  cons: Constraints,
-  rng: RNG,
-): Swap | null {
-  const [i, j] = rng.twoDistinct(edges.length);
-  const [a, b] = edges[i];
-  const [c, d] = edges[j];
-  let x1: number;
-  let y1: number;
-  let x2: number;
-  let y2: number;
-  if (rng.random() < 0.5) {
-    x1 = a; y1 = c; x2 = b; y2 = d;
-  } else {
-    x1 = a; y1 = d; x2 = b; y2 = c;
-  }
-
-  if (new Set([a, b, c, d]).size < 4) return null;
-  if (g.hasEdge(x1, y1) || g.hasEdge(x2, y2)) return null;
-  if (cons.required.has(pairKey(a, b)) || cons.required.has(pairKey(c, d))) {
-    return null;
-  }
-  if (cons.prohibited.has(pairKey(x1, y1)) || cons.prohibited.has(pairKey(x2, y2))) {
-    return null;
-  }
-  return { a, b, c, d, x1, y1, x2, y2 };
-}
-
-function applySwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.a, s.b);
-  g.removeEdge(s.c, s.d);
-  g.addEdge(s.x1, s.y1);
-  g.addEdge(s.x2, s.y2);
-}
-
-function revertSwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.x1, s.y1);
-  g.removeEdge(s.x2, s.y2);
-  g.addEdge(s.a, s.b);
-  g.addEdge(s.c, s.d);
+/** A swap is illegal when it would break a required edge or create a prohibited one. */
+function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
+  return (
+    cons.required.has(pairKey(s.a, s.b)) ||
+    cons.required.has(pairKey(s.c, s.d)) ||
+    cons.prohibited.has(pairKey(s.x1, s.y1)) ||
+    cons.prohibited.has(pairKey(s.x2, s.y2))
+  );
 }
 
 // --- contracts (dev-mode only) ----------------------------------------------
