@@ -58,9 +58,11 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 Surfaced by review, deliberately deferred (not silently ignored):
 - **Generation scales ~O(n²) even at small k:** `constrainedGreedy` runs one BFS per edge added,
   so cost grows quadratically in n regardless of k (n=500,k=4 ≈ 120 ms — within the n≤500 product
-  target; n=4000 ≈ 7 s), and worse as k approaches n. Beyond ~1–2k people it needs an incremental
-  distance scheme (a tracked follow-on) — and note the constrained path only ever needs
-  single-source distances, so it wants a lighter scheme than `ringGreedy`'s full all-pairs cache.
+  target; n=4000 ≈ 7–13 s), and worse as k approaches n. The whole constrained path is now capped
+  at `MAX_CONSTRAINED_N` (5000, in `graph.ts`) — enforced as a refusal in `validate` and a throw in
+  `constrainedGreedy` — so a legal-but-huge roster is refused, not left to hang; raising that ceiling
+  needs an incremental distance scheme first (a tracked follow-on). The constrained path only ever
+  needs single-source distances, so it wants a lighter scheme than `ringGreedy`'s full all-pairs cache.
 - **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
   column (thousands sharing one label) is slow/heap-heavy, and at tens of millions of pairs the
   `Set` construction itself throws before `validate` can refuse it. A `NaN` tag value never groups
@@ -68,6 +70,11 @@ Surfaced by review, deliberately deferred (not silently ignored):
 - **Polish is O(n·m) per iteration** — `polish`/`polishConstrained` recompute the full all-pairs
   summary every swap, so they are impractical much past a few hundred vertices (why auto-polish is
   capped at n≤120 in `index.ts`). Needs incremental/sampled energy for larger n.
+- **`girth` (and the other exported all-pairs metrics) are O(n²)** and uncapped — deliberately, since
+  they are pure diagnostics run on a `Graph` the caller already built (n bounded by `MAX_ROSTER`), not
+  generation entry points fed untrusted `(n,k,constraints)`. The generators that *are* the untrusted
+  surface are capped (`MAX_CACHED_N`, `MAX_CONSTRAINED_N`); `girth`'s sole internal use is on those
+  already-bounded outputs. Documented, not guarded, to avoid a contract change on every metric.
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
   `null`. Normalize or special-case at the export boundary (F6).
 - **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.

@@ -45,6 +45,23 @@ function build(s: {
   return cons;
 }
 
+/** Same constraint set as `build`, inserted in reversed order (endpoints too). */
+function buildReversed(s: {
+  n: number;
+  k: number;
+  prohibited: [number, number][];
+  reqVerts: number[];
+}): Constraints {
+  const cons = new Constraints(s.n);
+  const even = s.reqVerts.length - (s.reqVerts.length % 2);
+  for (let i = even - 2; i >= 0; i -= 2) cons.require(s.reqVerts[i + 1], s.reqVerts[i]);
+  for (let i = s.prohibited.length - 1; i >= 0; i--) {
+    const [a, b] = s.prohibited[i];
+    cons.prohibit(b, a);
+  }
+  return cons;
+}
+
 describe("constrainedGreedy invariants over random feasible inputs", () => {
   it("satisfies hard constraints, stays connected, and is deterministic", () => {
     fc.assert(
@@ -69,6 +86,12 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         // determinism: RNG-free, so a rerun is identical
         const rerun = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         expect(rerun.edgeList()).toEqual(g.edgeList());
+        // stronger: insertion ORDER must not leak into output via Set-ordered
+        // adjacency traversal (component discovery in forceConnect). Rebuild the
+        // same constraints with every pair inserted in reversed order.
+        const reordered = buildReversed(s);
+        const g2 = constrainedGreedy(s.n, s.k, reordered, { minSeparation: 5 });
+        expect(g2.edgeList()).toEqual(g.edgeList());
       }),
       { numRuns: 60 },
     );

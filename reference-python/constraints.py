@@ -77,6 +77,14 @@ def validate(cons, k):
     if structural:
         return sorted(set(structural))
 
+    # Refuse an oversized roster before the O(n^2) connectivity walk and
+    # generation: the constrained path is O(n^2) in time, so a legal-but-huge
+    # roster would hang rather than crash. Well under MAX_ROSTER.
+    if cons.n > MAX_CONSTRAINED_N:
+        return [
+            f"roster size {cons.n} exceeds the constrained maximum of {MAX_CONSTRAINED_N} (generation is O(n²))"
+        ]
+
     errs = []
     n = cons.n
 
@@ -114,6 +122,10 @@ def validate(cons, k):
 
 # Far beyond product scale but bounded so n-sized allocation can't blow up.
 MAX_ROSTER = 1_000_000
+
+# Constrained generation runs one BFS per edge added (O(n^2) in time), so it is
+# capped far tighter than MAX_ROSTER to keep worst-case generation bounded.
+MAX_CONSTRAINED_N = 5000
 
 
 def _structural_errors(cons):

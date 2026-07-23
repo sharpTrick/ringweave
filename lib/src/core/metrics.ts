@@ -102,20 +102,27 @@ export function connectedComponents(g: Graph): number[][] {
   return comps;
 }
 
-/** Length of the shortest cycle, or Infinity for a forest. Matches Python girth. */
+/**
+ * Length of the shortest cycle, or Infinity for a forest. Matches Python girth.
+ * O(n·(n+m)): a BFS from every source, with an early-out only once a triangle is
+ * found — so a high-girth graph runs the full sweep. Intended for the small
+ * generated graphs the builders produce (n ≤ MAX_CACHED_N); calling it on a
+ * hand-built graph of hundreds of thousands of vertices is slow by design.
+ */
 export function girth(g: Graph): number {
+  const UNVISITED = -1; // per-source BFS marker; distinct from bfsDistances' UNREACHABLE
   const n = g.n;
   let best = Infinity;
   for (let s = 0; s < n; s++) {
-    const dist = new Int32Array(n).fill(-1);
-    const parent = new Int32Array(n).fill(-1);
+    const dist = new Int32Array(n).fill(UNVISITED);
+    const parent = new Int32Array(n).fill(UNVISITED);
     dist[s] = 0;
     const q = [s];
     let head = 0;
     while (head < q.length) {
       const u = q[head++];
       for (const w of g.adj[u]) {
-        if (dist[w] === -1) {
+        if (dist[w] === UNVISITED) {
           dist[w] = dist[u] + 1;
           parent[w] = u;
           q.push(w);

@@ -20,7 +20,7 @@
  * they throw a clear error on malformed input (out-of-range ids, bad k,
  * required-degree over k) but otherwise assume feasibility.
  */
-import { Graph, DEFAULT_MIN_SEPARATION } from "./graph.js";
+import { Graph, DEFAULT_MIN_SEPARATION, MAX_CONSTRAINED_N } from "./graph.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -90,6 +90,9 @@ export function constrainedGreedy(
   // partners, never frees one), so we mark it once and never rescan it — that
   // is what keeps the loop from going cubic on many-stuck inputs.
   const stuck = new Uint8Array(n);
+  // The real exits are below: no deficient vertices left, or extendOne finds no
+  // legal edge. This cap is a defensive backstop that should never bind — at most
+  // n*k/2 edges are ever added, so 6*n*k is comfortably above any real run.
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
     const under = deficientVertices(g, k, stuck);
@@ -334,6 +337,13 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
   }
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
+  }
+  // O(n²) generation; refuse an oversized roster that would hang (validate()
+  // returns the same ceiling as a plain-language refusal for the safe path).
+  if (n > MAX_CONSTRAINED_N) {
+    throw new Error(
+      `roster size ${n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} — call validate() first`,
+    );
   }
   checkConstraintIds(n, cons);
   const reqd = cons.requiredDegree();

@@ -76,6 +76,8 @@ export function polish(
   }
 
   let iters = 0;
+  // rejects drives only the "hill" early-stop below; anneal runs the full budget
+  // (its temperature schedule, not a reject streak, governs convergence).
   let rejects = 0;
   const rejectCap = 200 * g.n; // empirically-tuned early-stop for "hill" mode
   while (iters < maxIters) {

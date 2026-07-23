@@ -18,6 +18,7 @@ import {
   polishConstrained,
   buildConstrainedBuddyGraph,
   MAX_ROSTER,
+  MAX_CONSTRAINED_N,
 } from "../src/core/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -178,9 +179,34 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
     expect(() => new Constraints(5).merge(new Constraints(6))).toThrow(/cannot merge/);
   });
 
-  it("validate accepts exactly MAX_ROSTER and refuses MAX_ROSTER+1 (boundary)", () => {
-    expect(validate(new Constraints(MAX_ROSTER), 4)).toEqual([]);
-    expect(validate(new Constraints(MAX_ROSTER + 1), 4).length).toBeGreaterThan(0);
+  // The constrained path is O(n²) in time, so it is capped far tighter than
+  // MAX_ROSTER — a legal-but-huge roster must be refused (validate/builder) or
+  // thrown (direct primitive), not left to hang. All three entry points share
+  // the ceiling; assert the boundary at each so widening one can't reopen it.
+  describe("constrained roster cap (MAX_CONSTRAINED_N)", () => {
+    it("validate accepts exactly the cap and refuses one past it", () => {
+      expect(validate(new Constraints(MAX_CONSTRAINED_N), 4)).toEqual([]);
+      const over = validate(new Constraints(MAX_CONSTRAINED_N + 1), 4);
+      expect(over.length).toBe(1);
+      expect(over[0]).toMatch(/constrained maximum/);
+    });
+    it("buildConstrainedBuddyGraph refuses one past the cap (no graph)", () => {
+      const r = buildConstrainedBuddyGraph(
+        MAX_CONSTRAINED_N + 1,
+        4,
+        new Constraints(MAX_CONSTRAINED_N + 1),
+      );
+      expect(r.report.refusals.some((m) => /constrained maximum/.test(m))).toBe(true);
+      expect(r.edges).toEqual([]);
+    });
+    it("constrainedGreedy (direct) throws one past the cap", () => {
+      expect(() =>
+        constrainedGreedy(MAX_CONSTRAINED_N + 1, 4, new Constraints(MAX_CONSTRAINED_N + 1)),
+      ).toThrow(/constrained maximum/);
+    });
+    it("validate still refuses (never throws) an astronomically large roster", () => {
+      expect(validate(new Constraints(MAX_ROSTER + 1), 4).length).toBeGreaterThan(0);
+    });
   });
 
   it.each(BAD_N)(

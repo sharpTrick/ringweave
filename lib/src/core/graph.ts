@@ -16,6 +16,16 @@
 // Shared by every entry point that validates n. Mirrored in reference-python.
 export const MAX_ROSTER = 1_000_000;
 
+// Upper bound on roster size for the constrained path (constrainedGreedy /
+// buildConstrainedBuddyGraph / validate). That path runs one BFS per edge added,
+// so generation is O(n²) in time even at small k — n≈8000 already takes ~a
+// minute, and MAX_ROSTER-sized input would run for hours. This caps worst-case
+// generation to the low tens of seconds (~10× the n≤500 product target) and is
+// enforced as a refusal in `validate` and a throw in `constrainedGreedy`'s
+// precondition. Distinct from MAX_CACHED_N despite the similar magnitude: that
+// bounds ringGreedy's O(n²) distance-cache *memory*; this bounds O(n²) *time*.
+export const MAX_CONSTRAINED_N = 5000;
+
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
 // option). Shared so the three generation entry points can't drift apart.
 export const DEFAULT_MIN_SEPARATION = 5;

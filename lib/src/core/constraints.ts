@@ -10,7 +10,7 @@
  * possible, and refuse (with a specific reason) only when a graph is genuinely
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
-import { MAX_ROSTER } from "./graph.js";
+import { MAX_ROSTER, MAX_CONSTRAINED_N } from "./graph.js";
 
 // Pairs live as normalized "min,max" string keys (JS Set compares by reference).
 // The keys are held privately so every stored pair is guaranteed canonical — an
@@ -161,6 +161,15 @@ export class Constraints {
 export function validate(cons: Constraints, k: number): string[] {
   const structural = structuralErrors(cons);
   if (structural.length > 0) return Array.from(new Set(structural)).sort();
+
+  // Refuse an oversized roster before the O(n²) connectivity walk and generation:
+  // the constrained path is O(n²) in time, so a legal-but-huge roster would hang
+  // rather than crash. This ceiling (well under MAX_ROSTER) keeps it tractable.
+  if (cons.n > MAX_CONSTRAINED_N) {
+    return [
+      `roster size ${cons.n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} (generation is O(n²))`,
+    ];
+  }
 
   if (!Number.isInteger(k) || k < 0) {
     return [`buddy count ${k} must be a non-negative whole number`];
