@@ -7,6 +7,12 @@
  *
  * `adj` is typed read-only to callers so the symmetry invariant can only be
  * mutated through `addEdge`/`removeEdge`; internal mutators cast past it.
+ *
+ * As the dependency leaf (it imports nothing from the core), this module is also
+ * home to the cross-cutting roster/work bounds every generation entry point
+ * validates against — `MAX_ROSTER`, `MAX_CONSTRAINED_N`, `MAX_CONSTRAINED_WORK`,
+ * `DEFAULT_MIN_SEPARATION`, and the `constrainedWork` estimate — so every module
+ * can import them without an import cycle.
  */
 // Upper bound on roster size for the O(n) structures — Graph adjacency, the
 // constrained path's per-BFS arrays, refusedResult. Bounds `new Array(n)` /
@@ -29,13 +35,15 @@ export const MAX_CONSTRAINED_N = 5000;
 
 // Work budget for constrained generation, bounding the cost that MAX_CONSTRAINED_N
 // misses: dense k. `constrainedGreedy` runs one BFS (~O(n)) per edge added and
-// adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n²·min(k,n-1) — measured at
-// ~5M work-units/second regardless of the sparse/dense split. A dense roster
-// (e.g. n=500,k=499) clears the n-cap but then runs for minutes-to-days; this
-// budget refuses it, holding worst-case generation to ~13 s for sparse rosters
-// and ≲~40 s in the (unrealistic) near-complete corner. Enforced in `validate`
-// (refuse) and `checkWellFormed` (throw); mirrored in reference-python. The real
-// fix — an incremental single-source distance scheme — is a tracked follow-on.
+// adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n²·min(k,n-1) — but not at a
+// uniform rate: ~7.5M work-units/s for sparse k, dropping to ~2.2M/s in the
+// near-complete corner (each BFS is deeper as m grows). A dense roster (e.g.
+// n=500,k=499) clears the n-cap but then runs for minutes-to-days; this budget
+// (1e8) refuses it, holding worst-case generation to ~13 s for sparse rosters and
+// ~46 s at the deepest allowed corner (n≈464, k=n-1 — an unrealistic near-complete
+// graph). Enforced in `validate` (refuse) and `checkWellFormed` (throw); mirrored
+// in reference-python. The real fix — an incremental single-source distance scheme
+// — is a tracked follow-on.
 export const MAX_CONSTRAINED_WORK = 100_000_000;
 
 /**

@@ -253,10 +253,11 @@ function choosePartner(
  *
  * In practice this is an inert backstop: completion (above) exits only once every
  * under-k vertex is stuck — has no legal partner at all — and a stuck vertex never
- * regains one, so no legal edge (cross-component or otherwise) is left for this to
- * add. It fires zero times across the test corpus. Retained for parity with the
- * reference and to keep the connectivity guarantee if completion's termination is
- * ever weakened.
+ * regains one, so completion's output is legal-edge-maximal (no addable legal edge
+ * remains, cross-component or otherwise) and this loop adds nothing. That
+ * maximality is asserted as a property in constrained.props.test.ts. Retained for
+ * parity with the reference and to keep the connectivity guarantee if completion's
+ * termination is ever weakened.
  */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion

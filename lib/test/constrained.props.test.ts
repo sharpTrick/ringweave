@@ -83,6 +83,19 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         // no self-loops, no isolated vertices, connected
         for (let v = 0; v < s.n; v++) expect(g.hasEdge(v, v)).toBe(false);
         expect(isConnected(g)).toBe(true);
+        // legal-edge-maximal: no addable legal edge remains. This is why
+        // forceConnect is provably inert (it reuses the same legality predicate),
+        // and it guards that completion never leaves a joinable pair behind.
+        for (let u = 0; u < s.n; u++) {
+          for (let v = u + 1; v < s.n; v++) {
+            const addable =
+              g.degree(u) < s.k &&
+              g.degree(v) < s.k &&
+              !g.hasEdge(u, v) &&
+              !cons.isProhibited(u, v);
+            expect(addable).toBe(false);
+          }
+        }
         // determinism: RNG-free, so a rerun is identical
         const rerun = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         expect(rerun.edgeList()).toEqual(g.edgeList());
