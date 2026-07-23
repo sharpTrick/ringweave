@@ -1,19 +1,25 @@
-# ringweave · BuddyGraph
+# ringweave
 
-**ringweave** is a zero-dependency TypeScript library that generates near-regular graphs
-with minimal **average shortest path length (ASPL)**: start with a ring, greedily weave in
-chords between the farthest, least-connected vertices, then optionally polish with
-degree-preserving edge swaps. Hard constraints (required / prohibited edges) and soft
-constraints (preserve prior edges) are supported.
+*Near-regular graph generation with minimal average shortest path length — plus hard/soft
+constraints. Zero dependencies.*
 
-**BuddyGraph** is the client-side web app built on ringweave: give it a group of people and
-a buddy count (say 3–4), and everyone gets an equal number of buddies while the whole group
-stays as closely connected as possible — your likely helper for any need is a buddy or a
-buddy-of-a-buddy. It runs entirely in the browser: **no accounts, no backend, no roster ever
-leaves the device.**
+**ringweave** is the project: a zero-dependency TypeScript library that generates
+near-regular graphs with minimal **average shortest path length (ASPL)**. Start with a ring,
+greedily weave in chords between the farthest, least-connected vertices, then optionally
+polish with degree-preserving edge swaps. Hard constraints (required / prohibited edges) and
+soft constraints (preserve prior edges) are supported. The library is the deliverable — the
+goal is for these algorithms to outlive this repo and land in mainstream graph libraries
+(see [`docs/UPSTREAMING.md`](docs/UPSTREAMING.md)).
 
-The split is deliberate — the package name (`ringweave`) serves library adopters, the
-product name (BuddyGraph) serves organizers.
+**BuddyGraph** is a proof-of-concept built on ringweave and shipped in this same repo — both
+a working demonstration of the library and a free client-side service for anyone who finds it
+useful. Give it a group of people and a buddy count (say 3–4), and everyone gets an equal
+number of buddies while the whole group stays as closely connected as possible — your likely
+helper for any need is a buddy or a buddy-of-a-buddy. It runs entirely in the browser: **no
+accounts, no backend, no roster ever leaves the device.**
+
+The two names, one hierarchy: `ringweave` is the library that adopters depend on; BuddyGraph
+is the reference application that shows what it's good for.
 
 ## Status
 
