@@ -3,7 +3,7 @@ import { buildBuddyGraph } from "ringweave";
 import { forceLayout, forceIters, ringLayout, FORCE_MAX_N, FORCE_MAX_EDGES } from "../src/graph/layout";
 
 describe("layout determinism", () => {
-  const result = buildBuddyGraph(30, 4, { seed: 12345 });
+  const result = buildBuddyGraph(30, 4, { seed: 12345, polish: false }); // only edges needed; skip slow polish
 
   it("ring layout is stable and unit-scaled", () => {
     const a = ringLayout(30);

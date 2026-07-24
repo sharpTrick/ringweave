@@ -7,7 +7,7 @@ import GraphCanvas from "../src/graph/GraphCanvas";
 // the pure render path — a node per person and a line per edge in the ring layout.
 describe("GraphCanvas smoke", () => {
   it("renders an SVG with a node per person and a line per edge", () => {
-    const r = buildBuddyGraph(12, 4, { seed: 1 });
+    const r = buildBuddyGraph(12, 4, { seed: 1, polish: false }); // render smoke; polish irrelevant
     const names = Array.from({ length: 12 }, (_, i) => `P${i}`);
     const html = renderToStaticMarkup(
       <GraphCanvas

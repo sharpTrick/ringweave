@@ -189,8 +189,9 @@ export function rerollBlockReason(n: number, settings: Settings): string | null 
   return null; // reroll may vary — a post-generation identical-edges check handles the plateau
 }
 
-/** Display names of person i's buddies. Shared by BuddyList and Slips. */
-export function buddyNames(view: GraphView, i: number): string[] {
+/** Person i's buddies as display names — the raw list that `buddyLabel` joins. Module-local:
+    every UI sink goes through `buddyLabel`, so this has no external consumer. */
+function buddyNames(view: GraphView, i: number): string[] {
   return view.buddies[i].map((j) => view.names[j]);
 }
 

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { copyFileSync, existsSync } from 'node:fs'
@@ -27,4 +28,8 @@ function spa404Fallback() {
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/ringweave/',
   plugins: [react(), spa404Fallback()],
+  // A few tests call the real core (buildBuddyGraph auto-polish can take seconds at n~30-60),
+  // so a per-test compute must not silently ride Vitest's 5s default and flake under load.
+  // Fixtures that don't exercise polish pass polish:false; this is the backstop for those that do.
+  test: { testTimeout: 20000 },
 })

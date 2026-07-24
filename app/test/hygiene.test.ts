@@ -22,4 +22,27 @@ describe("repo hygiene", () => {
     const offenders = files.filter((f) => /["'`]\/(home|Users|root)\//.test(readFileSync(f, "utf8")));
     expect(offenders).toEqual([]);
   });
+
+  // Class: an exported runtime symbol referenced ONLY within its own file is a dead export left
+  // by a refactor (buddyNames was exported but, after unification, used only by buddyLabel). Every
+  // exported function/const in model.ts must have a consumer in some OTHER file.
+  it("every exported function/const in model.ts is used outside model.ts", () => {
+    const srcRoot = fileURLToPath(new URL("../src", import.meta.url));
+    const testRoot = fileURLToPath(new URL("../test", import.meta.url));
+    const modelPath = fileURLToPath(new URL("../src/model.ts", import.meta.url));
+    const modelSrc = readFileSync(modelPath, "utf8");
+
+    const exported = [...modelSrc.matchAll(/export (?:function|const) (\w+)/g)].map((m) => m[1]);
+    expect(exported.length).toBeGreaterThan(0); // sanity: the regex found the exports
+
+    const others = [...walk(srcRoot), ...walk(testRoot)]
+      .filter((f) => /\.(ts|tsx)$/.test(f) && f !== modelPath)
+      .map((f) => readFileSync(f, "utf8"));
+
+    const orphans = exported.filter((name) => {
+      const ref = new RegExp(`\\b${name}\\b`);
+      return !others.some((body) => ref.test(body));
+    });
+    expect(orphans).toEqual([]); // un-export (make module-local) or add a consumer
+  });
 });

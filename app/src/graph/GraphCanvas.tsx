@@ -5,6 +5,19 @@ import { forceLayout, ringLayout, type Pt } from "./layout";
 
 export type LayoutMode = "ring" | "force";
 
+/** Every layout mode, so `fit` can frame the union of all of them (a stable viewBox that doesn't
+    rescale mid-toggle). A new mode is added here and in `positionsFor` — the two single sources. */
+export const LAYOUT_MODES: LayoutMode[] = ["ring", "force"];
+
+/**
+ * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
+ * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
+ * `fit`, so those three can never disagree — and a future mode (F8 focus) adds exactly one branch.
+ */
+export function positionsFor(layout: LayoutMode, ringPos: Pt[], forcePos: Pt[] | null): Pt[] {
+  return layout === "force" ? (forcePos ?? ringPos) : ringPos;
+}
+
 interface GraphCanvasProps {
   names: string[];
   edges: [number, number][];
@@ -60,9 +73,13 @@ export default function GraphCanvas({
   // (bounded but non-trivial at large n) never runs unless the user actually asks for force.
   // `layout` is a dep, so switching to force computes it in the same render (never null then).
   const forcePos = useMemo(() => (layout === "force" ? forceLayout(n, edges) : null), [layout, n, edges]);
-  const fit = useMemo(() => computeFit(forcePos ? [...ringPos, ...forcePos] : ringPos), [ringPos, forcePos]);
+  // Frame the union of ALL modes' positions so toggling layout pans but never rescales.
+  const fit = useMemo(
+    () => computeFit(LAYOUT_MODES.flatMap((m) => positionsFor(m, ringPos, forcePos))),
+    [ringPos, forcePos],
+  );
 
-  const target = layout === "ring" ? ringPos : (forcePos ?? ringPos);
+  const target = positionsFor(layout, ringPos, forcePos);
   const [display, setDisplay] = useState<Pt[]>(target);
   const displayRef = useRef(display);
   displayRef.current = display;
@@ -81,7 +98,7 @@ export default function GraphCanvas({
   // (new/resized graph, same-size re-roll, or reduced-motion).
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
-    const to = layout === "ring" ? ringPos : (forcePos ?? ringPos);
+    const to = positionsFor(layout, ringPos, forcePos); // same resolver as `target` — never desyncs
     const sizeChanged = prevSize.current !== sizeKey;
     const layoutChanged = prevLayout.current !== layout;
     prevSize.current = sizeKey;

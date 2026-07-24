@@ -20,6 +20,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(() => parseRoster(text), [text]);
@@ -27,7 +28,14 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
 
   // Bound the STORED (and DOM-rendered) string, not just the parse: an 8 MB file load or a
   // huge paste would otherwise re-render a multi-MB controlled textarea on every keystroke.
-  const capText = (s: string) => (s.length > MAX_PARSE_CHARS ? s.slice(0, MAX_PARSE_CHARS) : s);
+  // Because this pre-caps to exactly MAX_PARSE_CHARS, parseRoster's own char-truncation warning
+  // can't fire on the UI path (and the name-cap warning misses a <MAX_NAMES-distinct giant
+  // paste), so we surface the truncation notice here — capText is the UI truncation authority.
+  const capText = (s: string) => {
+    const over = s.length > MAX_PARSE_CHARS;
+    setInputCapped(over);
+    return over ? s.slice(0, MAX_PARSE_CHARS) : s;
+  };
 
   const readFile = async (file: File | undefined) => {
     if (!file) return;
@@ -91,6 +99,11 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
         </div>
 
         {fileError && <div className="note blocking">{fileError}</div>}
+        {inputCapped && (
+          <div className="note">
+            That's a lot of text — only the first {MAX_PARSE_CHARS.toLocaleString()} characters were kept.
+          </div>
+        )}
         {parsed.warnings.map((w, i) => (
           <div className="note" key={i}>{w}</div>
         ))}
