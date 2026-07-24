@@ -29,9 +29,15 @@ describe("feasibility", () => {
     expect(f.messages.join(" ")).toMatch(/odd/i);
   });
 
-  it("warns (does not block) for a large roster", () => {
-    const f = feasibility(2000, 4);
+  it("warns (does not block) for a large-but-allowed roster", () => {
+    const f = feasibility(500, 4);
     expect(f.canGenerate).toBe(true);
     expect(f.messages.join(" ")).toMatch(/large group/i);
+  });
+
+  it("refuses a roster beyond the generation ceiling", () => {
+    const f = feasibility(2000, 4);
+    expect(f.canGenerate).toBe(false);
+    expect(f.messages.join(" ")).toMatch(/most this tool generates/i);
   });
 });

@@ -3,7 +3,7 @@ import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
-import { degreeLabel, quality } from "../src/model";
+import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -64,15 +64,14 @@ describe("import hardening (adversarial files)", () => {
     expect(() => importGraph({ version: 1, people: people(3), edges })).toThrow(/too many edges/i);
   });
 
-  it("rejects a DENSE graph below both caps whose n·m product blows up all-pairs cost", () => {
-    // n and m are each under their cap, but a real (distinct, in-range) dense graph would
-    // cost ~seconds in all-pairs BFS. The work budget must reject it — arithmetically,
-    // before building anything — so rejection is instant.
-    const n = MAX_IMPORT_N; // 2000
+  it("rejects a DENSE graph (avg degree beyond a buddy graph) before layout/render", () => {
+    // A near-complete graph passes the node cap but would freeze force layout + SVG render
+    // (one <line> per edge). The density cap rejects it arithmetically, before building.
+    const n = 430;
     const edges: [number, number][] = [];
-    for (let i = 0; i < n; i++) for (let d = 1; d <= 10; d++) edges.push([i, (i + d) % n]);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) edges.push([i, j]); // K430, ~92k edges
     const start = performance.now();
-    expect(() => importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges })).toThrow(/too large/i);
+    expect(() => importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges })).toThrow(/denser|too many edges/i);
     expect(performance.now() - start).toBeLessThan(100);
   });
 
@@ -156,20 +155,27 @@ describe("import: disconnected / degenerate graphs are scored honestly", () => {
 
 // Class: untrusted file fields must not flow unclamped into generation cost — a crafted
 // high-degree import must not let a later reroll inject k up to n-1 and hang the worker.
-describe("import: untrusted settings.buddies is clamped to the UI range", () => {
+describe("import: untrusted settings are clamped to the UI range", () => {
   const star = (n: number): [number, number][] => Array.from({ length: n - 1 }, (_, i) => [0, i + 1]);
 
-  it("a star graph's degree-(n-1) fallback is clamped to 12", () => {
+  it("a star graph's degree-(n-1) fallback is clamped to BUDDY_MAX", () => {
     const n = 200;
     const v = importGraph({ version: 1, people: peopleOf(n), edges: star(n) }); // no settings block
-    expect(v.settings.buddies).toBeLessThanOrEqual(12);
-    expect(v.settings.buddies).toBeGreaterThanOrEqual(2);
+    expect(v.settings.buddies).toBe(BUDDY_MAX); // clamped from degree 199
+    expect(v.settings.buddies).toBeGreaterThanOrEqual(BUDDY_MIN);
   });
 
-  it("a declared oversized buddies is clamped", () => {
+  it("a declared oversized buddies is clamped to BUDDY_MAX", () => {
     for (const declared of [13, 100, 199, 1_000_000]) {
       const v = importGraph({ version: 1, people: peopleOf(50), edges: [[0, 1], [1, 2], [2, 0]], settings: { buddies: declared, seed: 1, polish: "auto" } });
-      expect(v.settings.buddies).toBeLessThanOrEqual(12);
+      expect(v.settings.buddies).toBe(BUDDY_MAX);
+    }
+  });
+
+  it("an out-of-range minSeparation is clamped too (mirrors buddies)", () => {
+    for (const [decl, exp] of [[999999999, BUDDY_MAX], [1, BUDDY_MIN], [7, 7]] as const) {
+      const v = importGraph({ version: 1, people: peopleOf(6), edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], settings: { buddies: 2, minSeparation: decl, seed: 1, polish: "auto" } });
+      expect(v.settings.minSeparation).toBe(exp);
     }
   });
 });

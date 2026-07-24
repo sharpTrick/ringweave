@@ -15,7 +15,12 @@ const hooks = vi.hoisted(() => {
   const generate = vi.fn(() => {
     state.status = "running";
   });
-  return { state, generate };
+  const reset = vi.fn(() => {
+    state.status = "idle";
+    state.result = null;
+    state.error = null;
+  });
+  return { state, generate, reset };
 });
 
 vi.mock("../src/state/useGenerationWorker", () => ({
@@ -24,6 +29,7 @@ vi.mock("../src/state/useGenerationWorker", () => ({
     result: hooks.state.result,
     error: hooks.state.error,
     generate: hooks.generate,
+    reset: hooks.reset,
   }),
 }));
 
@@ -34,6 +40,7 @@ beforeEach(() => {
   hooks.state.result = null;
   hooks.state.error = null;
   hooks.generate.mockClear();
+  hooks.reset.mockClear();
 });
 
 describe("useBuddyGraph result↔state pairing", () => {
@@ -48,7 +55,11 @@ describe("useBuddyGraph result↔state pairing", () => {
     const { result, rerender } = renderHook(() => useBuddyGraph());
     act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS)); // pending set; mock -> running
     act(() => rerender());
-    act(() => result.current.loadView(imported)); // import lands -> view=imported, pending cleared
+    expect(result.current.status).toBe("running");
+
+    act(() => result.current.loadView(imported)); // import lands -> view=imported, pending cleared, reset()
+    act(() => rerender());
+    expect(result.current.status).not.toBe("running"); // no stale "Generating…" overlay
 
     hooks.state.status = "done";
     hooks.state.result = stale; // worker finally replies for the superseded generate

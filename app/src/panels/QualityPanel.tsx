@@ -1,4 +1,4 @@
-import type { GraphView } from "../model";
+import { connectionSummary, type GraphView } from "../model";
 
 interface Props {
   view: GraphView;
@@ -16,7 +16,6 @@ const fmtInt = (x: number | null): string => (x == null ? "—" : String(x));
 export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
   const q = Math.round(m.quality * 100);
-  const largestPct = Math.round(m.largestComponentFraction * 100);
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">
@@ -37,11 +36,7 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         >
           <div className="inner tabnum">{q}</div>
         </div>
-        <span className="l">
-          {m.connected
-            ? "connection quality — everyone's well-linked"
-            : `not everyone's connected — ${largestPct}% are in the largest group`}
-        </span>
+        <span className="l">{connectionSummary(m)}</span>
       </div>
       <div className="m-acts">
         <button className="btn btn-ghost" onClick={onImport}>Import ↑</button>

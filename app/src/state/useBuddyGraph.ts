@@ -10,6 +10,7 @@ import { useGenerationWorker } from "./useGenerationWorker";
 export function useBuddyGraph() {
   const gen = useGenerationWorker();
   const genGenerate = gen.generate;
+  const genReset = gen.reset;
   const [view, setView] = useState<GraphView | null>(null);
   const pending = useRef<{ names: string[]; settings: Settings } | null>(null);
   // consumed: the last worker result we've already turned into a view. Guards against a
@@ -39,11 +40,13 @@ export function useBuddyGraph() {
 
   const loadView = useCallback((v: GraphView) => {
     // Supersede any in-flight generation: clearing `pending` makes the effect drop a
-    // worker result that arrives AFTER this import, so the imported view isn't clobbered
-    // by a stale reroll/generate that was still running when the file was loaded.
+    // worker result that arrives AFTER this import, and reset() cancels the running
+    // computation + clears the "running" status so no stale "Generating…" overlay lingers
+    // over the imported graph.
     pending.current = null;
+    genReset();
     setView(v);
-  }, []);
+  }, [genReset]);
 
   return { view, status: gen.status, error: gen.error, generate, loadView };
 }

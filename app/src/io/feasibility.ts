@@ -1,17 +1,19 @@
+import { MAX_ROSTER_N } from "../model";
+
 /** Above this, generation is noticeably slow; warn as a preflight (not a blocker). */
-export const LARGE_ROSTER = 800;
+export const LARGE_ROSTER = 300;
 
 export interface Feasibility {
-  /** False when generation cannot proceed (too few people). */
+  /** False when generation cannot proceed (too few / too many people, or bad k). */
   canGenerate: boolean;
-  /** Plain-language notes shown before generation (parity, too-few-people). */
+  /** Plain-language notes shown before generation (parity, too-few/too-many-people). */
   messages: string[];
 }
 
 /**
  * Pre-generation checks shown to the organizer, mirroring the mock's `checkNote`.
- * n < k+1 is a hard blocker (the ring seed needs more people than
- * buddies); an odd n×k is a soft note (one person ends up ±1 buddy — still fine).
+ * n < k+1 is a hard blocker (the ring seed needs more people than buddies); n above
+ * MAX_ROSTER_N is refused (generation would run too long); an odd n×k is a soft note.
  */
 export function feasibility(n: number, k: number): Feasibility {
   // The core's ring seed floors every degree at 2, so buildBuddyGraph throws for k<2.
@@ -27,16 +29,23 @@ export function feasibility(n: number, k: number): Feasibility {
       messages: [`Add at least ${need} more — you need more people than buddies.`],
     };
   }
+  if (n > MAX_ROSTER_N) {
+    return {
+      canGenerate: false,
+      messages: [`That's ${n} people — the most this tool generates for is ${MAX_ROSTER_N}.`],
+    };
+  }
+
   const messages: string[] = [];
   if ((n * k) % 2 !== 0) {
     messages.push(
       `${n} people × ${k} buddies is odd, so one person will have one buddy more or fewer. That's fine.`,
     );
   }
-  // Preflight: generation cost grows with n; warn (don't block) before a large run so the
-  // "Generating…" spinner isn't a surprise. The core caps genuinely-too-large rosters.
+  // Preflight: generation cost grows steeply with n; warn honestly before a large run so the
+  // "Generating…" spinner isn't a surprise (a near-limit roster can take tens of seconds).
   if (n > LARGE_ROSTER) {
-    messages.push(`${n} people is a large group — generating may take a few seconds.`);
+    messages.push(`${n} people is a large group — generating can take a while (tens of seconds near the limit).`);
   }
   return { canGenerate: true, messages };
 }

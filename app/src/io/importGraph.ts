@@ -1,65 +1,51 @@
 import { Graph, allPairsSummary, girth, largestComponentFraction } from "ringweave";
-import { assembleMetrics, type GraphView, type Settings } from "../model";
+import { assembleMetrics, BUDDY_MAX, BUDDY_MIN, degreeExtent, type GraphView, type Settings } from "../model";
 import type { BuddyGraphFile } from "./schema";
-
-/** Buddies-per-person the UI supports (mirrors SettingsControls' stepper range). */
-const MIN_BUDDIES = 2;
-const MAX_BUDDIES = 12;
 
 /** Thrown with a plain-language reason when a file can't be imported. */
 export class ImportError extends Error {}
 
 /**
- * Import bounds. The core's generation entry points are capped, but the pure metric
- * functions (`allPairsSummary`/`girth`) are UNCAPPED and re-measure the file on the main
- * thread. These bounds keep even a file at the limits under ~a second of measuring, and a
- * rejected file costs microseconds (an arithmetic check — the oversized *file* itself is
- * stopped earlier, by the byte-size gate in readFileText, before it is ever parsed).
- *
- * The caps are tighter than generation's (n≤2000, not 5000): import re-measures
- * synchronously on the UI thread where generation runs off it in a worker, so the ceiling
- * that keeps the tab responsive is lower. MAX_IMPORT_WORK bounds the O(n·(n+m)) metric
- * cost by the PRODUCT — the n and edge caps alone would still allow a dense n·m blow-up.
+ * Import bounds. The core's pure metric functions (`allPairsSummary`/`girth`) are UNCAPPED
+ * and re-measure the file on the main thread, and the graph view also LAYS OUT and RENDERS
+ * every edge synchronously. So both node count AND density must be bounded:
+ * - `MAX_IMPORT_N` caps the O(n^2) metric baseline.
+ * - the density cap (avg degree <= BUDDY_MAX) keeps edge-scaling work in check — the force
+ *   layout is O(m)/tick and the SVG renders one <line> per edge, so a near-complete graph
+ *   (K430 ≈ 92k edges) would freeze layout+render even though its BFS cost is modest.
+ * A buddy graph has at most BUDDY_MAX buddies each, so `2·m <= BUDDY_MAX·n` is the natural
+ * ceiling; anything denser isn't a buddy graph and is refused with a plain-language error.
+ * A rejected file costs an arithmetic check (the oversized *file* is stopped earlier by the
+ * byte-size gate in readFileText, before it is parsed).
  */
 export const MAX_IMPORT_N = 2000;
-export const MAX_IMPORT_EDGES = 100_000;
-export const MAX_IMPORT_WORK = 40_000_000;
 
-function degreeExtent(degrees: number[]): [number, number] {
-  if (degrees.length === 0) return [0, 0];
-  let lo = degrees[0];
-  let hi = degrees[0];
-  for (const d of degrees) {
-    if (d < lo) lo = d;
-    if (d > hi) hi = d;
-  }
-  return [lo, hi];
+function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): number {
+  return Number.isInteger(value) ? Math.max(lo, Math.min(hi, value as number)) : fallback;
 }
 
-/** Sanitize the settings block: values come from arbitrary JSON, and `buddies` becomes
-    the generation target a later reroll passes to the core. It is CLAMPED to the UI range
-    [2,12] — an untrusted file (or a star graph's degree-of-1999 fallback) must not inject
-    an arbitrarily large k that hangs the worker for hours on the next reroll. */
+/** Sanitize the settings block: values come from arbitrary JSON. `buddies` and
+    `minSeparation` become generation targets a later reroll passes to the core, so both are
+    CLAMPED to the UI range [BUDDY_MIN, BUDDY_MAX] — an untrusted file must not inject a value
+    the stepper can't express (a star graph's degree-1999 fallback, a declared minSeparation of
+    1e9) and drive generation out of range. */
 function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
-  const candidate = s && Number.isInteger(s.buddies) && s.buddies >= MIN_BUDDIES ? s.buddies : fallbackBuddies;
-  const buddies = Math.max(MIN_BUDDIES, Math.min(MAX_BUDDIES, candidate));
-  const seed = s && Number.isInteger(s.seed) ? s.seed : 12345;
-  const minSeparation =
-    s && Number.isInteger(s.minSeparation) && (s.minSeparation as number) >= 2
-      ? s.minSeparation
-      : undefined;
-  const polish: boolean | "auto" =
-    s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto";
-  return { buddies, seed, minSeparation, polish };
+  const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
+  return {
+    buddies: Math.max(BUDDY_MIN, Math.min(BUDDY_MAX, declared)),
+    minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, BUDDY_MIN, BUDDY_MAX, BUDDY_MIN) : undefined,
+    seed: s && Number.isInteger(s.seed) ? s.seed : 12345,
+    polish: s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto",
+  };
 }
 
 /**
  * Rehydrate a GraphView from a file WITHOUT regenerating — the edges are in the file.
  * A `Graph` is rebuilt and metrics are recomputed with the core's own functions
- * (`allPairsSummary`/`girth`), so imported (incl. hand-edited) files are honestly
- * re-measured — quality reflects the ACTUAL degree, not the declared `settings.buddies`.
- * Round-trips identically with `exportGraph` by construction. Dimensions are bounded up
- * front so an oversized file fails fast with a plain-language error instead of hanging.
+ * (`allPairsSummary`/`girth`/`largestComponentFraction`), so imported (incl. hand-edited)
+ * files are honestly re-measured — quality reflects the ACTUAL degree and connectivity, not
+ * the declared `settings`. Round-trips identically with `exportGraph`. Dimensions and density
+ * are bounded up front so an oversized/dense file fails fast instead of freezing the tab.
  */
 export function importGraph(data: unknown): GraphView {
   if (typeof data !== "object" || data === null) {
@@ -78,12 +64,10 @@ export function importGraph(data: unknown): GraphView {
   if (!Array.isArray(f.edges)) {
     throw new ImportError("That file has no edges list.");
   }
-  if (f.edges.length > MAX_IMPORT_EDGES) {
-    throw new ImportError(`That file has too many edges (limit ${MAX_IMPORT_EDGES}).`);
-  }
-  // Bound the O(n·(n+m)) metric cost by the product, not each dimension alone.
-  if (f.people.length * (f.people.length + f.edges.length) > MAX_IMPORT_WORK) {
-    throw new ImportError("That graph is too large to measure — reduce people or edges.");
+  // Density: a buddy graph has avg degree <= BUDDY_MAX, i.e. 2·m <= BUDDY_MAX·n. Anything
+  // denser would freeze layout/render, so it's refused (not a buddy graph).
+  if (2 * f.edges.length > BUDDY_MAX * f.people.length) {
+    throw new ImportError(`That file has too many edges for ${f.people.length} people — it's denser than a buddy graph.`);
   }
   // M2 has no constraints UI; refuse a constraint-bearing file explicitly rather than
   // silently dropping the constraints on import (and re-exporting them as empty).

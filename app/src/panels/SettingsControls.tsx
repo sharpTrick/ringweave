@@ -1,5 +1,5 @@
 import { DEFAULT_MIN_SEPARATION } from "ringweave";
-import type { Settings } from "../model";
+import { BUDDY_MAX, BUDDY_MIN, type Settings } from "../model";
 
 interface Props {
   settings: Settings;
@@ -15,10 +15,10 @@ const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.m
     separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped
     on change — HTML min/max don't stop a cleared/typed value (an empty field is 0). */
 export default function SettingsControls({ settings, onChange }: Props) {
-  const setK = (k: number) => onChange({ ...settings, buddies: clamp(Math.round(k), 2, 12) });
+  const setK = (k: number) => onChange({ ...settings, buddies: clamp(Math.round(k), BUDDY_MIN, BUDDY_MAX) });
 
   const setMinSep = (raw: number) =>
-    onChange({ ...settings, minSeparation: Number.isFinite(raw) ? clamp(Math.round(raw), 2, 12) : DEFAULT_MIN_SEPARATION });
+    onChange({ ...settings, minSeparation: Number.isFinite(raw) ? clamp(Math.round(raw), BUDDY_MIN, BUDDY_MAX) : DEFAULT_MIN_SEPARATION });
 
   const setSeed = (raw: number) =>
     onChange({ ...settings, seed: Number.isInteger(raw) ? raw : settings.seed });
@@ -40,8 +40,8 @@ export default function SettingsControls({ settings, onChange }: Props) {
             Min separation
             <input
               type="number"
-              min={2}
-              max={12}
+              min={BUDDY_MIN}
+              max={BUDDY_MAX}
               value={settings.minSeparation ?? DEFAULT_MIN_SEPARATION}
               onChange={(e) => setMinSep(Number(e.target.value))}
               style={{ width: 56 }}

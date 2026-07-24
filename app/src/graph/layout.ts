@@ -28,11 +28,12 @@ export function ringLayout(n: number): Pt[] {
   return pts;
 }
 
-// Force settling is super-linear (charge is O(n²) per tick) and blows up past a few
-// thousand nodes; above this it falls back to the ring layout so an oversized imported
-// graph can't freeze the render. Generated graphs are far smaller, so this only affects
-// large imports (themselves bounded by MAX_IMPORT_N).
+// Force settling scales with BOTH node and edge count (charge via a quadtree, links per
+// edge, all × ticks). Above either cap it falls back to the ring layout so a large or dense
+// graph can't freeze the render. Generated graphs are far smaller; this guards imports
+// (themselves bounded by MAX_IMPORT_N and the density cap).
 export const FORCE_MAX_N = 1000;
+export const FORCE_MAX_EDGES = 4000;
 
 interface SimNode extends SimulationNodeDatum {
   index: number;
@@ -53,7 +54,7 @@ interface SimLink {
  * for free, pixels). Normalized space; GraphCanvas fits it via computeFit().
  */
 export function forceLayout(n: number, edges: [number, number][], iters = 300): Pt[] {
-  if (n > FORCE_MAX_N) return ringLayout(n); // too large to settle synchronously
+  if (n > FORCE_MAX_N || edges.length > FORCE_MAX_EDGES) return ringLayout(n); // too large/dense to settle synchronously
   const nodes: SimNode[] = ringLayout(n).map((p, i) => ({ index: i, x: p.x, y: p.y }));
   const links: SimLink[] = edges.map(([source, target]) => ({ source, target }));
 

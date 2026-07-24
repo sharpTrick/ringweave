@@ -14,6 +14,16 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: 12345,
 };
 
+/** Buddies-per-person range the UI supports — the single source of truth for the
+    settings stepper AND the import clamp, so they can't diverge. */
+export const BUDDY_MIN = 2;
+export const BUDDY_MAX = 12;
+
+/** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
+    runs tens of seconds even off-thread, so the roster parser truncates and feasibility
+    refuses above it. (Import can display more — it only re-measures — but reroll is gated.) */
+export const MAX_ROSTER_N = 1000;
+
 /**
  * Display metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only, so
  * they are meaningful for the whole roster only when it is connected — they are `null`
@@ -38,11 +48,12 @@ function clampQuality(gap: number): number {
 }
 
 /**
- * quality = clamp01(1 - asplGap): the core's Moore-gap, never re-derived in the UI. A
- * non-finite ASPL (no reachable pairs: edgeless / n<=1) scores 0, not "optimal" —
- * otherwise `asplGap`'s "no valid Moore bound => gap 0" would collapse to quality 1.
- * NOTE: this does not by itself catch a disconnected-but-edged graph (whose ASPL is a
- * finite reachable-pairs mean); `assembleMetrics` gates that on `connected`.
+ * quality = clamp01(1 - asplGap): the core's Moore-gap. THE single scorer — `assembleMetrics`
+ * calls this, so there is one implementation behind the displayed number. A non-finite ASPL
+ * (no reachable pairs: edgeless / n<=1) scores 0, not "optimal" — otherwise `asplGap`'s "no
+ * valid Moore bound => gap 0" would collapse to quality 1. This alone does not catch a
+ * disconnected-but-edged graph (finite reachable-pairs mean); `assembleMetrics` gates that
+ * on `connected`.
  */
 export function quality(aspl: number, n: number, k: number): number {
   return Number.isFinite(aspl) ? clampQuality(asplGap(aspl, n, k)) : 0;
@@ -51,6 +62,37 @@ export function quality(aspl: number, n: number, k: number): number {
 /** Normalize a non-finite metric to null (Infinity for no reachable pairs). */
 export function finiteOrNull(x: number): number | null {
   return Number.isFinite(x) ? x : null;
+}
+
+/** Min and max of a degree sequence, loop-based (avoids arg-spread limits). */
+export function degreeExtent(degrees: number[]): [number, number] {
+  if (degrees.length === 0) return [0, 0];
+  let lo = degrees[0];
+  let hi = degrees[0];
+  for (const d of degrees) {
+    if (d < lo) lo = d;
+    if (d > hi) hi = d;
+  }
+  return [lo, hi];
+}
+
+/** Quality below this reads as "connected but loosely linked" rather than "well-linked". */
+const WELL_LINKED_QUALITY = 0.5;
+
+/**
+ * The one place that turns metrics into the connection caption, so the words can never
+ * contradict the gauge: a disconnected graph never says "well-linked" (and its shown
+ * largest-group % is floored below 100), a connected-but-poor graph says "loosely linked",
+ * and a roster too small to score (no reachable pairs) says so instead of "well-linked".
+ */
+export function connectionSummary(m: Metrics): string {
+  if (!m.connected) {
+    const pct = Math.min(99, Math.floor(m.largestComponentFraction * 100));
+    return `not everyone's connected — ${pct}% are in the largest group`;
+  }
+  if (m.aspl == null) return "not enough people yet to score";
+  if (m.quality < WELL_LINKED_QUALITY) return "everyone's connected, but loosely linked";
+  return "everyone's well-linked";
 }
 
 /** Raw numeric metrics a graph yields, before display normalization. */
@@ -78,7 +120,7 @@ export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
     aspl: measurable ? raw.aspl : null,
     diameter: measurable ? raw.diameter : null,
     girth: finiteOrNull(raw.girth),
-    quality: measurable ? clampQuality(asplGap(raw.aspl, n, raw.degreeMax)) : 0,
+    quality: measurable ? quality(raw.aspl, n, raw.degreeMax) : 0, // one scorer (see quality())
     connected: raw.connected,
     largestComponentFraction: raw.largestComponentFraction,
     regular: raw.degreeMin === raw.degreeMax,

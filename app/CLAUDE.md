@@ -90,3 +90,8 @@ token-swap; M2 ships the mock-faithful dark theme only.
   precompute-both model, not just extending `LayoutMode`.
 - **Hover highlight is O(n+m) per hover** (recomputes neighbor sets + node/edge classes). Fine at
   M2 sizes; memoize/gate it if very large graphs become common.
+- **Generation connectivity is assumed, not measured.** `viewFromResult` sets `connected:true` /
+  `largestComponentFraction:1` because `BuddyResult` carries no connectivity field and the ring
+  seed guarantees connectivity by construction. The honest fix is lib-first: add `connected` /
+  `largestComponentFraction` to `BuddyResult` (the worker already computes `allPairsSummary`, whose
+  `Summary` has `connected`) and pass them through, so both view-model producers *measure* it.
