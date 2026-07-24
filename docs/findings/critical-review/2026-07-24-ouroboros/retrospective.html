@@ -1,0 +1,642 @@
+<title>Anatomy of a Review Loop — Forensic Retrospective</title>
+<style>
+  :root {
+    --bg: #f5f7f9; --panel: #ffffff; --panel-2: #eef1f5; --ink: #161b24;
+    --ink-2: #49515f; --ink-3: #7b8494; --line: #e3e7ed; --line-2: #cdd4de;
+    --signal: #0d8a99; --signal-ink: #0a6f7c; --signal-soft: rgba(13,138,153,.11);
+    --blocking: #c23350; --suggestion: #b3761c; --converged: #2a9367; --plausible: #8b93a2;
+    --shadow: 0 1px 2px rgba(20,30,50,.05), 0 10px 30px -16px rgba(20,30,50,.18);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141c; --panel: #161d28; --panel-2: #1b2330; --ink: #e7ebf2;
+      --ink-2: #a4aebe; --ink-3: #6c7788; --line: #222b39; --line-2: #2f3a49;
+      --signal: #34c6d8; --signal-ink: #6fdcea; --signal-soft: rgba(52,198,216,.13);
+      --blocking: #e65c78; --suggestion: #d59a41; --converged: #46b487; --plausible: #8b95a7;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px -18px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7f9; --panel: #ffffff; --panel-2: #eef1f5; --ink: #161b24;
+    --ink-2: #49515f; --ink-3: #7b8494; --line: #e3e7ed; --line-2: #cdd4de;
+    --signal: #0d8a99; --signal-ink: #0a6f7c; --signal-soft: rgba(13,138,153,.11);
+    --blocking: #c23350; --suggestion: #b3761c; --converged: #2a9367; --plausible: #8b93a2;
+    --shadow: 0 1px 2px rgba(20,30,50,.05), 0 10px 30px -16px rgba(20,30,50,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f141c; --panel: #161d28; --panel-2: #1b2330; --ink: #e7ebf2;
+    --ink-2: #a4aebe; --ink-3: #6c7788; --line: #222b39; --line-2: #2f3a49;
+    --signal: #34c6d8; --signal-ink: #6fdcea; --signal-soft: rgba(52,198,216,.13);
+    --blocking: #e65c78; --suggestion: #d59a41; --converged: #46b487; --plausible: #8b95a7;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px -18px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px 96px; }
+  .col { max-width: 720px; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; letter-spacing: -0.018em; font-weight: 640; }
+  p { margin: 0 0 0.9em; }
+  a { color: var(--signal-ink); }
+  strong { font-weight: 650; color: var(--ink); }
+  em { font-style: normal; font-family: var(--mono); font-size: 0.9em; color: var(--ink-2); background: var(--panel-2); padding: 0.05em 0.36em; border-radius: 4px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--signal-ink); font-weight: 600;
+  }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  /* ---- masthead ---- */
+  header.top { padding: 60px 0 30px; border-bottom: 1px solid var(--line); }
+  .top .kicker { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .top .kicker .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+  h1 { font-size: clamp(30px, 5.2vw, 50px); margin: 0 0 18px; letter-spacing: -0.03em; }
+  h1 .sub { display: block; color: var(--ink-2); font-weight: 400; font-size: clamp(17px, 2.4vw, 21px); letter-spacing: -0.01em; margin-top: 12px; line-height: 1.4; }
+  .thesis { font-size: 18px; color: var(--ink-2); max-width: 640px; margin-top: 22px; }
+  .thesis b { color: var(--ink); font-weight: 600; }
+
+  /* ---- metric strip ---- */
+  .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 34px 0 8px; }
+  .strip .cell { background: var(--panel); padding: 16px 15px; }
+  .strip .v { font-family: var(--mono); font-size: 25px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .strip .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-top: 5px; line-height: 1.3; }
+  .strip .v.warn { color: var(--blocking); }
+  .strip .v.good { color: var(--converged); }
+
+  /* ---- section scaffolding ---- */
+  section { padding: 52px 0 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head h2 { font-size: clamp(21px, 3vw, 27px); margin: 0; }
+  h2 .idx { font-family: var(--mono); font-size: 13px; color: var(--ink-3); font-weight: 500; letter-spacing: 0; }
+  .lede { color: var(--ink-2); font-size: 17px; margin: 4px 0 26px; max-width: 700px; }
+
+  /* ---- panels ---- */
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 24px 24px 20px; margin: 22px 0; }
+  .panel .cap { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+  .panel .title { font-weight: 620; font-size: 16px; margin-bottom: 16px; letter-spacing: -0.01em; }
+  .chart-scroll { overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+  .legend .sw { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .box { width: 11px; height: 11px; border-radius: 3px; }
+
+  /* ---- two-regime split ---- */
+  .regimes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+  .regime { border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: var(--panel); position: relative; overflow: hidden; }
+  .regime::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; }
+  .regime.a::before { background: var(--signal); }
+  .regime.b::before { background: var(--suggestion); }
+  .regime .ph { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+  .regime h3 { font-size: 18px; margin: 6px 0 2px; }
+  .regime .rng { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
+  .regime dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; margin: 18px 0 0; }
+  .regime dt { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); }
+  .regime dd { margin: 2px 0 0; font-family: var(--mono); font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .regime dd small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+  .regime dd.hot { color: var(--blocking); }
+  .regime dd.cool { color: var(--converged); }
+
+  /* ---- meta findings ---- */
+  .findings { counter-reset: mf; margin: 8px 0; display: grid; gap: 2px; }
+  .mf { display: grid; grid-template-columns: 52px 1fr; gap: 18px; padding: 22px 0; border-top: 1px solid var(--line); }
+  .mf:last-child { border-bottom: 1px solid var(--line); }
+  .mf .n { counter-increment: mf; font-family: var(--mono); font-size: 13px; color: var(--signal-ink); font-weight: 600; padding-top: 3px; }
+  .mf .n::before { content: counter(mf, decimal-leading-zero); }
+  .mf h3 { font-size: 19px; margin: 0 0 7px; letter-spacing: -0.015em; }
+  .mf p { color: var(--ink-2); font-size: 15.5px; margin: 0; }
+  .mf .tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line-2); border-radius: 20px; padding: 2px 9px; margin-top: 10px; }
+
+  /* ---- data tables ---- */
+  .tbl-scroll { overflow-x: auto; margin: 20px 0; border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  thead th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--panel-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td .cls { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+  tbody tr.total td { font-weight: 650; background: var(--panel-2); }
+  .chip { font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 20px; font-weight: 600; }
+  .chip.block { color: var(--blocking); background: color-mix(in srgb, var(--blocking) 12%, transparent); }
+  .chip.sugg { color: var(--suggestion); background: color-mix(in srgb, var(--suggestion) 14%, transparent); }
+  .chip.ok { color: var(--converged); background: color-mix(in srgb, var(--converged) 13%, transparent); }
+  .minibar { display: inline-block; height: 8px; border-radius: 2px; vertical-align: middle; }
+
+  /* ---- lens sections ---- */
+  .lens { border-top: 2px solid var(--line-2); padding-top: 30px; margin-top: 40px; }
+  .lens > .cap { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--signal-ink); }
+  .lens h3.lh { font-size: 22px; margin: 6px 0 4px; letter-spacing: -0.02em; }
+  .lens ul { padding-left: 0; list-style: none; margin: 16px 0; display: grid; gap: 12px; }
+  .lens ul li { padding-left: 20px; position: relative; color: var(--ink-2); font-size: 15.5px; }
+  .lens ul li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+  .lens .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); margin: 26px 0 8px; }
+  .callout { border-left: 3px solid var(--signal); background: var(--signal-soft); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 15px; color: var(--ink-2); }
+  .callout b { color: var(--ink); }
+
+  .chain { font-family: var(--mono); font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; overflow-x: auto; line-height: 1.9; color: var(--ink-2); }
+  .chain .r { color: var(--ink); font-weight: 600; }
+  .chain .b { color: var(--blocking); font-weight: 600; }
+  .chain .arrow { color: var(--signal); padding: 0 4px; }
+
+  footer { margin-top: 64px; padding-top: 26px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13.5px; }
+  footer .cap { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+  footer ul { padding-left: 18px; display: grid; gap: 7px; }
+
+  @media (max-width: 720px) {
+    .strip { grid-template-columns: repeat(3, 1fr); }
+    .regimes { grid-template-columns: 1fr; }
+    .mf { grid-template-columns: 1fr; gap: 6px; }
+    .mf .n { padding-top: 0; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 1.1s ease forwards; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    .rise { transform-origin: bottom; animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes rise { from { transform: scaleY(0); opacity: 0; } }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="kicker"><span class="dot"></span><span class="eyebrow">Forensic Retrospective · Adversarial Review Loop</span></div>
+    <h1>Anatomy of a review loop
+      <span class="sub">18 captured rounds of full-surface adversarial review, run to convergence on one React/TypeScript app — reconstructed from 92 structured findings, per-agent telemetry, and the commit graph.</span>
+    </h1>
+    <p class="thesis">The loop worked — it shipped an app with no known blocking defects and a 136-test safety net. But the data shows it ran in <b>two distinct regimes</b>: a short, cheap <b>discovery</b> phase that found the real bugs, followed by an equally expensive <b>self-review tail</b> that mostly reviewed the loop's own fixes. This is the forensic consolidation of what happened — quantitative first, then five qualitative lenses. No remedies yet.</p>
+
+    <div class="strip">
+      <div class="cell"><div class="v num">18</div><div class="k">rounds captured<br>(4–21)</div></div>
+      <div class="cell"><div class="v num">92</div><div class="k">findings<br>75 confirmed</div></div>
+      <div class="cell"><div class="v num warn">13</div><div class="k">blocking<br>last at round 12</div></div>
+      <div class="cell"><div class="v num">5.26M</div><div class="k">subagent<br>tokens</div></div>
+      <div class="cell"><div class="v num">66.7%</div><div class="k">self-induced<br>findings</div></div>
+      <div class="cell"><div class="v num good">R20</div><div class="k">first<br>converged</div></div>
+    </div>
+    <p class="num" style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:12px">~140 min wall-clock · ≈19 fix commits · tests grown 68 → 136 (~1 per confirmed finding) · loop also ran rounds 2–3 (git-only, not captured here)</p>
+  </header>
+
+  <!-- ======= THE TRACE ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">01 /</span> The trace</h2></div>
+    <p class="lede">Findings per round, blocking sub-portion stacked at the base. Read left-to-right it is a signal decaying into self-noise: the dangerous findings are exhausted by round 12, yet the loop runs nine more rounds at roughly equal cost.</p>
+
+    <div class="panel">
+      <div class="cap">Findings per round · rounds 4–21</div>
+      <div class="chart-scroll"><div id="trace"></div></div>
+      <div class="legend">
+        <span class="sw"><span class="box" style="background:var(--blocking)"></span>blocking (confirmed)</span>
+        <span class="sw"><span class="box" style="background:var(--signal)"></span>suggestion (confirmed)</span>
+        <span class="sw"><span class="box" style="background:var(--plausible);opacity:.6"></span>plausible (unconfirmed)</span>
+        <span class="sw"><span class="box" style="background:var(--panel-2);border:1px solid var(--line-2)"></span>self-review tail (R13–21)</span>
+      </div>
+    </div>
+
+    <div class="regimes">
+      <div class="regime a">
+        <div class="ph">Regime I · Discovery</div>
+        <h3>Finding the real bugs</h3>
+        <div class="rng">rounds 4–12 · 9 rounds</div>
+        <dl>
+          <div><dt>Confirmed</dt><dd>57</dd></div>
+          <div><dt>Blocking</dt><dd class="hot">13</dd></div>
+          <div><dt>Tokens</dt><dd>2.70M</dd></div>
+          <div><dt>Cost / finding</dt><dd>47K<small> tok</small></dd></div>
+        </dl>
+      </div>
+      <div class="regime b">
+        <div class="ph">Regime II · Self-review tail</div>
+        <h3>Reviewing its own diff</h3>
+        <div class="rng">rounds 13–21 · 9 rounds</div>
+        <dl>
+          <div><dt>Confirmed</dt><dd>18</dd></div>
+          <div><dt>Blocking</dt><dd class="cool">0</dd></div>
+          <div><dt>Tokens</dt><dd>2.57M</dd></div>
+          <div><dt>Cost / finding</dt><dd>143K<small> tok</small></dd></div>
+        </dl>
+      </div>
+    </div>
+    <p class="col" style="color:var(--ink-2);font-size:15px">The two halves consumed <strong>near-identical compute</strong> (2.70M vs 2.57M tokens) for opposite value: 13 blocking issues versus zero, at 3× the cost per finding. Rounds 13 and 15 each spent <strong>~300K tokens to surface a single suggestion.</strong></p>
+  </section>
+
+  <!-- ======= WHERE THE VALUE WAS ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">02 /</span> Where the value was</h2></div>
+    <p class="lede">Re-bucketing all 75 confirmed findings by genuine engineering value. Only 13 (17%) were user-visible bugs — and twelve of them landed by round 8.</p>
+
+    <div class="panel">
+      <div class="cap">75 confirmed findings by value bucket</div>
+      <div id="valbars"></div>
+    </div>
+
+    <div class="col">
+      <p><strong>The value knee is round 8, not round 12.</strong> Rounds 4–8 hold 12 of the 13 real bugs; rounds 9–21 produced 34 more confirmed findings and exactly <strong>one</strong> user-facing bug — a missing <em>aria-pressed</em> on the layout toggle (round 16). The largest single bucket was not bugs but <strong>consistency</strong> (31/75): copy that contradicts a gauge, two constants that could drift. The <em>blocking</em> flag stopped tracking user value early — the last three blocking findings were a hostile-import hardening, a perf freeze, and a test flake.</p>
+    </div>
+  </section>
+
+  <!-- ======= THE LOOP'S OWN TAIL ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">03 /</span> The loop's own tail</h2></div>
+    <p class="lede">Each round reviewed the previous round's commit. A finding is <em>self-induced</em> when it targets code, a constant, a comment, or an abstraction the loop's own fixes created — not the original product.</p>
+
+    <div class="panel">
+      <div class="cap">84 findings after the baseline (rounds 5–21) · origin</div>
+      <div id="sibar"></div>
+      <div class="legend">
+        <span class="sw"><span class="box" style="background:var(--blocking)"></span>self-induced — immediate (prior round's fix) · 36</span>
+        <span class="sw"><span class="box" style="background:var(--suggestion)"></span>self-induced — lagged (earlier fix) · 20</span>
+        <span class="sw"><span class="box" style="background:var(--signal)"></span>pre-existing original code · 28</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="cap">Self-induced share per round · rounds 5–21</div>
+      <div class="chart-scroll"><div id="spark"></div></div>
+    </div>
+
+    <div class="col">
+      <p><strong>The tail turned inward — it did not clean up.</strong> Self-induced share <em>rose</em> from 65% in the discovery era to 70% in the tail, and rounds 13–16 were <strong>100% self-induced (12/12)</strong>: every finding targeted a comment, constant, or abstraction the loop had itself added. Both endpoints were manufactured, too — the final <em>blocking</em> finding (round 12) was a test the loop's own round-11 fix introduced, and the loop's terminal finding (round 21) was a defect in the loop's penultimate fix.</p>
+      <div class="callout"><b>Not all self-induction is waste.</b> An incomplete fix that a later round completes is still progress — the reroll no-op (R7→R8) and the CSV injection escalating to a real blocking bug (R9→R10) were genuine. But by rounds 13–16 the loop was reviewing scaffolding for a feature that was never built.</div>
+    </div>
+  </section>
+
+  <!-- ======= THE CRITICS ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">04 /</span> The four instruments</h2></div>
+    <p class="lede">Read as a set: correctness and security were the diagnostic lenses (they found the real bugs, then correctly went silent); maintainability was the metronome that never saturates and kept the loop alive.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr>
+          <th>Critic lens</th><th>Findings/round · R4→R21</th>
+          <th class="num">Confirmed</th><th class="num">Blocking</th><th class="num">Sole-source blocking</th><th>Saturation</th>
+        </tr></thead>
+        <tbody id="critrows"></tbody>
+      </table>
+    </div>
+
+    <div class="col">
+      <p><strong>Correctness + security caught 10 of the 13 blocking bugs</strong> (five each, seven of them sole-source — seen by no other lens). Maintainability filed the plurality (32 confirmed, 43%) but <strong>zero sole-source blocking</strong> — its two blocking finds were same-round duplicates of a correctness finding. Solid's entire value was a single irreplaceable catch: a stale-async race in <em>useBuddyGraph</em> (round 4) no other critic saw.</p>
+      <p><strong>Security saturated to extinction.</strong> All 12 of its findings landed in rounds 4–11 on one enumerable surface (resource exhaustion from untrusted input + export injection); it returned <em>nothing found</em> for nine straight rounds afterward. That silence is the correct terminal state of an exhausted surface — this app is local, offline, no network or auth. Maintainability's surface, by contrast, is self-renewing: every fix seeds a fresh stale comment or duplicated constant. <strong>Convergence was gated by maintainability running out of nits, not by the app becoming correct — that had happened by round 12.</strong></p>
+    </div>
+
+    <div class="callout"><b>Redundancy peaked early.</b> In 7 of 18 rounds two or more critics independently reported the same defect. Round 4's high: <b>all four critics</b> filed the same root cause — a disconnected import scoring 100% quality — so 4 of that round's 7 findings were one bug with one fix.</div>
+  </section>
+
+  <!-- ======= RATCHET ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">05 /</span> The ratchet locked cases, not themes</h2></div>
+    <p class="lede">Every confirmed finding was ratcheted into a test. Of 92 findings, 87 wore distinct class labels; only 4 ever literally recurred — and no ratcheted input ever re-broke across 18 rounds.</p>
+
+    <div class="col">
+      <p>That is a <strong>flawless anti-regression lock</strong>. But it was a poor <strong>anti-theme barrier</strong>: the 92 findings collapse into ~12 themes, and <strong>8 of them recurred across three or more rounds under new class labels</strong>. The ratchet caught the exact tuple; the theme walked around the point-test. Reviewers said so explicitly in their test-upgrade notes — <em>"tests \t/\r only as leading chars, so it cannot catch this"</em> (R10); <em>"only asserts the fallback fires above the caps, never the expensive in-range corner"</em> (R11).</p>
+    </div>
+
+    <div class="panel">
+      <div class="title">Two recurrence chains — the ratchet locks the case, the theme jumps a level</div>
+      <div class="cap">Chain A · spreadsheet formula injection — severity <em>escalated</em> as it moved</div>
+      <div class="chain"><span class="r">R8</span> csv-formula-injection <span style="color:var(--plausible)">[plausible · CSV export]</span><span class="arrow">→</span><span class="r">R9</span> incomplete-formula-neutralization <span style="color:var(--plausible)">[plausible · the clipboard path R8 left unguarded]</span><span class="arrow">→</span><span class="b">R10</span> embedded-delimiter-formula-injection <span class="b">[CONFIRMED · BLOCKING]</span> — a tab inside a name defeats the leading-char guard</div>
+      <div class="cap" style="margin-top:18px">Chain F · an abstraction for a feature that was never built — enumerated once per round</div>
+      <div class="chain"><span class="r">R12</span> duplicated-mode-decision <span class="arrow">→</span><span class="r">R13</span> fit-union-broken-by-lazy-force <span class="arrow">→</span><span class="r">R14</span> extension-seam-coupling <span class="arrow">→</span><span class="r">R15</span> aspirational-abstraction-no-consumer <span class="arrow">→</span><span class="r">R16</span> ×4 (data-drivenness · exhaustiveness · a11y) <span class="arrow">→</span><span class="r">R17</span> mutable-public-constant</div>
+      <p style="color:var(--ink-2);font-size:14.5px;margin:14px 0 0">Nine findings across six rounds, all suggestion-grade, all hypothetical (<em>"if you add 'focus' to LAYOUT_MODES…"</em>), all facets of one seam for the unbuilt F8 layout. None reachable by any user.</p>
+    </div>
+  </section>
+
+  <!-- ======= CONVERGENCE ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">06 /</span> The stopping rule</h2></div>
+    <p class="lede">The loop stopped when a round reported zero <em>confirmed</em> findings. That signal was severity-blind, grade-fragile, and gave no leading indicator.</p>
+
+    <div class="col">
+      <p><strong>It came one grading decision from stopping five rounds early.</strong> Round 15 reported a single confirmed finding from a single critic — had that lone suggestion been graded <em>plausible</em>, the rule fires at round 15. Round 16 then produced <strong>four confirmed</strong>, equal to the entire earlier plateau. The confirmed curve was non-monotonic — <span class="num">1 → 3 → 1 → 4 → 3 → 3 → 3</span> across rounds 13–19 — then fell off a cliff to 0. Nothing in the trajectory predicted round 20.</p>
+      <p><strong>Zero-confirmed is a grading threshold, not an absence of observations.</strong> Both "converged" rounds still surfaced a plausible finding, and both pointed at the <em>same</em> soft spot — the error-recovery branch in App.tsx. The critics kept seeing it; it merely landed on the plausible side of the line. The two-round confirmation (round 20 <em>and</em> 21) is what actually supplied robustness against the single-quiet-round fragility that round 15 exposed.</p>
+    </div>
+    <div class="callout"><b>The substance was retired 8 rounds before the formal stop.</b> Last blocking finding: round 12. The nine-round tail spent 49% of the total token budget and 41% of the wall-clock to convert "no blocking remains" into "zero confirmed remains" — a distinction the counting metric could not see.</div>
+  </section>
+
+  <!-- ======= THE SIX ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">07 /</span> Six consolidated findings</h2></div>
+    <p class="lede">Where the five independent lenses converge. Ranked by how strongly the data supports them.</p>
+
+    <div class="findings">
+      <div class="mf"><div class="n"></div><div>
+        <h3>The loop had two regimes, split at round 12</h3>
+        <p>A cheap, high-value discovery phase (rounds 4–12: 57 findings, 13 blocking, 47K tok/finding) and an equally expensive, near-zero-value self-review tail (rounds 13–21: 18 findings, 0 blocking, 143K tok/finding). Every lens located this boundary independently — value knee at R8, last blocking at R12, self-induced peak at R13–16, security saturation at R12.</p>
+        <span class="tag">corroborated by all 5 lenses</span>
+      </div></div>
+      <div class="mf"><div class="n"></div><div>
+        <h3>Two-thirds of what it found, it had caused</h3>
+        <p>56 of 84 post-baseline findings (66.7%) targeted loop-introduced code — rising to 100% across rounds 13–16. After the original code was combed (~R8–12), the "fresh eyes, full-surface" premise quietly degraded into a review of the loop's own recent diff.</p>
+        <span class="tag">iatrogenic lens</span>
+      </div></div>
+      <div class="mf"><div class="n"></div><div>
+        <h3>The ratchet prevented regressions, not recurrence</h3>
+        <p>Zero ratcheted case ever re-broke — a genuine, durable lock. But it locked tuples, not themes: 8 of 12 themes resurfaced under fresh class labels, and half the chains were spawned by the prior fix. Passing tests gave a false sense that a class was closed.</p>
+        <span class="tag">theme lens</span>
+      </div></div>
+      <div class="mf"><div class="n"></div><div>
+        <h3>An asymmetric instrument set determined the outcome</h3>
+        <p>Correctness and security are finite, diagnostic surfaces — they caught the real bugs and correctly fell silent by round 12. Maintainability's surface is self-renewing: every fix seeds new nits. Convergence was gated by that one non-saturating lens, not by the app's defect rate.</p>
+        <span class="tag">critic lens</span>
+      </div></div>
+      <div class="mf"><div class="n"></div><div>
+        <h3>The stop signal was severity-blind and grade-fragile</h3>
+        <p>Counting confirmed findings could not see that danger ended at R12; it nearly false-stopped at R15 on one grading call that R16 would have refuted. The two-round confirmation, not the zero itself, supplied the robustness.</p>
+        <span class="tag">convergence lens</span>
+      </div></div>
+      <div class="mf"><div class="n"></div><div>
+        <h3>Value inverted against the metric it optimized</h3>
+        <p>Only 17% of confirmed findings were user-visible bugs; the last "blocking" issue was a test flake; convergence coincided with the critics running out of reachable surface, not with the code becoming defect-free. The rule kept optimizing after the thing worth optimizing was gone.</p>
+        <span class="tag">value lens</span>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ======= LENS DEEP DIVES ======= -->
+  <section>
+    <div class="sec-head"><h2><span class="idx">08 /</span> The five lenses, in detail</h2></div>
+    <p class="lede">The forensic backing for the consolidation above. Each lens read the full 92-finding dataset independently.</p>
+
+    <div class="lens">
+      <div class="cap">Lens 01</div>
+      <h3 class="lh">Iatrogenic — did the loop create its own work?</h3>
+      <ul>
+        <li><strong>66.7% self-induced (56/84).</strong> 36 caused by the immediately-prior fix, 20 by an earlier loop-introduced construct; only 28 were pre-existing original code.</li>
+        <li><strong>Rounds 13–16 were 100% self-induced</strong> (12/12) and surfaced zero pre-existing bugs — the loop reviewing <em>LAYOUT_MODES</em>, lazy <em>forcePos</em>, <em>SEPARATION_DEFAULT</em>, <em>POLISH_MAX_N</em>, <em>FORCE_MAX_EDGES</em>, all constructs it had itself added.</li>
+        <li><strong>The reroll cascade:</strong> one genuine blocking bug (R7, seed-bump is a no-op) spawned ~10 self-induced follow-ups as each fix's new notice, callback, and detector became the next target.</li>
+      </ul>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Round</th><th class="num">Findings</th><th class="num">Self-induced</th><th class="num">Pre-existing</th><th class="num">% SI</th><th>Reviews the fix of…</th></tr></thead>
+          <tbody id="iatro"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="lens">
+      <div class="cap">Lens 02</div>
+      <h3 class="lh">Themes — lifecycle and ratchet effectiveness</h3>
+      <ul>
+        <li><strong>12 themes wear all 87 distinct labels.</strong> The reroll theme alone wore <strong>11 labels</strong> for one behavioral concern; the median theme wore ~7.</li>
+        <li><strong>10 of 12 themes were born by round 6.</strong> The entire suggestion tail introduced exactly one new theme (extensibility seams, R12) and otherwise re-expressed rounds 4–6 themes under new names.</li>
+        <li><strong>The loop opened and closed on the same theme</strong> — "an unusual state transition leaves the UI stale/wrong" — from R4's async-clobber to R20/R21's error-recovery, spanning all 18 rounds and never reducible to one locatable bug.</li>
+        <li><strong>The hygiene theme is parasitic:</strong> 5 of ~7 stale-comment findings are debris left by <em>other</em> themes' fixes — the "stale-comment ×3" recurrence is one round-6 cap change falsifying three comments across three later rounds.</li>
+      </ul>
+    </div>
+
+    <div class="lens">
+      <div class="cap">Lens 03</div>
+      <h3 class="lh">Critics — behavior, saturation, redundancy</h3>
+      <ul>
+        <li><strong>Correctness + security caught 10/13 blocking bugs, 7 sole-source.</strong> Maintainability filed 43% of all findings but produced zero sole-source blocking signal.</li>
+        <li><strong>Security: 12 findings → 0 across the round-12 boundary,</strong> then nine rounds of silence. Its one late finding (R21) was a follow-on nitpick on code correctness had just flagged — a saturated lens manufacturing output.</li>
+        <li><strong>Solid was bimodal:</strong> one uniquely-caught blocking race (R4) justified its whole presence; the rest was design-taste suggestions with the run's worst plausible-to-confirmed ratio.</li>
+        <li><strong>Maintainability never decayed</strong> — productive through R19 — because its surface regenerates faster than it can be cleared. It set where convergence landed.</li>
+      </ul>
+    </div>
+
+    <div class="lens">
+      <div class="cap">Lens 04</div>
+      <h3 class="lh">Value — taxonomy and diminishing returns</h3>
+      <ul>
+        <li><strong>13/75 confirmed (17%) were genuine user bugs.</strong> Buckets: consistency 31, doc-hygiene 13, real-bug 13, latent-robustness 11, extensibility-speculation 6, test-infra 1.</li>
+        <li><strong>The knee is round 8:</strong> rounds 4–8 held 12 of 13 real bugs; rounds 9–21 produced 34 confirmed and one user bug (R16 a11y).</li>
+        <li><strong>The 13 real bugs collapse to ~6 distinct defects</strong>, and all but one live on two surfaces: file <em>import</em> of hand-edited files and the <em>reroll</em> button. Genuine value came from stress-testing the two input-taking features.</li>
+        <li><strong>The nine-round tail traded ~2.6M tokens for</strong> 1 real fix, 13 internal cleanups, and 4 seams for code that doesn't exist.</li>
+      </ul>
+    </div>
+
+    <div class="lens">
+      <div class="cap">Lens 05</div>
+      <h3 class="lh">Convergence — stopping-rule mechanics</h3>
+      <ul>
+        <li><strong>One grade call from stopping at R15</strong> (five rounds early), a stop the R16 spike-to-4 would have immediately falsified.</li>
+        <li><strong>Non-monotonic:</strong> three round-over-round increases in confirmed, two inside the "converging" tail; the count plateaued at fixed values (4, then 3) like a per-round critic quota rather than a draining reservoir.</li>
+        <li><strong>Convergence was a cliff:</strong> 3 → 3 → 3 → 0, no taper, no leading indicator; the rule could only run blind until the four-critic zero coincided — twice.</li>
+        <li><strong>The findings pool behaved like a renewing sample</strong> (near-zero recurrence over 16 rounds of sustained yield), so "zero confirmed in one round" is the noisy joint probability of four independent samples all coming up empty.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <div class="cap">Forensic notes &amp; data provenance</div>
+    <ul>
+      <li><strong>Coverage:</strong> 18 of ~20 rounds. Rounds 2–3 ran (per the commit graph) but predate the captured structured outputs; round 4 is treated as the analytical baseline for self-induction.</li>
+      <li><strong>Quantitative facts</strong> (counts, tokens, timing, churn, class frequency) are parsed deterministically from the 18 workflow output files and <span class="num">git</span> history — reproducible.</li>
+      <li><strong>Interpretive layers</strong> (value bucketing, self-induced attribution, theme clustering) were produced by five independent fresh-context agents reading the finding text, cross-checked against findings that self-describe their cause. These are judgment calls; the boundaries between "consistency" and "real-bug," or "immediate" and "lagged" self-induction, carry ±1–2 finding of ambiguity and do not change any headline conclusion.</li>
+      <li><strong>Scope caveat:</strong> the subject is one small, offline, client-side app. The early saturation of the security lens is partly a property of that surface and should not be assumed to generalize.</li>
+      <li><strong>Framing caveat:</strong> "self-induced" is descriptive, not pejorative — completing a genuinely incomplete fix is real progress even when the follow-up was self-triggered.</li>
+    </ul>
+  </footer>
+</div>
+
+<script>
+  const R = [4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+  const CONF = [7,11,9,8,6,4,4,4,4,1,3,1,4,3,3,3,0,0];
+  const BLOCK = [4,1,0,3,2,0,1,1,1,0,0,0,0,0,0,0,0,0];
+  const PLAUS = [1,2,0,0,2,2,1,0,0,2,1,0,0,1,1,2,1,1];
+  const SIpct = {5:69,6:44,7:25,8:75,9:83,10:80,11:75,12:100,13:100,14:100,15:100,16:100,17:50,18:25,19:60,20:0,21:100};
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const cvar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  // ---------- TRACE (stacked columns: blocking + suggestion, plus plausible dots) ----------
+  (function () {
+    const W = 760, H = 300, padL = 34, padR = 14, padT = 20, padB = 44;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const n = R.length, band = iw / n, bw = Math.min(30, band * 0.6);
+    const maxY = 11;
+    const y = (v) => padT + ih - (v / maxY) * ih;
+    const cx = (i) => padL + band * i + band / 2;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Confirmed findings per round with blocking sub-portion; blocking ends at round 12, confirmed reaches zero at round 20." });
+
+    // tail shading (rounds 13-21 => index 9..17)
+    const tailX = padL + band * 9;
+    svg.appendChild(el("rect", { x: tailX, y: padT, width: iw - band * 9, height: ih, fill: cvar("--panel-2"), opacity: .55, rx: 4 }));
+    svg.appendChild(el("line", { x1: tailX, y1: padT - 4, x2: tailX, y2: padT + ih, stroke: cvar("--line-2"), "stroke-width": 1, "stroke-dasharray": "3 3" }));
+
+    // gridlines
+    for (let g = 0; g <= maxY; g += 2) {
+      svg.appendChild(el("line", { x1: padL, y1: y(g), x2: padL + iw, y2: y(g), stroke: cvar("--line"), "stroke-width": 1 }));
+      const t = el("text", { x: padL - 8, y: y(g) + 3.5, "text-anchor": "end", fill: cvar("--ink-3"), "font-size": 10, "font-family": cvar("--mono") }); t.textContent = g; svg.appendChild(t);
+    }
+
+    // columns
+    R.forEach((r, i) => {
+      const x = cx(i) - bw / 2;
+      const b = BLOCK[i], s = CONF[i] - BLOCK[i];
+      const g = el("g", { class: "rise", style: `animation-delay:${i * 28}ms` });
+      if (s > 0) g.appendChild(el("rect", { x, y: y(CONF[i]), width: bw, height: y(b) - y(CONF[i]), fill: cvar("--signal"), rx: 2 }));
+      if (b > 0) g.appendChild(el("rect", { x, y: y(b), width: bw, height: padT + ih - y(b), fill: cvar("--blocking"), rx: 2 }));
+      svg.appendChild(g);
+      // plausible as hollow dots
+      if (PLAUS[i] > 0) svg.appendChild(el("circle", { cx: cx(i), cy: y(CONF[i]) - 9, r: 3, fill: "none", stroke: cvar("--plausible"), "stroke-width": 1.5, opacity: .8 }));
+      // x label
+      const t = el("text", { x: cx(i), y: H - 26, "text-anchor": "middle", fill: cvar("--ink-3"), "font-size": 10.5, "font-family": cvar("--mono") }); t.textContent = r; svg.appendChild(t);
+    });
+
+    // annotations
+    const flag = (i, label, color) => {
+      const gx = cx(i);
+      svg.appendChild(el("line", { x1: gx, y1: padT - 2, x2: gx, y2: y(CONF[i]) - 14, stroke: color, "stroke-width": 1, opacity: .5 }));
+      const t = el("text", { x: gx, y: padT - 6, "text-anchor": i > 12 ? "end" : "middle", fill: color, "font-size": 10, "font-weight": 600, "font-family": cvar("--mono") }); t.textContent = label; svg.appendChild(t);
+    };
+    flag(4, "value knee", cvar("--suggestion"));      // r8
+    flag(8, "last blocking", cvar("--blocking"));      // r12
+    flag(16, "converged", cvar("--converged"));        // r20
+
+    // regime labels along bottom
+    const rl1 = el("text", { x: padL + band * 4.5, y: H - 8, "text-anchor": "middle", fill: cvar("--ink-3"), "font-size": 10, "font-family": cvar("--mono"), "letter-spacing": "0.08em" }); rl1.textContent = "REGIME I · DISCOVERY";
+    const rl2 = el("text", { x: tailX + (iw - band * 9) / 2, y: H - 8, "text-anchor": "middle", fill: cvar("--ink-3"), "font-size": 10, "font-family": cvar("--mono"), "letter-spacing": "0.08em" }); rl2.textContent = "REGIME II · SELF-REVIEW TAIL";
+    svg.appendChild(rl1); svg.appendChild(rl2);
+
+    document.getElementById("trace").appendChild(svg);
+  })();
+
+  // ---------- VALUE BARS ----------
+  (function () {
+    const data = [
+      ["Consistency", 31, "copy·gauge contradictions + drift-prone duplication", cvar("--signal")],
+      ["Doc-hygiene", 13, "stale comments · dead code / exports", cvar("--ink-3")],
+      ["Real user bug", 13, "wrong output · no-op · hung UI", cvar("--blocking")],
+      ["Latent robustness", 11, "hostile-input / resource hardening", cvar("--suggestion")],
+      ["Extensibility spec.", 6, "seams for the unbuilt F8 / F7 features", cvar("--plausible")],
+      ["Test-infra", 1, "a self-inflicted flaky test", cvar("--converged")],
+    ];
+    const W = 760, rowH = 46, padL = 4, padR = 4, top = 6, barX = 168, barW = 760 - barX - 54;
+    const H = top * 2 + data.length * rowH;
+    const max = 31;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Confirmed findings by value bucket: consistency 31, doc-hygiene 13, real user bug 13, latent robustness 11, extensibility speculation 6, test-infra 1." });
+    data.forEach((d, i) => {
+      const cy = top + i * rowH + rowH / 2;
+      const name = el("text", { x: padL, y: cy - 3, fill: cvar("--ink"), "font-size": 14, "font-weight": 600, "font-family": cvar("--sans") }); name.textContent = d[0]; svg.appendChild(name);
+      const desc = el("text", { x: padL, y: cy + 13, fill: cvar("--ink-3"), "font-size": 10.5, "font-family": cvar("--mono") }); desc.textContent = d[2]; svg.appendChild(desc);
+      svg.appendChild(el("rect", { x: barX, y: cy - 11, width: barW, height: 22, fill: cvar("--panel-2"), rx: 5 }));
+      const w = (d[1] / max) * barW;
+      svg.appendChild(el("rect", { x: barX, y: cy - 11, width: w, height: 22, fill: d[3], rx: 5, class: "rise", style: `animation-delay:${i * 40}ms; transform-origin:${barX}px center` }));
+      const val = el("text", { x: barX + barW + 12, y: cy + 4, fill: cvar("--ink"), "font-size": 15, "font-weight": 600, "font-family": cvar("--mono"), "text-anchor": "start" }); val.textContent = d[1]; svg.appendChild(val);
+    });
+    document.getElementById("valbars").appendChild(svg);
+  })();
+
+  // ---------- SELF-INDUCED STACKED BAR ----------
+  (function () {
+    const seg = [[36, cvar("--blocking"), "36"], [20, cvar("--suggestion"), "20"], [28, cvar("--signal"), "28"]];
+    const total = 84, W = 760, H = 62, x0 = 2, w = W - 4, y0 = 8, h = 34;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Of 84 post-baseline findings: 56 self-induced (36 immediate, 20 lagged), 28 pre-existing." });
+    let x = x0;
+    seg.forEach((s, i) => {
+      const sw = (s[0] / total) * w;
+      svg.appendChild(el("rect", { x, y: y0, width: sw - 2, height: h, fill: s[1], rx: 4 }));
+      const t = el("text", { x: x + sw / 2, y: y0 + h / 2 + 5, "text-anchor": "middle", fill: i === 2 ? "#fff" : "#fff", "font-size": 15, "font-weight": 700, "font-family": cvar("--mono") }); t.textContent = s[2]; svg.appendChild(t);
+      x += sw;
+    });
+    // 66.7% bracket
+    const bx = x0 + (56 / total) * w;
+    svg.appendChild(el("line", { x1: x0, y1: y0 + h + 8, x2: bx - 2, y2: y0 + h + 8, stroke: cvar("--ink-3"), "stroke-width": 1 }));
+    const lab = el("text", { x: (x0 + bx) / 2, y: y0 + h + 20, "text-anchor": "middle", fill: cvar("--ink-2"), "font-size": 11, "font-weight": 600, "font-family": cvar("--mono") }); lab.textContent = "66.7% self-induced"; svg.appendChild(lab);
+    document.getElementById("sibar").appendChild(svg);
+  })();
+
+  // ---------- SELF-INDUCED SPARK (per-round %) ----------
+  (function () {
+    const rounds = Object.keys(SIpct).map(Number);
+    const W = 760, H = 130, padL = 30, padR = 12, padT = 14, padB = 26;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const n = rounds.length, band = iw / n, bw = Math.min(26, band * 0.62);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Self-induced share per round rises to 100% across rounds 12-16." });
+    [0, 50, 100].forEach((g) => {
+      const yy = padT + ih - (g / 100) * ih;
+      svg.appendChild(el("line", { x1: padL, y1: yy, x2: padL + iw, y2: yy, stroke: cvar("--line"), "stroke-width": 1 }));
+      const t = el("text", { x: padL - 6, y: yy + 3.5, "text-anchor": "end", fill: cvar("--ink-3"), "font-size": 9.5, "font-family": cvar("--mono") }); t.textContent = g; svg.appendChild(t);
+    });
+    rounds.forEach((r, i) => {
+      const v = SIpct[r], cxx = padL + band * i + band / 2;
+      const hgt = (v / 100) * ih;
+      const col = v >= 90 ? cvar("--blocking") : v >= 50 ? cvar("--suggestion") : cvar("--signal");
+      svg.appendChild(el("rect", { x: cxx - bw / 2, y: padT + ih - hgt, width: bw, height: hgt || 1.5, fill: col, rx: 2, class: "rise", style: `animation-delay:${i * 24}ms` }));
+      const t = el("text", { x: cxx, y: H - 9, "text-anchor": "middle", fill: cvar("--ink-3"), "font-size": 9.5, "font-family": cvar("--mono") }); t.textContent = r; svg.appendChild(t);
+    });
+    document.getElementById("spark").appendChild(svg);
+  })();
+
+  // ---------- CRITIC ROWS (with inline sparkline) ----------
+  (function () {
+    const perc = {
+      correctness: [1,2,1,1,1,1,1,1,1,0,1,0,1,1,1,1,0,0],
+      solid:       [2,2,3,1,2,0,1,0,2,0,0,1,2,0,0,0,0,0],
+      security:    [2,3,2,3,0,1,0,1,0,0,0,0,0,0,0,0,0,0],
+      maintainability: [2,4,3,3,3,2,2,2,1,1,2,0,1,2,2,2,0,0],
+    };
+    const meta = {
+      correctness: [15, 5, 3, "steady — never decayed"],
+      solid: [16, 1, 1, "bimodal — one catch"],
+      security: [12, 5, 4, "extinct after R11"],
+      maintainability: [32, 2, 0, "never saturates"],
+    };
+    const spark = (arr, color) => {
+      const w = 150, h = 26, n = arr.length, band = w / n, max = 4;
+      let s = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">`;
+      arr.forEach((v, i) => {
+        const bh = (v / max) * (h - 4);
+        s += `<rect x="${(i * band + 1).toFixed(1)}" y="${(h - 2 - bh).toFixed(1)}" width="${(band - 1.5).toFixed(1)}" height="${(bh || 1).toFixed(1)}" rx="1" fill="${v === 0 ? cvar('--line-2') : color}"/>`;
+      });
+      return s + "</svg>";
+    };
+    const rows = ["correctness", "solid", "security", "maintainability"];
+    const colFor = { correctness: cvar("--signal"), solid: cvar("--plausible"), security: cvar("--blocking"), maintainability: cvar("--suggestion") };
+    const body = document.getElementById("critrows");
+    rows.forEach((k) => {
+      const m = meta[k];
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td><span class="cls" style="color:var(--ink);font-weight:600">${k}</span></td>` +
+        `<td>${spark(perc[k], colFor[k])}</td>` +
+        `<td class="num">${m[0]}</td>` +
+        `<td class="num">${m[1]}</td>` +
+        `<td class="num">${m[2] === 0 ? '<span class="chip" style="color:var(--ink-3)">0</span>' : m[2]}</td>` +
+        `<td><span class="cls">${m[3]}</span></td>`;
+      body.appendChild(tr);
+    });
+  })();
+
+  // ---------- IATROGENIC TABLE ----------
+  (function () {
+    const rows = [
+      [5,13,9,4,69,"r4 connectivity / quality"],
+      [6,9,4,5,44,"r5 density cap / constants"],
+      [7,8,2,6,25,"r6 comma-guard / import cap"],
+      [8,8,6,2,75,"r7 reroll predictor"],
+      [9,6,5,1,83,"r8 reroll callback / CSV guard"],
+      [10,5,4,1,80,"r9 copy-path guard"],
+      [11,4,3,1,75,"r10 buddyLabel"],
+      [12,4,4,0,100,"r11 defer-force / resolver"],
+      [13,3,3,0,100,"r12 lazy-force / constants"],
+      [14,4,4,0,100,"r13 identical-detect / caps"],
+      [15,1,1,0,100,"r14 LAYOUT_MODES OCP"],
+      [16,4,4,0,100,"r15 data-driven toggle"],
+      [17,4,2,2,50,"r16 connectionSummary"],
+      [18,4,1,3,25,"r17 girth / readFileText"],
+      [19,5,3,2,60,"r18 capText / truncation copy"],
+      [20,1,0,1,0,"r19 defensive error branch"],
+      [21,1,1,0,100,"r20 error-recovery"],
+    ];
+    const body = document.getElementById("iatro");
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      const pctColor = r[4] >= 90 ? "var(--blocking)" : r[4] >= 50 ? "var(--suggestion)" : "var(--ink-2)";
+      tr.innerHTML = `<td class="num">${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td>` +
+        `<td class="num" style="color:${pctColor};font-weight:600">${r[4]}%</td><td><span class="cls">${r[5]}</span></td>`;
+      body.appendChild(tr);
+    });
+    const tot = document.createElement("tr"); tot.className = "total";
+    tot.innerHTML = `<td>Σ 5–21</td><td class="num">84</td><td class="num">56</td><td class="num">28</td><td class="num">66.7%</td><td><span class="cls">two-thirds loop-authored</span></td>`;
+    body.appendChild(tot);
+  })();
+</script>
