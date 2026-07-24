@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { buddyNames, type GraphView } from "../model";
+import { buddyLabel, buddyNames, type GraphView } from "../model";
 import { copyText, downloadBlob, neutralizeCell, toCsv } from "../io/download";
 
 interface Props {
@@ -50,7 +50,7 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
             onClick={() => onSelect(i)}
           >
             <span className="nm">{name}</span>
-            <span className="bd">{buddyNames(view, i).join(", ") || "—"}</span>
+            <span className="bd">{buddyLabel(view, i)}</span>
           </button>
         ))}
       </div>

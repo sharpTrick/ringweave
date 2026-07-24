@@ -1,7 +1,7 @@
 import { Graph, allPairsSummary, girth, largestComponentFraction } from "ringweave";
 import {
   assembleMetrics, degreeExtent,
-  BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_MAX, SEPARATION_MIN,
+  BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN,
   type GraphView, type Settings,
 } from "../model";
 import { MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
@@ -9,6 +9,9 @@ import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
 export class ImportError extends Error {}
+
+/** C0 control chars + DEL — illegal inside a name (non-global so .test() is stateless). */
+const CONTROL_CHARS_TEST = /[\u0000-\u001f\u007f]/;
 
 /**
  * Import bounds. The core's pure metric functions (`allPairsSummary`/`girth`) are UNCAPPED
@@ -42,7 +45,7 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
   const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
   return {
     buddies: Math.max(BUDDY_MIN, Math.min(BUDDY_MAX, declared)),
-    minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_MIN) : undefined,
+    minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT) : undefined,
     seed: sanitizeInt(s?.seed, 0, SEED_MAX, DEFAULT_SEED),
     polish: s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto",
   };
@@ -95,6 +98,16 @@ export function importGraph(data: unknown): GraphView {
     }
     return p.name;
   });
+
+  // A name with an embedded control character (tab/CR/…) is a spreadsheet formula-injection
+  // vector: it isn't a comma/newline delimiter here, so it survives into the buddy list/CSV/
+  // clipboard and then splits a pasted line into a cell/row whose next field can be a live
+  // formula. Refuse it outright at the import authority (the roster editor normalizes such
+  // chars to spaces, so this also enforces round-trip stability). Checked before the length/
+  // round-trip checks so the reason names the real cause.
+  if (names.some((x) => CONTROL_CHARS_TEST.test(x))) {
+    throw new ImportError("A name contains a tab, line break, or other control character — remove it and try again.");
+  }
 
   // Names must survive the roster editor unchanged: `parseRoster` (comma/newline delimited)
   // trims, drops blanks, and de-dupes case-insensitively, so an empty/whitespace-only/

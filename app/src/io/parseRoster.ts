@@ -14,6 +14,10 @@ export const MAX_PARSE_CHARS = 500_000;
 export const MAX_NAMES = MAX_ROSTER_N;
 
 const TOKEN = /[^\n,]+/g;
+// C0 control chars (incl. tab and CR) and DEL. They are not line/comma delimiters here, so
+// they'd otherwise survive inside a name and later act as a cell/row delimiter when the roster
+// is pasted into a spreadsheet (a formula-injection vector) — normalized to spaces below.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
 /**
  * Tolerant roster parse: split on newlines and commas, trim, drop blank tokens.
@@ -42,7 +46,9 @@ export function parseRoster(raw: string): ParsedRoster {
       capped = true;
       break; // stop scanning — work stays proportional to kept names, not pasted chars
     }
-    const token = match[0].trim();
+    // Neutralize embedded control chars to spaces (the roster editor is tolerant, so we
+    // normalize rather than reject; import refuses them outright) before trimming.
+    const token = match[0].replace(CONTROL_CHARS, " ").trim();
     if (!token) continue;
     const key = token.toLowerCase();
     if (seen.has(key)) {

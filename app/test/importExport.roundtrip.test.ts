@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
 import { parseRoster } from "../src/io/parseRoster";
-import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX, SEED_MAX } from "../src/model";
+import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -179,6 +179,16 @@ describe("import: untrusted settings are clamped to the UI range", () => {
       expect(v.settings.minSeparation).toBe(exp);
     }
   });
+
+  // Class: an INVALID (non-integer) minSeparation must fall back to the one canonical default
+  // both Settings producers agree on (SEPARATION_DEFAULT), not to SEPARATION_MIN — otherwise a
+  // later reroll of the import would generate with a different separation than the panel shows.
+  it("an invalid minSeparation falls back to SEPARATION_DEFAULT (single source with the panel)", () => {
+    for (const decl of [2.5, Number.NaN, "5" as unknown as number]) {
+      const v = importGraph({ version: 1, people: peopleOf(6), edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], settings: { buddies: 2, minSeparation: decl, seed: 1, polish: "auto" } });
+      expect(v.settings.minSeparation).toBe(SEPARATION_DEFAULT);
+    }
+  });
 });
 
 describe("import: lossless round-trip and defaults", () => {
@@ -199,6 +209,22 @@ describe("import: lossless round-trip and defaults", () => {
     for (const nm of badRosters) {
       const people = nm.map((name, id) => ({ id, name }));
       expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow();
+    }
+  });
+
+  // Class: a name with an embedded control char (tab/CR/…) is a spreadsheet-injection vector —
+  // it isn't a comma/newline here, so it would survive into the buddy list/CSV/clipboard and
+  // split a pasted line into a live-formula cell/row. Import refuses it at the authority.
+  it("refuses a name containing a tab, CR, or other control character", () => {
+    const hostile = [
+      "foo\t=cmd(1)",             // tab -> a tab-delimited paste splits off `=cmd(1)...`
+      "foo\r=cmd(1)",             // CR  -> starts a new row with a formula
+      "foo" + String.fromCharCode(0) + "bar", // NUL
+    ];
+    for (const bad of hostile) {
+      const nm = [bad, "Bob", "Cara"];
+      const people = nm.map((name, id) => ({ id, name }));
+      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow(/control character/i);
     }
   });
 

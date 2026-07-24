@@ -55,4 +55,14 @@ describe("core reroll behavior (why post-hoc detection is needed)", () => {
     expect(c.polished).toBe(false);
     expect(d.edges).toEqual(c.edges);
   });
+
+  // Pin the app's POLISH_MAX_N to the core's actual auto-cap: the core disables polish above
+  // this n, and the app mirrors the literal (model.ts) to gate reroll + polish=on downgrade.
+  // If the core's cap moves, this fails app CI instead of the two silently desyncing.
+  it("the app's POLISH_MAX_N is exactly where the core's auto-polish turns off", () => {
+    // polishIters:1 keeps it fast — we're pinning WHETHER auto-polish runs (the boundary), not
+    // how much it iterates; the `polished` flag reflects that the stage executed either way.
+    expect(buildBuddyGraph(POLISH_MAX_N, 4, { polish: "auto", polishIters: 1 }).polished).toBe(true);
+    expect(buildBuddyGraph(POLISH_MAX_N + 1, 4, { polish: "auto", polishIters: 1 }).polished).toBe(false);
+  });
 });

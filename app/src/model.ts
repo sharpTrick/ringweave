@@ -1,4 +1,4 @@
-import { asplGap, type BuddyResult } from "ringweave";
+import { asplGap, DEFAULT_MIN_SEPARATION, type BuddyResult } from "ringweave";
 
 /** Generation settings surfaced in the UI (mirrors the core's BuddyOptions + k). */
 export interface Settings {
@@ -27,6 +27,13 @@ export const BUDDY_MAX = 12;
     happens to share bounds today), kept separate so the two knobs evolve independently. */
 export const SEPARATION_MIN = 2;
 export const SEPARATION_MAX = 12;
+
+/** The default minimum separation, surfaced when the field is unset and used as the fallback
+    for an invalid imported value — mirrors the core's `DEFAULT_MIN_SEPARATION` so both Settings
+    producers (the settings panel and import) agree on one default instead of drifting (the
+    panel showing 5 while an invalid import silently fell back to SEPARATION_MIN). This is the
+    single source; if the core's default moves, this re-export moves with it. */
+export const SEPARATION_DEFAULT = DEFAULT_MIN_SEPARATION;
 
 /** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
     runs tens of seconds even off-thread, so the roster parser truncates and feasibility
@@ -185,6 +192,13 @@ export function rerollBlockReason(n: number, settings: Settings): string | null 
 /** Display names of person i's buddies. Shared by BuddyList and Slips. */
 export function buddyNames(view: GraphView, i: number): string[] {
   return view.buddies[i].map((j) => view.names[j]);
+}
+
+/** The one buddy-cell projection — comma-joined names, or an em dash when a person has none.
+    Shared by the on-screen list and the printed slips so the two can't disagree on separator
+    or empty glyph. */
+export function buddyLabel(view: GraphView, i: number): string {
+  return buddyNames(view, i).join(", ") || "—";
 }
 
 /**
