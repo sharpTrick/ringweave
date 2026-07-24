@@ -21,6 +21,18 @@ describe("LayoutToggle is driven by LAYOUT_MODES", () => {
     expect(active.className).toContain("on"); // the selected mode is marked
   });
 
+  it("exposes the active mode to assistive tech via aria-pressed (not just CSS)", () => {
+    for (const active of LAYOUT_MODES) {
+      cleanup();
+      render(<LayoutToggle layout={active} onChange={() => {}} />);
+      // exactly the active mode's button reports pressed; the others report unpressed.
+      const pressed = screen.getAllByRole("button", { pressed: true });
+      expect(pressed).toHaveLength(1);
+      expect(pressed[0].textContent).toBe(active[0].toUpperCase() + active.slice(1));
+      expect(screen.getAllByRole("button", { pressed: false })).toHaveLength(LAYOUT_MODES.length - 1);
+    }
+  });
+
   it("calls onChange with the mode when its button is clicked", () => {
     const onChange = vi.fn();
     render(<LayoutToggle layout="ring" onChange={onChange} />);

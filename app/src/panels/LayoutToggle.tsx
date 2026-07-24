@@ -10,7 +10,12 @@ export default function LayoutToggle({ layout, onChange }: { layout: LayoutMode;
   return (
     <div id="toggle" className="glass" role="group" aria-label="Layout">
       {LAYOUT_MODES.map((m) => (
-        <button key={m} className={m + (layout === m ? " on" : "")} onClick={() => onChange(m)}>
+        <button
+          key={m}
+          aria-pressed={layout === m} // expose the active mode to assistive tech, not just via CSS
+          className={m + (layout === m ? " on" : "")}
+          onClick={() => onChange(m)}
+        >
           {label(m)}
         </button>
       ))}

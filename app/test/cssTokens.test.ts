@@ -22,4 +22,15 @@ describe("CSS tokens", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  // Class: the data-driven layout toggle renders a button per LAYOUT_MODES entry, so the ACTIVE
+  // style must be mode-agnostic — a new mode's selected state can't depend on a hardcoded
+  // `.on.<mode>` rule or it renders invisible. The generic `#toggle button.on` rule must set a
+  // non-transparent background so any mode reads as selected.
+  it("the active toggle button has a mode-agnostic background", () => {
+    const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
+    const generic = css.match(/#toggle button\.on\s*\{([^}]*)\}/); // the .on rule, not .on.<mode>
+    expect(generic).not.toBeNull();
+    expect(generic![1]).toMatch(/background:\s*var\(--/); // a defined-token background, not transparent
+  });
 });

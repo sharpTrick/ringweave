@@ -17,14 +17,27 @@ export const LAYOUT_MODES: LayoutMode[] = ["ring", "force"];
  */
 export const FIT_MODES: LayoutMode[] = ["ring", "force"];
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled layout mode: ${String(x)}`);
+}
+
 /**
  * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
  * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
- * `fit`, so those three can never disagree. A future selection-keyed mode (F8 focus) adds a branch
- * HERE and to LAYOUT_MODES, but stays out of FIT_MODES so it can't perturb the fixed frame.
+ * `fit`, so those three can never disagree. EXHAUSTIVE over LayoutMode via assertNever: a future
+ * selection-keyed mode (F8 focus) added to LAYOUT_MODES will fail to COMPILE here until it gets a
+ * branch — a loud single-seam edit, not a silent ring fallback. (It stays out of FIT_MODES so it
+ * can't perturb the fixed frame.)
  */
 export function positionsFor(layout: LayoutMode, ringPos: Pt[], forcePos: Pt[] | null): Pt[] {
-  return layout === "force" ? (forcePos ?? ringPos) : ringPos;
+  switch (layout) {
+    case "ring":
+      return ringPos;
+    case "force":
+      return forcePos ?? ringPos;
+    default:
+      return assertNever(layout);
+  }
 }
 
 interface GraphCanvasProps {

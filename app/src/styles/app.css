@@ -102,9 +102,11 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 #toggle { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; padding: 3px; }
 #toggle button { all: unset; font-size: 12.5px; font-weight: 500; color: var(--ink-dim); padding: 7px 18px; border-radius: 9px; cursor: pointer; transition: all 0.15s; }
 #toggle button:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-#toggle button.on { color: var(--bg); font-weight: 600; }
+/* Active state is mode-AGNOSTIC by default (a generic accent background), so any LAYOUT_MODES
+   entry — including a future one — reads as selected without needing its own rule. Per-mode
+   rules below only OVERRIDE the accent hue. */
+#toggle button.on { color: var(--bg); font-weight: 600; background: var(--cool); box-shadow: 0 0 16px var(--cool-glow); }
 #toggle button.on.ring { background: var(--warm); box-shadow: 0 0 16px var(--warm-glow); }
-#toggle button.on.force { background: var(--cool); box-shadow: 0 0 16px var(--cool-glow); }
 
 /* pan/zoom is gesture-only (d3-zoom: wheel + drag), so there are no zoom buttons */
 .hint { position: absolute; left: 18px; bottom: 104px; font-size: 11px; color: var(--ink-faint); z-index: 3; }
