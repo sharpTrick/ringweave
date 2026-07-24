@@ -39,9 +39,15 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (bg.status === "error" && bg.error) show(bg.error);
-    else if (bg.status === "running") clear(); // clear a stale error over a new run
-  }, [bg.status, bg.error, show, clear]);
+    if (bg.status === "error" && bg.error) {
+      show(bg.error);
+      // A first-generation failure leaves no view AND no running overlay, so without reopening
+      // the setup modal the user would be stranded with only an error toast and no way to retry.
+      if (!view) setModalOpen(true);
+    } else if (bg.status === "running") {
+      clear(); // clear a stale error over a new run
+    }
+  }, [bg.status, bg.error, view, show, clear]);
 
   // Every graph-replacing action clears transient selection + hover, so no stale
   // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
@@ -94,6 +100,7 @@ export default function App() {
     setNames(v.names);
     setSettings(v.settings);
     resetSelection();
+    clear(); // a superseding import must not leave a stale error/notice over the fresh graph
     setModalOpen(false);
   };
 
