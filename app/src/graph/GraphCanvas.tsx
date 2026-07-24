@@ -55,10 +55,14 @@ export default function GraphCanvas({
 }: GraphCanvasProps) {
   const n = names.length;
   const ringPos = useMemo(() => ringLayout(n), [n]);
-  const forcePos = useMemo(() => forceLayout(n, edges), [n, edges]);
-  const fit = useMemo(() => computeFit([...ringPos, ...forcePos]), [ringPos, forcePos]);
+  // Compute the force settle LAZILY — only when the force layout is on. A ring-mode view (the
+  // default) and every re-roll while in ring mode then pay nothing, so the synchronous settle
+  // (bounded but non-trivial at large n) never runs unless the user actually asks for force.
+  // `layout` is a dep, so switching to force computes it in the same render (never null then).
+  const forcePos = useMemo(() => (layout === "force" ? forceLayout(n, edges) : null), [layout, n, edges]);
+  const fit = useMemo(() => computeFit(forcePos ? [...ringPos, ...forcePos] : ringPos), [ringPos, forcePos]);
 
-  const target = layout === "ring" ? ringPos : forcePos;
+  const target = layout === "ring" ? ringPos : (forcePos ?? ringPos);
   const [display, setDisplay] = useState<Pt[]>(target);
   const displayRef = useRef(display);
   displayRef.current = display;
@@ -77,7 +81,7 @@ export default function GraphCanvas({
   // (new/resized graph, same-size re-roll, or reduced-motion).
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
-    const to = layout === "ring" ? ringPos : forcePos;
+    const to = layout === "ring" ? ringPos : (forcePos ?? ringPos);
     const sizeChanged = prevSize.current !== sizeKey;
     const layoutChanged = prevLayout.current !== layout;
     prevSize.current = sizeKey;

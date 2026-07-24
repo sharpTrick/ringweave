@@ -47,6 +47,31 @@ describe("parseRoster", () => {
     expect(warnings.join(" ")).toMatch(/maximum/i);
   });
 
+  // Class: the truncation warning must fire only when a DISTINCT name is actually dropped by
+  // the cap — not when the overflow past MAX_NAMES was just blanks or duplicates (nothing lost).
+  describe("cap warning tracks real loss, not raw token count past the cap", () => {
+    const uniques = Array.from({ length: MAX_NAMES }, (_, i) => `U${i}`);
+    const capWarned = (raw: string) => parseRoster(raw).warnings.join(" ").match(/maximum/i) != null;
+
+    it("exactly MAX_NAMES uniques -> kept all, no cap warning", () => {
+      const { names } = parseRoster(uniques.join("\n"));
+      expect(names).toHaveLength(MAX_NAMES);
+      expect(capWarned(uniques.join("\n"))).toBe(false);
+    });
+
+    it("MAX_NAMES uniques + trailing duplicates/blanks -> no cap warning (nothing lost)", () => {
+      expect(capWarned([...uniques, uniques[0]].join("\n"))).toBe(false);       // trailing dup
+      expect(capWarned([...uniques, "   ", ""].join("\n"))).toBe(false);         // trailing blanks
+      expect(capWarned([...uniques, uniques[3], "  "].join("\n"))).toBe(false);  // dup + blank
+    });
+
+    it("MAX_NAMES uniques + a trailing NEW name -> cap warning (a distinct name was dropped)", () => {
+      const { names } = parseRoster([...uniques, "OneMore"].join("\n"));
+      expect(names).toHaveLength(MAX_NAMES);
+      expect(capWarned([...uniques, "OneMore"].join("\n"))).toBe(true);
+    });
+  });
+
   it("truncates a pathologically long paste fast, with a warning", () => {
     const raw = "name,".repeat(1_100_000); // ~5.5M chars, well over MAX_PARSE_CHARS
     const start = performance.now();

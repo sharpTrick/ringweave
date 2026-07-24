@@ -39,8 +39,8 @@ function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): 
 /** Sanitize the settings block: values come from arbitrary JSON. `buddies` and
     `minSeparation` become generation targets a later reroll passes to the core, so both are
     CLAMPED to the UI range [BUDDY_MIN, BUDDY_MAX] — an untrusted file must not inject a value
-    the stepper can't express (a star graph's degree-1999 fallback, a declared minSeparation of
-    1e9) and drive generation out of range. */
+    the stepper can't express (a star import's near-n degree fallback — up to MAX_IMPORT_N-1,
+    e.g. 999 — or a declared minSeparation of 1e9) and drive generation out of range. */
 function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
   const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
   return {

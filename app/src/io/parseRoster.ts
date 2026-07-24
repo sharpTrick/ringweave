@@ -42,18 +42,23 @@ export function parseRoster(raw: string): ParsedRoster {
   TOKEN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TOKEN.exec(text)) !== null) {
-    if (names.length >= MAX_NAMES) {
-      capped = true;
-      break; // stop scanning — work stays proportional to kept names, not pasted chars
-    }
     // Neutralize embedded control chars to spaces (the roster editor is tolerant, so we
     // normalize rather than reject; import refuses them outright) before trimming.
     const token = match[0].replace(CONTROL_CHARS, " ").trim();
-    if (!token) continue;
+    if (!token) continue; // blank tokens are never "lost", so they never trip the cap warning
     const key = token.toLowerCase();
     if (seen.has(key)) {
-      extras.set(token, (extras.get(token) ?? 0) + 1);
+      // A duplicate isn't lost either. Count it toward the de-dupe warning only while we're
+      // still keeping names; a duplicate seen AFTER the cap is simply ignored (nothing dropped).
+      if (names.length < MAX_NAMES) extras.set(token, (extras.get(token) ?? 0) + 1);
       continue;
+    }
+    // A genuinely-new name. If we're already full, THIS is the first real name the cap drops —
+    // flag truncation and stop (so the warning only fires when a distinct name is actually lost,
+    // not when the overflow was blanks/duplicates), keeping work proportional to kept names.
+    if (names.length >= MAX_NAMES) {
+      capped = true;
+      break;
     }
     seen.add(key);
     names.push(token);

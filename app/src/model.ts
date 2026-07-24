@@ -194,11 +194,11 @@ export function buddyNames(view: GraphView, i: number): string[] {
   return view.buddies[i].map((j) => view.names[j]);
 }
 
-/** The one buddy-cell projection — comma-joined names, or an em dash when a person has none.
-    Shared by the on-screen list and the printed slips so the two can't disagree on separator
-    or empty glyph. */
-export function buddyLabel(view: GraphView, i: number): string {
-  return buddyNames(view, i).join(", ") || "—";
+/** The one buddy-cell projection — names joined by `separator`, or an em dash when a person has
+    none. Shared by the on-screen list, the printed slips, the clipboard copy, and the CSV export
+    (each passing its own separator) so the empty glyph and join can't drift between sinks. */
+export function buddyLabel(view: GraphView, i: number, separator = ", "): string {
+  return buddyNames(view, i).join(separator) || "—";
 }
 
 /**

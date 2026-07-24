@@ -86,9 +86,15 @@ token-swap; M2 ships the mock-faithful dark theme only.
   a successful return* via `report.refusals`. When constraints land (M3), the protocol needs a
   third notion (refused-with-reasons) and `viewFromResult` a constrained variant — don't build it
   now (YAGNI), but don't encode "failure == throw" as the only shape either.
-- **The focus/ego layout (F8, M3)** is selection-dependent; `GraphCanvas` currently precomputes
-  ring+force memoized on `[n, edges]` and picks one. Adding focus means restructuring that
-  precompute-both model, not just extending `LayoutMode`.
+- **The focus/ego layout (F8, M3)** is selection-dependent; `GraphCanvas` computes ring eagerly
+  and the force settle lazily (only when the force layout is on), memoized on `[layout, n, edges]`.
+  Adding focus means extending that lazy-per-mode model with a selection-keyed layout, not just
+  extending `LayoutMode`.
+- **The force settle is synchronous and tick-scaled, not off-thread.** `forceLayout` runs a
+  deterministic, n-scaled tick budget (`forceIters`) so the main-thread cost stays bounded
+  (~200 ms at the n=1000 ceiling instead of ~1.5 s at a fixed 300 ticks), and `GraphCanvas`
+  defers it to when force is actually selected. The robust fix — settling off the main thread
+  (or incrementally) — is a clean follow-on if very large graphs in force mode become common.
 - **Hover highlight is O(n+m) per hover** (recomputes neighbor sets + node/edge classes). Fine at
   M2 sizes; memoize/gate it if very large graphs become common.
 - **Generation connectivity is assumed, not measured.** `viewFromResult` sets `connected:true` /
