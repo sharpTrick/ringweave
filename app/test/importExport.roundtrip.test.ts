@@ -60,6 +60,27 @@ describe("import hardening (adversarial files)", () => {
     expect(() => importGraph({ version: 1, people: people(3), edges })).toThrow(/too many edges/i);
   });
 
+  it("rejects a DENSE graph below both caps whose n·m product blows up all-pairs cost", () => {
+    // n and m are each under their cap, but a real (distinct, in-range) dense graph would
+    // cost ~seconds in all-pairs BFS. The work budget must reject it — arithmetically,
+    // before building anything — so rejection is instant.
+    const n = 5000;
+    const edges: [number, number][] = [];
+    for (let i = 0; i < n; i++) for (let d = 1; d <= 4; d++) edges.push([i, (i + d) % n]);
+    const start = performance.now();
+    expect(() => importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges })).toThrow(/too large/i);
+    expect(performance.now() - start).toBeLessThan(100);
+  });
+
+  it("accepts a large but sparse graph within budget", () => {
+    // n=1000 ring: product 1000*(1000+1000)=2e6, well under budget; completes quickly.
+    const n = 1000;
+    const edges: [number, number][] = Array.from({ length: n }, (_, i) => [i, (i + 1) % n]);
+    const view = importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges });
+    expect(view.names).toHaveLength(n);
+    expect(view.metrics.regular).toBe(true); // a ring is 2-regular
+  });
+
   it("sanitizes a malformed settings.buddies so quality is never NaN or falsely 1.0", () => {
     // A 4-cycle is k=2; a hand-edited file declaring buddies:"7" (or 0) must not read as optimal.
     for (const buddies of ["7", 0, -1, 1.5, NaN] as unknown[]) {

@@ -15,6 +15,12 @@ export class ImportError extends Error {}
  */
 export const MAX_IMPORT_N = 5000;
 export const MAX_IMPORT_EDGES = 200_000;
+// The n and edge caps bound each dimension, but `allPairsSummary`/`girth` cost
+// O(n·(n+m)) — their PRODUCT. A file at both caps (5000 people × 200k edges) would still
+// spend ~8s in all-pairs BFS. This budget bounds the product directly (mirroring the
+// core's own MAX_CONSTRAINED_WORK), holding a rejected/accepted file's metric cost to
+// well under a second. `edges.length` is the raw count — an upper bound on distinct m.
+export const MAX_IMPORT_WORK = 100_000_000;
 
 function degreeExtent(degrees: number[]): [number, number] {
   if (degrees.length === 0) return [0, 0];
@@ -69,6 +75,10 @@ export function importGraph(data: unknown): GraphView {
   }
   if (f.edges.length > MAX_IMPORT_EDGES) {
     throw new ImportError(`That file has too many edges (limit ${MAX_IMPORT_EDGES}).`);
+  }
+  // Bound the O(n·(n+m)) metric cost by the product, not each dimension alone.
+  if (f.people.length * (f.people.length + f.edges.length) > MAX_IMPORT_WORK) {
+    throw new ImportError("That graph is too large to measure — reduce people or edges.");
   }
   // M2 has no constraints UI; refuse a constraint-bearing file explicitly rather than
   // silently dropping the constraints on import (and re-exporting them as empty).
