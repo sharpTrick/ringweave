@@ -1,7 +1,8 @@
 import { MAX_ROSTER_N } from "../model";
 
-/** Above this, generation is noticeably slow; warn as a preflight (not a blocker). */
-export const LARGE_ROSTER = 300;
+/** Above this, generation is noticeably slow; warn as a preflight (not a blocker). Module-local:
+    only this file's preflight note reads it. */
+const LARGE_ROSTER = 300;
 
 export interface Feasibility {
   /** False when generation cannot proceed (too few / too many people, or bad k). */

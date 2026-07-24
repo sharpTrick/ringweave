@@ -24,25 +24,24 @@ describe("repo hygiene", () => {
   });
 
   // Class: an exported runtime symbol referenced ONLY within its own file is a dead export left
-  // by a refactor (buddyNames was exported but, after unification, used only by buddyLabel). Every
-  // exported function/const in model.ts must have a consumer in some OTHER file.
-  it("every exported function/const in model.ts is used outside model.ts", () => {
+  // by a refactor (buddyNames after unification; LARGE_ROSTER never consumed). Every exported
+  // function/const under app/src must have a consumer in some OTHER file (src or test).
+  it("every exported function/const in app/src is referenced outside its own file", () => {
     const srcRoot = fileURLToPath(new URL("../src", import.meta.url));
     const testRoot = fileURLToPath(new URL("../test", import.meta.url));
-    const modelPath = fileURLToPath(new URL("../src/model.ts", import.meta.url));
-    const modelSrc = readFileSync(modelPath, "utf8");
+    const srcFiles = walk(srcRoot).filter((f) => /\.(ts|tsx)$/.test(f));
+    const cache = new Map<string, string>();
+    const read = (f: string) => cache.get(f) ?? (cache.set(f, readFileSync(f, "utf8")), cache.get(f)!);
+    const searchable = [...srcFiles, ...walk(testRoot).filter((f) => /\.(ts|tsx)$/.test(f))];
 
-    const exported = [...modelSrc.matchAll(/export (?:function|const) (\w+)/g)].map((m) => m[1]);
-    expect(exported.length).toBeGreaterThan(0); // sanity: the regex found the exports
-
-    const others = [...walk(srcRoot), ...walk(testRoot)]
-      .filter((f) => /\.(ts|tsx)$/.test(f) && f !== modelPath)
-      .map((f) => readFileSync(f, "utf8"));
-
-    const orphans = exported.filter((name) => {
-      const ref = new RegExp(`\\b${name}\\b`);
-      return !others.some((body) => ref.test(body));
-    });
+    const orphans: string[] = [];
+    for (const file of srcFiles) {
+      const exported = [...read(file).matchAll(/export (?:function|const) (\w+)/g)].map((m) => m[1]);
+      for (const name of exported) {
+        const ref = new RegExp(`\\b${name}\\b`);
+        if (!searchable.some((f) => f !== file && ref.test(read(f)))) orphans.push(`${name} (${file})`);
+      }
+    }
     expect(orphans).toEqual([]); // un-export (make module-local) or add a consumer
   });
 });

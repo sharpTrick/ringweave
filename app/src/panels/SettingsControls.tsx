@@ -32,7 +32,7 @@ export default function SettingsControls({ settings, onChange }: Props) {
           <button type="button" aria-label="more buddies" onClick={() => setK(settings.buddies + 1)}>+</button>
         </div>
       </div>
-      <details className="advanced">
+      <details>
         <summary className="linklike">Advanced</summary>
         <div className="sheet-row">
           <label className="field">

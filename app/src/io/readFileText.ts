@@ -1,8 +1,8 @@
 /** Hard ceiling on a file we'll read into memory. Bounds the cost of the read, the
     resulting string, and any parse that follows (JSON.parse / parseRoster run on the main
     thread) — the import/roster caps downstream can't help once an oversized file is already
-    parsed, so the gate has to come first. */
-export const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
+    parsed, so the gate has to come first. Module-local: only the default below reads it. */
+const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 
 /** Read a dropped/selected file as text, rejecting oversized files BEFORE the read and
     surfacing read failures (deleted/permission-denied) instead of silently no-op'ing. */

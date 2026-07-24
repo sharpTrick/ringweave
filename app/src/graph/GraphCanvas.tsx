@@ -5,8 +5,9 @@ import { forceLayout, ringLayout, type Pt } from "./layout";
 
 export type LayoutMode = "ring" | "force";
 
-/** Every user-selectable layout mode (what the toggle offers). */
-export const LAYOUT_MODES: LayoutMode[] = ["ring", "force"];
+/** Every user-selectable layout mode (what the toggle offers). Readonly — it's the single
+    load-bearing source of the mode set, so a consumer must not be able to mutate it app-wide. */
+export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
 /**
  * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
@@ -15,7 +16,7 @@ export const LAYOUT_MODES: LayoutMode[] = ["ring", "force"];
  * but deliberately NOT here: folding its per-selection points into the frame would rescale the
  * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
  */
-export const FIT_MODES: LayoutMode[] = ["ring", "force"];
+export const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
 function assertNever(x: never): never {
   throw new Error(`Unhandled layout mode: ${String(x)}`);

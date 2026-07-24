@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
-import { connectionSummary, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
+import { connectionSummary, qualityPercent, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `P${i}`);
@@ -58,5 +58,18 @@ describe("connectionSummary caption never contradicts the gauge", () => {
 
   it("connected and high quality reads 'well-linked'", () => {
     expect(connectionSummary(metrics({ connected: true, quality: 0.96 }))).toMatch(/well-linked/);
+  });
+
+  // Class: the gauge number (qualityPercent) and the caption must agree in tier at the rounding
+  // boundary — a score can't render "50" with 'loosely' while a hair above renders "50" with
+  // 'well-linked'. Both derive from qualityPercent, so tier flips exactly at gauge 50.
+  it("gauge percent and caption agree in tier across the 0.5 boundary", () => {
+    for (const q of [0, 0.49, 0.494, 0.495, 0.499, 0.5, 0.501, 0.504, 0.505, 0.51, 0.9, 1]) {
+      const m = metrics({ connected: true, aspl: 2, quality: q });
+      const pct = qualityPercent(m);
+      const caption = connectionSummary(m);
+      if (pct >= 50) expect(caption).toMatch(/well-linked/);
+      else expect(caption).toMatch(/loosely linked/);
+    }
   });
 });

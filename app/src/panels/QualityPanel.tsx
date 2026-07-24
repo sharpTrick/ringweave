@@ -1,4 +1,4 @@
-import { connectionSummary, type GraphView } from "../model";
+import { connectionSummary, qualityPercent, type GraphView } from "../model";
 
 interface Props {
   view: GraphView;
@@ -15,7 +15,7 @@ const fmtInt = (x: number | null): string => (x == null ? "—" : String(x));
     "everyone's well-linked". */
 export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
-  const q = Math.round(m.quality * 100);
+  const q = qualityPercent(m); // same rounded value the caption thresholds on
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">

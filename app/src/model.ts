@@ -117,14 +117,23 @@ export function degreeExtent(degrees: number[]): [number, number] {
   return [lo, hi];
 }
 
-/** Quality below this reads as "connected but loosely linked" rather than "well-linked". */
-const WELL_LINKED_QUALITY = 0.5;
+/** THE displayed quality number — the integer percentage the gauge shows. Both the gauge and the
+    connection caption derive from this ONE rounded value, so a score can't render (say) "50" with
+    "loosely linked" while a hair above renders "50" with "well-linked" (a rounding-vs-threshold
+    straddle). */
+export function qualityPercent(m: Metrics): number {
+  return Math.round(m.quality * 100);
+}
+
+/** Gauge percentage at/above which a connected graph reads as "well-linked" rather than "loosely". */
+const WELL_LINKED_PCT = 50;
 
 /**
  * The one place that turns metrics into the connection caption, so the words can never
  * contradict the gauge: a disconnected graph never says "well-linked" (and its shown
  * largest-group % is floored below 100), a connected-but-poor graph says "loosely linked",
  * and a roster too small to score (no reachable pairs) says so instead of "well-linked".
+ * Thresholds on the SAME rounded percent the gauge displays (qualityPercent).
  */
 export function connectionSummary(m: Metrics): string {
   if (!m.connected) {
@@ -132,7 +141,7 @@ export function connectionSummary(m: Metrics): string {
     return `not everyone's connected — ${pct}% are in the largest group`;
   }
   if (m.aspl == null) return "not enough people yet to score";
-  if (m.quality < WELL_LINKED_QUALITY) return "everyone's connected, but loosely linked";
+  if (qualityPercent(m) < WELL_LINKED_PCT) return "everyone's connected, but loosely linked";
   return "everyone's well-linked";
 }
 
