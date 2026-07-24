@@ -23,25 +23,27 @@ is the reference application that shows what it's good for.
 
 ## Status
 
-The algorithm is selected and validated. The TypeScript core lives in `lib/` with **38
-passing tests**, including 26 byte-identity checks against the Python reference (the greedy
-path is RNG-free, so this is a genuine cross-language correctness proof). The next milestone
-(**M1**) is porting the constraint layer (`constraints.py` + `constrained_gen.py`) into
-`lib/src/core`; the app (**M2**) turns the `mock/` prototype into a React app wired to the
-real core. See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the full roadmap.
+The algorithm is selected and validated. The TypeScript core lives in `lib/` with cross-language
+byte-identity checks against the Python reference (the greedy path is RNG-free, so this is a
+genuine cross-language correctness proof). The constraint layer is ported (**M1**), and the
+**MVP app (M2, features F1–F6)** now lives in `app/` — a Vite + React app that wires the `mock/`
+design to the real core (roster import, generate + settings, buddy list + slips, ring/force graph,
+quality panel, JSON export/import), deployed to GitHub Pages. See
+[`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the full roadmap.
 
 ## Repository layout
 
 | Path               | What it is |
 | ------------------ | ---------- |
 | `lib/`             | The `ringweave` TypeScript core — zero-dependency, framework-agnostic. Its own `README`, tests, and build. |
-| `mock/`            | Interactive HTML/JS prototype of the target UI (Ring / Force / Focus layouts). Not yet wired to the core (M2). |
+| `app/`             | **BuddyGraph** — the Vite + React app (M2) built on the core and deployed to GitHub Pages. Its own `README` and `CLAUDE.md`. |
+| `mock/`            | The original interactive HTML/JS prototype of the UI (Ring / Force / Focus). The design source `app/` was ported from. |
 | `reference-python/`| The validated research code: unconstrained + constrained cores, benchmarks, and the fixture source for the identity tests. |
 | `docs/`            | Findings, plans, attribution, and results CSVs (see below). |
 | `design/`          | Rendered design directions and mock-state screenshots. |
 | `HANDOFF.md`       | Implementation handoff — what exists, what's decided, what's next. |
 
-Planned: `app/` (Vite + React 19 + TS) arrives in M2 as a sibling of `lib/`.
+`app/` (Vite + React 19 + TS) is the M2 sibling of `lib/`, consuming the core via `file:../lib`.
 
 ## Documentation
 
