@@ -1,5 +1,9 @@
 import { Graph, allPairsSummary, girth, largestComponentFraction } from "ringweave";
-import { assembleMetrics, BUDDY_MAX, BUDDY_MIN, degreeExtent, type GraphView, type Settings } from "../model";
+import {
+  assembleMetrics, degreeExtent,
+  BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEPARATION_MAX, SEPARATION_MIN,
+  type GraphView, type Settings,
+} from "../model";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -17,8 +21,12 @@ export class ImportError extends Error {}
  * ceiling; anything denser isn't a buddy graph and is refused with a plain-language error.
  * A rejected file costs an arithmetic check (the oversized *file* is stopped earlier by the
  * byte-size gate in readFileText, before it is parsed).
+ *
+ * The node cap equals the generation ceiling (a re-rollable import shouldn't display more
+ * than the app can generate), which also holds the worst-case synchronous re-measure
+ * (`allPairsSummary`+`girth`) to a few hundred ms rather than over a second.
  */
-export const MAX_IMPORT_N = 2000;
+export const MAX_IMPORT_N = MAX_ROSTER_N;
 
 function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): number {
   return Number.isInteger(value) ? Math.max(lo, Math.min(hi, value as number)) : fallback;
@@ -33,8 +41,8 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
   const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
   return {
     buddies: Math.max(BUDDY_MIN, Math.min(BUDDY_MAX, declared)),
-    minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, BUDDY_MIN, BUDDY_MAX, BUDDY_MIN) : undefined,
-    seed: s && Number.isInteger(s.seed) ? s.seed : 12345,
+    minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_MIN) : undefined,
+    seed: s && Number.isInteger(s.seed) ? s.seed : DEFAULT_SEED,
     polish: s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto",
   };
 }
@@ -79,6 +87,11 @@ export function importGraph(data: unknown): GraphView {
   const names: string[] = f.people.map((p, i) => {
     if (!p || typeof p.name !== "string") {
       throw new ImportError(`Person at position ${i} is missing a name.`);
+    }
+    // The roster editor is comma/newline delimited, so a name containing either would be
+    // silently split into two people on an Edit→regenerate. Refuse it at the boundary.
+    if (/[,\n]/.test(p.name)) {
+      throw new ImportError(`Name "${p.name}" can't contain a comma or line break.`);
     }
     // Edges reference people by position; a present-but-mismatched id would mislabel them.
     if (p.id !== undefined && p.id !== i) {

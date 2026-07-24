@@ -6,6 +6,8 @@ import RosterModal from "./panels/RosterModal";
 import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
 import Slips from "./panels/Slips";
+import Notice from "./panels/Notice";
+import { useNotice } from "./state/useNotice";
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
@@ -22,19 +24,14 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>("ring");
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { notice, flash, show, clear } = useNotice();
 
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (bg.status === "error" && bg.error) setNotice(bg.error);
-    else if (bg.status === "running") setNotice(null); // clear a stale error over a new run
-  }, [bg.status, bg.error]);
-
-  const flash = (msg: string) => {
-    setNotice(msg);
-    setTimeout(() => setNotice((n) => (n === msg ? null : n)), 4000);
-  };
+    if (bg.status === "error" && bg.error) show(bg.error);
+    else if (bg.status === "running") clear(); // clear a stale error over a new run
+  }, [bg.status, bg.error, show, clear]);
 
   // Every graph-replacing action clears transient selection + hover, so no stale
   // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
@@ -53,8 +50,9 @@ export default function App() {
 
   const handleReroll = () => {
     const s = { ...settings, seed: settings.seed + 1 };
-    if (!feasibility(names.length, s.buddies).canGenerate) {
-      flash("Can't re-arrange this roster with the current buddy count — use “Edit people” to adjust it.");
+    const feas = feasibility(names.length, s.buddies);
+    if (!feas.canGenerate) {
+      flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
       return;
     }
     setSettings(s);
@@ -158,19 +156,7 @@ export default function App() {
         onChange={(e) => void handleImportFile(e.target.files?.[0])}
       />
 
-      {notice && (
-        <div
-          role="status"
-          style={{
-            position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)",
-            background: "var(--panel-solid)", border: "1px solid var(--line2)", color: "var(--ink)",
-            padding: "10px 16px", borderRadius: 10, fontSize: 13, zIndex: 40, maxWidth: "90vw",
-          }}
-          onClick={() => setNotice(null)}
-        >
-          {notice}
-        </div>
-      )}
+      <Notice message={notice} onDismiss={clear} />
     </>
   );
 }

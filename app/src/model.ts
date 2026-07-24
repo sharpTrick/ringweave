@@ -8,16 +8,25 @@ export interface Settings {
   seed: number;
 }
 
+/** Default polish RNG seed — matches the core's default; the single source so the app's
+    generate default and the import fallback can't drift apart. */
+export const DEFAULT_SEED = 12345;
+
 export const DEFAULT_SETTINGS: Settings = {
   buddies: 4,
   polish: "auto",
-  seed: 12345,
+  seed: DEFAULT_SEED,
 };
 
 /** Buddies-per-person range the UI supports — the single source of truth for the
     settings stepper AND the import clamp, so they can't diverge. */
 export const BUDDY_MIN = 2;
 export const BUDDY_MAX = 12;
+
+/** Minimum-separation range the UI supports. A DISTINCT concept from buddy count (it
+    happens to share bounds today), kept separate so the two knobs evolve independently. */
+export const SEPARATION_MIN = 2;
+export const SEPARATION_MAX = 12;
 
 /** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
     runs tens of seconds even off-thread, so the roster parser truncates and feasibility

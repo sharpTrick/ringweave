@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import type { Settings } from "../model";
-import { parseRoster } from "../io/parseRoster";
+import { MAX_PARSE_CHARS, parseRoster } from "../io/parseRoster";
 import { feasibility } from "../io/feasibility";
 import { readFileText } from "../io/readFileText";
 import { SAMPLE_NAMES } from "../sample";
@@ -25,11 +25,15 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
   const parsed = useMemo(() => parseRoster(text), [text]);
   const feas = useMemo(() => feasibility(parsed.names.length, settings.buddies), [parsed.names.length, settings.buddies]);
 
+  // Bound the STORED (and DOM-rendered) string, not just the parse: an 8 MB file load or a
+  // huge paste would otherwise re-render a multi-MB controlled textarea on every keystroke.
+  const capText = (s: string) => (s.length > MAX_PARSE_CHARS ? s.slice(0, MAX_PARSE_CHARS) : s);
+
   const readFile = async (file: File | undefined) => {
     if (!file) return;
     setFileError(null);
     try {
-      setText(await readFileText(file));
+      setText(capText(await readFileText(file)));
     } catch (err) {
       setFileError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
@@ -55,7 +59,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
         </p>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setText(capText(e.target.value))}
           placeholder={"Alice Nguyen\nBen Carter\nChloe Diaz\n…"}
           aria-label="Roster names"
         />

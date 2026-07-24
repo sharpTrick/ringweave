@@ -3,7 +3,7 @@ import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
-import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX } from "../src/model";
+import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -172,11 +172,23 @@ describe("import: untrusted settings are clamped to the UI range", () => {
     }
   });
 
-  it("an out-of-range minSeparation is clamped too (mirrors buddies)", () => {
-    for (const [decl, exp] of [[999999999, BUDDY_MAX], [1, BUDDY_MIN], [7, 7]] as const) {
+  it("an out-of-range minSeparation is clamped to its OWN range (SEPARATION_*, not BUDDY_*)", () => {
+    for (const [decl, exp] of [[999999999, SEPARATION_MAX], [1, SEPARATION_MIN], [7, 7]] as const) {
       const v = importGraph({ version: 1, people: peopleOf(6), edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], settings: { buddies: 2, minSeparation: decl, seed: 1, polish: "auto" } });
       expect(v.settings.minSeparation).toBe(exp);
     }
+  });
+});
+
+describe("import: lossless round-trip and defaults", () => {
+  it("refuses a name containing a comma or line break (roster editor is delimited)", () => {
+    expect(() => importGraph({ version: 1, people: [{ id: 0, name: "Doe, Jane" }, { id: 1, name: "B" }, { id: 2, name: "C" }], edges: [[0, 1], [1, 2], [2, 0]] })).toThrow(/comma or line break/i);
+    expect(() => importGraph({ version: 1, people: [{ id: 0, name: "line\nbreak" }, { id: 1, name: "B" }, { id: 2, name: "C" }], edges: [[0, 1], [1, 2], [2, 0]] })).toThrow(/comma or line break/i);
+  });
+
+  it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {
+    const v = importGraph({ version: 1, people: peopleOf(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]] });
+    expect(v.settings.seed).toBe(DEFAULT_SETTINGS.seed);
   });
 });
 
