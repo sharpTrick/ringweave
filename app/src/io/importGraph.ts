@@ -1,5 +1,5 @@
 import { Graph, allPairsSummary, girth } from "ringweave";
-import { finiteOrNull, quality, type GraphView, type Settings } from "../model";
+import { assembleMetrics, type GraphView, type Settings } from "../model";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -7,20 +7,19 @@ export class ImportError extends Error {}
 
 /**
  * Import bounds. The core's generation entry points are capped, but the pure metric
- * functions (`allPairsSummary`/`girth`) are deliberately UNCAPPED — and import feeds an
- * untrusted, possibly hand-authored/LLM-generated file straight into them on the main
- * thread. Without a cap, a ~1.5 MB file with 100k names (and zero edges) freezes the tab
- * for ~20 s. These bounds keep a rejected file's cost to milliseconds. `MAX_IMPORT_N`
- * mirrors the core's `MAX_CONSTRAINED_N`; the force layout is capped tighter (see layout.ts).
+ * functions (`allPairsSummary`/`girth`) are UNCAPPED and re-measure the file on the main
+ * thread. These bounds keep even a file at the limits under ~a second of measuring, and a
+ * rejected file costs microseconds (an arithmetic check — the oversized *file* itself is
+ * stopped earlier, by the byte-size gate in readFileText, before it is ever parsed).
+ *
+ * The caps are tighter than generation's (n≤2000, not 5000): import re-measures
+ * synchronously on the UI thread where generation runs off it in a worker, so the ceiling
+ * that keeps the tab responsive is lower. MAX_IMPORT_WORK bounds the O(n·(n+m)) metric
+ * cost by the PRODUCT — the n and edge caps alone would still allow a dense n·m blow-up.
  */
-export const MAX_IMPORT_N = 5000;
-export const MAX_IMPORT_EDGES = 200_000;
-// The n and edge caps bound each dimension, but `allPairsSummary`/`girth` cost
-// O(n·(n+m)) — their PRODUCT. A file at both caps (5000 people × 200k edges) would still
-// spend ~8s in all-pairs BFS. This budget bounds the product directly (mirroring the
-// core's own MAX_CONSTRAINED_WORK), holding a rejected/accepted file's metric cost to
-// well under a second. `edges.length` is the raw count — an upper bound on distinct m.
-export const MAX_IMPORT_WORK = 100_000_000;
+export const MAX_IMPORT_N = 2000;
+export const MAX_IMPORT_EDGES = 100_000;
+export const MAX_IMPORT_WORK = 40_000_000;
 
 function degreeExtent(degrees: number[]): [number, number] {
   if (degrees.length === 0) return [0, 0];
@@ -34,10 +33,10 @@ function degreeExtent(degrees: number[]): [number, number] {
 }
 
 /** Sanitize the settings block: values come from arbitrary JSON, and a bad `buddies`
-    (non-integer, <2) would both corrupt the quality score and make a later Generate throw
-    inside the core. Coerce to safe defaults rather than trust the file. */
-function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined): Settings {
-  const buddies = s && Number.isInteger(s.buddies) && s.buddies >= 2 ? s.buddies : 4;
+    (non-integer, <2) would make a later reroll throw inside the core. Fall back to the
+    graph's actual degree so reroll targets something sensible, not a hard-coded 4. */
+function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
+  const buddies = s && Number.isInteger(s.buddies) && s.buddies >= 2 ? s.buddies : Math.max(2, fallbackBuddies);
   const seed = s && Number.isInteger(s.seed) ? s.seed : 12345;
   const minSeparation =
     s && Number.isInteger(s.minSeparation) && (s.minSeparation as number) >= 2
@@ -52,9 +51,9 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined): Settings {
  * Rehydrate a GraphView from a file WITHOUT regenerating — the edges are in the file.
  * A `Graph` is rebuilt and metrics are recomputed with the core's own functions
  * (`allPairsSummary`/`girth`), so imported (incl. hand-edited) files are honestly
- * re-measured and the UI never reimplements the math. Round-trips identically with
- * `exportGraph` by construction. Dimensions are bounded up front so an oversized file
- * fails fast with a plain-language error instead of hanging the tab.
+ * re-measured — quality reflects the ACTUAL degree, not the declared `settings.buddies`.
+ * Round-trips identically with `exportGraph` by construction. Dimensions are bounded up
+ * front so an oversized file fails fast with a plain-language error instead of hanging.
  */
 export function importGraph(data: unknown): GraphView {
   if (typeof data !== "object" || data === null) {
@@ -113,24 +112,22 @@ export function importGraph(data: unknown): GraphView {
     g.addEdge(a, b); // ignores self-loops and de-dupes symmetric entries
   }
 
-  const settings = sanitizeSettings(f.settings);
   const summary = allPairsSummary(g);
   const [degreeMin, degreeMax] = degreeExtent(g.degrees());
   const buddies = g.adj.map((s) => Array.from(s).sort((x, y) => x - y));
+  const settings = sanitizeSettings(f.settings, degreeMax);
 
   return {
     names,
     edges: g.edgeList(),
     buddies,
     settings,
-    metrics: {
-      aspl: finiteOrNull(summary.aspl),
-      diameter: finiteOrNull(summary.diameter),
-      girth: finiteOrNull(girth(g)),
-      quality: quality(summary.aspl, n, settings.buddies),
-      regular: degreeMin === degreeMax,
+    metrics: assembleMetrics(n, {
+      aspl: summary.aspl,
+      diameter: summary.diameter,
+      girth: girth(g),
       degreeMin,
       degreeMax,
-    },
+    }),
   };
 }

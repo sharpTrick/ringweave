@@ -14,8 +14,9 @@ export interface Pt {
 
 /**
  * Ring layout in normalized unit-circle space: vertex i at angle -90° + i·(360°/n).
- * Pure trig, deterministic (mirrors mock/app.js:72). GraphView fits it to the SVG
- * via a computed viewBox, so resize is CSS scaling, not a recompute.
+ * Pure trig, deterministic (mirrors the mock's ring layout). GraphCanvas fits these
+ * normalized points into a fixed viewBox via computeFit(), so a resize is CSS scaling,
+ * not a re-layout.
  */
 export function ringLayout(n: number): Pt[] {
   const pts: Pt[] = [];
@@ -49,7 +50,7 @@ interface SimLink {
  * the auto-timer, then `tick(iters)` runs the fixed count with no events/animation, so
  * React renders a settled SVG. d3-force's internal PRNG is seeded and constant, so this
  * is deterministic run-to-run — matching the determinism contract (assignments AND, here,
- * for free, pixels). Normalized space; GraphView fits via viewBox.
+ * for free, pixels). Normalized space; GraphCanvas fits it via computeFit().
  */
 export function forceLayout(n: number, edges: [number, number][], iters = 300): Pt[] {
   if (n > FORCE_MAX_N) return ringLayout(n); // too large to settle synchronously

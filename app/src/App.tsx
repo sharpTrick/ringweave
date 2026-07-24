@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, type GraphView, type Settings } from "./model";
+import { DEFAULT_SETTINGS, degreeLabel, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -7,7 +7,9 @@ import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
 import Slips from "./panels/Slips";
 import { exportGraphJson } from "./io/exportGraph";
-import { importGraph, ImportError } from "./io/importGraph";
+import { importGraph } from "./io/importGraph";
+import { feasibility } from "./io/feasibility";
+import { readFileText } from "./io/readFileText";
 import { downloadBlob } from "./io/download";
 
 export default function App() {
@@ -26,6 +28,7 @@ export default function App() {
 
   useEffect(() => {
     if (bg.status === "error" && bg.error) setNotice(bg.error);
+    else if (bg.status === "running") setNotice(null); // clear a stale error over a new run
   }, [bg.status, bg.error]);
 
   const flash = (msg: string) => {
@@ -44,6 +47,10 @@ export default function App() {
 
   const handleReroll = () => {
     const s = { ...settings, seed: settings.seed + 1 };
+    if (!feasibility(names.length, s.buddies).canGenerate) {
+      flash("Can't re-arrange this roster with the current buddy count — use “Edit people” to adjust it.");
+      return;
+    }
     setSettings(s);
     setSelected(null);
     bg.generate(names, s);
@@ -62,19 +69,16 @@ export default function App() {
     setModalOpen(false);
   };
 
-  const handleImportFile = (file: File | undefined) => {
+  const handleImportFile = async (file: File | undefined) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        applyImported(importGraph(JSON.parse(String(reader.result ?? ""))));
-      } catch (err) {
-        flash(err instanceof ImportError || err instanceof SyntaxError
-          ? `Couldn't import that file: ${err.message}`
-          : "Couldn't import that file.");
-      }
-    };
-    reader.readAsText(file);
+    try {
+      // Size-gate the read BEFORE parsing: importGraph's caps operate on the parsed
+      // object and can't bound a giant JSON.parse that precedes them.
+      const text = await readFileText(file);
+      applyImported(importGraph(JSON.parse(text)));
+    } catch (err) {
+      flash(err instanceof Error ? `Couldn't import that file: ${err.message}` : "Couldn't import that file.");
+    }
   };
 
   return (
@@ -107,7 +111,7 @@ export default function App() {
               <div id="rail" className="glass">
                 <div className="rail-lbl">This roster</div>
                 <div className="rail-big tabnum">{view.names.length}</div>
-                <div className="rail-sub">people · {view.settings.buddies} buddies each</div>
+                <div className="rail-sub">people · {degreeLabel(view.metrics)} buddies each</div>
                 <div className="rail-btns">
                   <button className="btn btn-warm" onClick={handleReroll}>↻ Different arrangement</button>
                   <button className="btn btn-ghost" onClick={() => setModalOpen(true)}>Edit people</button>
@@ -146,7 +150,7 @@ export default function App() {
         type="file"
         accept=".json,application/json"
         style={{ display: "none" }}
-        onChange={(e) => handleImportFile(e.target.files?.[0])}
+        onChange={(e) => void handleImportFile(e.target.files?.[0])}
       />
 
       {notice && (

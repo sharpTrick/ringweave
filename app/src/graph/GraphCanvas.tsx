@@ -8,6 +8,7 @@ export type LayoutMode = "ring" | "force";
 interface GraphCanvasProps {
   names: string[];
   edges: [number, number][];
+  /** The buddy list (`view.buddies`) under a graph-generic name — used for hover glow. */
   adjacency: number[][];
   layout: LayoutMode;
   selected: number | null;

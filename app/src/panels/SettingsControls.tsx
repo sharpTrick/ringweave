@@ -1,3 +1,4 @@
+import { DEFAULT_MIN_SEPARATION } from "ringweave";
 import type { Settings } from "../model";
 
 interface Props {
@@ -8,10 +9,19 @@ interface Props {
 const polishValue = (p: boolean | "auto"): string => (p === "auto" ? "auto" : p ? "on" : "off");
 const parsePolish = (v: string): boolean | "auto" => (v === "auto" ? "auto" : v === "on");
 
+const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
+
 /** F2 settings: buddies-per-person (k) plus an Advanced disclosure for minimum
-    separation, polish mode, and the seed (determinism dial). */
+    separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped
+    on change — HTML min/max don't stop a cleared/typed value (an empty field is 0). */
 export default function SettingsControls({ settings, onChange }: Props) {
-  const setK = (k: number) => onChange({ ...settings, buddies: Math.max(2, Math.min(12, k)) });
+  const setK = (k: number) => onChange({ ...settings, buddies: clamp(Math.round(k), 2, 12) });
+
+  const setMinSep = (raw: number) =>
+    onChange({ ...settings, minSeparation: Number.isFinite(raw) ? clamp(Math.round(raw), 2, 12) : DEFAULT_MIN_SEPARATION });
+
+  const setSeed = (raw: number) =>
+    onChange({ ...settings, seed: Number.isInteger(raw) ? raw : settings.seed });
 
   return (
     <>
@@ -32,8 +42,8 @@ export default function SettingsControls({ settings, onChange }: Props) {
               type="number"
               min={2}
               max={12}
-              value={settings.minSeparation ?? 5}
-              onChange={(e) => onChange({ ...settings, minSeparation: Number(e.target.value) })}
+              value={settings.minSeparation ?? DEFAULT_MIN_SEPARATION}
+              onChange={(e) => setMinSep(Number(e.target.value))}
               style={{ width: 56 }}
             />
           </label>
@@ -53,7 +63,7 @@ export default function SettingsControls({ settings, onChange }: Props) {
             <input
               type="number"
               value={settings.seed}
-              onChange={(e) => onChange({ ...settings, seed: Number(e.target.value) })}
+              onChange={(e) => setSeed(Number(e.target.value))}
               style={{ width: 84 }}
             />
           </label>

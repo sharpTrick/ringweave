@@ -3,6 +3,7 @@ import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
+import { degreeLabel, quality } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -64,9 +65,9 @@ describe("import hardening (adversarial files)", () => {
     // n and m are each under their cap, but a real (distinct, in-range) dense graph would
     // cost ~seconds in all-pairs BFS. The work budget must reject it — arithmetically,
     // before building anything — so rejection is instant.
-    const n = 5000;
+    const n = MAX_IMPORT_N; // 2000
     const edges: [number, number][] = [];
-    for (let i = 0; i < n; i++) for (let d = 1; d <= 4; d++) edges.push([i, (i + d) % n]);
+    for (let i = 0; i < n; i++) for (let d = 1; d <= 10; d++) edges.push([i, (i + d) % n]);
     const start = performance.now();
     expect(() => importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges })).toThrow(/too large/i);
     expect(performance.now() - start).toBeLessThan(100);
@@ -79,6 +80,26 @@ describe("import hardening (adversarial files)", () => {
     const view = importGraph({ version: 1, people: people(n).map((p) => ({ name: p.name })), edges });
     expect(view.names).toHaveLength(n);
     expect(view.metrics.regular).toBe(true); // a ring is 2-regular
+  });
+
+  // Class: an imported graph whose real degree differs from a declared settings.buddies
+  // must be scored and labeled from the ACTUAL graph, never from the declared target.
+  it("scores quality and labels degree from the actual graph, not settings.buddies", () => {
+    const cycle6: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]];
+    const v = importGraph({ version: 1, people: people(6), edges: cycle6, settings: { buddies: 4, seed: 1, polish: "auto" } });
+    expect(v.metrics.degreeMax).toBe(2); // a 6-cycle is 2-regular
+    expect(v.settings.buddies).toBe(4); // the declared target is preserved for reroll
+    expect(degreeLabel(v.metrics)).toBe("2"); // but the shown count is the real degree
+    expect(v.metrics.quality).toBeCloseTo(quality(v.metrics.aspl!, 6, 2), 12); // scored at k=2, not 4
+  });
+
+  it("imports provably-optimal graphs at 100% regardless of declared buddies", () => {
+    const c4 = importGraph({ version: 1, people: people(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]] });
+    expect(c4.metrics.degreeMax).toBe(2);
+    expect(c4.metrics.quality).toBeCloseTo(1, 12); // 2-regular C4 is Moore-optimal
+    const k4 = importGraph({ version: 1, people: people(4), edges: [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]] });
+    expect(k4.metrics.degreeMax).toBe(3);
+    expect(k4.metrics.quality).toBeCloseTo(1, 12); // K4 has aspl 1 = its Moore bound
   });
 
   it("sanitizes a malformed settings.buddies so quality is never NaN or falsely 1.0", () => {

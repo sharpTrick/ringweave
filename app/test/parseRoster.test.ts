@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRoster } from "../src/io/parseRoster";
+import { parseRoster, MAX_NAMES } from "../src/io/parseRoster";
 
 describe("parseRoster", () => {
   it("splits on newlines and commas, trims, drops blanks", () => {
@@ -24,5 +24,20 @@ describe("parseRoster", () => {
   it("30 pasted names -> 30 names (F1 acceptance)", () => {
     const raw = Array.from({ length: 30 }, (_, i) => `Person ${i}`).join("\n");
     expect(parseRoster(raw).names).toHaveLength(30);
+  });
+
+  it("caps the number of names and warns (no unbounded parse)", () => {
+    const raw = Array.from({ length: MAX_NAMES + 500 }, (_, i) => `P${i}`).join("\n");
+    const { names, warnings } = parseRoster(raw);
+    expect(names).toHaveLength(MAX_NAMES);
+    expect(warnings.join(" ")).toMatch(/maximum/i);
+  });
+
+  it("truncates a pathologically long paste fast, with a warning", () => {
+    const raw = "name,".repeat(1_100_000); // ~5.5M chars, well over MAX_PARSE_CHARS
+    const start = performance.now();
+    const { warnings } = parseRoster(raw);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(warnings.join(" ")).toMatch(/characters/i);
   });
 });

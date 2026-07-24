@@ -1,3 +1,6 @@
+/** Above this, generation is noticeably slow; warn as a preflight (not a blocker). */
+export const LARGE_ROSTER = 800;
+
 export interface Feasibility {
   /** False when generation cannot proceed (too few people). */
   canGenerate: boolean;
@@ -6,8 +9,8 @@ export interface Feasibility {
 }
 
 /**
- * Pre-generation checks shown to the organizer, mirroring the mock's `checkNote`
- * (mock/app.js:314). n < k+1 is a hard blocker (the ring seed needs more people than
+ * Pre-generation checks shown to the organizer, mirroring the mock's `checkNote`.
+ * n < k+1 is a hard blocker (the ring seed needs more people than
  * buddies); an odd n×k is a soft note (one person ends up ±1 buddy — still fine).
  */
 export function feasibility(n: number, k: number): Feasibility {
@@ -29,6 +32,11 @@ export function feasibility(n: number, k: number): Feasibility {
     messages.push(
       `${n} people × ${k} buddies is odd, so one person will have one buddy more or fewer. That's fine.`,
     );
+  }
+  // Preflight: generation cost grows with n; warn (don't block) before a large run so the
+  // "Generating…" spinner isn't a surprise. The core caps genuinely-too-large rosters.
+  if (n > LARGE_ROSTER) {
+    messages.push(`${n} people is a large group — generating may take a few seconds.`);
   }
   return { canGenerate: true, messages };
 }

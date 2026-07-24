@@ -102,11 +102,8 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 #toggle button.on.ring { background: var(--warm); box-shadow: 0 0 16px var(--warm-glow); }
 #toggle button.on.force { background: var(--cool); box-shadow: 0 0 16px var(--cool-glow); }
 
-/* zoom buttons */
-.zoombtns { position: absolute; left: 18px; bottom: 96px; display: flex; flex-direction: column; gap: 6px; z-index: 4; }
-.zoombtns button { all: unset; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--ink-dim); cursor: pointer; background: var(--panel); border: 1px solid var(--line2); backdrop-filter: blur(8px); }
-.zoombtns button:hover { color: var(--ink); }
-.hint { position: absolute; left: 60px; bottom: 104px; font-size: 11px; color: var(--ink-faint); z-index: 3; }
+/* pan/zoom is gesture-only (d3-zoom: wheel + drag), so there are no zoom buttons */
+.hint { position: absolute; left: 18px; bottom: 104px; font-size: 11px; color: var(--ink-faint); z-index: 3; }
 
 /* right buddy panel */
 #buddies { position: absolute; top: 14px; right: 18px; bottom: 96px; width: 280px; z-index: 4; display: flex; flex-direction: column; overflow: hidden; }

@@ -59,3 +59,20 @@ explorer, focus/ego layout, construction replay, constraints UI.
 
 Colors are CSS custom properties (`src/styles/app.css`) so a **light theme** is a later
 token-swap; M2 ships the mock-faithful dark theme only.
+
+## Known follow-ons (surfaced by review, deferred — not silently ignored)
+
+- **Import re-measures on the main thread**, so its size caps (`MAX_IMPORT_N`=2000 etc.) are
+  tighter than generation's (which runs in the worker). A hand-made graph larger than the import
+  cap is refused with a plain-language error. Lifting this means routing import through the worker
+  — a clean follow-on, not needed for M2's roster sizes.
+- **Generation pipeline models failure as a thrown error only** (`worker/protocol.ts`
+  `GenerateResponse`). The constraint-aware core (`buildConstrainedBuddyGraph`) instead *refuses on
+  a successful return* via `report.refusals`. When constraints land (M3), the protocol needs a
+  third notion (refused-with-reasons) and `viewFromResult` a constrained variant — don't build it
+  now (YAGNI), but don't encode "failure == throw" as the only shape either.
+- **The focus/ego layout (F8, M3)** is selection-dependent; `GraphCanvas` currently precomputes
+  ring+force memoized on `[n, edges]` and picks one. Adding focus means restructuring that
+  precompute-both model, not just extending `LayoutMode`.
+- **Hover highlight is O(n+m) per hover** (recomputes neighbor sets + node/edge classes). Fine at
+  M2 sizes; memoize/gate it if very large graphs become common.

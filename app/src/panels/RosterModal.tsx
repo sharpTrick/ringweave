@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import type { Settings } from "../model";
 import { parseRoster } from "../io/parseRoster";
 import { feasibility } from "../io/feasibility";
+import { readFileText } from "../io/readFileText";
 import { SAMPLE_NAMES } from "../sample";
 import SettingsControls from "./SettingsControls";
 
@@ -18,21 +19,25 @@ interface Props {
 export default function RosterModal({ initialText, settings: initialSettings, canCancel, onGenerate, onCancel }: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(() => parseRoster(text), [text]);
   const feas = useMemo(() => feasibility(parsed.names.length, settings.buddies), [parsed.names.length, settings.buddies]);
 
-  const readFile = (file: File | undefined) => {
+  const readFile = async (file: File | undefined) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setText(String(reader.result ?? ""));
-    reader.readAsText(file);
+    setFileError(null);
+    try {
+      setText(await readFileText(file));
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "Couldn't read that file.");
+    }
   };
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
-    readFile(e.dataTransfer.files[0]);
+    void readFile(e.dataTransfer.files[0]);
   };
 
   const generate = () => {
@@ -64,7 +69,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
             type="file"
             accept=".txt,.csv,text/plain,text/csv"
             style={{ display: "none" }}
-            onChange={(e) => readFile(e.target.files?.[0])}
+            onChange={(e) => void readFile(e.target.files?.[0])}
           />
         </div>
 
@@ -77,6 +82,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
           </button>
         </div>
 
+        {fileError && <div className="note blocking">{fileError}</div>}
         {parsed.warnings.map((w, i) => (
           <div className="note" key={i}>{w}</div>
         ))}

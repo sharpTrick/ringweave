@@ -5,7 +5,7 @@ describe("feasibility", () => {
   // Class: settings the core rejects/caps must be blocked in the UI, not thrown from the core.
   const cases: Array<{ n: number; k: number; canGenerate: boolean; why: string }> = [
     { n: 30, k: 4, canGenerate: true, why: "normal even product" },
-    { n: 30, k: 4, canGenerate: true, why: "duplicate normal case" },
+    { n: 200, k: 6, canGenerate: true, why: "n far above k+1" },
     { n: 15, k: 3, canGenerate: true, why: "odd product still generates (soft note)" },
     { n: 5, k: 4, canGenerate: true, why: "n == k+1 boundary" },
     { n: 4, k: 4, canGenerate: false, why: "n < k+1 blocks" },
@@ -27,5 +27,11 @@ describe("feasibility", () => {
     const f = feasibility(15, 3);
     expect(f.canGenerate).toBe(true);
     expect(f.messages.join(" ")).toMatch(/odd/i);
+  });
+
+  it("warns (does not block) for a large roster", () => {
+    const f = feasibility(2000, 4);
+    expect(f.canGenerate).toBe(true);
+    expect(f.messages.join(" ")).toMatch(/large group/i);
   });
 });
