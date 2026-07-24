@@ -3,9 +3,12 @@
  */
 import { Graph } from "./graph.js";
 
-/** Distance vector from s; unreachable = -1. */
+/** Sentinel for an unreachable vertex in a `bfsDistances` result. */
+export const UNREACHABLE = -1;
+
+/** Distance vector from s; unreachable = UNREACHABLE (-1). */
 export function bfsDistances(g: Graph, s: number): Int32Array {
-  const dist = new Int32Array(g.n).fill(-1);
+  const dist = new Int32Array(g.n).fill(UNREACHABLE);
   dist[s] = 0;
   const q: number[] = [s];
   let head = 0;
@@ -13,7 +16,7 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
     const u = q[head++];
     const du = dist[u];
     for (const w of g.adj[u]) {
-      if (dist[w] === -1) {
+      if (dist[w] === UNREACHABLE) {
         dist[w] = du + 1;
         q.push(w);
       }
@@ -25,7 +28,7 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
 export function isConnected(g: Graph): boolean {
   if (g.n === 0) return true;
   const d = bfsDistances(g, 0);
-  for (let i = 0; i < g.n; i++) if (d[i] === -1) return false;
+  for (let i = 0; i < g.n; i++) if (d[i] === UNREACHABLE) return false;
   return true;
 }
 
@@ -63,56 +66,75 @@ export function allPairsSummary(g: Graph): Summary {
   return { aspl, diameter, connected };
 }
 
-/** Fraction of vertices in the largest connected component. */
-export function largestComponentFraction(g: Graph): number {
-  if (g.n === 0) return 1;
+/** ASPL with a heavy penalty when disconnected — a single scalar for optimizers. */
+export function penalizedAspl(summary: Summary, n: number): number {
+  return summary.connected ? summary.aspl : summary.aspl + 10 * n;
+}
+
+/** How many of `pairs` are currently present as edges in `g`. */
+export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
+  let count = 0;
+  for (const [a, b] of pairs) if (g.hasEdge(a, b)) count++;
+  return count;
+}
+
+/** Partition vertices into connected components (each a list of vertex indices). */
+export function connectedComponents(g: Graph): number[][] {
   const seen = new Uint8Array(g.n);
-  let best = 0;
-  for (let start = 0; start < g.n; start++) {
-    if (seen[start]) continue;
-    let size = 0;
-    const q = [start];
-    let head = 0;
-    seen[start] = 1;
-    while (head < q.length) {
-      const u = q[head++];
-      size++;
+  const comps: number[][] = [];
+  for (let s = 0; s < g.n; s++) {
+    if (seen[s]) continue;
+    const stack = [s];
+    seen[s] = 1;
+    const comp: number[] = [];
+    while (stack.length > 0) {
+      const u = stack.pop() as number;
+      comp.push(u);
       for (const w of g.adj[u]) {
         if (!seen[w]) {
           seen[w] = 1;
-          q.push(w);
+          stack.push(w);
         }
       }
     }
-    if (size > best) best = size;
+    comps.push(comp);
   }
-  return best / g.n;
+  return comps;
 }
 
-/** Length of the shortest cycle, or Infinity for a forest. Matches Python girth. */
+/**
+ * Length of the shortest cycle, or Infinity for a forest. Matches Python girth.
+ * O(n·(n+m)): a BFS from every source, with an early-out only once a triangle is
+ * found — so a high-girth graph runs the full sweep. Intended for the small
+ * generated graphs the builders produce (n ≤ MAX_CACHED_N); calling it on a
+ * hand-built graph of hundreds of thousands of vertices is slow by design.
+ */
 export function girth(g: Graph): number {
+  const UNVISITED = -1; // per-source BFS marker; distinct from bfsDistances' UNREACHABLE
   const n = g.n;
   let best = Infinity;
   for (let s = 0; s < n; s++) {
-    const dist = new Int32Array(n).fill(-1);
-    const parent = new Int32Array(n).fill(-1);
+    const dist = new Int32Array(n).fill(UNVISITED);
+    const parent = new Int32Array(n).fill(UNVISITED);
     dist[s] = 0;
     const q = [s];
     let head = 0;
     while (head < q.length) {
       const u = q[head++];
       for (const w of g.adj[u]) {
-        if (dist[w] === -1) {
+        if (dist[w] === UNVISITED) {
           dist[w] = dist[u] + 1;
           parent[w] = u;
           q.push(w);
         } else if (parent[u] !== w) {
+          // a non-parent already-seen neighbour closes a cycle; skip the tree edge
+          // back to the parent, which isn't one
           const cyc = dist[u] + dist[w] + 1;
           if (cyc < best) best = cyc;
         }
       }
     }
-    if (best === 3) break;
+    if (best === 3) break; // 3 is the smallest possible cycle; no source can beat it
   }
   return best;
 }

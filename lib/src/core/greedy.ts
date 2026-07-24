@@ -7,17 +7,30 @@
  * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
  * shortest-path identity is classical (see CONCEPT_LINEAGE).
  */
-import { Graph, ring } from "./graph.js";
+import { Graph, ring, DEFAULT_MIN_SEPARATION } from "./graph.js";
 import { bfsDistances } from "./metrics.js";
+
+// Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
+// ints capped well below the typed-array limit). Far tighter than MAX_ROSTER,
+// which bounds only the O(n) structures (Graph adjacency, the constrained path).
+export const MAX_CACHED_N = 5000;
 
 export interface GreedyResult {
   graph: Graph;
+  /** The mind (min-separation) target actually achieved after any demotion. */
   finalMind: number;
 }
 
 export interface GreedyOptions {
+  /**
+   * Minimum degrees of separation to aim for. Default 5, clamped to floor(n/2).
+   * `mind` mirrors the Python reference kwarg; the constrained path spells the
+   * same concept `minSeparation`.
+   */
   mind?: number;
+  /** When no pair is `mind` apart, shrink the target by 1 and retry rather than stop. Default true. */
   demote?: boolean;
+  /** Run `repairDegrees` after completion to close degree gaps. Default false. */
   repair?: boolean;
 }
 
@@ -26,11 +39,36 @@ export function ringGreedy(
   k: number,
   opts: GreedyOptions = {},
 ): GreedyResult {
-  const mind = opts.mind ?? 5;
+  // k must be a real number: `deg >= NaN` is always false, silently disabling the
+  // degree-cap logic in findPair. (The ring seed still gives every vertex degree
+  // 2, so this path targets ~k, not a hard cap — unlike the constrained path.)
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`buddy count ${k} must be a non-negative integer`);
+  }
+  // The ring seed gives every vertex degree 2 and completion only ADDS edges, so
+  // ringGreedy structurally cannot honor k < 2 — it would silently return a
+  // 2-regular graph. Refuse and point to the constrained path, which builds the
+  // empty graph (k=0) / matching (k=1) correctly.
+  if (k < 2) {
+    throw new Error(
+      `ringGreedy needs k >= 2 (its ring seed floors degree at 2); for k < 2 use buildConstrainedBuddyGraph`,
+    );
+  }
+  // ringGreedy allocates a flat n×n distance cache (O(n²) memory, and completion
+  // is ~O(n³) time), so it is capped far tighter than MAX_ROSTER — beyond ~a few
+  // thousand the Int32Array allocation would throw a native RangeError. Refuse
+  // with a clear message; a malformed n (non-integer/negative) is left to ring()
+  // → the Graph ctor for the canonical "must be an integer" message.
+  if (Number.isInteger(n) && n > MAX_CACHED_N) {
+    throw new Error(
+      `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
+    );
+  }
+  const mind = opts.mind ?? DEFAULT_MIN_SEPARATION;
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 
-  const g = ring(n);
+  const g = ring(n); // throws on a non-integer/negative n
   const INF = n + 5;
 
   // Flat n*n distance matrix; dist[i*n + j].
@@ -111,6 +149,8 @@ export function ringGreedy(
   for (;;) {
     const pair = findPair();
     if (pair === null) {
+      // Floor demotion at 3: below that the target is smaller than any cycle, so
+      // relaxing it buys nothing (mirrors the Python reference).
       if (demote && curMind > 3) {
         curMind -= 1;
         continue;

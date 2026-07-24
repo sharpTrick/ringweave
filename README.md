@@ -48,8 +48,8 @@ Planned: `app/` (Vite + React 18 + TS) arrives in M2 as a sibling of `lib/`.
 Start with [`HANDOFF.md`](HANDOFF.md), then:
 
 1. [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) — **source of truth** for features, priorities, milestones.
-2. [`docs/CONSTRAINT_FINDINGS.md`](docs/CONSTRAINT_FINDINGS.md) — the constraint-architecture decision.
-3. [`docs/FINDINGS.md`](docs/FINDINGS.md) — the original algorithm bake-off.
+2. [`docs/findings/CONSTRAINT_FINDINGS.md`](docs/findings/CONSTRAINT_FINDINGS.md) — the constraint-architecture decision.
+3. [`docs/findings/FINDINGS.md`](docs/findings/FINDINGS.md) — the original algorithm bake-off.
 4. [`docs/CONCEPT_LINEAGE.md`](docs/CONCEPT_LINEAGE.md) — attribution and intellectual genealogy (notably Markus Meringer's GENREG).
 5. [`docs/DESIGN_HANDOFF.md`](docs/DESIGN_HANDOFF.md) — visual direction.
 6. [`docs/UPSTREAMING.md`](docs/UPSTREAMING.md) — post-launch plan to contribute the algorithms to major graph libraries.

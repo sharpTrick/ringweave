@@ -64,7 +64,7 @@ already validated publicly elsewhere.
 ## Sequencing rationale
 
 graphology first because it's our native language and a fast, visible merge; NetworkX second
-because it's the impact prize and our benchmark evidence (docs/*.csv, FINDINGS) is exactly
+because it's the impact prize and our benchmark evidence (docs/*.csv, docs/findings/FINDINGS.md) is exactly
 the substantiation their process asks for; rustworkx/igraph after, riding the credibility of
 the first two. Every PR links back to the ringweave repo and CONCEPT_LINEAGE, which keeps
 attribution (including Meringer's) traveling with the code.

@@ -1,62 +1,42 @@
 /**
- * Swap-polish: improve ASPL by degree-preserving double edge swaps.
- * The swap (a-b, c-d) -> (a-c, b-d) never changes any vertex degree, so a
- * regular graph stays regular. Deterministic given a seed (via RNG).
+ * Swap-polish: improve ASPL by degree-preserving double edge swaps (mechanics in
+ * `swap.ts`). Deterministic given a seed (via RNG). Two modes: "hill" (accept
+ * only improvements) and "anneal" (Metropolis). Cost is O(n·m) per iteration
+ * (full re-measure), so it is impractical much past a few hundred vertices.
  *
- * Two modes: "hill" (accept only improvements) and "anneal" (Metropolis).
+ * No dev-mode postconditions here (unlike `polishConstrained`): swaps are
+ * structurally degree-preserving and `best` is monotonically non-increasing on
+ * penalized ASPL, so a connected input can never end disconnected (the 10n
+ * penalty dominates any connected ASPL) — provable by construction, no runtime
+ * check needed.
  */
 import { Graph } from "./graph.js";
-import { allPairsSummary } from "./metrics.js";
+import { allPairsSummary, penalizedAspl } from "./metrics.js";
 import { RNG } from "./rng.js";
+import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 export type PolishMode = "hill" | "anneal";
 
 export interface PolishOptions {
+  /** Acceptance rule: "anneal" (Metropolis, default) or "hill" (improvements only). */
   mode?: PolishMode;
+  /** Seed for the swap RNG. Default 12345. */
   seed?: number;
-  maxIters?: number; // iteration budget (browser-friendly; not wall-clock)
-  sampledSources?: number; // if set, use sampled-ASPL energy from this many sources
+  /** Iteration budget (browser-friendly; not wall-clock). Default 20000. Same
+   * concept as `PolishConstrainedOptions.iters`; named `maxIters` here because
+   * `PolishResult.iters` reports the count actually run. */
+  maxIters?: number;
 }
 
 export interface PolishResult {
   graph: Graph;
   aspl: number;
+  connected: boolean;
   iters: number;
 }
 
-function sampledAspl(g: Graph, srcs: number[]): number {
-  let total = 0;
-  let count = 0;
-  for (const s of srcs) {
-    // local BFS
-    const dist = new Int32Array(g.n).fill(-1);
-    dist[s] = 0;
-    const q = [s];
-    let head = 0;
-    while (head < q.length) {
-      const u = q[head++];
-      for (const w of g.adj[u]) {
-        if (dist[w] === -1) {
-          dist[w] = dist[u] + 1;
-          q.push(w);
-        }
-      }
-    }
-    for (let t = 0; t < g.n; t++) {
-      const d = dist[t];
-      if (d > 0) {
-        total += d;
-        count += 1;
-      }
-    }
-  }
-  return count ? total / count : Infinity;
-}
-
-function energy(g: Graph, srcs: number[] | null): number {
-  if (srcs) return sampledAspl(g, srcs);
-  const { aspl, connected } = allPairsSummary(g);
-  return connected ? aspl : aspl + 10 * g.n;
+function energy(g: Graph): number {
+  return penalizedAspl(allPairsSummary(g), g.n);
 }
 
 export function polish(
@@ -66,14 +46,10 @@ export function polish(
   const mode = opts.mode ?? "anneal";
   const rng = new RNG(opts.seed ?? 12345);
   const maxIters = opts.maxIters ?? 20000;
-  const srcs =
-    opts.sampledSources && opts.sampledSources < input.n
-      ? rng.sample(input.n, opts.sampledSources)
-      : null;
 
   const g = input.copy();
   let edges = g.edgeList();
-  let curE = energy(g, srcs);
+  let curE = energy(g);
   let best = g.copy();
   let bestE = curE;
 
@@ -88,7 +64,7 @@ export function polish(
       const sw = proposeSwap(g, edges, rng);
       if (!sw) continue;
       applySwap(g, sw);
-      deltas.push(Math.abs(energy(g, srcs) - curE));
+      deltas.push(Math.abs(energy(g) - curE));
       revertSwap(g, sw);
     }
     const T0 = Math.max(
@@ -100,8 +76,10 @@ export function polish(
   }
 
   let iters = 0;
+  // rejects drives only the "hill" early-stop below; anneal runs the full budget
+  // (its temperature schedule, not a reject streak, governs convergence).
   let rejects = 0;
-  const rejectCap = 200 * g.n;
+  const rejectCap = 200 * g.n; // empirically-tuned early-stop for "hill" mode
   while (iters < maxIters) {
     iters++;
     edges = g.edgeList();
@@ -109,7 +87,7 @@ export function polish(
     const sw = proposeSwap(g, edges, rng);
     if (!sw) continue;
     applySwap(g, sw);
-    const newE = energy(g, srcs);
+    const newE = energy(g);
     const delta = newE - curE;
 
     let accept: boolean;
@@ -139,48 +117,6 @@ export function polish(
     if (mode === "hill" && rejects >= rejectCap) break;
   }
 
-  const { aspl } = allPairsSummary(best);
-  return { graph: best, aspl, iters };
-}
-
-interface Swap {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-}
-
-function proposeSwap(g: Graph, edges: [number, number][], rng: RNG): Swap | null {
-  const [i, j] = rng.twoDistinct(edges.length);
-  const [a, b] = edges[i];
-  const [c, d] = edges[j];
-  let x1: number, y1: number, x2: number, y2: number;
-  if (rng.random() < 0.5) {
-    x1 = a; y1 = c; x2 = b; y2 = d;
-  } else {
-    x1 = a; y1 = d; x2 = b; y2 = c;
-  }
-  const distinct = new Set([a, b, c, d]);
-  if (distinct.size < 4) return null;
-  if (g.hasEdge(x1, y1) || g.hasEdge(x2, y2)) return null;
-  if (x1 === y1 || x2 === y2) return null;
-  return { a, b, c, d, x1, y1, x2, y2 };
-}
-
-function applySwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.a, s.b);
-  g.removeEdge(s.c, s.d);
-  g.addEdge(s.x1, s.y1);
-  g.addEdge(s.x2, s.y2);
-}
-
-function revertSwap(g: Graph, s: Swap): void {
-  g.removeEdge(s.x1, s.y1);
-  g.removeEdge(s.x2, s.y2);
-  g.addEdge(s.a, s.b);
-  g.addEdge(s.c, s.d);
+  const { aspl, connected } = allPairsSummary(best);
+  return { graph: best, aspl, connected, iters };
 }

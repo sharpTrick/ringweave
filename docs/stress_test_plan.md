@@ -81,7 +81,7 @@ is the number of shells needed.
 4. **Full grid.** Emit `results.csv`: one row per run — method, seed-method, n, k, budget,
    rng-seed, all metrics, time.
 5. **Robustness pass** on each method's best graph per (n,k) core cell.
-6. **Analysis → `FINDINGS.md`**: summary table (median ASPL gap per method per cell), 2–3
+6. **Analysis → `findings/FINDINGS.md`**: summary table (median ASPL gap per method per cell), 2–3
    plots (gap vs n by method at k=4; seed-vs-polished deltas; time vs n), and an explicit
    recommendation for the JS port.
 
@@ -110,5 +110,5 @@ is the number of shells needed.
 
 ## 10. Deliverables
 
-`bench.py` (single entry point, `--stage` flag), `results.csv`, `FINDINGS.md` with the tables,
+`bench.py` (single entry point, `--stage` flag), `results.csv`, `findings/FINDINGS.md` with the tables,
 plots as PNGs, and a short "port this" section naming the winning pipeline and its knobs.

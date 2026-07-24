@@ -1,8 +1,50 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "../src/core/index.js";
 import { polish } from "../src/core/polish.js";
-import { ringGreedy } from "../src/core/greedy.js";
-import { allPairsSummary } from "../src/core/metrics.js";
+import { ringGreedy, MAX_CACHED_N } from "../src/core/greedy.js";
+import { allPairsSummary, isConnected } from "../src/core/metrics.js";
+import { Graph, ring } from "../src/core/graph.js";
+import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
+
+// The unconstrained path has no report channel, so it THROWS a clear error.
+describe("malformed inputs throw a clear error (unconstrained path)", () => {
+  it.each(BAD_N)("new Graph(%p) throws a clear (non-RangeError) message", (n) => {
+    expect(() => new Graph(n)).toThrow(/integer/);
+  });
+  it.each(BAD_N)("buildBuddyGraph(%p, 3) throws a clear error", (n) => {
+    // malformed n -> "integer"; oversized-but-valid n -> the O(n^2) cache cap
+    expect(() => buildBuddyGraph(n, 3)).toThrow(/integer|supports up to/);
+  });
+  it.each(BAD_K)("buildBuddyGraph(30, %p) and ringGreedy(30, %p) throw", (k) => {
+    expect(() => buildBuddyGraph(30, k)).toThrow(/integer/);
+    expect(() => ringGreedy(30, k)).toThrow(/integer/);
+  });
+
+  it("refuses a roster above MAX_CACHED_N with a clear (non-RangeError) message", () => {
+    // the O(n^2) distance cache must be capped tighter than MAX_ROSTER
+    expect(() => ringGreedy(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
+    expect(() => buildBuddyGraph(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
+  });
+
+  // The ring seed floors degree at 2, so k<2 can't be honored — reject rather
+  // than silently return a 2-regular graph. (Constrained path handles k<2; see
+  // constrained.test.ts.)
+  it.each([0, 1])("buildBuddyGraph/ringGreedy reject k=%i (ring floors degree at 2)", (k) => {
+    expect(() => buildBuddyGraph(20, k)).toThrow(/needs k >= 2/);
+    expect(() => ringGreedy(20, k)).toThrow(/needs k >= 2/);
+  });
+  it.each([2, 3, 4])("buildBuddyGraph respects the degree cap for k=%i", (k) => {
+    expect(buildBuddyGraph(20, k, { polish: false }).degreeMax).toBeLessThanOrEqual(k);
+  });
+});
+
+describe("polish connectivity", () => {
+  it("reports connectivity and never disconnects a connected input", () => {
+    const res = polish(ring(20), { seed: 1, maxIters: 2000 });
+    expect(res.connected).toBe(true);
+    expect(isConnected(res.graph)).toBe(true);
+  });
+});
 
 describe("buildBuddyGraph", () => {
   it("produces a valid symmetric buddy assignment", () => {

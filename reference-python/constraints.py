@@ -73,8 +73,31 @@ def validate(cons, k):
     """Return list of human-readable infeasibility reasons (empty = feasible).
     These are the cases where NO valid graph exists; everything else we handle
     by sacrificing regularity."""
+    structural = _structural_errors(cons)
+    if structural:
+        return sorted(set(structural))
+
+    # Refuse an oversized roster before the O(n^2) connectivity walk and
+    # generation: the constrained path is O(n^2) in time, so a legal-but-huge
+    # roster would hang rather than crash. Well under MAX_ROSTER.
+    if cons.n > MAX_CONSTRAINED_N:
+        return [
+            f"roster size {cons.n} exceeds the constrained maximum of {MAX_CONSTRAINED_N} (generation is O(n²))"
+        ]
+
     errs = []
     n = cons.n
+
+    if not isinstance(k, int) or isinstance(k, bool) or k < 0:
+        return [f"buddy count {k} must be a non-negative whole number"]
+
+    # Dense k blows generation up past the n-cap (one BFS per edge, ~n*min(k,n-1)/2
+    # edges); refuse when the estimated work exceeds the budget. Mirrors the TS port.
+    if _constrained_work(cons.n, k) > MAX_CONSTRAINED_WORK:
+        return [
+            f"roster size {cons.n} with {k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count"
+        ]
+
     reqd = cons.required_degree()
     prod = cons.prohibited_degree()
 
@@ -90,9 +113,79 @@ def validate(cons, k):
         allowed = (n - 1) - prod[v]
         if allowed < reqd[v]:
             errs.append(f"person {v} cannot meet required buddies within their prohibited set")
-        if allowed <= 0 and n > 1:
+        # only a real problem when people actually need buddies (k > 0)
+        if allowed <= 0 and n > 1 and k > 0:
             errs.append(f"person {v} is prohibited from everyone — they'd have no buddies")
 
-    # global edge budget sanity: required edges alone must fit under degree caps
-    # (already covered per-vertex by reqd[v] <= k)
+    # connectivity feasibility: if prohibited pairs split the roster so that some
+    # people can never be linked to the rest (even ignoring degree caps), no
+    # connected buddy graph exists. Necessary condition; degree-budget shortfalls
+    # are handled by sacrificing regularity, not refused here.
+    if k > 0 and n > 1:
+        errs += _connectivity_errors(cons)
+
     return sorted(set(errs))
+
+
+# Far beyond product scale but bounded so n-sized allocation can't blow up.
+MAX_ROSTER = 1_000_000
+
+# Constrained generation runs one BFS per edge added (O(n^2) in time), so it is
+# capped far tighter than MAX_ROSTER to keep worst-case generation bounded.
+MAX_CONSTRAINED_N = 5000
+
+# Work budget bounding the dense-k blow-up that MAX_CONSTRAINED_N misses. Wall-clock
+# tracks n^2 * min(k, n-1); this ceiling holds worst-case generation to tens of
+# seconds. Mirrors the TS port (see MAX_CONSTRAINED_WORK in graph.ts).
+MAX_CONSTRAINED_WORK = 100_000_000
+
+
+def _constrained_work(n, k):
+    """Estimated constrained-generation cost, proportional to vertices x edges-added."""
+    return n * n * min(k, max(0, n - 1))
+
+
+def _structural_errors(cons):
+    """Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
+    Mirrors the TypeScript port's structural validation layer."""
+    n = cons.n
+    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        return [f"roster size {n} is not a valid count"]
+    if n > MAX_ROSTER:
+        return [f"roster size {n} exceeds the maximum of {MAX_ROSTER}"]
+    errs = []
+
+    def scan(pairs):
+        for (a, b) in pairs:
+            for x in (a, b):
+                if not isinstance(x, int) or isinstance(x, bool) or x < 0 or x >= n:
+                    errs.append(f"constraint references unknown person {x} (roster has {n})")
+            if a == b:
+                errs.append(f"person {a} cannot be paired with themselves")
+
+    scan(cons.required)
+    scan(cons.prohibited)
+    scan(cons.priors)
+    return errs
+
+
+def _connectivity_errors(cons):
+    """Refuse when the allowed-pairs graph (all non-prohibited pairs) is itself
+    disconnected — then no edge selection can ever connect everyone."""
+    n = cons.n
+    proh = cons.prohibited
+    if not proh:
+        return []  # nothing prohibited => allowed graph is complete, connected
+    seen = [False] * n
+    seen[0] = True
+    stack = [0]
+    while stack:
+        u = stack.pop()
+        for v in range(n):
+            if not seen[v] and v != u and pair(u, v) not in proh:
+                seen[v] = True
+                stack.append(v)
+    if all(seen):
+        return []
+    stranded = next(v for v in range(n) if not seen[v])
+    return [f"prohibited pairs split the group — person {stranded} can never be connected to everyone"]
