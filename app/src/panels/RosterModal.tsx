@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import type { Settings } from "../model";
-import { MAX_PARSE_CHARS, parseRoster } from "../io/parseRoster";
+import { MAX_PARSE_CHARS, charCapNotice, parseRoster } from "../io/parseRoster";
 import { feasibility } from "../io/feasibility";
 import { readFileText } from "../io/readFileText";
 import { SAMPLE_NAMES } from "../sample";
@@ -37,11 +37,19 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
     return over ? s.slice(0, MAX_PARSE_CHARS) : s;
   };
 
+  // The ONE way to replace the roster text. Clears the transient notices (a stale file-error or
+  // truncation note must never outlive the text it described) and re-derives inputCapped via
+  // capText, so EVERY text-replacing path — typing, "try example names", a successful file read —
+  // resets consistently rather than only the path that raised a notice.
+  const setRoster = (s: string) => {
+    setFileError(null);
+    setText(capText(s));
+  };
+
   const readFile = async (file: File | undefined) => {
     if (!file) return;
-    setFileError(null);
     try {
-      setText(capText(await readFileText(file)));
+      setRoster(await readFileText(file));
     } catch (err) {
       setFileError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
@@ -67,7 +75,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
         </p>
         <textarea
           value={text}
-          onChange={(e) => setText(capText(e.target.value))}
+          onChange={(e) => setRoster(e.target.value)}
           placeholder={"Alice Nguyen\nBen Carter\nChloe Diaz\n…"}
           aria-label="Roster names"
         />
@@ -75,7 +83,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
           <span>{parsed.names.length} {parsed.names.length === 1 ? "person" : "people"}</span>
           <span>· drop a .txt/.csv file, or</span>
           <button className="linklike" onClick={() => fileRef.current?.click()}>choose a file</button>
-          <button className="linklike" onClick={() => setText(SAMPLE_NAMES.join("\n"))}>try example names</button>
+          <button className="linklike" onClick={() => setRoster(SAMPLE_NAMES.join("\n"))}>try example names</button>
           <input
             ref={fileRef}
             type="file"
@@ -99,11 +107,7 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
         </div>
 
         {fileError && <div className="note blocking">{fileError}</div>}
-        {inputCapped && (
-          <div className="note">
-            That's a lot of text — only the first {MAX_PARSE_CHARS.toLocaleString()} characters were kept.
-          </div>
-        )}
+        {inputCapped && <div className="note">{charCapNotice()}</div>}
         {parsed.warnings.map((w, i) => (
           <div className="note" key={i}>{w}</div>
         ))}

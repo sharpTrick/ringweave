@@ -15,4 +15,14 @@ describe("readFileText size gate", () => {
     const f = new File(["Alice\nBob"], "roster.txt", { type: "text/plain" });
     await expect(readFileText(f, 1000)).resolves.toBe("Alice\nBob");
   });
+
+  // Class: the STATED limit must equal the ENFORCED one. The default gate is 8 MB = 8,000,000 B
+  // (decimal, matching the message's /1e6 formatting) — a file over 8e6 but under the old 8 MiB
+  // (8,388,608) must now be rejected, and the message must name "8 MB".
+  it("rejects a file just over the decimal 8 MB default (no MB-vs-MiB gap)", async () => {
+    const over = new File(["x".repeat(8_000_001)], "big.txt", { type: "text/plain" });
+    await expect(readFileText(over)).rejects.toThrow(/limit 8 MB/);
+    const under = new File(["x".repeat(8_000_000)], "ok.txt", { type: "text/plain" });
+    await expect(readFileText(under)).resolves.toHaveLength(8_000_000);
+  });
 });

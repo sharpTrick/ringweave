@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRoster, MAX_NAMES } from "../src/io/parseRoster";
+import { parseRoster, charCapNotice, MAX_NAMES, MAX_PARSE_CHARS } from "../src/io/parseRoster";
 
 const hasControlChar = (s: string): boolean =>
   [...s].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127);
@@ -90,5 +90,12 @@ describe("parseRoster", () => {
     const { warnings } = parseRoster(raw);
     expect(performance.now() - start).toBeLessThan(500);
     expect(warnings.join(" ")).toMatch(/characters/i);
+  });
+
+  // Class: the truncation copy has ONE source (charCapNotice), shared with the RosterModal UI, so
+  // rewording it can't leave the parser's warning and the app's notice divergent.
+  it("the char-cap warning is exactly charCapNotice (single source with the UI)", () => {
+    const { warnings } = parseRoster("x".repeat(MAX_PARSE_CHARS + 1));
+    expect(warnings).toContain(charCapNotice());
   });
 });

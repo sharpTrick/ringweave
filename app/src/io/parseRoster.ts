@@ -19,11 +19,20 @@ const TOKEN = /[^\n,]+/g;
 // is pasted into a spreadsheet (a formula-injection vector) — normalized to spaces below.
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
+/** THE character-truncation notice — shared so the parser's own warning and the RosterModal UI
+    can't drift in wording. (In the app, RosterModal pre-caps to MAX_PARSE_CHARS and shows this
+    itself; parseRoster's warning below is the same notice for DIRECT API callers.) */
+export function charCapNotice(): string {
+  return `That's a lot of text — only the first ${MAX_PARSE_CHARS.toLocaleString()} characters were kept.`;
+}
+
 /**
  * Tolerant roster parse: split on newlines and commas, trim, drop blank tokens.
  * Duplicates (case-insensitive) are kept once (first occurrence wins) and FLAGGED in
  * `warnings` — never silently dropped (F1 acceptance: "duplicates flagged not dropped").
- * Pathologically large input is truncated (with a warning) rather than parsed unbounded.
+ * Pathologically large input is truncated (with `charCapNotice()`) rather than parsed unbounded.
+ * NOTE: the app UI pre-caps upstream (RosterModal), so this char-cap branch is reached only by
+ * DIRECT callers; the roster editor shows its own (identical) notice.
  */
 export function parseRoster(raw: string): ParsedRoster {
   const warnings: string[] = [];
@@ -31,7 +40,7 @@ export function parseRoster(raw: string): ParsedRoster {
   let text = raw;
   if (text.length > MAX_PARSE_CHARS) {
     text = text.slice(0, MAX_PARSE_CHARS);
-    warnings.push(`That's a lot of text — only the first ${MAX_PARSE_CHARS.toLocaleString()} characters were read.`);
+    warnings.push(charCapNotice());
   }
 
   const keptByKey = new Map<string, string>(); // case-insensitive key -> first-kept display name
