@@ -34,52 +34,80 @@ jobs:
     # Same-repo PRs + pushes to main only.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30    # bound the PR build loop; a hung/malicious build can't pin the runner
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      # Always start from main: production is built from main's tip, and each PR
+      # preview is built by fetching that PR's head inside the build loop below.
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      - name: List open same-repo PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Keep the token scoped to THIS step. The build step below executes
+          # untrusted PR-authored code (npm lifecycle scripts, vite.config.ts) and
+          # must not inherit GH_TOKEN. An assignment on its own line also lets a
+          # `gh` failure trip set -e, instead of a `for … in $(gh …)` swallowing it
+          # and silently deploying a site with every preview removed.
+          nums="$(gh pr list --state open --json number,isCrossRepository \
+                    --jq '.[] | select(.isCrossRepository==false) | .number' | tr '\n' ' ')"
+          echo "numbers=$nums" >> "$GITHUB_OUTPUT"
+
       - name: Build production + all open PR previews
+        env:
+          PR_NUMBERS: ${{ steps.prs.outputs.numbers }}
         run: |
           set -euo pipefail
           SITE="$PWD/_site"; rm -rf "$SITE"; mkdir -p "$SITE"
 
           # Build the checked-out working tree into $2, served from base path $1.
+          # $CAP is an optional command prefix (e.g. "timeout 600") on the heavy npm
+          # steps — empty for production, a wall-clock cap for each PR preview.
           build_into () {  # $1=base path  $2=dest dir
             mkdir -p "$2"
             if [ ! -f app/package.json ]; then
               # Older ref without the app yet — emit a placeholder so the deploy
               # still succeeds instead of failing the whole run.
-              echo "<!doctype html><title>ringweave</title><p>Coming soon.</p>" > "$2/index.html"
+              printf '<!doctype html><meta charset="utf-8"><title>ringweave</title><p>Coming soon.</p>\n' > "$2/index.html"
               return
             fi
-            npm --prefix app ci
-            VITE_BASE="$1" npm --prefix app run build
-            cp -r app/dist/* "$2"/
+            ${CAP} npm --prefix app ci
+            VITE_BASE="$1" ${CAP} npm --prefix app run build
+            cp -a app/dist/. "$2"/
           }
 
-          # Production, from the tip of main.
+          # Production, from the tip of main. A failure here SHOULD fail the deploy,
+          # so it runs uncapped under set -e and is not wrapped below.
+          CAP=""
           build_into "/ringweave/" "$SITE"
 
-          # One preview per open, same-repo (non-fork) PR.
-          for pr in $(gh pr list --state open --json number,isCrossRepository \
-                        --jq '.[] | select(.isCrossRepository==false) | .number'); do
+          # One preview per open, same-repo (non-fork) PR. One bad PR must not abort
+          # the production deploy, so each preview is isolated: fetch + build in a
+          # subshell, time-boxed; failures are logged and skipped.
+          for pr in $PR_NUMBERS; do
             echo "::group::Building preview for PR #$pr"
-            git fetch --no-tags origin "pull/$pr/head"
-            git checkout -f -q FETCH_HEAD
-            build_into "/ringweave/pr-preview/pr-$pr/" "$SITE/pr-preview/pr-$pr"
+            if git fetch --no-tags origin "pull/$pr/head" \
+               && git checkout -f -q FETCH_HEAD \
+               && ( CAP="timeout 600"; build_into "/ringweave/pr-preview/pr-$pr/" "$SITE/pr-preview/pr-$pr" ); then
+              :
+            else
+              echo "::warning::preview build failed for PR #$pr — skipping"
+              rm -rf "$SITE/pr-preview/pr-$pr"
+            fi
             git checkout -f -q main
             echo "::endgroup::"
           done
@@ -91,12 +119,13 @@ jobs:
           path: _site
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request' && github.event.action != 'closed'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
+          GITHUB_TOKEN: ${{ github.token }}
           number: ${{ github.event.pull_request.number }}
           header: pages-preview
           message: |

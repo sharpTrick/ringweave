@@ -3,9 +3,11 @@ import react from '@vitejs/plugin-react'
 import { copyFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-// After build, copy dist/index.html -> dist/404.html so deep links resolve under
-// a GitHub Pages subpath (SPA fallback). Build-only and cross-platform (no shell
-// `cp`, so it also works if the build ever runs on Windows).
+// After build, copy dist/index.html -> dist/404.html (SPA fallback). GitHub Pages
+// serves only the site-ROOT 404.html for unmatched paths, so this makes production
+// deep links resolve; per-PR preview subdirs get a 404.html too but Pages ignores
+// subdir 404s, so preview deep links aren't covered (moot until a router is added).
+// Build-only and cross-platform (no shell `cp`, so it also works on Windows).
 function spa404Fallback() {
   return {
     name: 'spa-404-fallback',
