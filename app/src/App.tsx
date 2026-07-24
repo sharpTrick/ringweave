@@ -39,10 +39,11 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (bg.status === "error" && bg.error) {
-      show(bg.error);
-      // A first-generation failure leaves no view AND no running overlay, so without reopening
-      // the setup modal the user would be stranded with only an error toast and no way to retry.
+    if (bg.status === "error") {
+      // Recovery must not hinge on the message being non-empty: a "" error would otherwise skip
+      // BOTH the toast and the reopen. Always surface something and, on a first-generation failure
+      // (no view, no running overlay), reopen the setup modal so the user is never stranded.
+      show(bg.error || "Generation failed.");
       if (!view) setModalOpen(true);
     } else if (bg.status === "running") {
       clear(); // clear a stale error over a new run
