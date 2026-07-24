@@ -8,6 +8,17 @@
 #   1. Settings -> Pages -> Source: "GitHub Actions".
 #   2. Settings -> Environments -> github-pages -> Deployment branches: allow
 #      refs/pull/*/merge (or "No restriction"), so pull_request runs may deploy.
+#
+# Security model (deliberate): this single job builds each open PR's code and
+# also holds pages:write / id-token:write. That is safe here because ONLY
+# same-repo PRs are ever built — fork PRs are excluded (job `if:` + the
+# isCrossRepository filter) and never run. Same-repo PR authors already have
+# push access, so they have strictly more direct attack vectors than a preview
+# build; hardening against them specifically buys little. We still minimize
+# blast radius: GH_TOKEN is scoped to the PR-list step (not the untrusted build
+# step), each preview build is sandboxed/time-boxed, and the job is bounded by
+# timeout-minutes. If less-trusted collaborators ever get push access, split
+# this into an unprivileged pull_request build + a privileged workflow_run deploy.
 
 name: Deploy Pages
 
