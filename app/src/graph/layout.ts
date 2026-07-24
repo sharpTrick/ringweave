@@ -6,6 +6,7 @@ import {
   forceSimulation,
   type SimulationNodeDatum,
 } from "d3-force";
+import { BUDDY_MAX, MAX_ROSTER_N } from "../model";
 
 export interface Pt {
   x: number;
@@ -28,12 +29,16 @@ export function ringLayout(n: number): Pt[] {
   return pts;
 }
 
-// Force settling scales with BOTH node and edge count (charge via a quadtree, links per
-// edge, all × ticks). Above either cap it falls back to the ring layout so a large or dense
-// graph can't freeze the render. Generated graphs are far smaller; this guards imports
-// (themselves bounded by MAX_IMPORT_N and the density cap).
-export const FORCE_MAX_N = 1000;
-export const FORCE_MAX_EDGES = 4000;
+// Force settling scales with BOTH node and edge count (charge via a quadtree, links per edge,
+// all × ticks). Above either cap it falls back to the ring layout so a pathological graph can't
+// freeze the render. The edge cap is set to the DENSEST graph the app can itself produce —
+// generation at k=BUDDY_MAX yields n·BUDDY_MAX/2 edges (6000 at n=1000), and an import is refused
+// above the same 2m ≤ BUDDY_MAX·n density — so a max-settings generation keeps its force view
+// instead of silently rendering as ring. Beyond this (only an out-of-contract graph) it's a
+// defensive fallback. Edge cost is minor next to charge (measured ~flat 1000→4000 edges at
+// n=1000), so covering the densest in-app graph stays within the tick-scaled wall-clock budget.
+export const FORCE_MAX_N = MAX_ROSTER_N;
+export const FORCE_MAX_EDGES = Math.ceil((MAX_ROSTER_N * BUDDY_MAX) / 2);
 
 // The synchronous settle is O(n · ticks), so at a FIXED 300 ticks it grows to ~1.5 s at
 // n=1000 — a main-thread freeze. Ticks are therefore scaled DOWN as n grows past a knee, so

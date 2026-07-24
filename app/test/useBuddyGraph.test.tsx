@@ -102,9 +102,11 @@ describe("useBuddyGraph result↔state pairing", () => {
     hooks.state.result = g2;
     act(() => rerender());
 
-    expect(onNoop).toHaveBeenCalledTimes(1); // identical reroll -> notified, view kept
+    expect(onNoop).toHaveBeenCalledTimes(1); // identical reroll -> notified
     expect(onNoop).toHaveBeenCalledWith(kept); // caller gets the kept view to word from its quality
-    expect(result.current.view).toBe(kept); // same object — no needless re-render/re-layout
+    // The graph is reused (no re-layout) but the bumped seed is adopted so export stays truthful.
+    expect(result.current.view!.edges).toBe(kept!.edges); // same edges reference -> no re-layout
+    expect(result.current.view!.settings.seed).toBe(2); // reroll's new seed is reflected
   });
 
   it("does NOT fire onIdenticalReroll for an unchanged Edit→Generate (not a reroll request)", () => {
@@ -128,6 +130,35 @@ describe("useBuddyGraph result↔state pairing", () => {
 
     expect(onNoop).not.toHaveBeenCalled(); // silent idempotent no-op, not a failed "reroll"
     expect(result.current.view?.names).toEqual(roster);
+  });
+
+  // Class: an idempotent (identical-edges) generate under CHANGED settings must still adopt the
+  // new settings so export/UI aren't stale — while reusing the laid-out edges (no re-layout).
+  it.each([
+    ["seed", { buddies: 4, polish: "auto", seed: 2 } as const],
+    ["minSeparation", { buddies: 4, polish: "auto", seed: 1, minSeparation: 6 } as const],
+    ["polish", { buddies: 4, polish: false, seed: 1 } as const],
+  ])("adopts changed %s on an identical-edges regenerate, reusing edges (no re-layout)", (_label, changed) => {
+    const roster = ["A", "B", "C", "D", "E"];
+    const g1 = buildBuddyGraph(5, 4, { seed: 1 }); // K5
+    const g2 = buildBuddyGraph(5, 4, { seed: 2 }); // K5 again — identical edges
+
+    const { result, rerender } = renderHook(() => useBuddyGraph());
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g1;
+    act(() => rerender());
+    const priorEdges = result.current.view!.edges;
+
+    act(() => result.current.generate(roster, changed)); // non-reroll, changed settings
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g2;
+    act(() => rerender());
+
+    expect(result.current.view!.settings).toEqual(changed); // export/UI now truthful
+    expect(result.current.view!.edges).toBe(priorEdges); // same reference -> no re-layout/animation
   });
 
   it("never DISPATCHES polish=true above POLISH_MAX_N (cost gate)", () => {

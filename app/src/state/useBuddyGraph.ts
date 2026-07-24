@@ -14,6 +14,10 @@ function sameEdges(a: [number, number][], b: [number, number][]): boolean {
   return true;
 }
 
+function sameSettings(a: Settings, b: Settings): boolean {
+  return a.buddies === b.buddies && a.minSeparation === b.minSeparation && a.polish === b.polish && a.seed === b.seed;
+}
+
 /**
  * Orchestrates generation: sends a job to the worker and maps its BuddyResult back into
  * a GraphView using the exact roster + settings that produced it (captured in `pending`,
@@ -48,10 +52,14 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
       const next = viewFromResult(pending.current.names, pending.current.settings, gen.result);
       const cur = viewRef.current;
       // A re-generation on the same roster that produced an identical graph is a visual no-op:
-      // keep the current view rather than swapping in an indistinguishable one. Only a REROLL
-      // (an explicit "Different arrangement" request) surfaces a notice — an unchanged
-      // Edit→Generate is silently idempotent.
+      // keep the current graph rather than swapping in an indistinguishable one (no re-layout).
+      // But the SETTINGS may have changed (a new seed / minSeparation that happened to yield the
+      // same graph), and export + the Advanced panel must reflect what the user just configured —
+      // so adopt next.settings while REUSING cur's edges/buddies by reference (so GraphCanvas sees
+      // the same `edges` identity and doesn't re-lay-out/animate). Only a REROLL (an explicit
+      // "Different arrangement") also surfaces a notice; an unchanged Edit→Generate is silent.
       if (cur && sameStrings(cur.names, next.names) && sameEdges(cur.edges, next.edges)) {
+        if (!sameSettings(cur.settings, next.settings)) setView({ ...cur, settings: next.settings });
         if (wasReroll) onIdenticalRerollRef.current?.(cur);
       } else {
         setView(next);

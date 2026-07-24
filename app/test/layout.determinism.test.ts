@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
 import { forceLayout, forceIters, ringLayout, FORCE_MAX_N, FORCE_MAX_EDGES } from "../src/graph/layout";
+import { BUDDY_MAX } from "../src/model";
 
 describe("layout determinism", () => {
   const result = buildBuddyGraph(30, 4, { seed: 12345, polish: false }); // only edges needed; skip slow polish
@@ -58,13 +59,27 @@ describe("layout determinism", () => {
   });
 
   it("falls back to the ring layout above FORCE_MAX_EDGES even when n is small", () => {
-    const n = 100; // well under FORCE_MAX_N
+    const n = 120; // well under FORCE_MAX_N; K120 = 7140 edges exceeds FORCE_MAX_EDGES (6000)
     const edges: [number, number][] = [];
     for (let i = 0; i < n && edges.length <= FORCE_MAX_EDGES; i++) {
       for (let j = i + 1; j < n; j++) edges.push([i, j]);
     }
     expect(edges.length).toBeGreaterThan(FORCE_MAX_EDGES);
     const pts = forceLayout(n, edges);
-    expect(pts).toEqual(ringLayout(n)); // dense graph renders as ring, not a frozen sim
+    expect(pts).toEqual(ringLayout(n)); // beyond any in-app graph -> ring, not a frozen sim
+  });
+
+  // Class: the force view must be available for EVERY graph the app can generate — including the
+  // densest corner (n = ceiling, k = BUDDY_MAX), which has n·BUDDY_MAX/2 = 6000 edges and which
+  // the old 4000 cap silently dropped to ring. A real k=12 generation at n=1000 takes ~30s, so
+  // stand in a synthetic 12-regular circulant with the SAME edge count to pin the cap boundary.
+  it("does NOT fall back for a graph at the densest generatable edge count (n=MAX_ROSTER_N, 12-regular)", () => {
+    const n = FORCE_MAX_N;
+    const edges: [number, number][] = [];
+    for (let i = 0; i < n; i++) for (let d = 1; d <= BUDDY_MAX / 2; d++) edges.push([i, (i + d) % n]);
+    expect(edges.length).toBe((n * BUDDY_MAX) / 2); // 6000 = the app's max edge count
+    expect(edges.length).toBeLessThanOrEqual(FORCE_MAX_EDGES); // within the force cap by design
+    const pts = forceLayout(n, edges);
+    expect(pts).not.toEqual(ringLayout(n)); // it actually settled, not a ring fallback
   });
 });

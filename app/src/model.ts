@@ -44,11 +44,14 @@ export const SEPARATION_DEFAULT = Math.max(SEPARATION_MIN, Math.min(SEPARATION_M
     an O(n²) freeze on load. */
 export const MAX_ROSTER_N = 1000;
 
-/** Roster size above which the core auto-disables polish (mirrors `resolveWantPolish` in
-    lib/src/core/index.ts). Polish is the ONLY seed-dependent stage, and it is O(n·m)/iter,
-    so above this the app (a) never forces polish=on — that would run for tens of seconds —
-    and (b) knows a seed-bump reroll can't vary the RNG-free greedy output. If the core's
-    threshold moves, update this. */
+/** Roster size above which the core auto-disables polish (mirrors the `n <= 120` literal in the
+    un-exported `resolveWantPolish`, lib/src/core/index.ts). Polish is the ONLY seed-dependent
+    stage, and it is O(n·m)/iter, so above this the app (a) never forces polish=on — that would
+    run for tens of seconds — and (b) knows a seed-bump reroll can't vary the RNG-free greedy
+    output. This is not a free-floating literal: a boundary test in app/test/reroll.test.ts pins
+    it to the core's ACTUAL behavior (polished flips off at POLISH_MAX_N+1), so a core threshold
+    move turns that test red rather than silently mis-wording reroll copy. (The value coincides
+    with layout.ts's FORCE_TICK_KNEE_N, an UNRELATED force-tick concept — don't consolidate them.) */
 export const POLISH_MAX_N = 120;
 
 /** Seeds are clamped to [0, SEED_MAX] so a `seed + 1` reroll always advances at float

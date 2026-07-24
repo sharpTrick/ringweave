@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
-import { computeFit } from "../src/graph/GraphCanvas";
+import { computeFit, FIT_MODES, LAYOUT_MODES } from "../src/graph/GraphCanvas";
 import { ringLayout, forceLayout } from "../src/graph/layout";
 
 // Class: the graph is framed to the UNION of every layout so a toggle pans within a fixed
@@ -25,5 +25,14 @@ describe("computeFit frames the union of ring + force", () => {
 
   it("order-independent: framing the union doesn't depend on which layout comes first", () => {
     expect(computeFit([...ring, ...force])).toEqual(computeFit([...force, ...ring]));
+  });
+
+  // Class: only POSITION-STABLE layouts may define the fixed frame. A selection-dependent mode
+  // (F8 focus) belongs in LAYOUT_MODES + positionsFor but NOT FIT_MODES — folding its per-selection
+  // points into the union would rescale the viewBox on every hover/click. Pin the set so adding
+  // focus to the fit union trips this test.
+  it("FIT_MODES is exactly the position-stable layouts and is a subset of LAYOUT_MODES", () => {
+    expect(FIT_MODES).toEqual(["ring", "force"]);
+    for (const m of FIT_MODES) expect(LAYOUT_MODES).toContain(m);
   });
 });

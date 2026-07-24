@@ -5,14 +5,23 @@ import { forceLayout, ringLayout, type Pt } from "./layout";
 
 export type LayoutMode = "ring" | "force";
 
-/** Every layout mode, so `fit` can frame the union of all of them (a stable viewBox that doesn't
-    rescale mid-toggle). A new mode is added here and in `positionsFor` — the two single sources. */
+/** Every user-selectable layout mode (what the toggle offers). */
 export const LAYOUT_MODES: LayoutMode[] = ["ring", "force"];
+
+/**
+ * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
+ * points depend only on the graph, not on the current selection. A future SELECTION-DEPENDENT
+ * mode (F8 focus, whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
+ * but deliberately NOT here: folding its per-selection points into the frame would rescale the
+ * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
+ */
+export const FIT_MODES: LayoutMode[] = ["ring", "force"];
 
 /**
  * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
  * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
- * `fit`, so those three can never disagree — and a future mode (F8 focus) adds exactly one branch.
+ * `fit`, so those three can never disagree. A future selection-keyed mode (F8 focus) adds a branch
+ * HERE and to LAYOUT_MODES, but stays out of FIT_MODES so it can't perturb the fixed frame.
  */
 export function positionsFor(layout: LayoutMode, ringPos: Pt[], forcePos: Pt[] | null): Pt[] {
   return layout === "force" ? (forcePos ?? ringPos) : ringPos;
@@ -86,9 +95,10 @@ export default function GraphCanvas({
     forceFitRef.current = { edges, pts: forcePos };
   }
   const forceForFit = forceFitRef.current?.edges === edges ? forceFitRef.current.pts : null;
-  // Frame the union of ALL modes' positions so a settled toggle pans within a fixed viewBox.
+  // Frame the union of the POSITION-STABLE layouts (FIT_MODES) so a settled toggle pans within a
+  // fixed viewBox; a selection-dependent mode is excluded so it can't rescale the frame per click.
   const fit = useMemo(
-    () => computeFit(LAYOUT_MODES.flatMap((m) => positionsFor(m, ringPos, forceForFit))),
+    () => computeFit(FIT_MODES.flatMap((m) => positionsFor(m, ringPos, forceForFit))),
     [ringPos, forceForFit],
   );
 
