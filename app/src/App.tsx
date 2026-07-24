@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, degreeLabel, nextRerollSeed, rerollBlockReason, type 
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
+import LayoutToggle from "./panels/LayoutToggle";
 import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
 import Slips from "./panels/Slips";
@@ -145,10 +146,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div id="toggle" className="glass" role="group" aria-label="Layout">
-                <button className={"ring" + (layout === "ring" ? " on" : "")} onClick={() => setLayout("ring")}>Ring</button>
-                <button className={"force" + (layout === "force" ? " on" : "")} onClick={() => setLayout("force")}>Force</button>
-              </div>
+              <LayoutToggle layout={layout} onChange={setLayout} />
               <div className="hint">Hover a person to light their buddies</div>
 
               <BuddyList view={view} selected={selected} onSelect={setSelected} />
