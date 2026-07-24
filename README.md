@@ -41,7 +41,7 @@ real core. See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for the full roadm
 | `design/`          | Rendered design directions and mock-state screenshots. |
 | `HANDOFF.md`       | Implementation handoff — what exists, what's decided, what's next. |
 
-Planned: `app/` (Vite + React 18 + TS) arrives in M2 as a sibling of `lib/`.
+Planned: `app/` (Vite + React 19 + TS) arrives in M2 as a sibling of `lib/`.
 
 ## Documentation
 

@@ -33,7 +33,7 @@ invisible by default and delightful when revealed.
 
 ## 3. Architecture snapshot
 
-- **Stack:** React 18 + Vite + TypeScript. D3 (d3-force, d3-shape, d3-zoom, d3-transition)
+- **Stack:** React 19 + Vite + TypeScript. D3 (d3-force, d3-shape, d3-zoom, d3-transition)
   computes geometry; React renders SVG. At target sizes (n ≤ ~500) SVG is ample.
 - **Core:** existing `buddygraph` TS library (framework-agnostic, zero deps). UI never
   reimplements math.
