@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
-import { rerollBlockReason, POLISH_MAX_N, DEFAULT_SETTINGS } from "../src/model";
+import { rerollBlockReason, nextRerollSeed, POLISH_MAX_N, SEED_MAX, DEFAULT_SETTINGS } from "../src/model";
 
 describe("reroll gate messages (rerollBlockReason)", () => {
   it("a too-large group says so and never advises enabling already-on polish", () => {
@@ -16,6 +16,28 @@ describe("reroll gate messages (rerollBlockReason)", () => {
     // small + polish would run -> no pre-hoc block (the plateau is caught post-generation)
     expect(rerollBlockReason(20, { ...DEFAULT_SETTINGS, polish: "auto" })).toBeNull();
     expect(rerollBlockReason(20, { ...DEFAULT_SETTINGS, polish: true })).toBeNull();
+  });
+});
+
+describe("reroll seed stays within [0, SEED_MAX] (nextRerollSeed)", () => {
+  // Class: the stored/dispatched reroll seed must always honor the range the import path also
+  // clamps to — never overflow past float-safe integers, always advance to a distinct value.
+  it("advances by one below the ceiling and wraps to 0 at it", () => {
+    for (const seed of [0, 1, SEED_MAX - 2, SEED_MAX - 1]) {
+      const next = nextRerollSeed(seed);
+      expect(next).toBe(seed + 1);
+      expect(Number.isInteger(next)).toBe(true);
+    }
+    expect(nextRerollSeed(SEED_MAX)).toBe(0); // wrap, not overflow
+  });
+
+  it("never leaves the declared range and always changes the seed, even past the ceiling", () => {
+    for (const seed of [0, SEED_MAX - 1, SEED_MAX, SEED_MAX + 5, 2 ** 40]) {
+      const next = nextRerollSeed(seed);
+      expect(next).toBeGreaterThanOrEqual(0);
+      expect(next).toBeLessThanOrEqual(SEED_MAX);
+      expect(next).not.toBe(seed); // a reroll must actually pick a new seed
+    }
   });
 });
 

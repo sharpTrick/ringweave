@@ -1,8 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { toCsv } from "../src/io/download";
+import { neutralizeCell, toCsv } from "../src/io/download";
 
-describe("toCsv formula-injection neutralization", () => {
-  it("prefixes a cell starting with =,+,-,@ with an apostrophe", () => {
+// Class: any spreadsheet-bound sink must neutralize a value whose first char could start a
+// formula. neutralizeCell is the ONE shared guard used by both the CSV serializer and the
+// clipboard copy (see BuddyList), so exercising it over the full dangerous set guards both.
+describe("neutralizeCell (shared formula-injection guard)", () => {
+  for (const c of ["=", "+", "-", "@", "\t", "\r"]) {
+    it(`prefixes a value starting with ${JSON.stringify(c)} with an apostrophe`, () => {
+      expect(neutralizeCell(c + "cmd")).toBe(`'${c}cmd`);
+    });
+  }
+
+  it("leaves ordinary values untouched", () => {
+    expect(neutralizeCell("Alice")).toBe("Alice");
+    expect(neutralizeCell("O'Brien")).toBe("O'Brien");
+  });
+});
+
+describe("toCsv routes every cell through neutralizeCell and still escapes RFC-4180", () => {
+  it("prefixes a formula-leading cell with an apostrophe", () => {
     expect(toCsv([["=cmd"]])).toBe(`"'=cmd"`);
     expect(toCsv([["+1"]])).toBe(`"'+1"`);
     expect(toCsv([["-2"]])).toBe(`"'-2"`);

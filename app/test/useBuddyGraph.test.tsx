@@ -81,7 +81,7 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view?.names).toEqual(["A", "B", "C", "D"]);
   });
 
-  it("fires onIdenticalReroll when a re-generation on the same roster yields identical edges", () => {
+  it("fires onIdenticalReroll (with the kept view) when a REROLL yields identical edges", () => {
     const onNoop = vi.fn();
     const roster = ["A", "B", "C", "D", "E"];
     const g1 = buildBuddyGraph(5, 4, { seed: 1 }); // K5 (unique)
@@ -93,15 +93,40 @@ describe("useBuddyGraph result↔state pairing", () => {
     hooks.state.status = "done";
     hooks.state.result = g1;
     act(() => rerender());
-    expect(result.current.view?.names).toEqual(roster);
+    const kept = result.current.view;
+    expect(kept?.names).toEqual(roster);
 
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }, { reroll: true }));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
     act(() => rerender());
 
     expect(onNoop).toHaveBeenCalledTimes(1); // identical reroll -> notified, view kept
+    expect(onNoop).toHaveBeenCalledWith(kept); // caller gets the kept view to word from its quality
+    expect(result.current.view).toBe(kept); // same object — no needless re-render/re-layout
+  });
+
+  it("does NOT fire onIdenticalReroll for an unchanged Edit→Generate (not a reroll request)", () => {
+    const onNoop = vi.fn();
+    const roster = ["A", "B", "C", "D", "E"];
+    const g1 = buildBuddyGraph(5, 4, { seed: 1 });
+    const g2 = buildBuddyGraph(5, 4, { seed: 1 }); // same seed -> identical, but a plain generate
+
+    const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g1;
+    act(() => rerender());
+
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 })); // no reroll flag
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g2;
+    act(() => rerender());
+
+    expect(onNoop).not.toHaveBeenCalled(); // silent idempotent no-op, not a failed "reroll"
     expect(result.current.view?.names).toEqual(roster);
   });
 

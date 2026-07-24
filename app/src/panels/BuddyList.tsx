@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { buddyNames, type GraphView } from "../model";
-import { copyText, downloadBlob, toCsv } from "../io/download";
+import { copyText, downloadBlob, neutralizeCell, toCsv } from "../io/download";
 
 interface Props {
   view: GraphView;
@@ -14,8 +14,11 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
 
   const copyAll = async () => {
+    // Each line starts with a name, so a hostile name (`=HYPERLINK(...)`) pasted into a
+    // spreadsheet cell would be a live formula — neutralize the leading name the same way
+    // toCsv neutralizes every cell, so both spreadsheet-bound sinks share one guard.
     const text = view.names
-      .map((name, i) => `${name}: ${buddyNames(view, i).join(", ")}`)
+      .map((name, i) => `${neutralizeCell(name)}: ${buddyNames(view, i).join(", ")}`)
       .join("\n");
     const ok = await copyText(text);
     if (ok) {

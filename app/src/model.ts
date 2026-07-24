@@ -44,6 +44,13 @@ export const POLISH_MAX_N = 120;
     precision (integers past 2^53 don't). */
 export const SEED_MAX = 2 ** 31 - 1;
 
+/** The next reroll seed, kept within the declared [0, SEED_MAX] range — advance by one, or wrap
+    to 0 at the ceiling. The single source of the reroll increment so the stored seed can never
+    drift past the range the import path also clamps to. */
+export function nextRerollSeed(seed: number): number {
+  return seed >= SEED_MAX ? 0 : seed + 1;
+}
+
 /**
  * Display metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only, so
  * they are meaningful for the whole roster only when it is connected — they are `null`

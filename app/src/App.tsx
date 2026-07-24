@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, degreeLabel, rerollBlockReason, type GraphView, type Settings } from "./model";
+import { DEFAULT_SETTINGS, degreeLabel, nextRerollSeed, rerollBlockReason, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -17,8 +17,15 @@ import { downloadBlob } from "./io/download";
 export default function App() {
   const { notice, flash, show, clear } = useNotice();
   // A re-roll that regenerates a byte-identical graph (small unique / polish-converged) is a
-  // no-op; explain it rather than silently doing nothing.
-  const bg = useBuddyGraph(() => flash("That's already the best arrangement for a group this size."));
+  // no-op; explain it rather than silently doing nothing. Word it from the KEPT graph's actual
+  // quality so it never claims "best" over a gauge showing < 100%.
+  const bg = useBuddyGraph((kept) =>
+    flash(
+      kept.metrics.quality === 1
+        ? "That's already an optimal arrangement — a re-roll can't improve it."
+        : "Couldn't find a different arrangement — this is what the current settings produce.",
+    ),
+  );
   const view = bg.view;
 
   const [modalOpen, setModalOpen] = useState(true);
@@ -51,7 +58,9 @@ export default function App() {
   };
 
   const handleReroll = () => {
-    const s = { ...settings, seed: settings.seed + 1 };
+    // Advance the seed within its declared range [0, SEED_MAX] (nextRerollSeed) so a stored
+    // seed always honors the contract and can't drift past float-safe integer range.
+    const s = { ...settings, seed: nextRerollSeed(settings.seed) };
     const feas = feasibility(names.length, s.buddies);
     if (!feas.canGenerate) {
       flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
@@ -67,7 +76,7 @@ export default function App() {
     }
     setSettings(s);
     resetSelection();
-    bg.generate(names, s);
+    bg.generate(names, s, { reroll: true }); // intent: an identical result surfaces a notice
   };
 
   const cancelGeneration = () => {
