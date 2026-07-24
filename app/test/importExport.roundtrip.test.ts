@@ -208,6 +208,15 @@ describe("import: lossless round-trip and defaults", () => {
     expect(parseRoster(view.names.join("\n")).names).toEqual(view.names);
   });
 
+  // Class: an otherwise-valid but collectively over-long roster gets a SIZE reason, not the
+  // misleading commas/uniqueness message — the length check runs before the round-trip check.
+  it("refuses an over-long roster with a size reason, not a commas/uniqueness one", () => {
+    const long = Array.from({ length: 900 }, (_, i) => "x".repeat(600) + i);
+    const people = long.map((name, id) => ({ id, name }));
+    const edges = long.map((_, i) => [i, (i + 1) % long.length] as [number, number]);
+    expect(() => importGraph({ version: 1, people, edges })).toThrow(/too long/i);
+  });
+
   it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {
     const v = importGraph({ version: 1, people: peopleOf(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]] });
     expect(v.settings.seed).toBe(DEFAULT_SETTINGS.seed);

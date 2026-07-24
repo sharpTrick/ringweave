@@ -9,9 +9,16 @@ export function downloadBlob(filename: string, mime: string, data: string): void
   URL.revokeObjectURL(url);
 }
 
+/** Neutralize CSV formula injection: a cell starting with =,+,-,@ (or tab/CR) is prefixed with
+    an apostrophe so a spreadsheet treats it as text, not a formula, when a hostile imported name
+    (e.g. `=HYPERLINK(...)`) is exported and re-opened. */
+function neutralizeFormula(cell: string): string {
+  return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
+}
+
 /** Quote fields per RFC 4180 (double up embedded quotes) and join into CSV. */
 export function toCsv(rows: string[][]): string {
-  return rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+  return rows.map((r) => r.map((c) => `"${neutralizeFormula(c).replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 
 export async function copyText(text: string): Promise<boolean> {

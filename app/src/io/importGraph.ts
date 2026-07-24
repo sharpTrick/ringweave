@@ -4,7 +4,7 @@ import {
   BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_MAX, SEPARATION_MIN,
   type GraphView, type Settings,
 } from "../model";
-import { parseRoster } from "./parseRoster";
+import { MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -100,8 +100,13 @@ export function importGraph(data: unknown): GraphView {
   // trims, drops blanks, and de-dupes case-insensitively, so an empty/whitespace-only/
   // comma/newline/duplicate name would silently vanish or split on an Edit→regenerate,
   // shifting every downstream buddy label. Make the parser the authority — refuse anything
-  // it wouldn't round-trip.
-  const roundTrip = parseRoster(names.join("\n")).names;
+  // it wouldn't round-trip. Check total length FIRST so an over-long (but otherwise valid)
+  // roster gets a size reason, not a misleading commas/uniqueness one.
+  const joined = names.join("\n");
+  if (joined.length > MAX_PARSE_CHARS) {
+    throw new ImportError("Those names are collectively too long to import.");
+  }
+  const roundTrip = parseRoster(joined).names;
   if (roundTrip.length !== n || roundTrip.some((x, i) => x !== names[i])) {
     throw new ImportError("Every name must be non-empty, unique (case-insensitively), and free of commas or line breaks.");
   }

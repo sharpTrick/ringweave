@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, degreeLabel, rerollWouldVary, type GraphView, type Settings } from "./model";
+import { DEFAULT_SETTINGS, degreeLabel, rerollBlockReason, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -15,7 +15,10 @@ import { readFileText } from "./io/readFileText";
 import { downloadBlob } from "./io/download";
 
 export default function App() {
-  const bg = useBuddyGraph();
+  const { notice, flash, show, clear } = useNotice();
+  // A re-roll that regenerates a byte-identical graph (small unique / polish-converged) is a
+  // no-op; explain it rather than silently doing nothing.
+  const bg = useBuddyGraph(() => flash("That's already the best arrangement for a group this size."));
   const view = bg.view;
 
   const [modalOpen, setModalOpen] = useState(true);
@@ -24,7 +27,6 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>("ring");
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
-  const { notice, flash, show, clear } = useNotice();
 
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -55,10 +57,12 @@ export default function App() {
       flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
       return;
     }
-    // A re-roll varies the graph only when polish runs (the sole seed-dependent stage);
-    // above that, re-generating returns an identical graph — explain, don't silently no-op.
-    if (!rerollWouldVary(names.length, s)) {
-      flash("This is already the best arrangement for a group this size — turn on Polish (Advanced) for small groups to vary it.");
+    // Cheap pre-hoc gate for the two cases we can predict (too large / polish off) with
+    // actionable copy. The uniquely-determined / polish-converged plateau is caught post-hoc
+    // by the identical-reroll callback above.
+    const reason = rerollBlockReason(names.length, s);
+    if (reason) {
+      flash(reason);
       return;
     }
     setSettings(s);

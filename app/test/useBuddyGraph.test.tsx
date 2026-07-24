@@ -81,6 +81,30 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view?.names).toEqual(["A", "B", "C", "D"]);
   });
 
+  it("fires onIdenticalReroll when a re-generation on the same roster yields identical edges", () => {
+    const onNoop = vi.fn();
+    const roster = ["A", "B", "C", "D", "E"];
+    const g1 = buildBuddyGraph(5, 4, { seed: 1 }); // K5 (unique)
+    const g2 = buildBuddyGraph(5, 4, { seed: 2 }); // K5 again — byte-identical edges
+
+    const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g1;
+    act(() => rerender());
+    expect(result.current.view?.names).toEqual(roster);
+
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }));
+    act(() => rerender());
+    hooks.state.status = "done";
+    hooks.state.result = g2;
+    act(() => rerender());
+
+    expect(onNoop).toHaveBeenCalledTimes(1); // identical reroll -> notified, view kept
+    expect(result.current.view?.names).toEqual(roster);
+  });
+
   it("never DISPATCHES polish=true above POLISH_MAX_N (cost gate)", () => {
     const { result } = renderHook(() => useBuddyGraph());
     const big = Array.from({ length: POLISH_MAX_N + 50 }, (_, i) => `P${i}`);

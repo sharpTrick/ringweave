@@ -80,7 +80,7 @@ export function quality(aspl: number, n: number, k: number): number {
 }
 
 /** Normalize a non-finite metric to null (Infinity for no reachable pairs). */
-export function finiteOrNull(x: number): number | null {
+function finiteOrNull(x: number): number | null {
   return Number.isFinite(x) ? x : null;
 }
 
@@ -156,13 +156,23 @@ export function degreeLabel(m: Metrics): string {
 }
 
 /**
- * Whether a seed-bump "Different arrangement" would actually change the graph. The seed only
- * feeds the polish RNG and the greedy is RNG-free, so a re-roll varies ONLY when polish runs:
- * n <= POLISH_MAX_N and polish not off. Above that, re-generating returns an identical graph,
- * so the UI explains instead of silently doing nothing.
+ * Why a seed-bump "Different arrangement" CAN'T vary the graph, or null if it might.
+ *
+ * The seed only feeds the polish RNG and the greedy is RNG-free, so a re-roll can only vary
+ * when polish runs (n <= POLISH_MAX_N and polish not off). This is a NECESSARY, not sufficient,
+ * condition — a small polished graph can still converge to the same optimum, which only a
+ * post-generation edge comparison (in useBuddyGraph) can detect. This function gives the cheap,
+ * accurate reason for the two cases we CAN predict pre-hoc, with actionable, non-contradictory
+ * copy (it never tells a user to enable polish they've already enabled).
  */
-export function rerollWouldVary(n: number, settings: Settings): boolean {
-  return n <= POLISH_MAX_N && settings.polish !== false;
+export function rerollBlockReason(n: number, settings: Settings): string | null {
+  if (n > POLISH_MAX_N) {
+    return "This group is too large to shuffle — a different arrangement is only possible for smaller groups.";
+  }
+  if (settings.polish === false) {
+    return "Turn on Polish (Advanced) to see a different arrangement.";
+  }
+  return null; // reroll may vary — a post-generation identical-edges check handles the plateau
 }
 
 /** Display names of person i's buddies. Shared by BuddyList and Slips. */
