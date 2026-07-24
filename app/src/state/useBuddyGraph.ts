@@ -12,6 +12,9 @@ export function useBuddyGraph() {
   const genGenerate = gen.generate;
   const [view, setView] = useState<GraphView | null>(null);
   const pending = useRef<{ names: string[]; settings: Settings } | null>(null);
+  // consumed: the last worker result we've already turned into a view. Guards against a
+  // benign effect re-run (e.g. StrictMode's dev double-invoke) re-applying a still-"done"
+  // generation and clobbering a view set directly by loadView (an import).
   const consumed = useRef<unknown>(null);
 
   useEffect(() => {

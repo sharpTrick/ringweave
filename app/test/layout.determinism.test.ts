@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
-import { forceLayout, ringLayout } from "../src/graph/layout";
+import { forceLayout, ringLayout, FORCE_MAX_N } from "../src/graph/layout";
 
 describe("layout determinism", () => {
   const result = buildBuddyGraph(30, 4, { seed: 12345 });
@@ -21,5 +21,13 @@ describe("layout determinism", () => {
       expect(Number.isFinite(p.x)).toBe(true);
       expect(Number.isFinite(p.y)).toBe(true);
     }
+  });
+
+  it("falls back to the ring layout above FORCE_MAX_N (no super-linear settle)", () => {
+    const n = FORCE_MAX_N + 1;
+    const start = performance.now();
+    const pts = forceLayout(n, []);
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(pts).toEqual(ringLayout(n)); // exact ring fallback, not a settled sim
   });
 });

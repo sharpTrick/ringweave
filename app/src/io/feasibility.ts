@@ -11,6 +11,12 @@ export interface Feasibility {
  * buddies); an odd n×k is a soft note (one person ends up ±1 buddy — still fine).
  */
 export function feasibility(n: number, k: number): Feasibility {
+  // The core's ring seed floors every degree at 2, so buildBuddyGraph throws for k<2.
+  // Block it here with plain language rather than letting the internal error surface
+  // (e.g. after importing a hand-edited file whose settings carry buddies:1).
+  if (!Number.isInteger(k) || k < 2) {
+    return { canGenerate: false, messages: ["Each person needs at least 2 buddies."] };
+  }
   if (n < k + 1) {
     const need = k + 1 - n;
     return {

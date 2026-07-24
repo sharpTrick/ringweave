@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_SETTINGS, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
-import GraphCanvas, { type LayoutMode } from "./graph/GraphView";
+import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
 import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";

@@ -5,7 +5,7 @@ import { forceLayout, ringLayout, type Pt } from "./layout";
 
 export type LayoutMode = "ring" | "force";
 
-interface GraphViewProps {
+interface GraphCanvasProps {
   names: string[];
   edges: [number, number][];
   adjacency: number[][];
@@ -49,9 +49,9 @@ function reducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function GraphView({
+export default function GraphCanvas({
   names, edges, adjacency, layout, selected, hovered, onSelect, onHover,
-}: GraphViewProps) {
+}: GraphCanvasProps) {
   const n = names.length;
   const ringPos = useMemo(() => ringLayout(n), [n]);
   const forcePos = useMemo(() => forceLayout(n, edges), [n, edges]);
@@ -63,21 +63,26 @@ export default function GraphView({
   displayRef.current = display;
 
   const rafRef = useRef(0);
-  const graphKey = `${n}:${edges.length}`;
-  const prevGraph = useRef(graphKey);
+  // A cheap size fingerprint, not a full graph identity: it changes when the roster size
+  // or edge count changes, which is enough to force a snap when `to`/`from` differ in
+  // length. A same-size re-roll (same n, same edge count, different edges) is NOT caught
+  // here — it still snaps correctly because a re-roll doesn't change `layout`, so the
+  // `!layoutChanged` branch below fires. Only a layout toggle animates.
+  const sizeKey = `${n}:${edges.length}`;
+  const prevSize = useRef(sizeKey);
   const prevLayout = useRef(layout);
 
-  // Snap on a new graph; animate (cubic ease, ~650ms) on a layout toggle; snap under
-  // reduced-motion.
+  // Animate (cubic ease, ~650ms) only on a layout toggle at a stable size; otherwise snap
+  // (new/resized graph, same-size re-roll, or reduced-motion).
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
     const to = layout === "ring" ? ringPos : forcePos;
-    const graphChanged = prevGraph.current !== graphKey;
+    const sizeChanged = prevSize.current !== sizeKey;
     const layoutChanged = prevLayout.current !== layout;
-    prevGraph.current = graphKey;
+    prevSize.current = sizeKey;
     prevLayout.current = layout;
     const from = displayRef.current;
-    if (graphChanged || !layoutChanged || reducedMotion() || from.length !== to.length) {
+    if (sizeChanged || !layoutChanged || reducedMotion() || from.length !== to.length) {
       setDisplay(to);
       return;
     }
@@ -94,7 +99,7 @@ export default function GraphView({
     };
     rafRef.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [layout, ringPos, forcePos, graphKey]);
+  }, [layout, ringPos, forcePos, sizeKey]);
 
   // Pan/zoom via d3-zoom; the transform is applied to the root <g>.
   const svgRef = useRef<SVGSVGElement>(null);

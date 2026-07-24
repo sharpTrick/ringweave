@@ -1,11 +1,10 @@
 import type { BuddyResult } from "ringweave";
 
-/** Generation options mirroring the core's `BuddyOptions` (index.ts). */
+/** Generation options mirroring the subset of the core's `BuddyOptions` the UI exposes. */
 export interface GenerateOptions {
   minSeparation?: number;
   polish?: boolean | "auto";
   seed?: number;
-  polishIters?: number;
 }
 
 /** Main thread → worker. `id` correlates the response and lets stale runs be dropped. */

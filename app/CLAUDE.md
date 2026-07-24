@@ -8,7 +8,7 @@ The algorithm library lives in `../lib` and is the source of truth for all graph
 - `npm run dev` — Vite dev server
 - `npm run typecheck` — `tsc --noEmit`; must be clean
 - `npm test` — Vitest (pure logic: parsing, export/import round-trip, layout determinism,
-  quality, worker payload, a GraphView SSR smoke)
+  quality, worker payload, a GraphCanvas SSR smoke)
 - `npm run build` — `tsc --noEmit && vite build` → `dist/`
 
 **Build order (non-negotiable):** the app consumes the core via `"ringweave": "file:../lib"`,

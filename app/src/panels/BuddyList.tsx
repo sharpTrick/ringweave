@@ -1,15 +1,11 @@
 import { useState } from "react";
-import type { GraphView } from "../model";
+import { buddyNames, type GraphView } from "../model";
 import { copyText, downloadBlob, toCsv } from "../io/download";
 
 interface Props {
   view: GraphView;
   selected: number | null;
   onSelect: (i: number) => void;
-}
-
-function buddyNames(view: GraphView, i: number): string[] {
-  return view.buddies[i].map((j) => view.names[j]);
 }
 
 /** F3: the always-available, non-graph interface — a Name → buddies table with copy
