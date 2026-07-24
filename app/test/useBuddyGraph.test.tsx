@@ -1,0 +1,72 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { buildBuddyGraph, type BuddyResult } from "ringweave";
+import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+
+// Drive useBuddyGraph without a real Worker: a controllable stand-in for
+// useGenerationWorker whose state the test mutates, then rerenders to fire the effect.
+const hooks = vi.hoisted(() => {
+  const state: { status: "idle" | "running" | "done" | "error"; result: BuddyResult | null; error: string | null } = {
+    status: "idle",
+    result: null,
+    error: null,
+  };
+  const generate = vi.fn(() => {
+    state.status = "running";
+  });
+  return { state, generate };
+});
+
+vi.mock("../src/state/useGenerationWorker", () => ({
+  useGenerationWorker: () => ({
+    status: hooks.state.status,
+    result: hooks.state.result,
+    error: hooks.state.error,
+    generate: hooks.generate,
+  }),
+}));
+
+import { useBuddyGraph } from "../src/state/useBuddyGraph";
+
+beforeEach(() => {
+  hooks.state.status = "idle";
+  hooks.state.result = null;
+  hooks.state.error = null;
+  hooks.generate.mockClear();
+});
+
+describe("useBuddyGraph result↔state pairing", () => {
+  it("an import during in-flight generation survives the late worker result (no clobber)", () => {
+    const imported = viewFromResult(
+      ["A", "B", "C", "D", "E", "F"],
+      DEFAULT_SETTINGS,
+      buildBuddyGraph(6, 2, { seed: 1 }),
+    );
+    const stale = buildBuddyGraph(4, 2, { seed: 2 }); // the superseded generate's eventual result
+
+    const { result, rerender } = renderHook(() => useBuddyGraph());
+    act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS)); // pending set; mock -> running
+    act(() => rerender());
+    act(() => result.current.loadView(imported)); // import lands -> view=imported, pending cleared
+
+    hooks.state.status = "done";
+    hooks.state.result = stale; // worker finally replies for the superseded generate
+    act(() => rerender());
+
+    expect(result.current.view).toEqual(imported); // imported view is NOT overwritten
+  });
+
+  it("applies a worker result when nothing superseded it", () => {
+    const gen = buildBuddyGraph(4, 2, { seed: 3 });
+    const { result, rerender } = renderHook(() => useBuddyGraph());
+    act(() => result.current.generate(["A", "B", "C", "D"], DEFAULT_SETTINGS));
+    act(() => rerender());
+
+    hooks.state.status = "done";
+    hooks.state.result = gen;
+    act(() => rerender());
+
+    expect(result.current.view?.names).toEqual(["A", "B", "C", "D"]);
+  });
+});

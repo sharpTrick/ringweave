@@ -10,10 +10,13 @@ const fmt1 = (x: number | null): string => (x == null ? "—" : x.toFixed(1));
 const fmtInt = (x: number | null): string => (x == null ? "—" : String(x));
 
 /** F5: plain-language quality readout — avg hops, max hops, and a connection-quality
-    score from the core's Moore gap. Numbers come straight from the GraphView metrics. */
+    score from the core's Moore gap. Numbers come straight from the GraphView metrics.
+    A disconnected import (some people in separate groups) is shown honestly, not as
+    "everyone's well-linked". */
 export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
   const q = Math.round(m.quality * 100);
+  const largestPct = Math.round(m.largestComponentFraction * 100);
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">
@@ -30,11 +33,15 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         <div
           className="gauge"
           style={{ background: `conic-gradient(var(--cool2) 0 ${q}%, var(--line) ${q}% 100%)` }}
-          title="Connection quality: how close to the theoretical best (Moore bound) this graph is."
+          title="Connection quality: how close to the theoretical best (Moore bound) this graph is. Zero when the group is split into disconnected sub-groups."
         >
           <div className="inner tabnum">{q}</div>
         </div>
-        <span className="l">connection quality — everyone's well-linked</span>
+        <span className="l">
+          {m.connected
+            ? "connection quality — everyone's well-linked"
+            : `not everyone's connected — ${largestPct}% are in the largest group`}
+        </span>
       </div>
       <div className="m-acts">
         <button className="btn btn-ghost" onClick={onImport}>Import ↑</button>

@@ -14,27 +14,22 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: 12345,
 };
 
-/** Display metrics. aspl/diameter/girth are null when non-finite (n<=1 / disconnected). */
+/**
+ * Display metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only, so
+ * they are meaningful for the whole roster only when it is connected — they are `null`
+ * when the graph is disconnected (some pairs never meet) or trivial (n<=1). `girth` is
+ * `null` for a forest.
+ */
 export interface Metrics {
   aspl: number | null;
   diameter: number | null;
   girth: number | null;
-  quality: number; // 0..1
+  quality: number; // 0..1; 0 when disconnected (there is no whole-group closeness to score)
+  connected: boolean;
+  largestComponentFraction: number; // 1 when connected; else the largest group's share
   regular: boolean;
   degreeMin: number;
   degreeMax: number;
-}
-
-/**
- * The single view model that BOTH generation and import produce, so the whole UI
- * renders from one shape regardless of origin.
- */
-export interface GraphView {
-  names: string[];
-  edges: [number, number][];
-  buddies: number[][];
-  settings: Settings;
-  metrics: Metrics;
 }
 
 /** Clamp an ASPL gap to a 0..1 quality score (1 = provably optimal). */
@@ -42,12 +37,18 @@ function clampQuality(gap: number): number {
   return Math.max(0, Math.min(1, 1 - gap));
 }
 
-/** quality = clamp01(1 - asplGap): the core's Moore-gap, never re-derived in the UI. */
+/**
+ * quality = clamp01(1 - asplGap): the core's Moore-gap, never re-derived in the UI. A
+ * non-finite ASPL (no reachable pairs: edgeless / n<=1) scores 0, not "optimal" —
+ * otherwise `asplGap`'s "no valid Moore bound => gap 0" would collapse to quality 1.
+ * NOTE: this does not by itself catch a disconnected-but-edged graph (whose ASPL is a
+ * finite reachable-pairs mean); `assembleMetrics` gates that on `connected`.
+ */
 export function quality(aspl: number, n: number, k: number): number {
-  return clampQuality(asplGap(aspl, n, k));
+  return Number.isFinite(aspl) ? clampQuality(asplGap(aspl, n, k)) : 0;
 }
 
-/** Normalize a non-finite metric (Infinity for n<=1 / disconnected) to null. */
+/** Normalize a non-finite metric to null (Infinity for no reachable pairs). */
 export function finiteOrNull(x: number): number | null {
   return Number.isFinite(x) ? x : null;
 }
@@ -59,21 +60,27 @@ export interface RawMetrics {
   girth: number;
   degreeMin: number;
   degreeMax: number;
+  connected: boolean;
+  largestComponentFraction: number;
 }
 
 /**
  * The single owner of the display `Metrics` shape — called by BOTH the generation and
  * import paths so they can't drift. Quality is scored against the graph's ACTUAL degree
- * (`degreeMax`), not a declared/target `k`: an imported graph must be measured honestly
- * (a 2-regular 4-cycle is 100%, regardless of what `settings.buddies` claims). For a
- * generated k-regular graph `degreeMax === k`, so this matches the core's own `asplGap`.
+ * (`degreeMax`), not a declared/target `k`, and ONLY when the whole roster is connected:
+ * a disconnected import has a finite reachable-pairs ASPL that would otherwise beat the
+ * whole-n Moore bound and read as a false 100%. When disconnected, aspl/diameter are null
+ * (undefined over unreachable pairs) and quality is 0.
  */
 export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
+  const measurable = raw.connected && Number.isFinite(raw.aspl);
   return {
-    aspl: finiteOrNull(raw.aspl),
-    diameter: finiteOrNull(raw.diameter),
+    aspl: measurable ? raw.aspl : null,
+    diameter: measurable ? raw.diameter : null,
     girth: finiteOrNull(raw.girth),
-    quality: quality(raw.aspl, n, raw.degreeMax),
+    quality: measurable ? clampQuality(asplGap(raw.aspl, n, raw.degreeMax)) : 0,
+    connected: raw.connected,
+    largestComponentFraction: raw.largestComponentFraction,
     regular: raw.degreeMin === raw.degreeMax,
     degreeMin: raw.degreeMin,
     degreeMax: raw.degreeMax,
@@ -91,7 +98,20 @@ export function buddyNames(view: GraphView, i: number): string[] {
   return view.buddies[i].map((j) => view.names[j]);
 }
 
-/** Combine a worker BuddyResult with the roster + settings into a GraphView. */
+/**
+ * The single view model that BOTH generation and import produce, so the whole UI
+ * renders from one shape regardless of origin.
+ */
+export interface GraphView {
+  names: string[];
+  edges: [number, number][];
+  buddies: number[][];
+  settings: Settings;
+  metrics: Metrics;
+}
+
+/** Combine a worker BuddyResult with the roster + settings into a GraphView. The
+    unconstrained builder seeds a ring, so its output is always connected. */
 export function viewFromResult(names: string[], settings: Settings, r: BuddyResult): GraphView {
   return {
     names,
@@ -104,6 +124,8 @@ export function viewFromResult(names: string[], settings: Settings, r: BuddyResu
       girth: r.girth,
       degreeMin: r.degreeMin,
       degreeMax: r.degreeMax,
+      connected: true,
+      largestComponentFraction: 1,
     }),
   };
 }

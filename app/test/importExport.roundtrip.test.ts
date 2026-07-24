@@ -9,6 +9,10 @@ function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
 }
 
+function peopleOf(n: number): { id: number; name: string }[] {
+  return names(n).map((name, id) => ({ id, name }));
+}
+
 describe("export -> import round-trip (F6)", () => {
   it("reproduces identical graph and metrics", () => {
     const settings: Settings = { ...DEFAULT_SETTINGS, buddies: 4 };
@@ -46,7 +50,6 @@ describe("export -> import round-trip (F6)", () => {
 
 describe("import hardening (adversarial files)", () => {
   const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i, name: `P${i}` }));
-  const square = { edges: [[0, 1], [1, 2], [2, 3], [3, 0]] as [number, number][] };
 
   it("rejects an oversized roster FAST, before any O(n^2) metric runs", () => {
     const file = { version: 1, people: people(MAX_IMPORT_N + 1).map((p) => ({ name: p.name })), edges: [] as [number, number][] };
@@ -101,11 +104,92 @@ describe("import hardening (adversarial files)", () => {
     expect(k4.metrics.degreeMax).toBe(3);
     expect(k4.metrics.quality).toBeCloseTo(1, 12); // K4 has aspl 1 = its Moore bound
   });
+});
+
+// Class: a disconnected or degenerate imported graph must never read as optimal or
+// "everyone's well-linked". aspl/diameter are undefined over unreachable pairs (null),
+// quality is 0, and connectivity is surfaced honestly.
+describe("import: disconnected / degenerate graphs are scored honestly", () => {
+  const disconnected: Array<{ why: string; n: number; edges: [number, number][]; lcf: number }> = [
+    { why: "two disjoint triangles (regular)", n: 6, edges: [[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3]], lcf: 0.5 },
+    { why: "two disjoint K4s (regular)", n: 8, edges: [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3], [4, 5], [4, 6], [4, 7], [5, 6], [5, 7], [6, 7]], lcf: 0.5 },
+    { why: "triangle + isolated vertex (irregular, degMin 0)", n: 4, edges: [[0, 1], [1, 2], [2, 0]], lcf: 0.75 },
+    { why: "a perfect matching (n=6, three pairs)", n: 6, edges: [[0, 1], [2, 3], [4, 5]], lcf: 2 / 6 },
+  ];
+
+  for (const c of disconnected) {
+    it(c.why + " -> connected:false, quality:0, aspl:null", () => {
+      const v = importGraph({ version: 1, people: peopleOf(c.n), edges: c.edges });
+      expect(v.metrics.connected).toBe(false);
+      expect(v.metrics.quality).toBe(0);
+      expect(v.metrics.aspl).toBeNull();
+      expect(v.metrics.diameter).toBeNull();
+      expect(v.metrics.largestComponentFraction).toBeCloseTo(c.lcf, 10);
+    });
+  }
+
+  it("an edgeless roster is not scored as optimal", () => {
+    for (const n of [4, 50]) {
+      const v = importGraph({ version: 1, people: peopleOf(n), edges: [] });
+      expect(v.metrics.connected).toBe(false);
+      expect(v.metrics.quality).toBe(0);
+      expect(v.metrics.aspl).toBeNull();
+    }
+  });
+
+  it("invariant: quality > 0 implies a finite, connected ASPL", () => {
+    const cases: [number, [number, number][]][] = [
+      [4, []],
+      [6, [[0, 1], [2, 3]]],
+      [6, [[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3]]],
+      [4, [[0, 1], [1, 2], [2, 3], [3, 0]]], // connected -> quality 1
+    ];
+    for (const [n, edges] of cases) {
+      const m = importGraph({ version: 1, people: peopleOf(n), edges }).metrics;
+      if (m.quality > 0) {
+        expect(m.connected).toBe(true);
+        expect(m.aspl).not.toBeNull();
+      }
+    }
+  });
+});
+
+// Class: untrusted file fields must not flow unclamped into generation cost — a crafted
+// high-degree import must not let a later reroll inject k up to n-1 and hang the worker.
+describe("import: untrusted settings.buddies is clamped to the UI range", () => {
+  const star = (n: number): [number, number][] => Array.from({ length: n - 1 }, (_, i) => [0, i + 1]);
+
+  it("a star graph's degree-(n-1) fallback is clamped to 12", () => {
+    const n = 200;
+    const v = importGraph({ version: 1, people: peopleOf(n), edges: star(n) }); // no settings block
+    expect(v.settings.buddies).toBeLessThanOrEqual(12);
+    expect(v.settings.buddies).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a declared oversized buddies is clamped", () => {
+    for (const declared of [13, 100, 199, 1_000_000]) {
+      const v = importGraph({ version: 1, people: peopleOf(50), edges: [[0, 1], [1, 2], [2, 0]], settings: { buddies: declared, seed: 1, polish: "auto" } });
+      expect(v.settings.buddies).toBeLessThanOrEqual(12);
+    }
+  });
+});
+
+describe("file schema stays in sync with Metrics", () => {
+  it("meta.metrics has exactly the keys of a produced Metrics object", () => {
+    const r = buildBuddyGraph(20, 4, { seed: 1 });
+    const view = viewFromResult(names(20), DEFAULT_SETTINGS, r);
+    const file = exportGraph(view);
+    expect(Object.keys(file.meta.metrics).sort()).toEqual(Object.keys(view.metrics).sort());
+  });
+});
+
+describe("import: validation & sanitization", () => {
+  const square: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 0]];
 
   it("sanitizes a malformed settings.buddies so quality is never NaN or falsely 1.0", () => {
     // A 4-cycle is k=2; a hand-edited file declaring buddies:"7" (or 0) must not read as optimal.
     for (const buddies of ["7", 0, -1, 1.5, NaN] as unknown[]) {
-      const v = importGraph({ version: 1, people: people(4), ...square, settings: { buddies } });
+      const v = importGraph({ version: 1, people: peopleOf(4), edges: square, settings: { buddies } });
       expect(Number.isInteger(v.settings.buddies)).toBe(true);
       expect(v.settings.buddies).toBeGreaterThanOrEqual(2);
       expect(Number.isFinite(v.metrics.quality)).toBe(true);
@@ -118,8 +202,8 @@ describe("import hardening (adversarial files)", () => {
     expect(() =>
       importGraph({
         version: 1,
-        people: people(4),
-        ...square,
+        people: peopleOf(4),
+        edges: square,
         constraints: { required: [[0, 1]], prohibited: [] },
       }),
     ).toThrow(/constraint/i);
@@ -127,6 +211,6 @@ describe("import hardening (adversarial files)", () => {
 
   it("rejects people whose id disagrees with their position", () => {
     const reordered = [{ id: 3, name: "D" }, { id: 1, name: "B" }, { id: 2, name: "C" }, { id: 0, name: "A" }];
-    expect(() => importGraph({ version: 1, people: reordered, ...square })).toThrow(/position/i);
+    expect(() => importGraph({ version: 1, people: reordered, edges: square })).toThrow(/position/i);
   });
 });

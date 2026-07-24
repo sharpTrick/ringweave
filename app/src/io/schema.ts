@@ -1,3 +1,5 @@
+import type { Metrics } from "../model";
+
 /**
  * The versioned BuddyGraph file format (F6). Matches PROJECT_PLAN §4 F6 and
  * DESIGN_HANDOFF.md §9: `{version, people, constraints, edges, settings, meta}`.
@@ -20,14 +22,9 @@ export interface BuddyGraphFile {
   };
   meta: {
     app: "BuddyGraph";
-    metrics: {
-      aspl: number | null; // Infinity -> null at the JSON boundary
-      diameter: number | null;
-      girth: number | null;
-      quality: number;
-      regular: boolean;
-      degreeMin: number;
-      degreeMax: number;
-    };
+    // Informational / write-only: exportGraph writes the produced Metrics here, but
+    // importGraph ignores it and RE-MEASURES from `edges`. Reuses the Metrics type
+    // (not a hand-copied mirror) so it can't drift when Metrics gains a field.
+    metrics: Metrics;
   };
 }

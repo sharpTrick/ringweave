@@ -1,6 +1,10 @@
-import { Graph, allPairsSummary, girth } from "ringweave";
+import { Graph, allPairsSummary, girth, largestComponentFraction } from "ringweave";
 import { assembleMetrics, type GraphView, type Settings } from "../model";
 import type { BuddyGraphFile } from "./schema";
+
+/** Buddies-per-person the UI supports (mirrors SettingsControls' stepper range). */
+const MIN_BUDDIES = 2;
+const MAX_BUDDIES = 12;
 
 /** Thrown with a plain-language reason when a file can't be imported. */
 export class ImportError extends Error {}
@@ -32,11 +36,13 @@ function degreeExtent(degrees: number[]): [number, number] {
   return [lo, hi];
 }
 
-/** Sanitize the settings block: values come from arbitrary JSON, and a bad `buddies`
-    (non-integer, <2) would make a later reroll throw inside the core. Fall back to the
-    graph's actual degree so reroll targets something sensible, not a hard-coded 4. */
+/** Sanitize the settings block: values come from arbitrary JSON, and `buddies` becomes
+    the generation target a later reroll passes to the core. It is CLAMPED to the UI range
+    [2,12] — an untrusted file (or a star graph's degree-of-1999 fallback) must not inject
+    an arbitrarily large k that hangs the worker for hours on the next reroll. */
 function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
-  const buddies = s && Number.isInteger(s.buddies) && s.buddies >= 2 ? s.buddies : Math.max(2, fallbackBuddies);
+  const candidate = s && Number.isInteger(s.buddies) && s.buddies >= MIN_BUDDIES ? s.buddies : fallbackBuddies;
+  const buddies = Math.max(MIN_BUDDIES, Math.min(MAX_BUDDIES, candidate));
   const seed = s && Number.isInteger(s.seed) ? s.seed : 12345;
   const minSeparation =
     s && Number.isInteger(s.minSeparation) && (s.minSeparation as number) >= 2
@@ -128,6 +134,8 @@ export function importGraph(data: unknown): GraphView {
       girth: girth(g),
       degreeMin,
       degreeMax,
+      connected: summary.connected,
+      largestComponentFraction: largestComponentFraction(g),
     }),
   };
 }

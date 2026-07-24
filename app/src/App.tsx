@@ -36,11 +36,17 @@ export default function App() {
     setTimeout(() => setNotice((n) => (n === msg ? null : n)), 4000);
   };
 
+  // Every graph-replacing action clears transient selection + hover, so no stale
+  // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
+  const resetSelection = () => {
+    setSelected(null);
+    setHovered(null);
+  };
+
   const handleGenerate = (roster: string[], s: Settings) => {
     setNames(roster);
     setSettings(s);
-    setSelected(null);
-    setHovered(null);
+    resetSelection();
     bg.generate(roster, s);
     setModalOpen(false);
   };
@@ -52,7 +58,7 @@ export default function App() {
       return;
     }
     setSettings(s);
-    setSelected(null);
+    resetSelection();
     bg.generate(names, s);
   };
 
@@ -64,8 +70,7 @@ export default function App() {
     bg.loadView(v);
     setNames(v.names);
     setSettings(v.settings);
-    setSelected(null);
-    setHovered(null);
+    resetSelection();
     setModalOpen(false);
   };
 

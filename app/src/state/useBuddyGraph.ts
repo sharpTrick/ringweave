@@ -37,7 +37,13 @@ export function useBuddyGraph() {
     });
   }, [genGenerate]);
 
-  const loadView = useCallback((v: GraphView) => setView(v), []);
+  const loadView = useCallback((v: GraphView) => {
+    // Supersede any in-flight generation: clearing `pending` makes the effect drop a
+    // worker result that arrives AFTER this import, so the imported view isn't clobbered
+    // by a stale reroll/generate that was still running when the file was loaded.
+    pending.current = null;
+    setView(v);
+  }, []);
 
   return { view, status: gen.status, error: gen.error, generate, loadView };
 }
