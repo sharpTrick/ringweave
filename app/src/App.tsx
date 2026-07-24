@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, degreeLabel, nextRerollSeed, rerollBlockReason, type GraphView, type Settings } from "./model";
+import { DEFAULT_SETTINGS, degreeLabel, isOptimal, nextRerollSeed, rerollBlockReason, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -22,7 +22,7 @@ export default function App() {
   // quality so it never claims "best" over a gauge showing < 100%.
   const bg = useBuddyGraph((kept) =>
     flash(
-      kept.metrics.quality === 1
+      isOptimal(kept.metrics)
         ? "That's already an optimal arrangement — a re-roll can't improve it."
         : "Couldn't find a different arrangement — this is what the current settings produce.",
     ),

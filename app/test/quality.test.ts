@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
-import { connectionSummary, qualityPercent, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
+import { connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `P${i}`);
@@ -71,5 +71,17 @@ describe("connectionSummary caption never contradicts the gauge", () => {
       if (pct >= 50) expect(caption).toMatch(/well-linked/);
       else expect(caption).toMatch(/loosely linked/);
     }
+  });
+
+  // Class: the "already optimal" claim must fire ONLY at a provably-optimal score (quality === 1),
+  // never merely because the gauge rounds to 100 — a 99.6% graph a reroll could still improve.
+  it("isOptimal is exact (quality === 1), not gauge-rounded to 100", () => {
+    expect(isOptimal(metrics({ quality: 1 }))).toBe(true);
+    for (const q of [0.996, 0.999, 0.9999]) {
+      const m = metrics({ quality: q });
+      expect(qualityPercent(m)).toBe(100); // gauge shows 100...
+      expect(isOptimal(m)).toBe(false); // ...but it is NOT claimed optimal
+    }
+    expect(isOptimal(metrics({ quality: 0.5 }))).toBe(false);
   });
 });

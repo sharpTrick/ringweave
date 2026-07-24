@@ -34,9 +34,9 @@ export function parseRoster(raw: string): ParsedRoster {
     warnings.push(`That's a lot of text — only the first ${MAX_PARSE_CHARS.toLocaleString()} characters were read.`);
   }
 
-  const seen = new Set<string>();
+  const keptByKey = new Map<string, string>(); // case-insensitive key -> first-kept display name
   const names: string[] = [];
-  const extras = new Map<string, number>(); // display name -> how many extra copies dropped
+  const extras = new Map<string, number>(); // key -> how many extra copies dropped
   let capped = false;
 
   TOKEN.lastIndex = 0;
@@ -47,10 +47,12 @@ export function parseRoster(raw: string): ParsedRoster {
     const token = match[0].replace(CONTROL_CHARS, " ").trim();
     if (!token) continue; // blank tokens are never "lost", so they never trip the cap warning
     const key = token.toLowerCase();
-    if (seen.has(key)) {
+    if (keptByKey.has(key)) {
       // A duplicate isn't lost either. Count it toward the de-dupe warning only while we're
       // still keeping names; a duplicate seen AFTER the cap is simply ignored (nothing dropped).
-      if (names.length < MAX_NAMES) extras.set(token, (extras.get(token) ?? 0) + 1);
+      // Keyed on the case-insensitive KEY so mixed-casing copies of one person (Alice/alice/ALICE)
+      // count as extra copies of that ONE person, not as distinct duplicated names.
+      if (names.length < MAX_NAMES) extras.set(key, (extras.get(key) ?? 0) + 1);
       continue;
     }
     // A genuinely-new name. If we're already full, THIS is the first real name the cap drops —
@@ -60,7 +62,7 @@ export function parseRoster(raw: string): ParsedRoster {
       capped = true;
       break;
     }
-    seen.add(key);
+    keptByKey.set(key, token);
     names.push(token);
   }
 
@@ -69,7 +71,8 @@ export function parseRoster(raw: string): ParsedRoster {
   }
   if (extras.size > 0) {
     const dropped = [...extras.values()].reduce((a, b) => a + b, 0);
-    const list = [...extras.keys()].join(", ");
+    // List each de-duplicated person once, by the casing we KEPT (first occurrence).
+    const list = [...extras.keys()].map((k) => keptByKey.get(k)!).join(", ");
     warnings.push(
       `Removed ${dropped} duplicate ${dropped === 1 ? "entry" : "entries"} (${list}). Each person appears once.`,
     );

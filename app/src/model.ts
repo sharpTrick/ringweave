@@ -66,15 +66,18 @@ export function nextRerollSeed(seed: number): number {
 }
 
 /**
- * Display metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only, so
- * they are meaningful for the whole roster only when it is connected — they are `null`
- * when the graph is disconnected (some pairs never meet) or trivial (n<=1). `girth` is
- * `null` for a forest.
+ * The graph's measured metrics. Most feed the UI: `aspl`/`diameter`/`quality` in QualityPanel,
+ * `regular`/`degreeMin`/`degreeMax` the rail's buddy-count label, `connected`/
+ * `largestComponentFraction`/`quality` the connection caption. `aspl`/`diameter` are
+ * averaged/maxed over REACHABLE pairs only, so they are `null` when the graph is disconnected or
+ * trivial (n<=1). `girth` is NOT shown anywhere in the M2 UI — it is carried through only to the
+ * exported file's `meta.metrics` snapshot (F6), so the schema stays a full characterization; it
+ * is `null` for a forest.
  */
 export interface Metrics {
   aspl: number | null;
   diameter: number | null;
-  girth: number | null;
+  girth: number | null; // export-only (meta.metrics); not displayed in M2
   quality: number; // 0..1; 0 when disconnected (there is no whole-group closeness to score)
   connected: boolean;
   largestComponentFraction: number; // 1 when connected; else the largest group's share
@@ -123,6 +126,14 @@ export function degreeExtent(degrees: number[]): [number, number] {
     straddle). */
 export function qualityPercent(m: Metrics): number {
   return Math.round(m.quality * 100);
+}
+
+/** Whether the graph is PROVABLY optimal (quality exactly 1 = zero Moore gap). Deliberately the
+    exact score, NOT `qualityPercent(m) === 100`: a 99.6% graph rounds to a gauge of 100 but a
+    reroll could still improve it, so the "already optimal" copy must not fire there. The single
+    seam for the optimality claim, beside qualityPercent, so all quality-derived copy agrees. */
+export function isOptimal(m: Metrics): boolean {
+  return m.quality === 1;
 }
 
 /** Gauge percentage at/above which a connected graph reads as "well-linked" rather than "loosely". */

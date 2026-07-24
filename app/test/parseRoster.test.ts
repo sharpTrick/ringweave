@@ -18,6 +18,18 @@ describe("parseRoster", () => {
     expect(warnings[0]).toMatch(/alice|Alice/);
   });
 
+  // Class: same person in mixed casing with multiple extra copies must be reported as ONE
+  // de-duplicated person (by the kept casing), with the count = total extra copies dropped.
+  it("lists each case-variant person once in the dedupe warning, by the kept casing", () => {
+    const { names, warnings } = parseRoster("Alice\nalice\nALICE\nBob\nBOB");
+    expect(names).toEqual(["Alice", "Bob"]); // first-seen casing kept
+    const w = warnings.join(" ");
+    expect(w).toMatch(/Removed 3 duplicate entries/); // 2 extra Alices + 1 extra Bob
+    // each distinct person appears once in the parenthetical, by kept casing
+    const list = w.match(/\(([^)]*)\)/)![1];
+    expect(list.split(", ").sort()).toEqual(["Alice", "Bob"]);
+  });
+
   it("no warnings when there are no duplicates", () => {
     const { names, warnings } = parseRoster("A\nB\nC");
     expect(names).toEqual(["A", "B", "C"]);
