@@ -68,7 +68,7 @@ design/             Rendered design directions (1a/1b/1c) + mock state screensho
 - **M1b: churn benchmark. DONE.** `reference-python/churn_bench.py` swept preserved-edge
   fraction vs prior-weight at n ∈ {30, 60, 120}; results + the honest F9 claim in
   `docs/findings/churn-priors-weight.md` (default prior weight confirmed at 2).
-- **M2 (next): the app.** Vite + React 18 + TS under `app/`; port the mock's UI onto the real
+- **M2 (next): the app.** Vite + React 19 + TS under `app/`; port the mock's UI onto the real
   core; worker-wrap generation; flip `pages.yml` live (upload path → `app/dist`). The core
   already exposes `largestComponentFraction` for the honest connectivity report.
 - **M3/M4:** per PROJECT_PLAN (constraints UI, explorer, recalc, replay, share links).

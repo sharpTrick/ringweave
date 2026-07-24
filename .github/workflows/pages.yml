@@ -1,59 +1,108 @@
-# Deploys the built site to GitHub Pages.
+# Builds the production site plus a preview of every open same-repo PR into one
+# GitHub Pages artifact, then deploys it. No gh-pages branch — pure Actions artifact.
 #
-# This is scaffolded for the UI phase. Once a Vite app is added (e.g. under
-# `app/` with `vite build` emitting to `app/dist`), point the upload path at it
-# and enable Pages in repo Settings -> Pages -> Source: GitHub Actions.
+#   production        -> https://sharptrick.github.io/ringweave/
+#   preview of PR #N  -> https://sharptrick.github.io/ringweave/pr-preview/pr-N/
 #
-# Until the UI exists, this workflow is inert (only runs on manual dispatch).
+# One-time repo settings required (see the PR description):
+#   1. Settings -> Pages -> Source: "GitHub Actions".
+#   2. Settings -> Environments -> github-pages -> Deployment branches: allow
+#      refs/pull/*/merge (or "No restriction"), so pull_request runs may deploy.
 
 name: Deploy Pages
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
   workflow_dispatch:
-  # push:
-  #   branches: [main, master]
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  pull-requests: write   # for the sticky preview-URL comment
 
 concurrency:
   group: pages
-  cancel-in-progress: true
-
-defaults:
-  run:
-    working-directory: lib
+  cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: lib/package-lock.json
-      - run: npm ci
-      - run: npm test
-      # UI phase: build the front-end here, e.g.
-      #   - run: npm --prefix app ci
-      #   - run: npm --prefix app run build   # emits app/dist
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          # Path is relative to the repo root (not the `defaults` working-directory).
-          # UI phase: change to app/dist once the front-end exists.
-          path: lib/dist
-
-  deploy:
-    needs: build
+  build-deploy:
+    # Skip fork PRs — they get no token/env access, so their preview can't deploy.
+    # Same-repo PRs + pushes to main only.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build production + all open PR previews
+        run: |
+          set -euo pipefail
+          SITE="$PWD/_site"; rm -rf "$SITE"; mkdir -p "$SITE"
+
+          # Build the checked-out working tree into $2, served from base path $1.
+          build_into () {  # $1=base path  $2=dest dir
+            mkdir -p "$2"
+            if [ ! -f app/package.json ]; then
+              # Older ref without the app yet — emit a placeholder so the deploy
+              # still succeeds instead of failing the whole run.
+              echo "<!doctype html><title>ringweave</title><p>Coming soon.</p>" > "$2/index.html"
+              return
+            fi
+            npm --prefix app ci
+            VITE_BASE="$1" npm --prefix app run build
+            cp -r app/dist/* "$2"/
+          }
+
+          # Production, from the tip of main.
+          build_into "/ringweave/" "$SITE"
+
+          # One preview per open, same-repo (non-fork) PR.
+          for pr in $(gh pr list --state open --json number,isCrossRepository \
+                        --jq '.[] | select(.isCrossRepository==false) | .number'); do
+            echo "::group::Building preview for PR #$pr"
+            git fetch --no-tags origin "pull/$pr/head"
+            git checkout -f -q FETCH_HEAD
+            build_into "/ringweave/pr-preview/pr-$pr/" "$SITE/pr-preview/pr-$pr"
+            git checkout -f -q main
+            echo "::endgroup::"
+          done
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          number: ${{ github.event.pull_request.number }}
+          header: pages-preview
+          message: |
+            ### 🔎 Preview deployed
+
+            **https://sharptrick.github.io/ringweave/pr-preview/pr-${{ github.event.pull_request.number }}/**
+
+            Rebuilt on every push to this PR (note the trailing slash). Removed from
+            the site automatically once the PR is closed.
