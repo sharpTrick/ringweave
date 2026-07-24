@@ -60,8 +60,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: app/package-lock.json
+
+      # setup-node's built-in `cache: npm` is not used here: this job checks out
+      # `main` and then each PR head in turn, so `app/package-lock.json` may be
+      # absent (e.g. on a `main` that predates the app) or differ per ref, which
+      # makes a single cache-dependency-path resolve to nothing and hard-fail.
+      # Cache the shared npm download dir instead, keyed on any lockfile present.
+      - name: Cache ~/.npm
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
 
       - name: List open same-repo PRs
         id: prs
