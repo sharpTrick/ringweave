@@ -41,8 +41,8 @@ interface Fit {
 }
 
 /** A stable normalized->pixel transform covering both layouts, so points move but the
-    frame doesn't rescale mid-animation. */
-function computeFit(pts: Pt[]): Fit {
+    frame doesn't rescale mid-animation. Pure (no state) — exported for framing tests. */
+export function computeFit(pts: Pt[]): Fit {
   if (pts.length === 0) return { s: 1, cx: VB_W / 2, cy: VB_H / 2 };
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const p of pts) {
@@ -73,10 +73,23 @@ export default function GraphCanvas({
   // (bounded but non-trivial at large n) never runs unless the user actually asks for force.
   // `layout` is a dep, so switching to force computes it in the same render (never null then).
   const forcePos = useMemo(() => (layout === "force" ? forceLayout(n, edges) : null), [layout, n, edges]);
-  // Frame the union of ALL modes' positions so toggling layout pans but never rescales.
+
+  // Keep the union frame STABLE across ring<->force toggles. `forcePos` is null in ring mode
+  // (the settle is deferred), so framing off it alone would collapse the frame back to ring on
+  // every toggle and re-pop the scale. Instead, remember the force settle once computed for THIS
+  // graph (keyed on the edges identity, which changes only on a new graph) and frame the union
+  // from that — so a return to ring keeps the same frame. The first switch to force reframes once
+  // (unavoidable without settling eagerly, which we avoid to keep ring mode cheap); after that,
+  // toggling only pans. A new graph invalidates the cache back to a ring-only frame.
+  const forceFitRef = useRef<{ edges: [number, number][]; pts: Pt[] } | null>(null);
+  if (forcePos && forceFitRef.current?.edges !== edges) {
+    forceFitRef.current = { edges, pts: forcePos };
+  }
+  const forceForFit = forceFitRef.current?.edges === edges ? forceFitRef.current.pts : null;
+  // Frame the union of ALL modes' positions so a settled toggle pans within a fixed viewBox.
   const fit = useMemo(
-    () => computeFit(LAYOUT_MODES.flatMap((m) => positionsFor(m, ringPos, forcePos))),
-    [ringPos, forcePos],
+    () => computeFit(LAYOUT_MODES.flatMap((m) => positionsFor(m, ringPos, forceForFit))),
+    [ringPos, forceForFit],
   );
 
   const target = positionsFor(layout, ringPos, forcePos);

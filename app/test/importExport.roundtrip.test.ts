@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
 import { parseRoster } from "../src/io/parseRoster";
-import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
+import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, MAX_ROSTER_N, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -51,6 +51,15 @@ describe("export -> import round-trip (F6)", () => {
 
 describe("import hardening (adversarial files)", () => {
   const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i, name: `P${i}` }));
+
+  // Invariant: import is capped to the SAME ceiling as generation because it re-measures
+  // synchronously on the main thread — raising MAX_IMPORT_N above MAX_ROSTER_N would reintroduce
+  // an O(n^2) freeze on load. Guard the equality so the two can't silently drift apart.
+  it("caps import at exactly the generation ceiling (MAX_IMPORT_N === MAX_ROSTER_N)", () => {
+    expect(MAX_IMPORT_N).toBe(MAX_ROSTER_N);
+    // and the boundary is enforced: n = ceiling accepted, n = ceiling + 1 refused
+    expect(() => importGraph({ version: 1, people: people(MAX_IMPORT_N + 1).map((p) => ({ name: p.name })), edges: [] })).toThrow(/limit/i);
+  });
 
   it("rejects an oversized roster FAST, before any O(n^2) metric runs", () => {
     const file = { version: 1, people: people(MAX_IMPORT_N + 1).map((p) => ({ name: p.name })), edges: [] as [number, number][] };

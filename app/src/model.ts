@@ -31,13 +31,17 @@ export const SEPARATION_MAX = 12;
 /** The default minimum separation, surfaced when the field is unset and used as the fallback
     for an invalid imported value — mirrors the core's `DEFAULT_MIN_SEPARATION` so both Settings
     producers (the settings panel and import) agree on one default instead of drifting (the
-    panel showing 5 while an invalid import silently fell back to SEPARATION_MIN). This is the
-    single source; if the core's default moves, this re-export moves with it. */
-export const SEPARATION_DEFAULT = DEFAULT_MIN_SEPARATION;
+    panel showing 5 while an invalid import silently fell back to SEPARATION_MIN). It is an
+    IN-RANGE fallback, so it's clamped to [SEPARATION_MIN, SEPARATION_MAX]: if the core ever moves
+    its default outside the UI range, this stays a value the stepper can express (guarded by a
+    model invariant test) rather than silently feeding an out-of-range value to a reroll. */
+export const SEPARATION_DEFAULT = Math.max(SEPARATION_MIN, Math.min(SEPARATION_MAX, DEFAULT_MIN_SEPARATION));
 
 /** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
-    runs tens of seconds even off-thread, so the roster parser truncates and feasibility
-    refuses above it. (Import can display more — it only re-measures — but reroll is gated.) */
+    runs tens of seconds even off-thread, so the roster parser truncates and feasibility refuses
+    above it. Import is capped to the SAME ceiling (MAX_IMPORT_N = MAX_ROSTER_N in importGraph.ts),
+    because import re-measures synchronously on the main thread — allowing more would reintroduce
+    an O(n²) freeze on load. */
 export const MAX_ROSTER_N = 1000;
 
 /** Roster size above which the core auto-disables polish (mirrors `resolveWantPolish` in
