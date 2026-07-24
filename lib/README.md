@@ -24,7 +24,7 @@ genealogy and acknowledgments (notably Markus Meringer's GENREG).
 
 Under the hood this builds a near-regular graph with small **average shortest
 path length (ASPL)** — the mathematical target behind "everyone stays close to
-everyone." The selected algorithm (see [`FINDINGS.md`](./FINDINGS.md)) is:
+everyone." The selected algorithm (see [`FINDINGS.md`](../docs/findings/FINDINGS.md)) is:
 
 > **ring-greedy + incremental distance cache + degree repair**, with an optional
 > fixed-seed **polish** pass at small sizes where it reaches provably-optimal

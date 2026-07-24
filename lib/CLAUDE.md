@@ -2,6 +2,13 @@
 
 Scope: the zero-dependency algorithm library in `lib/`. App conventions come later (M2).
 
+Durable knowledge lives in **`../docs/findings/`** — research findings, cost models, and
+hard-won lessons (the *why* behind decisions, with evidence). When a review or an
+experiment teaches you something a future contributor should be able to trust and act on,
+write it there, not only in a commit message. The *known limitations* below are the
+lib-local, live version of that; the findings directory is where the reasoning and
+measurements are recorded in full.
+
 ## Commands (run from `lib/`)
 
 - `npm install` — deps (dev-only; the shipped core has no runtime deps)

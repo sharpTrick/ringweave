@@ -34,9 +34,9 @@ design/             Rendered design directions (1a/1b/1c) + mock state screensho
 
 1. `docs/PROJECT_PLAN.md` — **source of truth** for features, priorities, milestones,
    non-functional requirements. Status banner at top reflects current state.
-2. `docs/CONSTRAINT_FINDINGS.md` — the constraint architecture decision (constrained-greedy
+2. `docs/findings/CONSTRAINT_FINDINGS.md` — the constraint architecture decision (constrained-greedy
    backbone + constraint-preserving polish; seat and free-repair eliminated on data).
-3. `docs/FINDINGS.md` — the original algorithm bake-off (why ring-greedy + cache; why polish;
+3. `docs/findings/FINDINGS.md` — the original algorithm bake-off (why ring-greedy + cache; why polish;
    the cached-greedy scaling addendum).
 4. `docs/CONCEPT_LINEAGE.md` — attribution and intellectual genealogy. **Ship this in the
    repo**; the Meringer acknowledgment is a commitment, not decoration.

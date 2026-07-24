@@ -3,7 +3,7 @@
 > **STATUS (July 2026, pre-handoff):** Naming settled — repo/npm package **`ringweave`**
 > (the algorithm library), product name **BuddyGraph** (the web app). M0/M1 are
 > substantially **de-risked ahead of schedule**: the constraint-architecture bake-off is done
-> (see `CONSTRAINT_FINDINGS.md`) — constrained-greedy (B) + constraint-preserving polish won;
+> (see `findings/CONSTRAINT_FINDINGS.md`) — constrained-greedy (B) + constraint-preserving polish won;
 > label-assignment and free+repair were eliminated on data. The churn/priors soft mechanism is
 > validated (47–81% prior-buddy preservation via polish penalty). Remaining M1 work is the
 > **TypeScript port** of `constrained_gen.py` + `constraints.py` into `lib/src/core`, with
@@ -12,7 +12,7 @@
 > React app wired to the real core.
 
 **Author:** Patrick Sharp (github: sharpTrick) · Plan drafted with Claude (Anthropic), July 2026
-**Status of foundations:** core algorithm selected and validated (see FINDINGS.md), TypeScript
+**Status of foundations:** core algorithm selected and validated (see findings/FINDINGS.md), TypeScript
 core built with 38 passing tests including byte-identity vs the Python reference.
 
 ## 1. Vision
@@ -127,7 +127,7 @@ last (footnote), metrics tick down live.*
 
 ### F12. What-if resilience — P2
 *As an organizer, I click "simulate X leaving" (or "random 10% leave") and watch the group
-stay connected — the robustness pass from FINDINGS as a live demo.*
+stay connected — the robustness pass from findings/FINDINGS.md as a live demo.*
 
 ### F13. Shareable state — P2
 *As an organizer, I share a URL that encodes the graph (compressed in the fragment, so nothing

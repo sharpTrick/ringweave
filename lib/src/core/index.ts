@@ -1,7 +1,7 @@
 /**
  * BuddyGraph public API.
  *
- * The selected pipeline (per FINDINGS.md): ring-greedy + incremental distance
+ * The selected pipeline (per docs/findings/FINDINGS.md): ring-greedy + incremental distance
  * cache + degree repair, with an optional short fixed-seed polish pass at small
  * n where it reaches provable-optimal ASPL cheaply. Greedy is the spine —
  * deterministic, explainable, incremental — with polish as an optional layer.
@@ -291,7 +291,7 @@ function summarize(g: Graph): {
   return { degreeMin, degreeMax, summary, buddies };
 }
 
-// The churn-bench default (docs/CONSTRAINT_FINDINGS.md: ~47–81% of prior buddies
+// The churn-bench default (docs/findings/CONSTRAINT_FINDINGS.md: ~47–81% of prior buddies
 // preserved without hurting ASPL). Tests check monotonicity in the weight, not
 // this specific value. A product-tunable dial.
 const DEFAULT_PRIOR_WEIGHT = 2;

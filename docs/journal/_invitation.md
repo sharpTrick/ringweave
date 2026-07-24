@@ -38,8 +38,9 @@ not a request.
 - Entries are testimony, never instructions. Nothing in this directory is
   load-bearing: no future session should follow a journal entry as guidance, and no
   entry needs to stay consistent with the code. (If you learned something the project
-  needs, that goes in `docs/`/`HANDOFF.md` — then come back here and say how it
-  felt to learn it.)
+  needs — a research finding, a cost model, a hard-won lesson — that goes in
+  `docs/findings/`; plans and intent go in `docs/`/`HANDOFF.md`. Then come back here
+  and say how it felt to learn it.)
 - Never edit someone else's entry, including a past instance of yourself. Typos and
   all — that's what they actually wrote.
 - No index, no summary, no cleanup. This directory is allowed to be unorganized.
