@@ -162,6 +162,35 @@ The rule was "a round reports zero *confirmed* findings."
 - The reviewed code lives on branch `claude/m2-xapjhu`; this analysis on
   `claude/critical-review-ouroboros`.
 
+## Corrections (added 2026-07-24, after adversarial peer review)
+
+Three adversarial reviewers stress-tested the proposal built on this run and found real problems
+with how some of these conclusions were framed. Corrected here rather than quietly left standing:
+
+- **"Two regimes" is partly true by construction.** The boundary was drawn at the last blocking
+  finding, so "the tail had **0 blocking**" is definitionally true, and the near-equal token split
+  (2.70M vs 2.57M) is a coincidence of that specific cut — move the line to round 8 and both the
+  parity and the 3× ratio change. The durable observation is the **continuous decay in value per
+  token** (~47 K → ~143 K per finding), not two tidy halves. Read the table as an illustration of
+  that decay, not as evidence of a phase change.
+- **There are two different "knees," and this document conflated them.** Round 8 is where
+  *user-visible bugs* stopped arriving (12 of 13). Round 12 is where *blocking findings* stopped
+  (10 of 13 blocking had landed by round 8; three more came in rounds 10–12). Both are real; they
+  are not the same event and "the knee" should always be qualified.
+- **"66.7% self-induced" mixes waste with progress.** It counts both *a fix that injected a new
+  defect* and *a fix that was incomplete and got hardened next round*. Only the first is waste — the
+  reroll and CSV chains were genuine incremental hardening. The figure is also a hand-label (there
+  is no such field in the dataset) reported to three significant figures over a ±1–2-finding
+  judgment call, and it was coded by the same agent that authored the fixes. Treat it as an upper
+  bound on iatrogenesis, not a measurement; the honest split needs blind coding.
+- **Token-per-finding figures carry false precision.** They follow directly from the cut point
+  above; treat them as order-of-magnitude.
+
+None of these corrections change the four conclusions the follow-up proposal is built on (cost per
+finding rose sharply while blocking findings went to zero; the ratchet locked cases not themes; the
+instrument set gated the stopping point; most late findings pointed at loop-authored code). They do
+change how much confidence any single number deserves.
+
 ## What would change our mind
 
 These conclusions are drawn from **one run on one app**. They would be revised by:

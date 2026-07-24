@@ -19,18 +19,34 @@ its structured outputs, and reports what actually happened — quantitatively fi
 
 ## Convention
 
-- One directory per experiment, with a memorable codename. A `README.md` is the durable,
-  git-readable record (numbers over adjectives; state what would change the conclusion). Visual
-  companions and the reproducible datasets live alongside it.
+- **Experiments** get a date-prefixed directory with a memorable codename
+  (`2026-07-24-ouroboros/`). A `README.md` is the durable, git-readable record (numbers over
+  adjectives; state what would change the conclusion). Visual companions and the reproducible
+  datasets live alongside it.
+- **Proposals** get a date-prefixed file (`2026-07-24-external-oracle-review-proposal.md`). A
+  proposal is not load-bearing until an experiment measures it; say so at the top.
+- Date-prefixed because process experiments are *episodes* — unlike an algorithm finding, the run
+  date is part of what the record means (which tooling, which protocol version, which app state).
 
 ## Experiments
 
-- **[`ouroboros/`](./ouroboros/)** — the first run: full-surface, 4-critic adversarial review to
-  zero-confirmed convergence with test-ratcheting, on `app/`. 18 rounds, 92 findings. Signature
-  result: the loop spent its second half (rounds 13–21) reviewing its own output — **66.7% of
-  findings were self-induced**, at 3× the cost-per-finding of the productive first half and with
-  a single user-facing bug to show for it. Established the "two-regime" shape and the gap between
-  the zero-confirmed stop signal and actual user value.
+- **[`2026-07-24-ouroboros/`](./2026-07-24-ouroboros/)** — the first run: full-surface, 4-critic
+  adversarial review to zero-confirmed convergence with test-ratcheting, on `app/`. 18 rounds, 92
+  findings. Signature result: the loop spent its second half reviewing its own output, at ~3× the
+  cost per finding of the productive first half, with one user-visible bug to show for it.
+  Established the value-decay curve, the case-vs-theme gap in the test ratchet, and the gap between
+  the zero-confirmed stop signal and actual user value. Carries a corrections section from
+  subsequent peer review — read it alongside the conclusions.
+
+## Proposals
+
+- **[`2026-07-24-external-oracle-review-proposal.md`](./2026-07-24-external-oracle-review-proposal.md)**
+  — what to change after Ouroboros, hardened against three adversarial peer reviews. Organizing
+  principle: *every robust fix replaces agent judgment with an external oracle or is strictly
+  subtractive; every fragile one asks an agent to grade its own work.* Two levers (shrink the junk
+  denominator; find what prose critics can't), low-level changes to the critic/skill/workflow
+  definitions, and three experiments with pre-registered success criteria — keystone first: build
+  the seeded-defect recall harness before the improvements that claim "no loss of recall."
 
 ## Companion documents
 
