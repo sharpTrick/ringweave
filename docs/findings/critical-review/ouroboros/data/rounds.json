@@ -1,0 +1,2208 @@
+[
+  {
+    "file": "w7odrrp6p.output",
+    "t0": 1784873664258,
+    "converged": false,
+    "counts": {
+      "confirmed": 7,
+      "blocking": 4,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "metrics-ignore-connectivity",
+        "file": "app/src/io/importGraph.ts",
+        "line": 115,
+        "summary": "An imported disconnected graph is scored as 100% connection quality with a small finite ASPL, because the app discards the core's `connected` flag (and never calls `largestComponentFraction`). `allPairsSummary` averages ASPL over REACHABLE pairs only, so a split roster yields a finite, misleadingly-low aspl; `asplGap` then goes negative (the reachable-pairs mean beats the Moore bound computed for the whole n) and `clampQuality` pins quality to 1."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "stale-async-result-clobbers-newer-state",
+        "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+        "line": 20,
+        "summary": "An import that lands while a generate/reroll is still in flight is silently overwritten when the worker result finally arrives."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "degenerate-metric-reads-as-optimal",
+        "file": "/home/user/ringweave/app/src/model.ts",
+        "line": 46,
+        "summary": "An imported disconnected/edgeless graph displays 100% connection quality, contradicting its own disconnected metrics."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "unbounded-generation-work-from-imported-k",
+        "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+        "line": 39,
+        "summary": "Imported settings.buddies is clamped only on the low side (>=2), never bounded above, so a crafted high-degree import injects an arbitrarily large k (up to n-1) that later generation consumes, hanging the worker for hours and wedging all future generation."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "disconnected-graph-scored-optimal",
+        "file": "/home/user/ringweave/app/src/model.ts",
+        "line": 46,
+        "summary": "A fully disconnected imported graph with zero edges reports 100% connection quality because asplGap short-circuits to 0 when degreeMax=0 (k=0), while aspl displays as '—'."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "misleading-displayed-metric",
+        "file": "/home/user/ringweave/app/src/model.ts",
+        "line": 76,
+        "summary": "Connection-quality reads 100% for a fully-disconnected / edgeless imported graph because asplGap treats degree-0 (k=0) as \"no Moore bound => optimal\"."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-shape-that-can-drift",
+        "file": "/home/user/ringweave/app/src/io/schema.ts",
+        "line": 21,
+        "summary": "BuddyGraphFile.meta.metrics re-declares the full model.Metrics shape by hand, and importGraph never reads meta at all — it is a write-only mirror that can silently drift from Metrics."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "stale-selection-state-on-regenerate",
+        "file": "/home/user/ringweave/app/src/App.tsx",
+        "line": 48,
+        "summary": "handleReroll resets `selected` but not `hovered`; every other graph-replacing path (handleGenerate, applyImported) resets both, so the reroll path is an inconsistent outlier."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 259514,
+        "tokens": 65250,
+        "toolCalls": 42,
+        "startedAt": 1784873664258,
+        "queuedAt": 1784873661302
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 258779,
+        "tokens": 58790,
+        "toolCalls": 37,
+        "startedAt": 1784873664960,
+        "queuedAt": 1784873661302
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 407065,
+        "tokens": 65715,
+        "toolCalls": 32,
+        "startedAt": 1784873927861,
+        "queuedAt": 1784873661302
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 320404,
+        "tokens": 69442,
+        "toolCalls": 47,
+        "startedAt": 1784873932912,
+        "queuedAt": 1784873661303
+      }
+    ],
+    "totalTokens": 259197,
+    "totalToolCalls": 158,
+    "seq": 1
+  },
+  {
+    "file": "w4yq4w0wj.output",
+    "t0": 1784875001905,
+    "converged": false,
+    "counts": {
+      "confirmed": 11,
+      "blocking": 1,
+      "plausible": 2
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "disconnected-fraction-rounds-to-100",
+        "file": "/home/user/ringweave/app/src/panels/QualityPanel.tsx",
+        "line": 43,
+        "summary": "When a disconnected import's largest component is >=99.5% of the roster, Math.round makes the panel display '100% are in the largest group' while simultaneously saying 'not everyone's connected' — a self-contradiction, and a number that disagrees with the core's actual largestComponentFraction (<1)."
+      },
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "n1-import-well-linked-with-zero-quality",
+        "file": "/home/user/ringweave/app/src/panels/QualityPanel.tsx",
+        "line": 42,
+        "summary": "A 1-person import yields connected=true but quality=0 and aspl/diameter=null (no reachable pairs), so the panel shows 'connection quality — everyone's well-linked' next to a 0% gauge and '—' hops, a contradictory readout."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-busy-indicator-on-supersede",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 40,
+        "summary": "loadView supersedes an in-flight generation by clearing `pending`, but does not reset the worker's `running` status, so the App's \"Generating…\" overlay stays up over the freshly-imported graph until the superseded worker finishes."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicate-quality-formula-off-display-path",
+        "file": "app/src/model.ts",
+        "line": 47,
+        "summary": "The exported quality(aspl,n,k) helper (scored at target k) is a second, divergent implementation of the display quality that assembleMetrics computes inline at degreeMax; they disagree for irregular graphs and the tests exercise only the off-path helper."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "uncapped-main-thread-work-on-hostile-import",
+        "file": "app/src/graph/layout.ts",
+        "line": 56,
+        "summary": "A dense imported graph passes every round-4 import cap yet triggers a multi-second main-thread freeze: the size gates bound the BFS metric cost but nothing bounds the synchronous force layout or the SVG render, which scale with EDGE count while FORCE_MAX_N gates only on node count."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "superlinear-generation-uncancellable-worker",
+        "file": "app/src/io/feasibility.ts",
+        "line": 38,
+        "summary": "The app admits rosters up to MAX_NAMES=5000, but unconstrained generation (ringGreedy) is ~O(n^3); feasibility grossly understates it ('may take a few seconds' above 800) and the single worker has no cancellation, so a stale long run blocks all later generate/reroll."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "per-keystroke-work-unbounded-by-name-cap",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 27,
+        "summary": "parseRoster's tokenization (split/map/filter) materializes the full token array of the whole 2 MB-capped text before MAX_NAMES caps the dedup loop, so per-keystroke cost is O(chars), not O(names)."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-display-caption",
+        "file": "/home/user/ringweave/app/src/panels/QualityPanel.tsx",
+        "line": 41,
+        "summary": "The connection-quality caption branches only on `m.connected`, so a connected-but-poorly-linked graph shows a near-zero gauge while the text asserts everyone is well-linked."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-magic-constant",
+        "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+        "line": 6,
+        "summary": "The buddies-per-person range [2,12] is hardcoded in three independent places with only a prose 'mirrors' comment tying them together, so a change to the UI stepper silently desyncs the import clamp."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-logic-and-stale-comment",
+        "file": "/home/user/ringweave/app/src/model.ts",
+        "line": 41,
+        "summary": "`quality()` is exercised only by tests: production re-inlines `clampQuality(asplGap(...))` in assembleMetrics, and quality()'s own doc claims the Moore-gap is 'never re-derived in the UI' — which the inline re-derivation contradicts."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-helper",
+        "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+        "line": 28,
+        "summary": "`degreeExtent` is a byte-for-byte duplicate of the core's private helper in lib/src/core/index.ts:314-323."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "generation-connectivity-assumed-not-measured",
+        "file": "app/src/model.ts",
+        "line": 127,
+        "summary": "viewFromResult hardcodes connected:true and largestComponentFraction:1 because BuddyResult carries no connectivity field, so the false-100% path the import fix guards against is only assumed-away, never measured, on the generation path."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "untrusted-field-into-generation-unclamped",
+        "file": "app/src/io/importGraph.ts",
+        "line": 47,
+        "summary": "sanitizeSettings clamps buddies to the UI range [2,12] (round-4 fix) but leaves minSeparation unclamped (any integer >= 2 from the file flows through), an incomplete version of the same untrusted-field-into-generation hardening."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 424775,
+        "tokens": 87438,
+        "toolCalls": 39,
+        "startedAt": 1784875002678,
+        "queuedAt": 1784874998951
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 327117,
+        "tokens": 78540,
+        "toolCalls": 36,
+        "startedAt": 1784875001905,
+        "queuedAt": 1784874998952
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 601162,
+        "tokens": 87249,
+        "toolCalls": 35,
+        "startedAt": 1784875332451,
+        "queuedAt": 1784874998952
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 332748,
+        "tokens": 84559,
+        "toolCalls": 35,
+        "startedAt": 1784875430994,
+        "queuedAt": 1784874998952
+      }
+    ],
+    "totalTokens": 337786,
+    "totalToolCalls": 145,
+    "seq": 2
+  },
+  {
+    "file": "wx9xatibi.output",
+    "t0": 1784876760524,
+    "converged": false,
+    "counts": {
+      "confirmed": 9,
+      "blocking": 0,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-gate-message",
+        "file": "/home/user/ringweave/app/src/App.tsx",
+        "line": 57,
+        "summary": "handleReroll refuses with a hardcoded 'adjust buddy count' message that ignores the real feasibility reason, so a large imported roster is told to do something that can't fix it."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "shared-constant-conflates-distinct-concepts",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 21,
+        "summary": "minSeparation (degrees of separation, a distinct domain concept) is clamped to the buddies-per-person range [BUDDY_MIN, BUDDY_MAX] in three places, coupling two unrelated knobs to one constant pair."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "lossy-roster-roundtrip",
+        "file": "app/src/App.tsx",
+        "line": 139,
+        "summary": "An imported person whose name contains a comma is silently split into two people if the user opens 'Edit people' and regenerates, because the roster textarea round-trips through a comma/newline parser."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "mixed-responsibility-component",
+        "file": "app/src/App.tsx",
+        "line": 161,
+        "summary": "App embeds a full transient-notice/toast subsystem (state + effect + flash timer + inline-styled render) alongside generation orchestration, selection, hover, layout, and import plumbing -- the clearest separable seam in the god-component."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unbounded-controlled-input-rerender",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 28,
+        "summary": "Roster textarea stores untruncated text; only the parse is capped, not the stored/rendered string."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "sync-uncapped-metric-on-main-thread",
+        "file": "app/src/io/importGraph.ts",
+        "line": 105,
+        "summary": "Import re-measures with uncapped O(n·(n+m)) core metrics synchronously; the density cap still admits a >1s main-thread freeze."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "coupled-constant-reuse",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 21,
+        "summary": "The min-separation knob (a girth-flavored degrees-of-separation value, core default 5) is clamped to [BUDDY_MIN, BUDDY_MAX]=[2,12] — constants named for and otherwise used as BUDDY COUNT (setK, buddies sanitize, and the density cap 2m<=BUDDY_MAX*n). Two unrelated quantities now share one bound. Same reuse at SettingsControls.tsx:43-44 (input min/max) and importGraph.ts:36 (sanitizeSettings)."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-magic-number",
+        "file": "app/src/io/importGraph.ts",
+        "line": 37,
+        "summary": "The default seed literal 12345 is written twice — DEFAULT_SETTINGS (model.ts:14) and sanitizeSettings' fallback (importGraph.ts:37) — and both mirror the core's un-exported default seed in buildBuddyGraph. There is no single named constant tying them together."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "hardcoded-token-value",
+        "file": "app/src/styles/app.css",
+        "line": 74,
+        "summary": "The stylesheet header and app/CLAUDE.md both promise 'a light theme is a later token-swap,' but several color literals hardcode the value of an existing CSS custom property instead of referencing it: --bg (#0a0e1a) is inlined as the node-label halo stroke (line 74) and the active toggle text color (line 101); --panel-solid (#0e1626) is inlined as .btn-warm text (line 90)."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 652997,
+        "tokens": 98680,
+        "toolCalls": 47,
+        "startedAt": 1784876760524,
+        "queuedAt": 1784876757170
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 340936,
+        "tokens": 80399,
+        "toolCalls": 39,
+        "startedAt": 1784876760892,
+        "queuedAt": 1784876757171
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 408176,
+        "tokens": 73456,
+        "toolCalls": 34,
+        "startedAt": 1784877104746,
+        "queuedAt": 1784876757171
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 479255,
+        "tokens": 86185,
+        "toolCalls": 41,
+        "startedAt": 1784877418404,
+        "queuedAt": 1784876757171
+      }
+    ],
+    "totalTokens": 338720,
+    "totalToolCalls": 161,
+    "seq": 3
+  },
+  {
+    "file": "w3mv2lgky.output",
+    "t0": 1784878415998,
+    "converged": false,
+    "counts": {
+      "confirmed": 8,
+      "blocking": 3,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "import-name-not-roundtrip-stable-through-parser",
+        "file": "app/src/io/importGraph.ts",
+        "line": 93,
+        "summary": "importGraph only rejects names containing comma/newline, but accepts empty, whitespace-only, and duplicate names that the roster editor's parseRoster silently drops or merges — so Edit→regenerate deletes people and shifts every downstream buddy assignment."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "file-input-value-not-reset",
+        "file": "/home/user/ringweave/app/src/App.tsx",
+        "line": 156,
+        "summary": "Neither file <input> clears e.target.value after handling, so selecting the same filename twice never re-fires onChange (same class in RosterModal.tsx:76)."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "uncapped-worker-cost-no-cancel",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 52,
+        "summary": "Explicit polish=\"on\" has no roster-size gate, so a modest roster runs the core polish loop (O(n·m)/iter × 20000 iters) for tens of seconds to minutes with no cancel affordance during first generation."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "reroll-silent-noop",
+        "file": "app/src/App.tsx",
+        "line": 52,
+        "summary": "\"Different arrangement\" (handleReroll bumps seed by 1) is a silent no-op for every roster larger than 120 people: seed only feeds the polish RNG, and polish auto-disables above n=120, so the RNG-free greedy returns byte-identical edges."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "seed-advance-precision",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 23,
+        "summary": "setSeed accepts any integer including values >= 2^53, where handleReroll's `seed + 1` is a no-op at float precision, so even in the polish-on regime reroll can return an identical graph."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "silent-noop-primary-action",
+        "file": "app/src/App.tsx",
+        "line": 51,
+        "summary": "The prominent \"↻ Different arrangement\" reroll button silently does nothing for rosters over 120 people. It only bumps settings.seed, but the core's greedy generator is RNG-free and its auto-polish (the sole seed-dependent stage) is capped at n<=120. So for n>120 with the default polish:\"auto\" (or polish off), seed++ yields a byte-identical graph and no visible change or feedback."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-doc-comment",
+        "file": "app/CLAUDE.md",
+        "line": 79,
+        "summary": "The \"Known follow-ons\" note states import size caps are \"(`MAX_IMPORT_N`=2000 etc.) ... tighter than generation's\". After the round-6 change MAX_IMPORT_N = MAX_ROSTER_N = 1000 (importGraph.ts:29, model.ts:34), so the cited value (2000) is wrong and the relationship is inverted: the import cap now EQUALS the generation ceiling, not tighter — importGraph.ts:26-30 explicitly documents that equality. A new contributor reading the working-notes doc for context is misled about both the number and the design rationale."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "committed-dead-scratch",
+        "file": "app/_g.mjs",
+        "line": 1,
+        "summary": "app/_g.mjs is a committed one-off benchmark scratch file that hardcodes an absolute machine path (`import { buildBuddyGraph } from \"/home/user/ringweave/lib/dist/core/index.js\"`). It is git-tracked, referenced by no package.json script, excluded from no gitignore, and cannot run on any other machine. It sits at the app package root where a contributor will trip over it and either try (and fail) to run it or mistake it for part of the app."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 388791,
+        "tokens": 72829,
+        "toolCalls": 36,
+        "startedAt": 1784878416199,
+        "queuedAt": 1784878412467
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 284449,
+        "tokens": 71091,
+        "toolCalls": 36,
+        "startedAt": 1784878415998,
+        "queuedAt": 1784878412468
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 545176,
+        "tokens": 80641,
+        "toolCalls": 32,
+        "startedAt": 1784878707478,
+        "queuedAt": 1784878412468
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 292034,
+        "tokens": 77194,
+        "toolCalls": 41,
+        "startedAt": 1784878810501,
+        "queuedAt": 1784878412468
+      }
+    ],
+    "totalTokens": 301755,
+    "totalToolCalls": 145,
+    "seq": 4
+  },
+  {
+    "file": "wk0lz2f29.output",
+    "t0": 1784879923026,
+    "converged": false,
+    "counts": {
+      "confirmed": 6,
+      "blocking": 2,
+      "plausible": 2
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "silent-noop-reroll",
+        "file": "app/src/model.ts",
+        "line": 164,
+        "summary": "rerollWouldVary predicts variation from the polish-enabled axis only, so \"Different arrangement\" silently regenerates a byte-identical graph (no explanatory flash) for common small rosters where the graph is uniquely determined / polish converges identically."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-user-message",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "summary": "Reroll block message tells the user to 'turn on Polish' even when Polish is already ON and the group is too large for polish to ever run."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "false-rejection-wrong-reason",
+        "file": "app/src/io/importGraph.ts",
+        "line": 104,
+        "summary": "A valid import whose names total more than MAX_PARSE_CHARS (500k) is refused with a message blaming commas/line-breaks/uniqueness, none of which is the real cause."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "reroll-silent-noop",
+        "file": "app/src/model.ts",
+        "line": 164,
+        "summary": "rerollWouldVary gates only on whether polish RUNS, not whether it actually varies the graph, so 'Different arrangement' is a silent no-op for small rosters where the optimal graph is unique."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-notice-text",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "summary": "The reroll explanatory flash tells the user to 'turn on Polish' even when polish is already explicitly ON, because at n>POLISH_MAX_N the real blocker is size, not the polish setting."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unused-export",
+        "file": "app/src/model.ts",
+        "line": 83,
+        "summary": "finiteOrNull is exported but only referenced inside model.ts (girth normalization at line 142) and no test uses it, widening the module's public surface for no consumer."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "misleading-reroll-flash",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "summary": "For an explicit polish=on roster above POLISH_MAX_N (which useBuddyGraph silently downgrades to \"auto\"), the reroll gate flashes \"turn on Polish (Advanced) for small groups to vary it\" even though the user already has polish on."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "csv-formula-injection",
+        "file": "app/src/io/download.ts",
+        "line": 13,
+        "summary": "toCsv quotes fields but does not neutralize leading =,+,-,@; an imported/shared roster name becomes an executable formula when the exported buddies.csv is opened in a spreadsheet."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 648525,
+        "tokens": 75686,
+        "toolCalls": 16,
+        "startedAt": 1784879923026,
+        "queuedAt": 1784879919218
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 376735,
+        "tokens": 77498,
+        "toolCalls": 32,
+        "startedAt": 1784879923050,
+        "queuedAt": 1784879919218
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 719754,
+        "tokens": 92371,
+        "toolCalls": 38,
+        "startedAt": 1784880302915,
+        "queuedAt": 1784879919218
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 333798,
+        "tokens": 83201,
+        "toolCalls": 41,
+        "startedAt": 1784880575982,
+        "queuedAt": 1784879919218
+      }
+    ],
+    "totalTokens": 328756,
+    "totalToolCalls": 127,
+    "seq": 5
+  },
+  {
+    "file": "ws9wcalkb.output",
+    "t0": 1784881511702,
+    "converged": false,
+    "counts": {
+      "confirmed": 4,
+      "blocking": 0,
+      "plausible": 2
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misattributed-user-message",
+        "file": "app/src/App.tsx",
+        "line": 21,
+        "summary": "The identical-regeneration callback always says \"That's already the best arrangement for a group this size,\" but it fires on ANY same-roster re-generation (including an Edit→Generate with no change) and overclaims optimality when quality<1."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unclamped-seed-increment",
+        "file": "/home/user/ringweave/app/src/App.tsx",
+        "line": 54,
+        "summary": "handleReroll computes seed+1 and persists it via setSettings without re-clamping to [0, SEED_MAX], violating the clamp invariant documented in model.ts:43-45."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-user-copy",
+        "file": "app/src/App.tsx",
+        "line": 21,
+        "summary": "The post-hoc identical-reroll callback fires for ANY byte-identical regeneration, but its copy asserts optimality (\"already the best arrangement\") and also misfires on a plain re-Generate that was never a reroll request."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "inconsistent-naming",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 34,
+        "summary": "One callback has two names within a single 85-line file: the parameter/doc call it `onIdenticalReroll`, but the ref that actually invokes it is `onNoop`."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "csv-formula-injection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 17,
+        "summary": "The round-8 CSV formula neutralization is applied to the CSV export but not to the sibling clipboard-copy path, which emits the same untrusted roster names into the same spreadsheet-paste sink."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "incomplete-formula-neutralization",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 16,
+        "summary": "CSV formula-injection neutralization guards only the CSV export path (toCsv/neutralizeFormula); the parallel \"Copy\" clipboard path emits the same untrusted names with no neutralization, so the mitigation is asymmetric and a maintainer can't tell whether the omission is intentional."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 713062,
+        "tokens": 71282,
+        "toolCalls": 35,
+        "startedAt": 1784881512010,
+        "queuedAt": 1784881510149
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 239823,
+        "tokens": 56139,
+        "toolCalls": 25,
+        "startedAt": 1784881511702,
+        "queuedAt": 1784881510149
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 278945,
+        "tokens": 63231,
+        "toolCalls": 30,
+        "startedAt": 1784881753534,
+        "queuedAt": 1784881510149
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 291400,
+        "tokens": 60375,
+        "toolCalls": 28,
+        "startedAt": 1784882037567,
+        "queuedAt": 1784881510149
+      }
+    ],
+    "totalTokens": 251027,
+    "totalToolCalls": 118,
+    "seq": 6
+  },
+  {
+    "file": "whcfire9p.output",
+    "t0": 1784882592117,
+    "converged": false,
+    "counts": {
+      "confirmed": 4,
+      "blocking": 1,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "embedded-delimiter-formula-injection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 21,
+        "summary": "The clipboard Copy path's leading-char-only neutralizeCell guard is defeated by a TAB or CR embedded inside an imported name, re-opening the exact spreadsheet formula-injection the round-9 fix claimed to close (breaking the stated CSV/Copy parity)."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "settings-default-single-source-drift",
+        "file": "app/src/io/importGraph.ts",
+        "line": 45,
+        "summary": "model.ts advertises itself as the single source that keeps the two Settings producers from diverging, but the minSeparation DEFAULT is not centralized there: SettingsControls falls back to the core's DEFAULT_MIN_SEPARATION (5) while importGraph's sanitizeSettings falls back to SEPARATION_MIN (2) for an invalid value, so the two producers of a Settings.minSeparation disagree."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "magic-number-mirrors-unexported-core-constant",
+        "file": "app/src/model.ts",
+        "line": 41,
+        "summary": "POLISH_MAX_N=120 hand-duplicates the core's polish auto-cap, which is an un-exported literal in resolveWantPolish (lib/src/core/index.ts:310); nothing keeps them in sync."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-projection-across-components",
+        "file": "app/src/panels/Slips.tsx",
+        "line": 12,
+        "summary": "The buddy-label projection `buddyNames(view,i).join(\", \") || \"—\"` is copy-pasted identically in BuddyList.tsx:53 and Slips.tsx:12."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "reroll-policy-split-across-layers",
+        "file": "app/src/App.tsx",
+        "line": 60,
+        "summary": "Reroll orchestration is split: useBuddyGraph owns the reroll INTENT flag, worker dispatch, and post-hoc identical-edges detection, but the pre-hoc reroll POLICY (advance seed via nextRerollSeed, feasibility() gate, rerollBlockReason() gate, resetSelection) lives inline in App.handleReroll. A second reroll trigger (the code already anticipates one: App.tsx:46 comments about a 'keyboard reroll') would have to duplicate this five-step gating sequence."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 460260,
+        "tokens": 93119,
+        "toolCalls": 34,
+        "startedAt": 1784882594719,
+        "queuedAt": 1784882590365
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 263165,
+        "tokens": 72680,
+        "toolCalls": 35,
+        "startedAt": 1784882592117,
+        "queuedAt": 1784882590366
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 324498,
+        "tokens": 59780,
+        "toolCalls": 28,
+        "startedAt": 1784882856787,
+        "queuedAt": 1784882590366
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 221026,
+        "tokens": 74577,
+        "toolCalls": 42,
+        "startedAt": 1784883062148,
+        "queuedAt": 1784882590366
+      }
+    ],
+    "totalTokens": 300156,
+    "totalToolCalls": 139,
+    "seq": 7
+  },
+  {
+    "file": "wmqgynevf.output",
+    "t0": 1784883927449,
+    "converged": false,
+    "counts": {
+      "confirmed": 4,
+      "blocking": 1,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "misleading-truncation-warning",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 45,
+        "summary": "parseRoster emits the \"Kept the first 1000 names — that's the maximum\" warning even when the token past the cap was a duplicate (nothing was actually lost), because the cap is checked at loop top before duplicate filtering."
+      },
+      {
+        "critic": "critic-security",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "main-thread-force-layout-freeze",
+        "file": "app/src/graph/layout.ts",
+        "line": 56,
+        "summary": "forceLayout settles 300 d3-force ticks synchronously and freezes the main thread ~1.5s at the app's own n=1000 ceiling; its caps never fire for any in-range input."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-projection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 21,
+        "summary": "copyAll re-inlines the buddy-name join instead of reusing buddyLabel, contradicting buddyLabel's \"the one buddy-cell projection\" comment and diverging on the empty case."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-comment",
+        "file": "app/src/io/importGraph.ts",
+        "line": 43,
+        "summary": "sanitizeSettings comment cites a \"degree-1999 fallback\" that cannot occur under the current MAX_IMPORT_N=1000 cap (max reachable degreeMax is 999)."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 412971,
+        "tokens": 69205,
+        "toolCalls": 36,
+        "startedAt": 1784883927449,
+        "queuedAt": 1784883925641
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 265382,
+        "tokens": 61787,
+        "toolCalls": 32,
+        "startedAt": 1784883927465,
+        "queuedAt": 1784883925641
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 351654,
+        "tokens": 80086,
+        "toolCalls": 39,
+        "startedAt": 1784884194747,
+        "queuedAt": 1784883925641
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 250729,
+        "tokens": 77399,
+        "toolCalls": 39,
+        "startedAt": 1784884343953,
+        "queuedAt": 1784883925641
+      }
+    ],
+    "totalTokens": 288477,
+    "totalToolCalls": 146,
+    "seq": 8
+  },
+  {
+    "file": "wzic9z46v.output",
+    "t0": 1784885032291,
+    "converged": false,
+    "counts": {
+      "confirmed": 4,
+      "blocking": 1,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "blocking",
+        "verdict": "CONFIRMED",
+        "class": "flaky-slow-test-timeout",
+        "file": "app/test/graphCanvasDefer.test.tsx",
+        "line": 21,
+        "summary": "Test fixture builds a real auto-polished graph (buildBuddyGraph(60,4) ~4.2s) under vitest's default 5000ms timeout, so the suite is non-deterministically red — the \"force mode computes it\" test timed out on a full `npm test` run, though it passes in isolation."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-mode-decision",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 62,
+        "summary": "The 'which positions for the current layout mode' decision is expressed independently in four places instead of one resolver: the forcePos memo (line 62), the fit memo's ring-vs-force branch (line 63), the render `target` (line 65), and the animation `to` inside the effect (line 84). All four must stay in sync."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unreachable-truncation-warning",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 30,
+        "summary": "RosterModal.capText pre-truncates every stored string to EXACTLY MAX_PARSE_CHARS before parseRoster runs, so parseRoster's char-truncation warning (guarded by `text.length > MAX_PARSE_CHARS`, a strict >) can never fire on the UI path. Confirmed dead: the warning is exercised only by a direct parseRoster unit test (parseRoster.test.ts:75), never through the component."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-comment-after-rename",
+        "file": "/home/user/ringweave/app/src/model.ts",
+        "line": 192,
+        "summary": "buddyNames' doc-comment claims it is 'Shared by BuddyList and Slips', but after the round-11 unification neither component uses it — both route through buddyLabel; buddyNames is now a private helper called only by buddyLabel yet is still exported."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 437710,
+        "tokens": 80474,
+        "toolCalls": 41,
+        "startedAt": 1784885032291,
+        "queuedAt": 1784885030489
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 287959,
+        "tokens": 65417,
+        "toolCalls": 29,
+        "startedAt": 1784885032354,
+        "queuedAt": 1784885030489
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 293650,
+        "tokens": 57848,
+        "toolCalls": 27,
+        "startedAt": 1784885323281,
+        "queuedAt": 1784885030489
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 301311,
+        "tokens": 88223,
+        "toolCalls": 45,
+        "startedAt": 1784885472904,
+        "queuedAt": 1784885030490
+      }
+    ],
+    "totalTokens": 291962,
+    "totalToolCalls": 142,
+    "seq": 9
+  },
+  {
+    "file": "wijfnmjjf.output",
+    "t0": 1784886241172,
+    "converged": false,
+    "counts": {
+      "confirmed": 1,
+      "blocking": 0,
+      "plausible": 2
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-comment",
+        "file": "app/src/model.ts",
+        "line": 40,
+        "summary": "MAX_ROSTER_N's doc claims imports can display more people than generation allows, but the import cap equals the generation cap, so the claim is false and contradicts a documented safety invariant."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "fit-union-invariant-broken-by-lazy-force",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 77,
+        "summary": "The 'frame the union of all modes so toggling pans but never rescales' invariant is defeated by computing forcePos lazily (null in ring mode), so the viewBox transform can rescale on every ring<->force toggle."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "unguarded-cross-constant-coupling",
+        "file": "app/src/model.ts",
+        "line": 36,
+        "summary": "SEPARATION_DEFAULT re-exports the core's DEFAULT_MIN_SEPARATION but is never guaranteed to lie within the app-local [SEPARATION_MIN, SEPARATION_MAX] range it is used as an in-range fallback for, and nothing guards the coupling."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 432839,
+        "tokens": 83974,
+        "toolCalls": 37,
+        "startedAt": 1784886241251,
+        "queuedAt": 1784886239147
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 268618,
+        "tokens": 77949,
+        "toolCalls": 39,
+        "startedAt": 1784886241172,
+        "queuedAt": 1784886239147
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 235235,
+        "tokens": 58517,
+        "toolCalls": 27,
+        "startedAt": 1784886511529,
+        "queuedAt": 1784886239147
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 283289,
+        "tokens": 78604,
+        "toolCalls": 39,
+        "startedAt": 1784886677509,
+        "queuedAt": 1784886239148
+      }
+    ],
+    "totalTokens": 299044,
+    "totalToolCalls": 142,
+    "seq": 10
+  },
+  {
+    "file": "w0k16x6ed.output",
+    "t0": 1784902272948,
+    "converged": false,
+    "counts": {
+      "confirmed": 3,
+      "blocking": 0,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-settings-on-idempotent-generate",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 54,
+        "summary": "On an Edit->Generate that yields byte-identical edges under DIFFERENT settings, the kept view retains the OLD settings, so the exported file's settings block disagrees with what the user just configured (and with the Advanced panel)."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-comment",
+        "file": "app/src/graph/layout.ts",
+        "line": 34,
+        "summary": "The FORCE_MAX_EDGES rationale comment claims only imports can trip the force caps and that generated graphs are 'far smaller', but a max-size generation exceeds FORCE_MAX_EDGES and silently falls back to ring in force mode."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "magic-number-mirrors-uncrossed-core-constant",
+        "file": "app/src/model.ts",
+        "line": 52,
+        "summary": "POLISH_MAX_N=120 hand-mirrors the core's polish threshold, which the core hardcodes as a bare literal `n <= 120` inside the un-exported `resolveWantPolish` (lib/src/core/index.ts:310) — the two are bound only by a 'if the core's threshold moves, update this' comment, with no cross-check test."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "extension-seam-coupling",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 10,
+        "summary": "LAYOUT_MODES is dual-purposed as BOTH the set of user-selectable render modes AND the set of layouts unioned for the stable fit frame (computeFit at lines 90-93). The in-code comment at line 17-18 claims a future F8 focus mode 'adds exactly one branch' to positionsFor, understating the change: focus positions are selection-dependent, so if focus is added to LAYOUT_MODES the union-fit at lines 90-93 will fold selection-dependent points into the fixed viewBox and rescale the frame on every selection change — defeating the very purpose of the union frame (a fixed viewBox that only pans, never rescales, mid-interaction). The app CLAUDE.md already notes focus is 'a selection-keyed layout, not just extending LayoutMode', but the GraphCanvas comment/data-model still presents it as a one-branch add."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 391158,
+        "tokens": 79138,
+        "toolCalls": 43,
+        "startedAt": 1784902273118,
+        "queuedAt": 1784902271105
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 219812,
+        "tokens": 66175,
+        "toolCalls": 34,
+        "startedAt": 1784902272948,
+        "queuedAt": 1784902271105
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 284045,
+        "tokens": 71975,
+        "toolCalls": 31,
+        "startedAt": 1784902500695,
+        "queuedAt": 1784902271105
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 415915,
+        "tokens": 91084,
+        "toolCalls": 44,
+        "startedAt": 1784902667356,
+        "queuedAt": 1784902271105
+      }
+    ],
+    "totalTokens": 308372,
+    "totalToolCalls": 152,
+    "seq": 11
+  },
+  {
+    "file": "wzl5wzc7m.output",
+    "t0": 1784903704157,
+    "converged": false,
+    "counts": {
+      "confirmed": 1,
+      "blocking": 0,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "aspirational-abstraction-no-runtime-consumer",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 9,
+        "summary": "LAYOUT_MODES is exported as the single source of selectable layout modes and the documented F8-focus extension point, but has no runtime consumer — the App toggle hardcodes its buttons — so the OCP openness it advertises is fictional."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 387649,
+        "tokens": 79344,
+        "toolCalls": 32,
+        "startedAt": 1784903704157,
+        "queuedAt": 1784903702199
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 214606,
+        "tokens": 73468,
+        "toolCalls": 35,
+        "startedAt": 1784903704249,
+        "queuedAt": 1784903702200
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 275159,
+        "tokens": 65709,
+        "toolCalls": 27,
+        "startedAt": 1784903920573,
+        "queuedAt": 1784903702200
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 293033,
+        "tokens": 95672,
+        "toolCalls": 42,
+        "startedAt": 1784904096238,
+        "queuedAt": 1784903702200
+      }
+    ],
+    "totalTokens": 314193,
+    "totalToolCalls": 136,
+    "seq": 12
+  },
+  {
+    "file": "w5tkq0quh.output",
+    "t0": 1784904542129,
+    "converged": false,
+    "counts": {
+      "confirmed": 4,
+      "blocking": 0,
+      "plausible": 0
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "partial-data-drivenness",
+        "file": "app/src/styles/app.css",
+        "line": 106,
+        "summary": "LAYOUT_MODES is only half load-bearing: the toggle button is data-driven, but its ACTIVE-state styling is hardcoded per mode in CSS (`.on.ring`/`.on.force`), so a future added mode surfaces a button whose selected state is invisible."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "non-exhaustive-extension-seam",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 26,
+        "summary": "The round-15 story is 'LAYOUT_MODES is the single load-bearing source of selectable layouts.' It is load-bearing for rendering a button, but the layout->positions resolver it feeds is NOT exhaustive, so a new mode added to LAYOUT_MODES compiles and renders a button that silently does nothing."
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "a11y-toggle-state-not-exposed",
+        "file": "app/src/panels/LayoutToggle.tsx",
+        "line": 13,
+        "summary": "The layout toggle is a mutually-exclusive selector (radio semantics) rendered as plain <button>s inside role=group, with the active mode conveyed ONLY through a CSS class (color/background). The selected state is invisible to assistive tech, against the app's stated 'keyboard-navigable / WCAG-AA' principle in app/CLAUDE.md."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "partial-data-driven-source",
+        "file": "app/src/panels/LayoutToggle.tsx",
+        "line": 6,
+        "summary": "LayoutToggle claims LAYOUT_MODES is the single load-bearing source of selectable layouts, but the active-button styling (background + glow) is hard-coded per mode in CSS, so adding a mode renders an invisible active state."
+      }
+    ],
+    "plausible": [],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 170284,
+        "tokens": 47571,
+        "toolCalls": 19,
+        "startedAt": 1784904542129,
+        "queuedAt": 1784904540413
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 123548,
+        "tokens": 45472,
+        "toolCalls": 17,
+        "startedAt": 1784904542847,
+        "queuedAt": 1784904540413
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 301491,
+        "tokens": 59955,
+        "toolCalls": 26,
+        "startedAt": 1784904670129,
+        "queuedAt": 1784904540413
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 124116,
+        "tokens": 60184,
+        "toolCalls": 34,
+        "startedAt": 1784904716665,
+        "queuedAt": 1784904540413
+      }
+    ],
+    "totalTokens": 213182,
+    "totalToolCalls": 96,
+    "seq": 13
+  },
+  {
+    "file": "w4xsvphmv.output",
+    "t0": 1784905135486,
+    "converged": false,
+    "counts": {
+      "confirmed": 3,
+      "blocking": 0,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "display-rounding-vs-threshold-boundary",
+        "file": "app/src/model.ts",
+        "line": 135,
+        "summary": "The quality gauge (Math.round(quality*100)) and the connection caption ('loosely'/'well-linked') straddle the 0.5 threshold at different granularities, so the identical displayed number 50 can carry either caption."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unused-export",
+        "file": "/home/user/ringweave/app/src/io/feasibility.ts",
+        "line": 4,
+        "summary": "LARGE_ROSTER is `export`ed but referenced only inside feasibility.ts — a dead export the hygiene test doesn't catch because that test only scans model.ts."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "dead-css-hook",
+        "file": "/home/user/ringweave/app/src/panels/SettingsControls.tsx",
+        "line": 35,
+        "summary": "`<details className=\"advanced\">` carries a class hook that no rule in app.css or print.css ever targets — an orphan className (likely left by a rename/removed rule)."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "mutable-public-constant",
+        "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+        "line": 9,
+        "summary": "LAYOUT_MODES and FIT_MODES are exported as mutable `LayoutMode[]`; being the single load-bearing source of selectable/frameable modes, they should be immutable so a consumer can't mutate the app's mode set."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 385749,
+        "tokens": 75364,
+        "toolCalls": 37,
+        "startedAt": 1784905135486,
+        "queuedAt": 1784905133978
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 239596,
+        "tokens": 65423,
+        "toolCalls": 30,
+        "startedAt": 1784905136719,
+        "queuedAt": 1784905133979
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 253477,
+        "tokens": 55671,
+        "toolCalls": 25,
+        "startedAt": 1784905381127,
+        "queuedAt": 1784905133979
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 217478,
+        "tokens": 72826,
+        "toolCalls": 38,
+        "startedAt": 1784905524241,
+        "queuedAt": 1784905133979
+      }
+    ],
+    "totalTokens": 269284,
+    "totalToolCalls": 130,
+    "seq": 14
+  },
+  {
+    "file": "w3lmjutmd.output",
+    "t0": 1784906045806,
+    "converged": false,
+    "counts": {
+      "confirmed": 3,
+      "blocking": 0,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "dedupe-warning-casing-double-count",
+        "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+        "line": 53,
+        "summary": "The duplicate-removal warning keys its list on the current occurrence's casing, so multiple case-variants of ONE person are listed as if they were distinct names."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "computed-metric-never-displayed",
+        "file": "app/src/model.ts",
+        "line": 68,
+        "summary": "`Metrics.girth` is documented as a \"Display metric\" and is computed on every import via an O(n^2) `girth(g)` call, but no component renders it — QualityPanel shows only aspl, diameter, and the quality gauge."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unused-parameter",
+        "file": "app/src/io/readFileText.ts",
+        "line": 9,
+        "summary": "`readFileText(file, maxBytes = MAX_FILE_BYTES)` exposes a `maxBytes` override that no call site (App.tsx:105, RosterModal.tsx:44) and no test ever passes — dead parameter surface."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "quality-copy-bypasses-single-seam",
+        "file": "app/src/App.tsx",
+        "line": 25,
+        "summary": "The reroll \"already an optimal arrangement\" message gates on raw `kept.metrics.quality === 1`, a third quality-derived UI string that bypasses the `qualityPercent` seam model.ts advertises as the single source for all quality-derived copy (gauge + caption)."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 437729,
+        "tokens": 93845,
+        "toolCalls": 48,
+        "startedAt": 1784906046280,
+        "queuedAt": 1784906043737
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 206778,
+        "tokens": 68633,
+        "toolCalls": 36,
+        "startedAt": 1784906045806,
+        "queuedAt": 1784906043738
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 290166,
+        "tokens": 72571,
+        "toolCalls": 28,
+        "startedAt": 1784906254199,
+        "queuedAt": 1784906043738
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 280881,
+        "tokens": 77736,
+        "toolCalls": 38,
+        "startedAt": 1784906487360,
+        "queuedAt": 1784906043738
+      }
+    ],
+    "totalTokens": 312785,
+    "totalToolCalls": 150,
+    "seq": 15
+  },
+  {
+    "file": "whenhi6tr.output",
+    "t0": 1784906975550,
+    "converged": false,
+    "counts": {
+      "confirmed": 3,
+      "blocking": 0,
+      "plausible": 2
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false
+      }
+    ],
+    "confirmed": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "stale-ui-notice-not-reset",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 78,
+        "summary": "The \"try example names\" button (and any setText path that bypasses capText) never clears inputCapped or fileError, so a truncation/read-error notice lingers over unrelated, valid roster text."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "duplicated-user-copy",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 34,
+        "summary": "The char-truncation warning parseRoster pushes is unreachable via every production caller and duplicates RosterModal's notice with divergent wording (\"read\" vs \"kept\")."
+      },
+      {
+        "critic": "critic-maintainability",
+        "severity": "suggestion",
+        "verdict": "CONFIRMED",
+        "class": "unit-mismatch-message",
+        "file": "app/src/io/readFileText.ts",
+        "line": 12,
+        "summary": "The file-size gate enforces 8 MiB (8*1024*1024 B) but the rejection message and comment call it \"8 MB\" while dividing sizes by 1e6, so the stated limit differs from the enforced one."
+      }
+    ],
+    "plausible": [
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "ocp-cross-file-contract-for-constraints",
+        "file": "app/src/worker/protocol.ts",
+        "line": 23,
+        "summary": "The generation pipeline hard-wires failure == thrown-error; the named next feature (constraints) needs a third 'refused-with-reasons' notion that the request/response contract, the worker, useBuddyGraph, and viewFromResult cannot express without a coordinated multi-file edit. (Documented in app/CLAUDE.md as a deliberate deferral; surfaced to name where the constraints extension catches. Not blocking.)"
+      },
+      {
+        "critic": "critic-solid",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "srp-domain-logic-in-composition-root",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "summary": "handleReroll embeds the reroll-feasibility decision (seed advance + feasibility() + rerollBlockReason() + dispatch) inline in the composition root, so App owns both wiring and a piece of generation-eligibility policy. Borderline and low-cost; not blocking."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 282520,
+        "tokens": 70890,
+        "toolCalls": 29,
+        "startedAt": 1784906975628,
+        "queuedAt": 1784906974005
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 303049,
+        "tokens": 79145,
+        "toolCalls": 34,
+        "startedAt": 1784906975550,
+        "queuedAt": 1784906974005
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 247098,
+        "tokens": 63398,
+        "toolCalls": 24,
+        "startedAt": 1784907261741,
+        "queuedAt": 1784906974005
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 308388,
+        "tokens": 79589,
+        "toolCalls": 39,
+        "startedAt": 1784907280092,
+        "queuedAt": 1784906974005
+      }
+    ],
+    "totalTokens": 293022,
+    "totalToolCalls": 126,
+    "seq": 16
+  },
+  {
+    "file": "wrp4pnbtn.output",
+    "t0": 1784907942354,
+    "converged": true,
+    "counts": {
+      "confirmed": 0,
+      "blocking": 0,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      }
+    ],
+    "confirmed": [],
+    "plausible": [
+      {
+        "critic": "critic-correctness",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "incomplete-error-recovery",
+        "file": "app/src/App.tsx",
+        "line": 41,
+        "summary": "The status=\"error\" branch is handled with a persistent notice but the recovery paths around it are incomplete: a first-generation error leaves the user with no modal and no view (dead-end), and a later error's toast is never cleared when an import supersedes it."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 574283,
+        "tokens": 84347,
+        "toolCalls": 37,
+        "startedAt": 1784907942354,
+        "queuedAt": 1784907941024
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 191395,
+        "tokens": 62279,
+        "toolCalls": 28,
+        "startedAt": 1784907942632,
+        "queuedAt": 1784907941024
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 338538,
+        "tokens": 78323,
+        "toolCalls": 32,
+        "startedAt": 1784908137488,
+        "queuedAt": 1784907941024
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 365956,
+        "tokens": 95664,
+        "toolCalls": 40,
+        "startedAt": 1784908479022,
+        "queuedAt": 1784907941025
+      }
+    ],
+    "totalTokens": 320613,
+    "totalToolCalls": 137,
+    "seq": 17
+  },
+  {
+    "file": "wt377t7z1.output",
+    "t0": 1784909074648,
+    "converged": true,
+    "counts": {
+      "confirmed": 0,
+      "blocking": 0,
+      "plausible": 1
+    },
+    "byCritic": [
+      {
+        "critic": "critic-correctness",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-solid",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      },
+      {
+        "critic": "critic-security",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false
+      },
+      {
+        "critic": "critic-maintainability",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false
+      }
+    ],
+    "confirmed": [],
+    "plausible": [
+      {
+        "critic": "critic-security",
+        "severity": "suggestion",
+        "verdict": "PLAUSIBLE",
+        "class": "error-recovery-empty-message-deadend",
+        "file": "app/src/App.tsx",
+        "line": 42,
+        "summary": "The first-generation error recovery gates BOTH the toast and the modal reopen on `bg.error` being truthy, so a worker error whose message string is empty (\"\") would skip recovery entirely — no toast and no reopened modal on a first generation, leaving a blank screen."
+      }
+    ],
+    "agents": [
+      {
+        "critic": "critic-correctness",
+        "durationMs": 209588,
+        "tokens": 59438,
+        "toolCalls": 23,
+        "startedAt": 1784909074648,
+        "queuedAt": 1784909072298
+      },
+      {
+        "critic": "critic-solid",
+        "durationMs": 153465,
+        "tokens": 40613,
+        "toolCalls": 12,
+        "startedAt": 1784909074687,
+        "queuedAt": 1784909072298
+      },
+      {
+        "critic": "critic-security",
+        "durationMs": 183218,
+        "tokens": 56555,
+        "toolCalls": 25,
+        "startedAt": 1784909232394,
+        "queuedAt": 1784909072298
+      },
+      {
+        "critic": "critic-maintainability",
+        "durationMs": 224554,
+        "tokens": 78189,
+        "toolCalls": 34,
+        "startedAt": 1784909288021,
+        "queuedAt": 1784909072298
+      }
+    ],
+    "totalTokens": 234795,
+    "totalToolCalls": 94,
+    "seq": 18
+  }
+]

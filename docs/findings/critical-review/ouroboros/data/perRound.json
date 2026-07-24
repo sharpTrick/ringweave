@@ -1,0 +1,773 @@
+[
+  {
+    "round": 4,
+    "converged": false,
+    "confirmed": 7,
+    "blocking": 4,
+    "plausible": 1,
+    "totalFindings": 8,
+    "files": [
+      "app/src/io/importGraph.ts",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/model.ts",
+      "app/src/io/schema.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "metrics-ignore-connectivity",
+      "stale-async-result-clobbers-newer-state",
+      "degenerate-metric-reads-as-optimal",
+      "unbounded-generation-work-from-imported-k",
+      "disconnected-graph-scored-optimal",
+      "misleading-displayed-metric",
+      "duplicated-shape-that-can-drift",
+      "stale-selection-state-on-regenerate"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 259197,
+    "toolCalls": 158,
+    "wallMs": 407065,
+    "agentMsSum": 1245762
+  },
+  {
+    "round": 5,
+    "converged": false,
+    "confirmed": 11,
+    "blocking": 1,
+    "plausible": 2,
+    "totalFindings": 13,
+    "files": [
+      "app/src/panels/QualityPanel.tsx",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/model.ts",
+      "app/src/graph/layout.ts",
+      "app/src/io/feasibility.ts",
+      "app/src/io/parseRoster.ts",
+      "app/src/io/importGraph.ts"
+    ],
+    "classes": [
+      "disconnected-fraction-rounds-to-100",
+      "n1-import-well-linked-with-zero-quality",
+      "stale-busy-indicator-on-supersede",
+      "duplicate-quality-formula-off-display-path",
+      "uncapped-main-thread-work-on-hostile-import",
+      "superlinear-generation-uncancellable-worker",
+      "per-keystroke-work-unbounded-by-name-cap",
+      "misleading-display-caption",
+      "duplicated-magic-constant",
+      "duplicated-logic-and-stale-comment",
+      "duplicated-helper",
+      "generation-connectivity-assumed-not-measured",
+      "untrusted-field-into-generation-unclamped"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 3,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 4,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 4,
+        "nothingFound": false
+      }
+    },
+    "tokens": 337786,
+    "toolCalls": 145,
+    "wallMs": 601162,
+    "agentMsSum": 1685802
+  },
+  {
+    "round": 6,
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 0,
+    "plausible": 0,
+    "totalFindings": 9,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/panels/RosterModal.tsx",
+      "app/src/io/importGraph.ts",
+      "app/src/styles/app.css"
+    ],
+    "classes": [
+      "misleading-gate-message",
+      "shared-constant-conflates-distinct-concepts",
+      "lossy-roster-roundtrip",
+      "mixed-responsibility-component",
+      "unbounded-controlled-input-rerender",
+      "sync-uncapped-metric-on-main-thread",
+      "coupled-constant-reuse",
+      "duplicated-magic-number",
+      "hardcoded-token-value"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 3,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 338720,
+    "toolCalls": 161,
+    "wallMs": 652997,
+    "agentMsSum": 1881364
+  },
+  {
+    "round": 7,
+    "converged": false,
+    "confirmed": 8,
+    "blocking": 3,
+    "plausible": 0,
+    "totalFindings": 8,
+    "files": [
+      "app/src/io/importGraph.ts",
+      "app/src/App.tsx",
+      "app/src/panels/SettingsControls.tsx",
+      "app/CLAUDE.md",
+      "app/_g.mjs"
+    ],
+    "classes": [
+      "import-name-not-roundtrip-stable-through-parser",
+      "file-input-value-not-reset",
+      "uncapped-worker-cost-no-cancel",
+      "reroll-silent-noop",
+      "seed-advance-precision",
+      "silent-noop-primary-action",
+      "stale-doc-comment",
+      "committed-dead-scratch"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 3,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 301755,
+    "toolCalls": 145,
+    "wallMs": 545176,
+    "agentMsSum": 1510450
+  },
+  {
+    "round": 8,
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "plausible": 2,
+    "totalFindings": 8,
+    "files": [
+      "app/src/model.ts",
+      "app/src/App.tsx",
+      "app/src/io/importGraph.ts",
+      "app/src/io/download.ts"
+    ],
+    "classes": [
+      "silent-noop-reroll",
+      "misleading-user-message",
+      "false-rejection-wrong-reason",
+      "reroll-silent-noop",
+      "misleading-notice-text",
+      "unused-export",
+      "misleading-reroll-flash",
+      "csv-formula-injection"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 3,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 328756,
+    "toolCalls": 127,
+    "wallMs": 719754,
+    "agentMsSum": 2078812
+  },
+  {
+    "round": 9,
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 0,
+    "plausible": 2,
+    "totalFindings": 6,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/panels/BuddyList.tsx"
+    ],
+    "classes": [
+      "misattributed-user-message",
+      "unclamped-seed-increment",
+      "misleading-user-copy",
+      "inconsistent-naming",
+      "csv-formula-injection",
+      "incomplete-formula-neutralization"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 251027,
+    "toolCalls": 118,
+    "wallMs": 713062,
+    "agentMsSum": 1523230
+  },
+  {
+    "round": 10,
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 1,
+    "plausible": 1,
+    "totalFindings": 5,
+    "files": [
+      "app/src/panels/BuddyList.tsx",
+      "app/src/io/importGraph.ts",
+      "app/src/model.ts",
+      "app/src/panels/Slips.tsx",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "embedded-delimiter-formula-injection",
+      "settings-default-single-source-drift",
+      "magic-number-mirrors-unexported-core-constant",
+      "duplicated-projection-across-components",
+      "reroll-policy-split-across-layers"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 2,
+        "nothingFound": false
+      }
+    },
+    "tokens": 300156,
+    "toolCalls": 139,
+    "wallMs": 460260,
+    "agentMsSum": 1268949
+  },
+  {
+    "round": 11,
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 1,
+    "plausible": 0,
+    "totalFindings": 4,
+    "files": [
+      "app/src/io/parseRoster.ts",
+      "app/src/graph/layout.ts",
+      "app/src/panels/BuddyList.tsx",
+      "app/src/io/importGraph.ts"
+    ],
+    "classes": [
+      "misleading-truncation-warning",
+      "main-thread-force-layout-freeze",
+      "duplicated-projection",
+      "stale-comment"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "security": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 2,
+        "nothingFound": false
+      }
+    },
+    "tokens": 288477,
+    "toolCalls": 146,
+    "wallMs": 412971,
+    "agentMsSum": 1280736
+  },
+  {
+    "round": 12,
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 1,
+    "plausible": 0,
+    "totalFindings": 4,
+    "files": [
+      "app/test/graphCanvasDefer.test.tsx",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/panels/RosterModal.tsx",
+      "app/src/model.ts"
+    ],
+    "classes": [
+      "flaky-slow-test-timeout",
+      "duplicated-mode-decision",
+      "unreachable-truncation-warning",
+      "stale-comment-after-rename"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 1,
+        "nothingFound": false
+      }
+    },
+    "tokens": 291962,
+    "toolCalls": 142,
+    "wallMs": 437710,
+    "agentMsSum": 1320630
+  },
+  {
+    "round": 13,
+    "converged": false,
+    "confirmed": 1,
+    "blocking": 0,
+    "plausible": 2,
+    "totalFindings": 3,
+    "files": [
+      "app/src/model.ts",
+      "app/src/graph/GraphCanvas.tsx"
+    ],
+    "classes": [
+      "stale-comment",
+      "fit-union-invariant-broken-by-lazy-force",
+      "unguarded-cross-constant-coupling"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "solid": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 2,
+        "nothingFound": false
+      }
+    },
+    "tokens": 299044,
+    "toolCalls": 142,
+    "wallMs": 432839,
+    "agentMsSum": 1219981
+  },
+  {
+    "round": 14,
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "plausible": 1,
+    "totalFindings": 4,
+    "files": [
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/graph/layout.ts",
+      "app/src/model.ts",
+      "app/src/graph/GraphCanvas.tsx"
+    ],
+    "classes": [
+      "stale-settings-on-idempotent-generate",
+      "stale-comment",
+      "magic-number-mirrors-uncrossed-core-constant",
+      "extension-seam-coupling"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 2,
+        "nothingFound": false
+      }
+    },
+    "tokens": 308372,
+    "toolCalls": 152,
+    "wallMs": 415915,
+    "agentMsSum": 1310930
+  },
+  {
+    "round": 15,
+    "converged": false,
+    "confirmed": 1,
+    "blocking": 0,
+    "plausible": 0,
+    "totalFindings": 1,
+    "files": [
+      "app/src/graph/GraphCanvas.tsx"
+    ],
+    "classes": [
+      "aspirational-abstraction-no-runtime-consumer"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "solid": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 0,
+        "nothingFound": true
+      }
+    },
+    "tokens": 314193,
+    "toolCalls": 136,
+    "wallMs": 387649,
+    "agentMsSum": 1170447
+  },
+  {
+    "round": 16,
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 0,
+    "plausible": 0,
+    "totalFindings": 4,
+    "files": [
+      "app/src/styles/app.css",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/panels/LayoutToggle.tsx"
+    ],
+    "classes": [
+      "partial-data-drivenness",
+      "non-exhaustive-extension-seam",
+      "a11y-toggle-state-not-exposed",
+      "partial-data-driven-source"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 1,
+        "nothingFound": false
+      }
+    },
+    "tokens": 213182,
+    "toolCalls": 96,
+    "wallMs": 301491,
+    "agentMsSum": 719439
+  },
+  {
+    "round": 17,
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "plausible": 1,
+    "totalFindings": 4,
+    "files": [
+      "app/src/model.ts",
+      "app/src/io/feasibility.ts",
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/graph/GraphCanvas.tsx"
+    ],
+    "classes": [
+      "display-rounding-vs-threshold-boundary",
+      "unused-export",
+      "dead-css-hook",
+      "mutable-public-constant"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 269284,
+    "toolCalls": 130,
+    "wallMs": 385749,
+    "agentMsSum": 1096300
+  },
+  {
+    "round": 18,
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "plausible": 1,
+    "totalFindings": 4,
+    "files": [
+      "app/src/io/parseRoster.ts",
+      "app/src/model.ts",
+      "app/src/io/readFileText.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "dedupe-warning-casing-double-count",
+      "computed-metric-never-displayed",
+      "unused-parameter",
+      "quality-copy-bypasses-single-seam"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 3,
+        "nothingFound": false
+      }
+    },
+    "tokens": 312785,
+    "toolCalls": 150,
+    "wallMs": 437729,
+    "agentMsSum": 1215554
+  },
+  {
+    "round": 19,
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "plausible": 2,
+    "totalFindings": 5,
+    "files": [
+      "app/src/panels/RosterModal.tsx",
+      "app/src/io/parseRoster.ts",
+      "app/src/io/readFileText.ts",
+      "app/src/worker/protocol.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "stale-ui-notice-not-reset",
+      "duplicated-user-copy",
+      "unit-mismatch-message",
+      "ocp-cross-file-contract-for-constraints",
+      "srp-domain-logic-in-composition-root"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 2,
+        "nothingFound": false
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 2,
+        "nothingFound": false
+      }
+    },
+    "tokens": 293022,
+    "toolCalls": 126,
+    "wallMs": 308388,
+    "agentMsSum": 1141055
+  },
+  {
+    "round": 20,
+    "converged": true,
+    "confirmed": 0,
+    "blocking": 0,
+    "plausible": 1,
+    "totalFindings": 1,
+    "files": [
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "incomplete-error-recovery"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "solid": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "security": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "maintainability": {
+        "findings": 0,
+        "nothingFound": true
+      }
+    },
+    "tokens": 320613,
+    "toolCalls": 137,
+    "wallMs": 574283,
+    "agentMsSum": 1470172
+  },
+  {
+    "round": 21,
+    "converged": true,
+    "confirmed": 0,
+    "blocking": 0,
+    "plausible": 1,
+    "totalFindings": 1,
+    "files": [
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "error-recovery-empty-message-deadend"
+    ],
+    "perCritic": {
+      "correctness": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "solid": {
+        "findings": 0,
+        "nothingFound": true
+      },
+      "security": {
+        "findings": 1,
+        "nothingFound": false
+      },
+      "maintainability": {
+        "findings": 0,
+        "nothingFound": true
+      }
+    },
+    "tokens": 234795,
+    "toolCalls": 94,
+    "wallMs": 224554,
+    "agentMsSum": 770825
+  }
+]
