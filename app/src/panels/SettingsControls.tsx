@@ -1,5 +1,5 @@
 import { DEFAULT_MIN_SEPARATION } from "ringweave";
-import { BUDDY_MAX, BUDDY_MIN, SEPARATION_MAX, SEPARATION_MIN, type Settings } from "../model";
+import { BUDDY_MAX, BUDDY_MIN, SEED_MAX, SEPARATION_MAX, SEPARATION_MIN, type Settings } from "../model";
 
 interface Props {
   settings: Settings;
@@ -21,7 +21,7 @@ export default function SettingsControls({ settings, onChange }: Props) {
     onChange({ ...settings, minSeparation: Number.isFinite(raw) ? clamp(Math.round(raw), SEPARATION_MIN, SEPARATION_MAX) : DEFAULT_MIN_SEPARATION });
 
   const setSeed = (raw: number) =>
-    onChange({ ...settings, seed: Number.isInteger(raw) ? raw : settings.seed });
+    onChange({ ...settings, seed: Number.isInteger(raw) ? clamp(raw, 0, SEED_MAX) : settings.seed });
 
   return (
     <>
@@ -62,6 +62,8 @@ export default function SettingsControls({ settings, onChange }: Props) {
             Seed
             <input
               type="number"
+              min={0}
+              max={SEED_MAX}
               value={settings.seed}
               onChange={(e) => setSeed(Number(e.target.value))}
               style={{ width: 84 }}

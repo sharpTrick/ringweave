@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { viewFromResult, type GraphView, type Settings } from "../model";
+import { POLISH_MAX_N, viewFromResult, type GraphView, type Settings } from "../model";
 import { useGenerationWorker } from "./useGenerationWorker";
 
 /**
@@ -27,12 +27,16 @@ export function useBuddyGraph() {
 
   const generate = useCallback((names: string[], settings: Settings) => {
     pending.current = { names, settings };
+    // Never DISPATCH an explicit polish=on above the core's polish cap: it is O(n·m)/iter
+    // and would run for tens of seconds. Downgrade to "auto" (which the core disables at
+    // this size anyway), so a hostile imported polish=true can't drive a multi-minute run.
+    const polish = settings.polish === true && names.length > POLISH_MAX_N ? "auto" : settings.polish;
     genGenerate({
       n: names.length,
       k: settings.buddies,
       options: {
         minSeparation: settings.minSeparation,
-        polish: settings.polish,
+        polish,
         seed: settings.seed,
       },
     });
@@ -48,5 +52,5 @@ export function useBuddyGraph() {
     setView(v);
   }, [genReset]);
 
-  return { view, status: gen.status, error: gen.error, generate, loadView };
+  return { view, status: gen.status, error: gen.error, generate, loadView, cancel: genReset };
 }

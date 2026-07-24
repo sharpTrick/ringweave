@@ -155,6 +155,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .linklike:hover { text-decoration: underline; }
 
 .busy { position: absolute; inset: 0; display: grid; place-items: center; z-index: 15; color: var(--ink-dim); font-size: 14px; }
+.busy-inner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background: var(--panel-solid); border: 1px solid var(--line2); color: var(--ink); padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 40; max-width: 90vw; cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

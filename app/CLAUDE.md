@@ -76,10 +76,11 @@ token-swap; M2 ships the mock-faithful dark theme only.
 
 ## Known follow-ons (surfaced by review, deferred — not silently ignored)
 
-- **Import re-measures on the main thread**, so its size caps (`MAX_IMPORT_N`=2000 etc.) are
-  tighter than generation's (which runs in the worker). A hand-made graph larger than the import
-  cap is refused with a plain-language error. Lifting this means routing import through the worker
-  — a clean follow-on, not needed for M2's roster sizes.
+- **Import re-measures on the main thread**, so its size caps (`MAX_IMPORT_N` = `MAX_ROSTER_N` =
+  1000, plus a density cap) match generation's ceiling — a re-rollable import shouldn't display
+  more than the app can generate, and the equality keeps the synchronous re-measure to a few
+  hundred ms. A larger/denser hand-made graph is refused with a plain-language error. Lifting this
+  means routing import re-measurement through the worker — a clean follow-on.
 - **Generation pipeline models failure as a thrown error only** (`worker/protocol.ts`
   `GenerateResponse`). The constraint-aware core (`buildConstrainedBuddyGraph`) instead *refuses on
   a successful return* via `report.refusals`. When constraints land (M3), the protocol needs a

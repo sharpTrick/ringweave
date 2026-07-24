@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, degreeLabel, type GraphView, type Settings } from "./model";
+import { DEFAULT_SETTINGS, degreeLabel, rerollWouldVary, type GraphView, type Settings } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -55,9 +55,20 @@ export default function App() {
       flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
       return;
     }
+    // A re-roll varies the graph only when polish runs (the sole seed-dependent stage);
+    // above that, re-generating returns an identical graph — explain, don't silently no-op.
+    if (!rerollWouldVary(names.length, s)) {
+      flash("This is already the best arrangement for a group this size — turn on Polish (Advanced) for small groups to vary it.");
+      return;
+    }
     setSettings(s);
     resetSelection();
     bg.generate(names, s);
+  };
+
+  const cancelGeneration = () => {
+    bg.cancel();
+    if (!view) setModalOpen(true); // first generation has no graph to fall back to
   };
 
   const handleExport = () => {
@@ -142,7 +153,14 @@ export default function App() {
             />
           )}
 
-          {bg.status === "running" && <div className="busy">Generating…</div>}
+          {bg.status === "running" && (
+            <div className="busy">
+              <div className="busy-inner">
+                <span>Generating…</span>
+                <button className="btn btn-ghost" onClick={cancelGeneration}>Cancel</button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -153,7 +171,11 @@ export default function App() {
         type="file"
         accept=".json,application/json"
         style={{ display: "none" }}
-        onChange={(e) => void handleImportFile(e.target.files?.[0])}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // allow re-selecting the same filename after an external edit
+          void handleImportFile(file);
+        }}
       />
 
       <Notice message={notice} onDismiss={clear} />

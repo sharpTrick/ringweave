@@ -1,9 +1,10 @@
 import { Graph, allPairsSummary, girth, largestComponentFraction } from "ringweave";
 import {
   assembleMetrics, degreeExtent,
-  BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEPARATION_MAX, SEPARATION_MIN,
+  BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_MAX, SEPARATION_MIN,
   type GraphView, type Settings,
 } from "../model";
+import { parseRoster } from "./parseRoster";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -42,7 +43,7 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
   return {
     buddies: Math.max(BUDDY_MIN, Math.min(BUDDY_MAX, declared)),
     minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_MIN) : undefined,
-    seed: s && Number.isInteger(s.seed) ? s.seed : DEFAULT_SEED,
+    seed: sanitizeInt(s?.seed, 0, SEED_MAX, DEFAULT_SEED),
     polish: s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto",
   };
 }
@@ -88,17 +89,22 @@ export function importGraph(data: unknown): GraphView {
     if (!p || typeof p.name !== "string") {
       throw new ImportError(`Person at position ${i} is missing a name.`);
     }
-    // The roster editor is comma/newline delimited, so a name containing either would be
-    // silently split into two people on an Edit→regenerate. Refuse it at the boundary.
-    if (/[,\n]/.test(p.name)) {
-      throw new ImportError(`Name "${p.name}" can't contain a comma or line break.`);
-    }
     // Edges reference people by position; a present-but-mismatched id would mislabel them.
     if (p.id !== undefined && p.id !== i) {
       throw new ImportError(`Person "${p.name}" has id ${p.id} but is at position ${i}.`);
     }
     return p.name;
   });
+
+  // Names must survive the roster editor unchanged: `parseRoster` (comma/newline delimited)
+  // trims, drops blanks, and de-dupes case-insensitively, so an empty/whitespace-only/
+  // comma/newline/duplicate name would silently vanish or split on an Edit→regenerate,
+  // shifting every downstream buddy label. Make the parser the authority — refuse anything
+  // it wouldn't round-trip.
+  const roundTrip = parseRoster(names.join("\n")).names;
+  if (roundTrip.length !== n || roundTrip.some((x, i) => x !== names[i])) {
+    throw new ImportError("Every name must be non-empty, unique (case-insensitively), and free of commas or line breaks.");
+  }
 
   const g = new Graph(n);
   for (const e of f.edges) {

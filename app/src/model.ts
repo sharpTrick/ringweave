@@ -33,6 +33,17 @@ export const SEPARATION_MAX = 12;
     refuses above it. (Import can display more — it only re-measures — but reroll is gated.) */
 export const MAX_ROSTER_N = 1000;
 
+/** Roster size above which the core auto-disables polish (mirrors `resolveWantPolish` in
+    lib/src/core/index.ts). Polish is the ONLY seed-dependent stage, and it is O(n·m)/iter,
+    so above this the app (a) never forces polish=on — that would run for tens of seconds —
+    and (b) knows a seed-bump reroll can't vary the RNG-free greedy output. If the core's
+    threshold moves, update this. */
+export const POLISH_MAX_N = 120;
+
+/** Seeds are clamped to [0, SEED_MAX] so a `seed + 1` reroll always advances at float
+    precision (integers past 2^53 don't). */
+export const SEED_MAX = 2 ** 31 - 1;
+
 /**
  * Display metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only, so
  * they are meaningful for the whole roster only when it is connected — they are `null`
@@ -142,6 +153,16 @@ export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
     regular, else a min–max range. Reflects the produced graph, not the target `k`. */
 export function degreeLabel(m: Metrics): string {
   return m.regular ? String(m.degreeMax) : `${m.degreeMin}–${m.degreeMax}`;
+}
+
+/**
+ * Whether a seed-bump "Different arrangement" would actually change the graph. The seed only
+ * feeds the polish RNG and the greedy is RNG-free, so a re-roll varies ONLY when polish runs:
+ * n <= POLISH_MAX_N and polish not off. Above that, re-generating returns an identical graph,
+ * so the UI explains instead of silently doing nothing.
+ */
+export function rerollWouldVary(n: number, settings: Settings): boolean {
+  return n <= POLISH_MAX_N && settings.polish !== false;
 }
 
 /** Display names of person i's buddies. Shared by BuddyList and Slips. */

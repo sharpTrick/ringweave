@@ -3,7 +3,8 @@ import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
-import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX } from "../src/model";
+import { parseRoster } from "../src/io/parseRoster";
+import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, SEPARATION_MIN, SEPARATION_MAX, SEED_MAX } from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `Person ${i}`);
@@ -181,14 +182,42 @@ describe("import: untrusted settings are clamped to the UI range", () => {
 });
 
 describe("import: lossless round-trip and defaults", () => {
-  it("refuses a name containing a comma or line break (roster editor is delimited)", () => {
-    expect(() => importGraph({ version: 1, people: [{ id: 0, name: "Doe, Jane" }, { id: 1, name: "B" }, { id: 2, name: "C" }], edges: [[0, 1], [1, 2], [2, 0]] })).toThrow(/comma or line break/i);
-    expect(() => importGraph({ version: 1, people: [{ id: 0, name: "line\nbreak" }, { id: 1, name: "B" }, { id: 2, name: "C" }], edges: [[0, 1], [1, 2], [2, 0]] })).toThrow(/comma or line break/i);
+  const cycle = (nm: string[]): [number, number][] => nm.map((_, i) => [i, (i + 1) % nm.length]);
+
+  // Class: import must only ACCEPT names that survive the comma/newline roster editor, so an
+  // Edit→regenerate can't drop/split/merge people. Anything that wouldn't round-trip is refused.
+  it("refuses names that wouldn't survive the roster editor", () => {
+    const badRosters: string[][] = [
+      ["Alice", "   ", "Bob"],       // whitespace-only -> dropped
+      ["Alice", "", "Bob"],          // empty -> dropped
+      ["Alice", "alice"],            // case-insensitive duplicate -> merged
+      ["Alice", "Alice"],            // exact duplicate -> merged
+      [" Alice ", "Bob"],            // leading/trailing space -> trimmed (not stable)
+      ["Doe, Jane", "Bob", "Cara"],  // comma -> split
+      ["line\nbreak", "Bob", "Cara"], // newline -> split
+    ];
+    for (const nm of badRosters) {
+      const people = nm.map((name, id) => ({ id, name }));
+      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow();
+    }
+  });
+
+  it("accepted names round-trip through the roster editor unchanged", () => {
+    const roster = ["Alice Nguyen", "Bob Carter", "Chloe Diaz"];
+    const view = importGraph({ version: 1, people: roster.map((name, id) => ({ id, name })), edges: cycle(roster) });
+    expect(parseRoster(view.names.join("\n")).names).toEqual(view.names);
   });
 
   it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {
     const v = importGraph({ version: 1, people: peopleOf(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]] });
     expect(v.settings.seed).toBe(DEFAULT_SETTINGS.seed);
+  });
+
+  it("clamps an out-of-safe-range seed so seed+1 always advances", () => {
+    const v = importGraph({ version: 1, people: peopleOf(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]], settings: { buddies: 2, seed: 2 ** 53, polish: "auto" } });
+    expect(v.settings.seed).toBeLessThanOrEqual(SEED_MAX);
+    expect(v.settings.seed).toBeGreaterThanOrEqual(0);
+    expect(v.settings.seed + 1).toBeGreaterThan(v.settings.seed); // advances at float precision
   });
 });
 

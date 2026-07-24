@@ -73,7 +73,11 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
             type="file"
             accept=".txt,.csv,text/plain,text/csv"
             style={{ display: "none" }}
-            onChange={(e) => void readFile(e.target.files?.[0])}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ""; // allow re-choosing the same filename after an external edit
+              void readFile(file);
+            }}
           />
         </div>
 

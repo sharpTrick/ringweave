@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { buildBuddyGraph, type BuddyResult } from "ringweave";
-import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+import { DEFAULT_SETTINGS, POLISH_MAX_N, viewFromResult } from "../src/model";
 
 // Drive useBuddyGraph without a real Worker: a controllable stand-in for
 // useGenerationWorker whose state the test mutates, then rerenders to fire the effect.
@@ -79,5 +79,19 @@ describe("useBuddyGraph result↔state pairing", () => {
     act(() => rerender());
 
     expect(result.current.view?.names).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("never DISPATCHES polish=true above POLISH_MAX_N (cost gate)", () => {
+    const { result } = renderHook(() => useBuddyGraph());
+    const big = Array.from({ length: POLISH_MAX_N + 50 }, (_, i) => `P${i}`);
+    act(() => result.current.generate(big, { buddies: 4, polish: true, seed: 1 }));
+    const req = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
+    expect(req.options.polish).not.toBe(true); // downgraded to "auto"
+
+    hooks.generate.mockClear();
+    const small = Array.from({ length: POLISH_MAX_N }, (_, i) => `P${i}`);
+    act(() => result.current.generate(small, { buddies: 4, polish: true, seed: 1 }));
+    const req2 = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
+    expect(req2.options.polish).toBe(true); // honored at/below the cap
   });
 });
