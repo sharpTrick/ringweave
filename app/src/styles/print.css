@@ -1,0 +1,20 @@
+/* Print-friendly buddy slips (F3). The slips live in their own DOM subtree that is
+   hidden on screen and revealed for print, so app chrome (rail, graph, glass panels)
+   never reaches paper and no backdrop-filter is involved. */
+.slips { display: none; }
+
+@media print {
+  #app { display: none !important; }
+  .slips { display: block; color: #000; }
+  .slips .slip {
+    border: 1px solid #999;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0 0 10px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .slips .slip h3 { margin: 0 0 6px; font-size: 15px; }
+  .slips .slip .who { font-size: 12px; color: #333; }
+  .slips .slip .buddies { font-size: 13px; margin-top: 4px; }
+}

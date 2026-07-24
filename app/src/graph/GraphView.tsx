@@ -1,0 +1,187 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { select } from "d3-selection";
+import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
+import { forceLayout, ringLayout, type Pt } from "./layout";
+
+export type LayoutMode = "ring" | "force";
+
+interface GraphViewProps {
+  names: string[];
+  edges: [number, number][];
+  adjacency: number[][];
+  layout: LayoutMode;
+  selected: number | null;
+  hovered: number | null;
+  onSelect: (i: number | null) => void;
+  onHover: (i: number | null) => void;
+}
+
+const VB_W = 800;
+const VB_H = 600;
+const PAD = 60;
+
+interface Fit {
+  s: number;
+  cx: number;
+  cy: number;
+}
+
+/** A stable normalized->pixel transform covering both layouts, so points move but the
+    frame doesn't rescale mid-animation. */
+function computeFit(pts: Pt[]): Fit {
+  if (pts.length === 0) return { s: 1, cx: VB_W / 2, cy: VB_H / 2 };
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = Math.max(maxX - minX, 1e-6);
+  const spanY = Math.max(maxY - minY, 1e-6);
+  const s = Math.min((VB_W - 2 * PAD) / spanX, (VB_H - 2 * PAD) / spanY);
+  const cx = VB_W / 2 - ((minX + maxX) / 2) * s;
+  const cy = VB_H / 2 - ((minY + maxY) / 2) * s;
+  return { s, cx, cy };
+}
+
+function reducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+export default function GraphView({
+  names, edges, adjacency, layout, selected, hovered, onSelect, onHover,
+}: GraphViewProps) {
+  const n = names.length;
+  const ringPos = useMemo(() => ringLayout(n), [n]);
+  const forcePos = useMemo(() => forceLayout(n, edges), [n, edges]);
+  const fit = useMemo(() => computeFit([...ringPos, ...forcePos]), [ringPos, forcePos]);
+
+  const target = layout === "ring" ? ringPos : forcePos;
+  const [display, setDisplay] = useState<Pt[]>(target);
+  const displayRef = useRef(display);
+  displayRef.current = display;
+
+  const rafRef = useRef(0);
+  const graphKey = `${n}:${edges.length}`;
+  const prevGraph = useRef(graphKey);
+  const prevLayout = useRef(layout);
+
+  // Snap on a new graph; animate (cubic ease, ~650ms) on a layout toggle; snap under
+  // reduced-motion.
+  useEffect(() => {
+    cancelAnimationFrame(rafRef.current);
+    const to = layout === "ring" ? ringPos : forcePos;
+    const graphChanged = prevGraph.current !== graphKey;
+    const layoutChanged = prevLayout.current !== layout;
+    prevGraph.current = graphKey;
+    prevLayout.current = layout;
+    const from = displayRef.current;
+    if (graphChanged || !layoutChanged || reducedMotion() || from.length !== to.length) {
+      setDisplay(to);
+      return;
+    }
+    const t0 = performance.now();
+    const dur = 650;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      setDisplay(to.map((tp, i) => ({
+        x: from[i].x + (tp.x - from[i].x) * e,
+        y: from[i].y + (tp.y - from[i].y) * e,
+      })));
+      if (k < 1) rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [layout, ringPos, forcePos, graphKey]);
+
+  // Pan/zoom via d3-zoom; the transform is applied to the root <g>.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [zt, setZt] = useState<ZoomTransform>(zoomIdentity);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const sel = select(el);
+    const behavior = zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.4, 6])
+      .on("zoom", (ev) => setZt(ev.transform));
+    sel.call(behavior);
+    return () => { sel.on(".zoom", null); };
+  }, []);
+
+  const focus = hovered ?? selected;
+  const { first, second } = useMemo(() => {
+    const f = new Set<number>();
+    const s = new Set<number>();
+    if (focus != null) {
+      for (const b of adjacency[focus] ?? []) f.add(b);
+      for (const b of adjacency[focus] ?? []) {
+        for (const c of adjacency[b] ?? []) if (c !== focus && !f.has(c)) s.add(c);
+      }
+    }
+    return { first: f, second: s };
+  }, [focus, adjacency]);
+
+  const px = (p: Pt) => ({ x: fit.cx + p.x * fit.s, y: fit.cy + p.y * fit.s });
+
+  const nodeClass = (i: number): string => {
+    if (focus == null) return "node";
+    if (i === focus) return "node sel";
+    if (first.has(i)) return "node hi";
+    if (second.has(i)) return "node hi2";
+    return "node faded";
+  };
+
+  const edgeClass = (u: number, v: number): string => {
+    if (focus == null) return "edge";
+    if (u === focus || v === focus) return "edge lit";
+    if (second.has(u) || second.has(v)) return "edge lit2";
+    return "edge dim";
+  };
+
+  return (
+    <svg
+      ref={svgRef}
+      className="graph"
+      viewBox={`0 0 ${VB_W} ${VB_H}`}
+      role="img"
+      aria-label={`Buddy graph of ${n} people. Use the buddy list for a keyboard-navigable view.`}
+      onClick={(e) => { if (e.target === svgRef.current) onSelect(null); }}
+    >
+      <g transform={`translate(${zt.x},${zt.y}) scale(${zt.k})`}>
+        {display.length === n &&
+          edges.map(([u, v], idx) => {
+            const a = px(display[u]);
+            const b = px(display[v]);
+            return (
+              <line
+                key={idx}
+                className={edgeClass(u, v)}
+                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              />
+            );
+          })}
+        {display.length === n &&
+          display.map((p, i) => {
+            const c = px(p);
+            const label = names[i].split(" ")[0];
+            return (
+              <g
+                key={i}
+                className={nodeClass(i)}
+                transform={`translate(${c.x},${c.y})`}
+                onMouseEnter={() => onHover(i)}
+                onMouseLeave={() => onHover(null)}
+                onClick={(e) => { e.stopPropagation(); onSelect(i); }}
+              >
+                <circle r={14} fill="transparent" />
+                <circle className="dot" r={6} />
+                <text x={9} y={4}>{label}</text>
+              </g>
+            );
+          })}
+      </g>
+    </svg>
+  );
+}
