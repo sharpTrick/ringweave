@@ -103,6 +103,23 @@ export function connectedComponents(g: Graph): number[][] {
 }
 
 /**
+ * Fraction (0..1) of vertices in the largest connected component. 1 for a
+ * connected graph; the empty graph is vacuously 1. A graded companion to
+ * `isConnected` — how close to whole is a disconnected roster. Matches Python
+ * `largest_component_fraction`.
+ */
+export function largestComponentFraction(g: Graph): number {
+  if (g.n === 0) return 1;
+  let largest = 0;
+  // Loop rather than Math.max(...sizes) to avoid the argument-spread ceiling on
+  // large rosters (same reason as degreeExtent in index.ts).
+  for (const comp of connectedComponents(g)) {
+    if (comp.length > largest) largest = comp.length;
+  }
+  return largest / g.n;
+}
+
+/**
  * Length of the shortest cycle, or Infinity for a forest. Matches Python girth.
  * O(n·(n+m)): a BFS from every source, with an early-out only once a triangle is
  * found — so a high-girth graph runs the full sweep. Intended for the small

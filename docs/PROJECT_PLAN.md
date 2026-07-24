@@ -1,19 +1,18 @@
 # BuddyGraph — Project Plan
 
-> **STATUS (July 2026, pre-handoff):** Naming settled — repo/npm package **`ringweave`**
-> (the algorithm library), product name **BuddyGraph** (the web app). M0/M1 are
-> substantially **de-risked ahead of schedule**: the constraint-architecture bake-off is done
-> (see `findings/CONSTRAINT_FINDINGS.md`) — constrained-greedy (B) + constraint-preserving polish won;
-> label-assignment and free+repair were eliminated on data. The churn/priors soft mechanism is
-> validated (47–81% prior-buddy preservation via polish penalty). Remaining M1 work is the
-> **TypeScript port** of `constrained_gen.py` + `constraints.py` into `lib/src/core`, with
-> constrained cross-language fixtures added to the identity tests. An interactive HTML mock of
-> the target UI exists in `mock/` (three layouts incl. Focus ego-view); M2 turns it into the
-> React app wired to the real core.
+> **STATUS (July 2026):** Naming settled — repo/npm package **`ringweave`** (the algorithm
+> library), product name **BuddyGraph** (the web app). **M1 is done and merged**: the
+> constraint core (constrained-greedy + constraint-preserving polish + up-front `validate` +
+> tag compilation) is ported to `lib/src/core` and validated against the Python oracle. **M1b
+> (churn benchmark) is done**: the prior-weight sweep (`findings/churn-priors-weight.md`) set
+> the honest F9 claim — ~98% of prior buddies preserved at n=30, ~86% at n=60, ~64% at n=120,
+> at negligible ASPL cost — and confirmed the default prior weight. An interactive HTML mock
+> of the target UI exists in `mock/` (three layouts incl. Focus ego-view); **M2 (next)** turns
+> it into the React app wired to the real core.
 
 **Author:** Patrick Sharp (github: sharpTrick) · Plan drafted with Claude (Anthropic), July 2026
 **Status of foundations:** core algorithm selected and validated (see findings/FINDINGS.md), TypeScript
-core built with 38 passing tests including byte-identity vs the Python reference.
+constraint core built with 157 passing tests including cross-language parity vs the Python reference.
 
 ## 1. Vision
 
@@ -150,11 +149,12 @@ touches a server), for read-only viewing.*
 
 ## 6. Milestones
 
-- **M0 — churn benchmark (½ day):** extend Python bench to measure preserved-edge fraction
-  under roster changes; sets honest targets for F9.
-- **M1 — constraint core (1–2 days):** label-assignment tier + core-aware fallback +
-  feasibility validator, with tests (including new cross-language fixtures where the core
-  changes). *Gate: no UI work on F7/F9 until this lands.*
+- **M0 — churn benchmark (½ day): DONE** (landed as M1b) — `churn_bench.py` measures
+  preserved-edge fraction vs. prior weight under roster changes; honest F9 targets set in
+  `findings/churn-priors-weight.md`.
+- **M1 — constraint core (1–2 days): DONE & merged** — constrained-greedy + constraint-
+  preserving polish + up-front feasibility validator + tag compilation in `lib/src/core`, with
+  cross-language parity tests. *Gate cleared: UI work on F7/F9 may now proceed.*
 - **M2 — MVP app (F1–F6):** scaffold `app/` (Vite+React), worker wiring, ring/force views,
   slips, export/import, quality panel. Flip the Pages workflow live.
 - **M3 — exploration (F7, F8, F10):** constraints UI, fuzzy search, node explorer, path

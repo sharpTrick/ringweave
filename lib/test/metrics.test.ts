@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { Graph, ring } from "../src/core/graph.js";
-import { allPairsSummary, girth, connectedComponents } from "../src/core/metrics.js";
+import {
+  allPairsSummary,
+  girth,
+  connectedComponents,
+  largestComponentFraction,
+} from "../src/core/metrics.js";
 import { mooreLowerBounds, cycleAspl, asplGap } from "../src/core/bounds.js";
 
 function petersen(): Graph {
@@ -90,6 +95,38 @@ describe("connectedComponents", () => {
   it("returns one component for a connected graph and none for n=0", () => {
     expect(connectedComponents(ring(7)).length).toBe(1);
     expect(connectedComponents(new Graph(0)).length).toBe(0);
+  });
+});
+
+describe("largestComponentFraction", () => {
+  it("is 1 for a connected graph", () => {
+    expect(largestComponentFraction(ring(7))).toBe(1);
+    expect(largestComponentFraction(petersen())).toBe(1);
+  });
+
+  it("is the largest component's share when disconnected", () => {
+    // two disjoint triangles: largest of 6 is 3 -> 0.5 (mirrors Python test_core)
+    const g = new Graph(6);
+    g.addEdge(0, 1);
+    g.addEdge(1, 2);
+    g.addEdge(0, 2);
+    g.addEdge(3, 4);
+    g.addEdge(4, 5);
+    g.addEdge(3, 5);
+    expect(largestComponentFraction(g)).toBeCloseTo(0.5, 12);
+  });
+
+  it("counts an isolated vertex against the fraction", () => {
+    const g = new Graph(5); // path 0-1-2-3 plus isolated 4 -> 4/5
+    g.addEdge(0, 1);
+    g.addEdge(1, 2);
+    g.addEdge(2, 3);
+    expect(largestComponentFraction(g)).toBeCloseTo(0.8, 12);
+  });
+
+  it("is 1 for the single-vertex and empty boundaries", () => {
+    expect(largestComponentFraction(new Graph(1))).toBe(1); // one component of size 1
+    expect(largestComponentFraction(new Graph(0))).toBe(1); // vacuous
   });
 });
 

@@ -363,6 +363,9 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     expect(r.report.reqViolations).toBe(0);
     expect(r.report.prohViolations).toBe(0);
     expect(r.report.refusals).toEqual([]);
+    // a satisfied graph is connected, so the whole roster is one group
+    expect(r.report.connected).toBe(true);
+    expect(r.report.largestComponentFraction).toBe(1);
     expect(r.buddies[0]).toContain(1);
   });
 
@@ -384,6 +387,8 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     expect(r.report.refusals.length).toBeGreaterThan(0);
     expect(r.edges).toEqual([]);
     expect(r.buddies[0] ?? []).not.toContain(1);
+    // refused input produced no graph: 0, not the empty-graph vacuous 1
+    expect(r.report.largestComponentFraction).toBe(0);
   });
 
   it("refuses when hard priors push required degree over k", () => {
@@ -433,6 +438,12 @@ describe("buildConstrainedBuddyGraph pipeline", () => {
     // the bulk still get buddies — far above the ~n-1 edges of a starved run
     expect(r.edges.length).toBeGreaterThan(50);
     expect(r.degreeMax).toBe(k);
+    // honest residual disconnection: 29 is stranded, the other 29 form one group.
+    // This is the only report path that exercises the REAL largestComponentFraction
+    // computation strictly inside (0,1) — a hardcoded constant would not survive it.
+    expect(r.report.refusals).toEqual([]);
+    expect(r.report.connected).toBe(false);
+    expect(r.report.largestComponentFraction).toBeCloseTo(29 / 30, 12);
   });
 
   it("stays fast on a many-stuck sink-bottleneck (guards the cubic regression)", () => {

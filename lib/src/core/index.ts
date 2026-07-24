@@ -17,6 +17,7 @@ export {
   isConnected,
   allPairsSummary,
   girth,
+  largestComponentFraction,
   type Summary,
 } from "./metrics.js";
 export { mooreLowerBounds, asplGap, type MooreBounds } from "./bounds.js";
@@ -53,6 +54,7 @@ import {
   allPairsSummary,
   girth,
   countPresentEdges,
+  largestComponentFraction,
   type Summary,
 } from "./metrics.js";
 import { asplGap } from "./bounds.js";
@@ -163,6 +165,12 @@ export interface ConstraintReport {
   reqViolations: number;
   prohViolations: number;
   connected: boolean;
+  /**
+   * Fraction (0..1) of people in the largest connected group. 1 when connected;
+   * a graded companion to `connected` for the honest residual-disconnection the
+   * constrained generator can leave (e.g. "94% of people are in one group").
+   */
+  largestComponentFraction: number;
   /** Fraction (0..1) of prior buddies preserved, or null when there are no priors. */
   priorsKeptFraction: number | null;
   /** Plain-language reasons the input was refused (empty when generated). */
@@ -291,9 +299,10 @@ function summarize(g: Graph): {
   return { degreeMin, degreeMax, summary, buddies };
 }
 
-// The churn-bench default (docs/findings/CONSTRAINT_FINDINGS.md: ~47–81% of prior buddies
-// preserved without hurting ASPL). Tests check monotonicity in the weight, not
-// this specific value. A product-tunable dial.
+// Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
+// step function — any weight >= ~0.5 saturates it (98% kept at n=30, 86% at n=60, 64% at
+// n=120), at negligible ASPL cost. 2 sits on that plateau with margin above the activation
+// threshold. Tests check monotonicity in the weight, not this value. A product-tunable dial.
 const DEFAULT_PRIOR_WEIGHT = 2;
 
 /** Resolve the polish option: "auto" (default) enables polish for n <= 120. */
@@ -332,6 +341,7 @@ function buildReport(
     reqViolations,
     prohViolations,
     connected,
+    largestComponentFraction: largestComponentFraction(g),
     priorsKeptFraction,
     refusals: [],
   };
@@ -355,6 +365,9 @@ function refusedResult(n: number, refusals: string[]): ConstrainedBuddyResult {
       reqViolations: 0,
       prohViolations: 0,
       connected: false,
+      // No graph was produced (input refused); 0 signals "no group formed",
+      // consistent with connected:false — not the empty-graph vacuous 1.
+      largestComponentFraction: 0,
       priorsKeptFraction: null,
       refusals,
     },

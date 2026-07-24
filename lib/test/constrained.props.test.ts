@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
-import { isConnected } from "../src/core/metrics.js";
+import { isConnected, largestComponentFraction } from "../src/core/metrics.js";
 import {
   Constraints,
   validate,
@@ -83,6 +83,12 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         // no self-loops, no isolated vertices, connected
         for (let v = 0; v < s.n; v++) expect(g.hasEdge(v, v)).toBe(false);
         expect(isConnected(g)).toBe(true);
+        // the graded connectivity metric stays in range and agrees with the
+        // boolean on every input: frac === 1 exactly when the graph is connected
+        const frac = largestComponentFraction(g);
+        expect(frac).toBeGreaterThanOrEqual(1 / s.n);
+        expect(frac).toBeLessThanOrEqual(1);
+        expect(frac === 1).toBe(isConnected(g));
         // legal-edge-maximal: no addable legal edge remains. This is why
         // forceConnect is provably inert (it reuses the same legality predicate),
         // and it guards that completion never leaves a joinable pair behind.
