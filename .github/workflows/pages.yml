@@ -107,6 +107,14 @@ jobs:
               printf '<!doctype html><meta charset="utf-8"><title>ringweave</title><p>Coming soon.</p>\n' > "$2/index.html"
               return
             fi
+            # The app depends on the ringweave core via `file:../lib`, which
+            # resolves to lib/dist. lib/dist is gitignored and lib has no `prepare`
+            # script, so `npm --prefix app ci` alone won't produce it — build the
+            # core first (guarded, so an older ref without lib still degrades to the
+            # placeholder above rather than erroring here).
+            if [ -f lib/package.json ]; then
+              ${CAP} npm --prefix lib ci && ${CAP} npm --prefix lib run build
+            fi
             ${CAP} npm --prefix app ci
             VITE_BASE="$1" ${CAP} npm --prefix app run build
             cp -a app/dist/. "$2"/

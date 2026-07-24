@@ -6,9 +6,11 @@
 > tag compilation) is ported to `lib/src/core` and validated against the Python oracle. **M1b
 > (churn benchmark) is done**: the prior-weight sweep (`findings/churn-priors-weight.md`) set
 > the honest F9 claim — ~98% of prior buddies preserved at n=30, ~86% at n=60, ~64% at n=120,
-> at negligible ASPL cost — and confirmed the default prior weight. An interactive HTML mock
-> of the target UI exists in `mock/` (three layouts incl. Focus ego-view); **M2 (next)** turns
-> it into the React app wired to the real core.
+> at negligible ASPL cost — and confirmed the default prior weight. **M2 (MVP app, F1–F6) is
+> implemented** in `app/` (Vite + React 19 + TS): the `mock/` design ported onto the real core,
+> generation in a Web Worker, ring/force graph, buddy list + slips, quality panel, and JSON
+> export/import — deployed via the per-PR-preview Pages workflow. **M3/M4 (next):** constraints
+> UI, fuzzy search, node explorer, path finder, recalc, replay, share links.
 
 **Author:** Patrick Sharp (github: sharpTrick) · Plan drafted with Claude (Anthropic), July 2026
 **Status of foundations:** core algorithm selected and validated (see findings/FINDINGS.md), TypeScript

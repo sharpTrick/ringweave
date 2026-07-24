@@ -11,7 +11,7 @@
 // re-exported as a user-facing dial for UI preflight; `MAX_CONSTRAINED_WORK` /
 // `constrainedWork` stay unexported on purpose (a replaceable heuristic), so N is
 // deliberately not the only ceiling. Call `validate()` rather than the constant.
-export { Graph, ring, MAX_ROSTER, MAX_CONSTRAINED_N } from "./graph.js";
+export { Graph, ring, MAX_ROSTER, MAX_CONSTRAINED_N, DEFAULT_MIN_SEPARATION } from "./graph.js";
 export {
   bfsDistances,
   isConnected,
