@@ -94,29 +94,22 @@ Surfaced by review, deliberately deferred (not silently ignored):
 ## Review (required before commit)
 
 Non-trivial changes get **adversarial sub-agent review** using the committed critics in
-`.claude/agents/` (correctness, SOLID, maintainability, security). The critics default to
-skepticism and try to break the change.
+`.claude/agents/` (correctness, SOLID, security, maintainability). The critics default to skepticism
+and try to break the change.
 
-Protocol (learned the hard way):
-- **Unfocused, full-surface, every round.** Point critics at the whole component under review, not
-  a diff. Critics anchor on the first/biggest issue they see; a diff-scoped review hides everything
-  the anchor is sitting on top of.
-- **Run all four critics each round**, in parallel. They run on `model: opus` at `effort: medium`
-  (set in each `.claude/agents/critic-*.md` frontmatter) — a deliberate cost/thoroughness balance;
-  raise a critic's effort in its frontmatter for a deeper pass when a change warrants it.
-- **Verify each finding against the code before acting on it** — reproduce or trace it — to filter
-  false positives (LLM negation-blindness). Fix confirmed blocking findings or justify them
-  explicitly; log suggestions.
-- **Keep going, round after round, until either the critics give a unanimous green light or it is
-  clear they would give contradictory suggestions next round** — in which case use judgment and
-  adjudicate. Do not stop at a fixed round count: clearing the anchor frees critics to find the
-  next layer, so a clean round only counts after a round that changed nothing substantive.
-- **Ratchet every confirmed finding into the suite before closing it.** Review is expensive,
-  non-deterministic discovery; tests are cheap, deterministic regression — a class caught once
-  should never need re-discovering. Codify the *class*, not the one input: prefer widening a
-  property-test generator or adding a parameterized (table-driven) case over a bespoke `it()`, so
-  the test also guards inputs the critic didn't try. Fight sprawl by consolidating near-duplicate
-  cases into tables and widening generators — not by testing less; a parameterized suite is cheaper
-  to read than a pile of examples. The payoff compounds: as the suite hardens, later rounds
-  converge faster because the critics stop tripping over already-guarded ground.
-- Keep tests green at the end of every round.
+**The authoritative, repo-wide process is [`../docs/REVIEW_PROTOCOL.md`](../docs/REVIEW_PROTOCOL.md)**
+— full-surface every round, all four critics in parallel, verify each finding, ratchet the *class*
+into the suite, and run until a round changes nothing substantive. Do not orchestrate rounds by
+hand; run the committed runner, which enforces that and computes convergence:
+
+```
+Workflow({ name: "adversarial-review", args: "lib/src (the ringweave core)" })
+```
+
+Lib-specific lens the critics apply on top of that process:
+- **Determinism** is a hard contract (RNG-free generators; seeded polish only) — any nondeterminism
+  is a finding.
+- **Oracle parity:** metrics must match `reference-python/`; regenerate fixtures
+  (`python3 gen_fixtures.py`) if an algorithm changed, and keep `test/identity.test.ts` green.
+- **Ratchet into property tests / oracle-parity checks**, and keep `npm test` green at the end of
+  every round.

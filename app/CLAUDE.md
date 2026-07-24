@@ -23,6 +23,20 @@ npm ci && npm run build
 CI (`.github/workflows/ci.yml` `app` job) and Pages (`.github/workflows/pages.yml`
 `build_into`) both build the core first for this reason.
 
+## Review (required before commit)
+
+Non-trivial app changes get the same adversarial review as the core. The authoritative process is
+[`../docs/REVIEW_PROTOCOL.md`](../docs/REVIEW_PROTOCOL.md) — full-surface every round, all four
+critics, run until a round changes nothing. Don't hand-orchestrate; run the committed runner:
+
+```
+Workflow({ name: "adversarial-review", args: "app/src (the BuddyGraph app)" })
+```
+
+App lens the critics apply: React state/effect bugs and StrictMode; numbers the UI *displays* vs the
+core's actual output; size gates that must run *before* a read/parse (not after); and any uncapped
+core metric / synchronous parse on the main thread. Keep `npm test` green at the end of every round.
+
 ## Architecture (respect)
 
 - **The UI never reimplements math.** Every metric and every edge comes from `ringweave`
