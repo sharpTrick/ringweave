@@ -90,8 +90,6 @@ Surfaced by review, deliberately deferred (not silently ignored):
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
   `null`. Normalize or special-case at the export boundary (F6).
 - **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.
-- **Connected-fraction metric** (`largestComponentFraction`) is not implemented — the M2
-  churn-resilience report will want it; it's a one-liner over `connectedComponents` (add with a test).
 
 ## Review (required before commit)
 

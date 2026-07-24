@@ -49,9 +49,11 @@ than by search, so it never risks residual violations. **D is eliminated.**
 B+polish gives the lowest ASPL in essentially every scenario while never breaking a constraint
 and staying near-regular (degree spread ≤ 1). The churn result is the proof the soft mechanism
 works: raw B preserves ~27% of prior buddies; **B+polish with a prior penalty lifts that to
-~47–81%** (81% at n=30, tapering with scale as the optimizer has more to juggle) — all while
-still satisfying hard constraints and improving ASPL. Priors-as-penalty-weight is the right
-design for the soft/hard toggle.
+~64–98%** (98% at n=30, 86% at n=60, 64% at n=120 — tapering with scale as the optimizer has
+more to juggle) — all while still satisfying hard constraints at negligible ASPL cost. The
+dedicated M1b sweep (`churn-priors-weight.md`) supersedes the earlier bake-off estimate and
+shows the penalty is effectively on/off: any weight ≥ ~0.5 saturates preservation.
+Priors-as-penalty-weight is the right design for the soft/hard toggle.
 
 Cost: polish is the only expensive step (full-ASPL per swap). ~3 s at n=60, ~16 s at n=120 for
 4 k iters. For the product, cap polish by iteration budget and scale iters down with n, exactly

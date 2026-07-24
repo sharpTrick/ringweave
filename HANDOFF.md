@@ -17,8 +17,8 @@ implementation. Read this file first; it tells you what exists, what's decided, 
 ## Package map
 
 ```
-lib/                TypeScript core (rename applied). 38 tests passing incl. 26
-                    byte-identity tests vs the Python reference. CI + Pages workflows included.
+lib/                TypeScript core (constraint core landed, M1). 157 tests passing incl.
+                    cross-language parity vs the Python reference. CI + Pages workflows included.
 mock/               Interactive HTML/JS prototype of the target UI (index.html + app.js).
                     Three layouts (Ring / Force / Focus ego-view), hover glow, node detail,
                     fuzzy search, export, replay, responsive. NOT wired to the core (stand-in
@@ -60,16 +60,17 @@ design/             Rendered design directions (1a/1b/1c) + mock state screensho
 
 ## Milestones (revised)
 
-- **M1 (next): constrained core in TS.** Port `constraints.py` + `constrained_gen.py` into
-  `lib/src/core` (constrainedGreedy, polishConstrained, validate, tag compilation). Extend
-  `buildBuddyGraph` to accept constraints and return the report (satisfied, degree spread,
-  priors kept, refusal reasons). Generate constrained fixtures from the Python (greedy path is
-  RNG-free ⇒ byte-identity holds) and add them to `test/identity.test.ts`. Port the
-  incremental-distance cache into constrainedGreedy for scale parity.
-- **M1b: churn benchmark.** Small: measure preserved-edge fraction vs prior-weight at
-  n ∈ {30, 60, 120} to pick the default weight and set the honest F9 claim.
-- **M2: the app.** Vite + React 18 + TS under `app/`; port the mock's UI onto the real core;
-  worker-wrap generation; flip `pages.yml` live (upload path → `app/dist`).
+- **M1: constrained core in TS. DONE & merged.** `constraints.py` + `constrained_gen.py`
+  ported into `lib/src/core` (constrainedGreedy, polishConstrained, validate, tag
+  compilation); `buildConstrainedBuddyGraph` returns the report (satisfied, degree spread,
+  priors kept, largest-component fraction, refusal reasons); validated against the Python
+  oracle on invariants + aggregate metrics.
+- **M1b: churn benchmark. DONE.** `reference-python/churn_bench.py` swept preserved-edge
+  fraction vs prior-weight at n ∈ {30, 60, 120}; results + the honest F9 claim in
+  `docs/findings/churn-priors-weight.md` (default prior weight confirmed at 2).
+- **M2 (next): the app.** Vite + React 18 + TS under `app/`; port the mock's UI onto the real
+  core; worker-wrap generation; flip `pages.yml` live (upload path → `app/dist`). The core
+  already exposes `largestComponentFraction` for the honest connectivity report.
 - **M3/M4:** per PROJECT_PLAN (constraints UI, explorer, recalc, replay, share links).
 
 ## Engineering ground rules (from the plan; non-negotiable)
