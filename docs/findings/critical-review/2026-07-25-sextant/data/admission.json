@@ -1,6 +1,6 @@
 {
-  "head": "c03bf0c5a6e005814eab2e13f5a0ed160ff81001",
-  "mode": "check",
+  "head": "30e3cf6b6b9258c0a2dd5ea8c36cfd8e2bc9eb67",
+  "mode": "build",
   "generatedFrom": "scripts/sextant/seed-defs.json",
   "results": [
     {
@@ -13,6 +13,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -29,6 +30,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -45,6 +47,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -61,6 +64,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -77,6 +81,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -93,6 +98,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -109,6 +115,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -125,6 +132,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -141,6 +149,7 @@
         "typecheck": false,
         "tests": false,
         "lint": false,
+        "lintDetail": "app/src/io/parseRoster.ts:20:7: error eslint(no-unused-vars): Variable 'CONTROL_CHARS' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.",
         "covered": true
       },
       "isControl": false,
@@ -157,6 +166,7 @@
         "typecheck": true,
         "tests": false,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -172,7 +182,8 @@
         "applied": true,
         "typecheck": true,
         "tests": true,
-        "lint": true,
+        "lint": false,
+        "lintDetail": "Unused exports (1)",
         "covered": true
       },
       "isControl": false,
@@ -189,6 +200,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -205,6 +217,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -221,6 +234,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": false
       },
       "isControl": false,
@@ -237,6 +251,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": false,
@@ -252,6 +267,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": true,
@@ -267,6 +283,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": true,
@@ -282,6 +299,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": true,
@@ -297,6 +315,7 @@
         "typecheck": true,
         "tests": true,
         "lint": true,
+        "lintDetail": null,
         "covered": true
       },
       "isControl": true,
