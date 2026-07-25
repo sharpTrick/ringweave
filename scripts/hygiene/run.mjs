@@ -156,6 +156,65 @@ for (const file of codeFiles) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// 4. Critic frontmatter must agree with the runner.
+//
+// `.claude/workflows/adversarial-review.js` holds the EXECUTABLE gating config (each lens's model,
+// surface globs and saturation gate) because workflow scripts have no filesystem access and cannot
+// read the agent definitions. The critic `.md` frontmatter carries the same values for anyone
+// reading the agent file. Two copies of a fact drift, and here the drift is invisible: a surface
+// that disagrees would silently gate the wrong lens, producing a review round with a hole in it
+// that still reports converged. So the two are compared mechanically.
+// ---------------------------------------------------------------------------------------------
+const AGENTS_DIR = join(ROOT, ".claude", "agents");
+const RUNNER = join(ROOT, ".claude", "workflows", "adversarial-review.js");
+let agentFiles = [];
+try {
+  agentFiles = readdirSync(AGENTS_DIR).filter((f) => f.startsWith("critic-") && f.endsWith(".md"));
+} catch {
+  /* no agents dir — nothing to cross-check */
+}
+if (agentFiles.length > 0) {
+  const runner = readFileSync(RUNNER, "utf8");
+  const blocks = [...runner.matchAll(/\{\s*type:\s*'(critic-[\w-]+)',\s*model:\s*'(\w+)',\s*saturationGate:\s*(\d+),\s*surface:\s*(\[[^\]]*\])/g)];
+  const runnerLenses = new Map(
+    blocks.map(([, type, model, gate, surface]) => [
+      type,
+      { model, gate: Number(gate), surface: JSON.parse(surface.replace(/'/g, '"')) },
+    ]),
+  );
+
+  for (const file of agentFiles) {
+    const path = join(AGENTS_DIR, file);
+    const fm = readFileSync(path, "utf8").split(/^---$/m)[1] ?? "";
+    const name = /^name:\s*(\S+)/m.exec(fm)?.[1];
+    const model = /^model:\s*(\S+)/m.exec(fm)?.[1];
+    const gate = /^saturation_gate:\s*(\d+)/m.exec(fm)?.[1];
+    const surfaceRaw = /^surface:\s*(\[.*\])/m.exec(fm)?.[1];
+
+    const inRunner = runnerLenses.get(name);
+    if (!inRunner) {
+      report("critic-runner-drift", path, `\`${name}\` has no entry in adversarial-review.js — it would never run`);
+      continue;
+    }
+    if (model !== inRunner.model) {
+      report("critic-runner-drift", path, `model \`${model}\` but the runner spawns it on \`${inRunner.model}\``);
+    }
+    if (Number(gate) !== inRunner.gate) {
+      report("critic-runner-drift", path, `saturation_gate ${gate} but the runner gates at ${inRunner.gate}`);
+    }
+    const surface = surfaceRaw ? JSON.parse(surfaceRaw.replace(/'/g, '"')) : null;
+    if (!surface || JSON.stringify(surface) !== JSON.stringify(inRunner.surface)) {
+      report("critic-runner-drift", path, `surface globs disagree with the runner's copy for \`${name}\``);
+    }
+  }
+  for (const name of runnerLenses.keys()) {
+    if (!agentFiles.some((f) => f === `${name}.md`)) {
+      report("critic-runner-drift", RUNNER, `runner spawns \`${name}\` but .claude/agents/${name}.md does not exist`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 
 if (failures.length > 0) {
   console.error(`hygiene: ${failures.length} issue(s)\n`);
