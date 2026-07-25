@@ -158,7 +158,12 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 
 .busy { position: absolute; inset: 0; display: grid; place-items: center; z-index: 15; color: var(--ink-dim); font-size: 14px; }
 .busy-inner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background: var(--panel-solid); border: 1px solid var(--line2); color: var(--ink); padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 40; max-width: 90vw; cursor: pointer; }
+/* The always-mounted live region (see Notice.tsx). It holds no layout of its own — the toast
+   inside it is position:fixed — so an empty region is invisible and costs nothing. */
+.toast-region:empty { display: none; }
+/* The toast is a <button> so it can be dismissed from the keyboard; `font-family: inherit` and
+   `text-align: inherit` undo the UA button defaults that a <div> never had. */
+.toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background: var(--panel-solid); border: 1px solid var(--line2); color: var(--ink); padding: 10px 16px; border-radius: 10px; font-family: inherit; font-size: 13px; text-align: inherit; z-index: 40; max-width: 90vw; cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 

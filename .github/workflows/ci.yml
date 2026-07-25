@@ -47,3 +47,15 @@ jobs:
         working-directory: app
       - run: npm run build
         working-directory: app
+      # The hygiene gate runs in this job because it needs BOTH packages installed: knip resolves
+      # app's `ringweave` import through app/node_modules, so a standalone lint job would either
+      # duplicate the whole install or report false "unresolved import" noise.
+      #
+      # docs/REVIEW_PROTOCOL.md puts every class this gate covers OUT OF SCOPE for the adversarial
+      # critics, so it has to be enforced somewhere that cannot be skipped. `lint` also self-tests:
+      # it asserts each lint rule and custom check still fires on a deliberate violation, because a
+      # silently-dead rule is indistinguishable from a clean tree.
+      - run: npm ci
+        working-directory: .
+      - run: npm run lint
+        working-directory: .

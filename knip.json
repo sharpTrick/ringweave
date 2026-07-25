@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs"],
+      "project": ["scripts/**/*.mjs"]
+    },
+    "lib": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "app": {
+      "entry": [
+        "src/worker/generate.worker.ts",
+        "test/**/*.test.ts",
+        "test/**/*.test.tsx"
+      ],
+      "project": ["src/**/*.ts", "src/**/*.tsx"]
+    }
+  }
+}

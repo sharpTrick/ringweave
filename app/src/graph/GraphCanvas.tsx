@@ -205,6 +205,13 @@ export default function GraphCanvas({
   };
 
   return (
+    // Deliberate, and narrowly scoped: the graph is a VIEW, never the only interface. It is
+    // exposed as role="img" whose label points at the keyboard-navigable buddy list, and every
+    // operation the canvas offers (select, clear) is reachable there. This background click is a
+    // mouse convenience on top of that path, not the only way to clear a selection — so a
+    // keyboard listener here would add a focus stop that leads nowhere. Suppressed at the site
+    // rather than repo-wide, so a NEW non-interactive click handler anywhere else still fails.
+    /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
     <svg
       ref={svgRef}
       className="graph"

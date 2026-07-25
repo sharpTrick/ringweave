@@ -1,0 +1,72 @@
+{
+  // The hygiene oracle for lib/ and app/. See docs/REVIEW_PROTOCOL.md: this runs and must be
+  // clean BEFORE the adversarial critics are spawned, and critics are out of scope for anything
+  // it covers. That handoff is only fair if the linter actually catches these classes, so every
+  // rule we depend on is proven to fire by a fixture in scripts/hygiene/fixtures/ — oxlint
+  // SILENTLY IGNORES unknown rule names, so an unproven rule name is indistinguishable from a
+  // rule that is switched off.
+  //
+  // Rule selection follows Tricorder's bar (Sadowski et al., CACM 2018): analyzers surfaced in
+  // review must stay under ~10% "effective false positives", where an effective FP is any issue
+  // a developer takes no positive action on. So this starts at `correctness` plus a few named
+  // rules rather than every category, and each suppression below names its reason.
+  "plugins": ["react", "jsx-a11y", "import", "vitest", "typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "deny"
+  },
+  "rules": {
+    // The stale-effect-dependency oracle. This is a defect class prose critics repeatedly missed
+    // and mutation operators cannot generate, so it is deliberately an error, not a warning.
+    "react-hooks/exhaustive-deps": "deny",
+    "react-hooks/rules-of-hooks": "deny",
+
+    // Dead-code classes that E1's review loop kept re-finding by hand, round after round.
+    "no-unused-vars": "deny",
+    "no-unreachable": "deny",
+    // `x == null` is the deliberate "null or undefined" idiom throughout this codebase and every
+    // hit was one, so the null case is exempted rather than the rule disabled — a loose `==`
+    // anywhere else is still an error.
+    "eqeqeq": ["deny", "always", { "null": "ignore" }],
+
+    // --- Suppressions, each with its reason (see the effective-FP bar above) ---
+
+    // parseRoster.ts and importGraph.ts match C0 controls ON PURPOSE: an embedded tab or CR
+    // inside a name survives into a spreadsheet cell and acts as a delimiter, which was a real
+    // blocking finding (embedded-delimiter formula injection, M2 review round 10). Both regexes
+    // already use the Unicode escapes this rule's help text recommends, so it fires on code that
+    // has already taken its advice.
+    "no-control-regex": "allow",
+
+    // `new Array<number>(n).fill(0)` in constraints.ts is explicitly typed and immediately
+    // filled, so the ambiguity this rule guards against cannot arise. The suggested
+    // `Array.from({length: n})` is materially slower at the roster sizes the core allows
+    // (MAX_ROSTER = 1e6), and this is a hot path.
+    "unicorn/no-new-array": "allow",
+
+    // `role="status"` on a container is the canonical live-region pattern for a transient toast.
+    // `<output>` is for the result of a calculation and is not a substitute here.
+    "jsx-a11y/prefer-tag-over-role": "allow",
+
+    // Fires on every plain `vi.fn()`. It is a typing-style preference with no defect signal, and
+    // at 9 hits on a green suite it is pure noise against the effective-FP bar.
+    "vitest/require-mock-type-parameters": "allow",
+
+    // The suite is table-driven, so branch-dependent assertions ("if the row says infeasible,
+    // expect a message") are the intended shape. The real risk this rule guards — an assertion
+    // that silently never runs — is better answered by the coverage report than by banning the
+    // pattern.
+    "vitest/no-conditional-expect": "allow"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/coverage/**",
+    // A frozen design prototype with a stand-in generator, deliberately not wired to the core
+    // and not shipped. Holding it to the product's hygiene bar would be noise, not signal.
+    "mock/**",
+    // Seeded-defect worktrees for the Sextant recall harness: intentionally broken copies.
+    ".sextant-worktrees/**",
+    // Deliberate rule-firing fixtures — they exist to BE violations.
+    "scripts/hygiene/fixtures/**"
+  ]
+}

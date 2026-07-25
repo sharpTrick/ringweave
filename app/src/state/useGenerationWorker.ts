@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BuddyResult } from "ringweave";
 import type { GenerateOptions, GenerateRequest, GenerateResponse } from "../worker/protocol";
 
-export type GenStatus = "idle" | "running" | "done" | "error";
+/** Module-local: `GenState.status` carries it structurally, so nothing outside needs the name. */
+type GenStatus = "idle" | "running" | "done" | "error";
 
 export interface GenState {
   status: GenStatus;

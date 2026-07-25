@@ -22,6 +22,8 @@ describe("buildBuddyGraph (worker payload)", () => {
   });
 
   it("throws on k<2 (surfaced over the worker error channel)", () => {
-    expect(() => buildBuddyGraph(10, 1, {})).toThrow();
+    // Assert the contract, not merely "something threw" — a bare .toThrow() would also pass on a
+    // TypeError from a mistyped call, hiding whether the k<2 guard actually fired.
+    expect(() => buildBuddyGraph(10, 1, {})).toThrow(/k >= 2/);
   });
 });

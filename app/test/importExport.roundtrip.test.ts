@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
-import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
+import { importGraph, ImportError, MAX_IMPORT_N } from "../src/io/importGraph";
 import { parseRoster } from "../src/io/parseRoster";
 import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, MAX_ROSTER_N, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
 
@@ -217,7 +217,9 @@ describe("import: lossless round-trip and defaults", () => {
     ];
     for (const nm of badRosters) {
       const people = nm.map((name, id) => ({ id, name }));
-      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow();
+      // Assert the TYPE, not merely "something threw": a bare .toThrow() also passes when the
+      // test itself throws a TypeError, which would hide the case it means to cover.
+      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow(ImportError);
     }
   });
 

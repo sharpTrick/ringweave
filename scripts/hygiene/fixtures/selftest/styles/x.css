@@ -1,0 +1,4 @@
+/* .ghost-hook is referenced by no source file -> dead-css-hook.
+   .used-hook is referenced, so it must NOT be reported (guards against over-reporting). */
+.ghost-hook { color: #eef2fb; }
+.used-hook { color: #f6b26b; }

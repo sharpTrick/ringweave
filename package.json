@@ -1,0 +1,19 @@
+{
+  "name": "ringweave-repo",
+  "private": true,
+  "type": "module",
+  "description": "Repo-level tooling only. The shipped packages are lib/ (the ringweave core) and app/ (BuddyGraph); neither depends on anything here.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "lint": "npm run lint:oxlint && npm run lint:knip && npm run lint:hygiene",
+    "lint:oxlint": "oxlint --deny-warnings",
+    "lint:knip": "knip",
+    "lint:hygiene": "node scripts/hygiene/oracle-check.mjs && node scripts/hygiene/run.mjs"
+  },
+  "devDependencies": {
+    "knip": "^6.29.0",
+    "oxlint": "^1.75.0"
+  }
+}

@@ -23,25 +23,10 @@ describe("repo hygiene", () => {
     expect(offenders).toEqual([]);
   });
 
-  // Class: an exported runtime symbol referenced ONLY within its own file is a dead export left
-  // by a refactor (buddyNames after unification; LARGE_ROSTER never consumed). Every exported
-  // function/const under app/src must have a consumer in some OTHER file (src or test).
-  it("every exported function/const in app/src is referenced outside its own file", () => {
-    const srcRoot = fileURLToPath(new URL("../src", import.meta.url));
-    const testRoot = fileURLToPath(new URL("../test", import.meta.url));
-    const srcFiles = walk(srcRoot).filter((f) => /\.(ts|tsx)$/.test(f));
-    const cache = new Map<string, string>();
-    const read = (f: string) => cache.get(f) ?? (cache.set(f, readFileSync(f, "utf8")), cache.get(f)!);
-    const searchable = [...srcFiles, ...walk(testRoot).filter((f) => /\.(ts|tsx)$/.test(f))];
-
-    const orphans: string[] = [];
-    for (const file of srcFiles) {
-      const exported = [...read(file).matchAll(/export (?:function|const) (\w+)/g)].map((m) => m[1]);
-      for (const name of exported) {
-        const ref = new RegExp(`\\b${name}\\b`);
-        if (!searchable.some((f) => f !== file && ref.test(read(f)))) orphans.push(`${name} (${file})`);
-      }
-    }
-    expect(orphans).toEqual([]); // un-export (make module-local) or add a consumer
-  });
+  // The dead-export half of this file is now knip's job (`npm run lint` at the repo root). knip
+  // was adopted only after being shown to be a strict superset of the regex it replaced: on the
+  // two historical orphans this test was written for (`buddyNames`, `LARGE_ROSTER`) it flags both,
+  // it likewise ignores an export consumed only by a test — the deliberate allowance the regex
+  // made — and it additionally catches `export type`, which `export (?:function|const)` could
+  // never see (it found an unused `GenStatus` the moment it was switched on).
 });
