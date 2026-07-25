@@ -26,11 +26,21 @@ export const meta = {
   ],
 }
 
-const seeds = args?.seeds ?? []
-const controls = args?.controls ?? []
-const config = args?.config ?? 'unspecified'
+// Tolerate `args` arriving as a JSON STRING rather than an object. This is a documented foot-gun of
+// the calling convention and it cost a launch: a stringified payload leaves `args.seeds` undefined,
+// so the run dies with "nothing to score" and looks like an empty corpus rather than a caller error.
+const input = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
 
-if (seeds.length === 0) throw new Error('mutation-recall: args.seeds is empty — nothing to score')
+const seeds = input.seeds ?? []
+const controls = input.controls ?? []
+const config = input.config ?? 'unspecified'
+
+if (seeds.length === 0) {
+  throw new Error(
+    `mutation-recall: args.seeds is empty — nothing to score. Received args of type ${typeof args}` +
+      ` with keys [${Object.keys(input).join(', ')}]. Pass seeds/controls as an actual JSON object.`,
+  )
+}
 
 /** E1's dataset mixes absolute and relative paths; normalize both sides before comparing. */
 function normPath(p) {
@@ -106,8 +116,8 @@ const seedRuns = await pipeline(
   (s) =>
     workflow('adversarial-review', {
       target: s.worktree,
-      saturation: args?.saturation ?? {},
-      modelOverride: args?.modelOverride ?? null,
+      saturation: input.saturation ?? {},
+      modelOverride: input.modelOverride ?? null,
       round: 1,
     }).catch(() => null),
   (round, s) => {
@@ -135,7 +145,7 @@ phase('Precision')
 const controlRuns = controls.length
   ? await pipeline(
       controls,
-      (c) => workflow('adversarial-review', { target: c.worktree, saturation: args?.saturation ?? {}, modelOverride: args?.modelOverride ?? null, round: 1 }).catch(() => null),
+      (c) => workflow('adversarial-review', { target: c.worktree, saturation: input.saturation ?? {}, modelOverride: input.modelOverride ?? null, round: 1 }).catch(() => null),
       (round, c) => ({
         control: c.id,
         errored: !round,

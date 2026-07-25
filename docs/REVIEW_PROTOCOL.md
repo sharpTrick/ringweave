@@ -21,8 +21,16 @@ critic is spawned**. This is not a formality: it is what makes the critics' scop
 
 The lint gate owns these classes outright, and a critic filing one is **out of scope**: stale
 comments naming symbols that no longer exist, unused exports and parameters, dead CSS hooks, a bare
-literal mirroring an exported constant, committed scratch files, and statically-detectable a11y
-defects. In the measured run these were among the most-repeated finding labels, and a ~150 K-token
+literal mirroring an exported constant, committed scratch files, and a11y defects where an attribute
+is **present but wrong** (`aria-hidden` on something focusable, a bad `role`, a label pointing
+nowhere).
+
+**A *missing* accessible attribute is NOT owned by the linter and stays in scope** for
+`critic-interaction`. A linter cannot flag an absence: nothing tells it a `<button>` is a toggle that
+ought to expose `aria-pressed`. This was measured rather than assumed — a seeded `aria-pressed`
+removal passed the full lint gate cleanly, and only the test suite caught it. An earlier version of
+this section excluded "statically-detectable a11y defects" wholesale, which was too broad and would
+have left that class watched by nobody. That is the failure mode scope exclusions must never create. In the measured run these were among the most-repeated finding labels, and a ~150 K-token
 round spent noticing a stale comment is the failure that experiment documented.
 
 The gate **self-tests**: `scripts/hygiene/oracle-check.mjs` asserts every rule and custom check
