@@ -113,8 +113,7 @@ token-swap; M2 ships the mock-faithful dark theme only.
   (or incrementally) — is a clean follow-on if very large graphs in force mode become common.
 - **Hover highlight is O(n+m) per hover** (recomputes neighbor sets + node/edge classes). Fine at
   M2 sizes; memoize/gate it if very large graphs become common.
-- **Generation connectivity is assumed, not measured.** `viewFromResult` sets `connected:true` /
-  `largestComponentFraction:1` because `BuddyResult` carries no connectivity field and the ring
-  seed guarantees connectivity by construction. The honest fix is lib-first: add `connected` /
-  `largestComponentFraction` to `BuddyResult` (the worker already computes `allPairsSummary`, whose
-  `Summary` has `connected`) and pass them through, so both view-model producers *measure* it.
+- ~~**Generation connectivity is assumed, not measured.**~~ **Retired in M3.** `BuddyResult` now
+  carries `connected` / `largestComponentFraction` (from the `allPairsSummary` the builder already
+  ran), and `viewFromResult` reads them instead of hardcoding `true` / `1`. The fix was taken
+  lib-first as recorded. It stopped being cosmetic the moment a second generator fed the same view.

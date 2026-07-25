@@ -25,6 +25,86 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
   return dist;
 }
 
+/**
+ * Throw on a vertex index outside 0..n-1. The path/eccentricity entry points take
+ * indices chosen by a caller (ultimately a user selection), and `bfsDistances`
+ * would silently tolerate a bad one — `Int32Array` ignores an out-of-range write,
+ * so `dist[s]` reads back `undefined` and every downstream comparison is false.
+ */
+function checkVertex(g: Graph, v: number, label: string): void {
+  if (!Number.isInteger(v) || v < 0 || v >= g.n) {
+    throw new Error(`${label} ${v} must be an integer in [0, ${g.n - 1}]`);
+  }
+}
+
+/**
+ * Canonical shortest path from `s` to `t` inclusive, as vertex indices; null when
+ * `t` is unreachable from `s`. `shortestPath(g, v, v)` is `[v]`.
+ *
+ * Determinism is the whole design. `bfsDistances` iterates `g.adj[u]`, a Set in
+ * insertion order, so *distances* are order-invariant but a *predecessor* is not:
+ * recording a `parent` during BFS (as `girth` does) would make the path depend on
+ * edge-insertion history, and a graph rebuilt with its edges added in a different
+ * order would yield a different path. Instead, BFS from `t` and then walk forward
+ * from `s`, always taking the lowest-indexed neighbour one step closer. `min` is
+ * order-free, so the result depends only on the edge set — and it is the
+ * lexicographically smallest shortest path.
+ *
+ * Not symmetric: `shortestPath(g, s, t)` is generally not the reverse of
+ * `shortestPath(g, t, s)`, since each is smallest read from its own start. A
+ * caller treating the pair as unordered should canonicalise (e.g. always pass the
+ * lower index as `s`).
+ */
+export function shortestPath(g: Graph, s: number, t: number): number[] | null {
+  checkVertex(g, s, "source");
+  checkVertex(g, t, "target");
+  const dist = bfsDistances(g, t);
+  const steps = dist[s];
+  if (steps === UNREACHABLE) return null;
+
+  // Bounded by the known distance rather than looping until `u === t`, so a
+  // malformed adjacency can never spin. Each step is guaranteed to find a
+  // neighbour: `u` is reachable at distance d > 0 only because BFS discovered it
+  // from some vertex at d-1, and `Graph` keeps adjacency symmetric.
+  const path = new Array<number>(steps + 1);
+  path[0] = s;
+  let u = s;
+  for (let i = 1; i <= steps; i++) {
+    const closer = dist[u] - 1;
+    let next = -1;
+    for (const w of g.adj[u]) {
+      if (dist[w] === closer && (next === -1 || w < next)) next = w;
+    }
+    path[i] = next;
+    u = next;
+  }
+  return path;
+}
+
+/**
+ * Largest distance from `v` to any other vertex — how many steps the furthest
+ * person is. Infinity when some vertex is unreachable from `v`, and 0 for the
+ * single-vertex graph.
+ *
+ * Infinity, not `UNREACHABLE`, because this is a *metric*: the module keeps two
+ * non-overlapping conventions and `girth`/`aspl` already return Infinity for "no
+ * such value", while `UNREACHABLE` (-1) is only ever a per-entry sentinel inside a
+ * distance vector. Returning -1 here would read as "0 steps away, but less" to
+ * every numeric comparison — and a disconnected roster reporting a small
+ * eccentricity is precisely the "disconnected reads as optimal" failure this is
+ * meant to prevent.
+ */
+export function eccentricity(g: Graph, v: number): number {
+  checkVertex(g, v, "vertex");
+  const dist = bfsDistances(g, v);
+  let ecc = 0;
+  for (let i = 0; i < g.n; i++) {
+    if (dist[i] === UNREACHABLE) return Infinity;
+    if (dist[i] > ecc) ecc = dist[i];
+  }
+  return ecc;
+}
+
 export function isConnected(g: Graph): boolean {
   if (g.n === 0) return true;
   const d = bfsDistances(g, 0);

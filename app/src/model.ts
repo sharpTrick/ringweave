@@ -241,8 +241,15 @@ export interface GraphView {
   metrics: Metrics;
 }
 
-/** Combine a worker BuddyResult with the roster + settings into a GraphView. The
-    unconstrained builder seeds a ring, so its output is always connected. */
+/**
+ * Combine a worker BuddyResult with the roster + settings into a GraphView.
+ *
+ * Connectivity is read from the result rather than assumed. It used to be
+ * hardcoded true on the reasoning that the unconstrained builder seeds a ring and
+ * so always connects — true of that builder, but it made the *view* layer carry a
+ * fact about a *generator*, which is exactly the assumption that goes stale the
+ * moment a second generator feeds the same view.
+ */
 export function viewFromResult(names: string[], settings: Settings, r: BuddyResult): GraphView {
   return {
     names,
@@ -255,8 +262,8 @@ export function viewFromResult(names: string[], settings: Settings, r: BuddyResu
       girth: r.girth,
       degreeMin: r.degreeMin,
       degreeMax: r.degreeMax,
-      connected: true,
-      largestComponentFraction: 1,
+      connected: r.connected,
+      largestComponentFraction: r.largestComponentFraction,
     }),
   };
 }

@@ -63,6 +63,16 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 ## Known limitations / tracked follow-ons
 
 Surfaced by review, deliberately deferred (not silently ignored):
+- **`shortestPath` / `eccentricity` are deliberately NOT mirrored in `reference-python/`,** and this
+  is the one documented exception to the mirror rule above. The rule is conditional on changing an
+  *algorithm*; these add none, they query `bfsDistances`, which is itself oracle-validated. More to
+  the point, the oracle's stated contract is invariants and aggregate metrics **"not byte-for-byte
+  edges"** — and a path is exactly a byte-for-byte artifact, the one category it does not validate.
+  Mirroring would manufacture a *new* cross-language byte-identity obligation between runtimes whose
+  set iteration orders differ, i.e. it would make the oracle claim less true, not more. The
+  substitute is `paths.props.test.ts`'s `path.length - 1 === bfsDistances(g,s)[t]`, which checks the
+  new code against the mirrored function rather than against another TS BFS. Revisit only if path
+  choice ever feeds generation.
 - **Generation cost scales as n²·min(k,n-1):** `constrainedGreedy` runs one BFS (~O(n)) per edge
   added and adds ~n·min(k,n-1)/2 edges (n=500,k=4 ≈ 120 ms; n=5000,k=4 ≈ 13 s; the dense corner
   n=500,k=499 ≈ 89 s). Two caps bound it, both in `graph.ts` and enforced as a refusal in `validate`

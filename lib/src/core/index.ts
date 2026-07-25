@@ -14,9 +14,12 @@
 export { Graph, ring, MAX_ROSTER, MAX_CONSTRAINED_N, DEFAULT_MIN_SEPARATION } from "./graph.js";
 export {
   bfsDistances,
+  UNREACHABLE,
   isConnected,
   allPairsSummary,
   girth,
+  shortestPath,
+  eccentricity,
   largestComponentFraction,
   type Summary,
 } from "./metrics.js";
@@ -85,6 +88,20 @@ export interface BuddyResult {
   asplGap: number;
   polished: boolean;
   finalMinSeparation: number;
+  /**
+   * Whether every person can reach every other. `allPairsSummary` has always
+   * computed this; it simply was not surfaced, which left every consumer either
+   * hardcoding `true` or inferring connectivity from a finite ASPL — and ASPL is
+   * a mean over *reachable* pairs, so a split roster reads as finite and can
+   * score as optimal.
+   */
+  connected: boolean;
+  /**
+   * Fraction (0..1) of people in the largest group. 1 when connected. The graded
+   * companion to `connected`, matching {@link ConstraintReport}'s field of the
+   * same name so both builders report connectivity the same way.
+   */
+  largestComponentFraction: number;
 }
 
 /**
@@ -139,6 +156,8 @@ export function buildBuddyGraph(
     asplGap: asplGap(summary.aspl, n, k),
     polished,
     finalMinSeparation: finalMind,
+    connected: summary.connected,
+    largestComponentFraction: largestComponentFraction(g),
   };
 }
 
