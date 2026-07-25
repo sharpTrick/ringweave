@@ -6,9 +6,13 @@ import RosterModal from "./panels/RosterModal";
 import LayoutToggle from "./panels/LayoutToggle";
 import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
+import PersonSearch from "./panels/PersonSearch";
+import PersonPanel from "./panels/PersonPanel";
 import Slips from "./panels/Slips";
 import Notice from "./panels/Notice";
 import { useNotice } from "./state/useNotice";
+import { useExplorerHistory } from "./state/useExplorerHistory";
+import { useGraph } from "./state/useGraph";
 import { describeReasons } from "./io/constraintMessages";
 import type { ConstraintPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
@@ -16,6 +20,9 @@ import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
 import { readFileText } from "./io/readFileText";
 import { downloadBlob } from "./io/download";
+
+/** Stable identity for the no-view case, so the graph memo doesn't rebuild every render. */
+const EMPTY_EDGES: [number, number][] = [];
 
 export default function App() {
   const { notice, flash, show, clear } = useNotice();
@@ -38,10 +45,18 @@ export default function App() {
   // only ever replaced together (by generate or by import), so they cannot drift apart.
   const [constraints, setConstraints] = useState<ConstraintPair[]>([]);
   const [layout, setLayout] = useState<LayoutMode>("ring");
-  const [selected, setSelected] = useState<number | null>(null);
+  // Selection carries a back stack: in the explorer every name is a link, so
+  // "where was I" is part of the model rather than something the user re-derives.
+  const explorer = useExplorerHistory();
+  const selected = explorer.current;
+  const setSelected = explorer.select;
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
+
+  // Rebuilt only when the edge set changes; the explorer and the path finder both
+  // need real core queries and neither may reimplement them.
+  const graph = useGraph(view?.names.length ?? 0, view?.edges ?? EMPTY_EDGES);
 
   useEffect(() => {
     if (bg.status === "refused") {
@@ -64,7 +79,7 @@ export default function App() {
   // Every graph-replacing action clears transient selection + hover, so no stale
   // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
   const resetSelection = () => {
-    setSelected(null);
+    explorer.reset();
     setHovered(null);
   };
 
@@ -169,6 +184,19 @@ export default function App() {
 
               <LayoutToggle layout={layout} onChange={setLayout} />
               <div className="hint">Hover a person to light their buddies</div>
+              <PersonSearch names={view.names} onSelect={setSelected} />
+
+              {selected !== null && (
+                <PersonPanel
+                  view={view}
+                  graph={graph}
+                  index={selected}
+                  canGoBack={explorer.canGoBack}
+                  onSelect={setSelected}
+                  onBack={explorer.back}
+                  onClose={() => setSelected(null)}
+                />
+              )}
 
               <BuddyList view={view} selected={selected} onSelect={setSelected} />
               <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />

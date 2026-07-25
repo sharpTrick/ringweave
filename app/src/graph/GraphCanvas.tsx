@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { forceLayout, ringLayout, type Pt } from "./layout";
+import { neighborhood } from "../neighborhood";
 
 export type LayoutMode = "ring" | "force";
 
@@ -175,17 +176,9 @@ export default function GraphCanvas({
   }, []);
 
   const focus = hovered ?? selected;
-  const { first, second } = useMemo(() => {
-    const f = new Set<number>();
-    const s = new Set<number>();
-    if (focus != null) {
-      for (const b of adjacency[focus] ?? []) f.add(b);
-      for (const b of adjacency[focus] ?? []) {
-        for (const c of adjacency[b] ?? []) if (c !== focus && !f.has(c)) s.add(c);
-      }
-    }
-    return { first: f, second: s };
-  }, [focus, adjacency]);
+  // Shared with the person explorer (src/neighborhood.ts) so the two can't disagree
+  // about who counts as one or two steps away.
+  const { first, second } = useMemo(() => neighborhood(adjacency, focus), [focus, adjacency]);
 
   const px = (p: Pt) => ({ x: fit.cx + p.x * fit.s, y: fit.cy + p.y * fit.s });
 

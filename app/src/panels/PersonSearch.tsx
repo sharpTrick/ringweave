@@ -1,0 +1,114 @@
+import { useId, useMemo, useState, type KeyboardEvent } from "react";
+import { rankMatches } from "../search";
+
+interface Props {
+  names: string[];
+  onSelect: (index: number) => void;
+}
+
+/** How many results the list shows. Enough to find someone, short enough to scan. */
+const RESULT_LIMIT = 8;
+
+/**
+ * F8: find a person by fuzzy name ("jsmi" → "John Smith").
+ *
+ * A proper combobox rather than an input with a list stuck under it: the results
+ * are reachable and announced with the arrow keys, which is the only way this is
+ * usable without a mouse. Enter picks the active row, Escape clears the query.
+ *
+ * Escape STOPS PROPAGATION. There is a global Escape handler that clears
+ * selection, and a user pressing Escape over a search box with text in it means
+ * "clear this box" — falling through would clear both, and the first press would
+ * appear to do the wrong thing.
+ */
+export default function PersonSearch({ names, onSelect }: Props) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const listId = useId();
+  const rowId = (i: number) => `${listId}-r${i}`;
+
+  const matches = useMemo(() => rankMatches(query, names, RESULT_LIMIT), [query, names]);
+  const open = query.trim() !== "";
+  // `active` is clamped rather than reset in an effect: the list changes on every
+  // keystroke, and an effect that resets it would fight the arrow keys.
+  const activeIndex = matches.length === 0 ? -1 : Math.min(active, matches.length - 1);
+
+  const choose = (index: number) => {
+    onSelect(index);
+    setQuery("");
+    setActive(0);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (matches.length === 0) return;
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      setActive((prev) => {
+        const from = Math.min(prev, matches.length - 1);
+        return (from + delta + matches.length) % matches.length;
+      });
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0) {
+        e.preventDefault();
+        choose(matches[activeIndex].index);
+      }
+    } else if (e.key === "Escape") {
+      // See the note above: this Escape belongs to the search box.
+      e.stopPropagation();
+      setQuery("");
+      setActive(0);
+    }
+  };
+
+  return (
+    <div id="search" className="glass">
+      <input
+        className="search-in"
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && activeIndex >= 0 ? rowId(activeIndex) : undefined}
+        aria-label="Find a person"
+        placeholder="Find a person…"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActive(0);
+        }}
+        onKeyDown={onKeyDown}
+      />
+      {open && (
+        // The options are <button role="option">, not divs or list items. An ARIA
+        // option is itself the interactive element, so nesting a button inside one
+        // would create a second target; a bare div would be an unfocusable one. A
+        // button is genuinely clickable and genuinely focusable, and tabIndex={-1}
+        // keeps it out of the tab order, where the combobox contract says keyboard
+        // access runs through the input's arrow keys and aria-activedescendant.
+        <div className="search-list" id={listId} role="listbox" aria-label="Search results">
+          {matches.map((m, i) => (
+            <button
+              key={m.index}
+              id={rowId(i)}
+              role="option"
+              tabIndex={-1}
+              aria-selected={i === activeIndex}
+              className={"search-row" + (i === activeIndex ? " on" : "")}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => choose(m.index)}
+            >
+              {names[m.index]}
+            </button>
+          ))}
+          {/* Designed, not incidental: an empty result is the state a user hits when
+              they mistype, and silence there reads as a broken search box. */}
+          {matches.length === 0 && (
+            <div className="search-empty">Nobody matches “{query.trim()}”</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
