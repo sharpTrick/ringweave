@@ -52,7 +52,33 @@ console.log(JSON.stringify({config:"proposed-model-diverse",
 Pass that as an **actual JSON object**, not a string — passing a string is what killed the first
 launch (the script now tolerates it, but don't).
 
-## CRITICAL: the worktrees may be gone
+## Container restart, 2026-07-25 — what actually survived
+
+A restart happened mid-run. Recorded because the answer was better than the warning below suggested,
+and the next person should not rebuild unnecessarily:
+
+- `.sextant-worktrees/` **survived**, with seeds still applied and the `node_modules`/`lib/dist`
+  symlinks intact. Verified by re-reading two seeded lines, not by assuming.
+- `node_modules` in all three packages and `lib/dist` **survived**.
+- The workflow's **resume cache survived** — it lives in `journal.jsonl` under the transcript dir in
+  `/root/.claude/projects/`, not in the repo. 55 non-null agent results were still cached, which is
+  most of a 9-round run (~6 agents per round).
+- Only the *running processes* were killed.
+
+So after a restart: **check before rebuilding.** `ls .sextant-worktrees/ | wc -l` and a `sed -n` on a
+seeded line answer it in one command, versus ~15 minutes to rebuild.
+
+## Also fixed since: a dead lens read as a clean one
+
+The first scoring run lost 33 of 49 agents to a session limit and *still reported* `recall 0.8` and a
+blind spot. `agent()` **returns null** on a terminal API error rather than throwing, so the runner's
+`.catch` never fired and `(r && r.findings) || []` recorded each dead lens as
+`findings: 0, nothingFound: false, errored: undefined` — which let a round in which every lens died
+report `converged: true`. Now: null or malformed ⇒ `errored: true` with a reason, and
+`mutation-recall` excludes any round containing a dead lens from the denominator. The void output is
+kept as `data/VOID-recall-diverse-contaminated.json`. **Quote nothing from it.**
+
+## If the worktrees ARE gone
 
 `.sextant-worktrees/` is gitignored and lives only on this container's disk. If the container was
 reclaimed, **every review target no longer exists** and a resume would review nothing. Check first:
