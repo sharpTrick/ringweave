@@ -3,7 +3,7 @@
   "transcriptDir": "/root/.claude/projects/-home-user-ringweave/345b7fb0-c8e8-5daa-a884-3a1fe1c5886b/subagents/workflows/wf_09929847-e79",
   "note": "Reconstructed from transcripts, not from the workflow's return value. A round missing a lens is complete:false and MUST be excluded from any recall figure — a partial round scored as whole produces a false blind spot.",
   "totals": {
-    "agentResults": 85,
+    "agentResults": 87,
     "mappedRounds": 8,
     "unmappedResults": 0
   },
@@ -1181,98 +1181,74 @@
         "critic-maintainability"
       ],
       "nothingFoundLenses": [],
-      "findingCount": 12,
+      "findingCount": 10,
       "findings": [
         {
           "critic": "critic-correctness",
           "severity": "blocking",
           "verdict": "CONFIRMED",
-          "class": "untyped-file-drop-accepted-as-roster",
-          "theme": "a dropped file is accepted as roster text whatever it actually is, so the app's own export file silently becomes a roster of fake people",
-          "file": "app/src/panels/RosterModal.tsx",
-          "line": 58,
-          "summary": "The roster drop handler performs no file-type check, while the file picker beside it declares accept=\".txt,.csv,text/plain,text/csv\". `accept` does not apply to drops, so the drop path admits a strictly larger file set than the picker — including the app's own exported buddygraph.json, whose raw text parseRoster happily shreds into \"names\". There is no drag-and-drop import path for a graph file, so the natural gesture (\"reload the graph I exported\") lands here and is misinterpreted rather than refused or routed to importGraph.",
-          "failure": "Reproduced with @testing-library/react against the real RosterModal: exportGraphJson of a 6-person graph (viewFromResult(['Alice','Bob','Cara','Dan','Eve','Fay'], DEFAULT_SETTINGS, buildBuddyGraph(6,2,{seed:1,polish:false}))) written to a File('buddygraph.json', type 'application/json') and dispatched via fireEvent.drop on `.sheet`. Result: the counter renders \"44 people\", the Generate button is enabled (disabled === false), and clicking it calls onGenerate with names = [\"{\", \"\\\"version\\\": 1\", \"\\\"people\\\": [\", \"\\\"id\\\": 0\", \"\\\"name\\\": \\\"Alice\\\"\", \"}\", \"\\\"id\\\": 1\", ...] — 44 entries — alongside the warning `Removed 34 duplicate entries ({, }, ], [, 0, 1, 2, 3, 4, 5). Each person appears once.` The organizer can then print buddy slips for a person named `\"version\": 1`. The same hole admits a binary file under the 8 MB gate (readAsText mojibake). No existing test dispatches a drop event on RosterModal, so the whole path is uncovered.",
-          "remediation": "Gate `readFile` in RosterModal on the same set the picker declares — accept only text/plain, text/csv, or a .txt/.csv extension — and surface the existing `fileError` note for anything else, so the drop path and the picker path admit exactly one file set. Better still, detect a parsed `{version: 1, people: [...]}` object and route it to `importGraph` (App.applyImported) instead, which turns the most likely mistake into the action the user meant.",
-          "invariant": "For every File f, the roster drop handler replaces the roster text iff f is in the accepted-roster-type set declared by the picker's `accept` attribute (text/plain | text/csv | .txt | .csv); for every f outside that set the roster text is unchanged and a notice is raised. In particular, no file whose text JSON.parses to an object with version === 1 and an array `people` may ever reach parseRoster."
-        },
-        {
-          "critic": "critic-correctness",
-          "severity": "suggestion",
-          "verdict": "PLAUSIBLE",
-          "class": "unguarded-page-level-file-drop",
-          "theme": "a file dropped outside the roster sheet triggers browser default navigation and discards the unsaved graph",
-          "file": "app/src/panels/RosterModal.tsx",
-          "line": 70,
-          "summary": "`onDragOver`/`onDrop` with preventDefault exist only on `.sheet`. Nothing guards the `#modal` backdrop, `#stage`, the rail, or the document, and when no modal is open there is no drop handler anywhere. A dropped file therefore reaches the browser default action, which navigates the tab to the file — destroying the in-memory roster, graph, and settings, none of which are persisted.",
-          "failure": "Traced by grep: the only dragover/drop handlers in app/src are RosterModal.tsx:70 on `.sheet`. With a graph on screen and the modal closed, dropping buddygraph.json anywhere in the viewport hits the UA default (navigate to the dropped file) rather than any app handler; the App holds `view`, `names`, `settings`, `layout` only in React state, so the whole session is lost with no confirmation. Marked PLAUSIBLE rather than CONFIRMED because jsdom does not implement the navigation default, so the consequence is derived from the HTML drag-and-drop spec rather than observed here.",
-          "remediation": "Add a document-level (or #app-level) dragover/drop listener that preventDefaults unconditionally, and route a dropped file to the appropriate importer by kind — roster text to setRoster, a version-1 BuddyGraph JSON to applyImported — so no drop can reach the UA default.",
-          "invariant": "Any `drop` event carrying `dataTransfer.files`, dispatched on any node in the document, ends with `event.defaultPrevented === true`."
+          "class": "unsupported-file-silently-mis-parsed",
+          "theme": "the JSON graph-import path has no first-run entry point, and the only visible drop target silently turns a BuddyGraph .json into a fabricated roster instead of importing it",
+          "file": "/home/user/ringweave/.sextant-worktrees/wt-18/app/src/panels/RosterModal.tsx",
+          "line": 51,
+          "summary": "`readFile` in RosterModal accepts ANY dropped file and pipes its raw text straight into `setRoster` with no type check, while the only affordance that reaches `importGraph` (QualityPanel's \"Import ↑\", App.tsx:161) is rendered inside `{view && ...}` — so it does not exist until a graph has already been generated. On first run the organizer's natural action, dragging the .json they exported yesterday onto the setup sheet, is not an import: `parseRoster` splits the JSON on newlines/commas and produces a roster of syntax fragments, with no error and no warning.",
+          "failure": "Fresh app (modalOpen=true, view=null). Drop the file produced by `exportGraphJson` for a 6-person graph onto the setup sheet. Reproduced: `parseRoster(exportGraphJson(view))` returns 44 names — [\"{\", \"\\\"version\\\": 1\", \"\\\"people\\\": [\", \"\\\"id\\\": 0\", \"\\\"name\\\": \\\"Ann\\\"\", \"}\", \"\\\"id\\\": 1\", ...]. The sheet then reads \"44 people\", Generate is enabled, and the app produces and displays a real buddy graph over 44 fabricated people named after JSON tokens. Traced separately: with view===null there is no rendered control that clicks `importRef`, so the actual import path is unreachable on first run (app/test/appErrorRecovery.test.tsx has to reach the hidden <input> via `document.querySelector` because no button exposes it). Existing tests catch neither half — none render App with view=null looking for an import affordance, and none feed graph JSON to the roster reader.",
+          "invariant": "For any text T read by the roster file path, if `JSON.parse(T)` succeeds and yields an object with `version === 1` and an array `people`, T must never become roster text — it is either routed to `importGraph` or refused with a plain-language message. Equivalently: no string that `importGraph` would accept is ever passed to `parseRoster` as a roster. Additionally, the set of controls rendered when `view === null` must include one that reaches `importGraph`.",
+          "remediation": "In `RosterModal.readFile`, sniff the text before `setRoster`: if it parses as JSON with `version === 1`, either hand it to the App's import handler (lift an `onImportFile` prop) or reject it with \"That looks like a saved BuddyGraph file — use Import to open it.\" Independently, render an import affordance on the first-run sheet (an \"Open a saved graph\" link that clicks `importRef`) so F6's import is reachable before any graph exists."
         },
         {
           "critic": "critic-correctness",
           "severity": "suggestion",
           "verdict": "CONFIRMED",
-          "class": "unhandled-worker-error-channel",
-          "theme": "a worker failure that is not a thrown exception inside onmessage leaves the UI permanently in the running state with no error surfaced",
-          "file": "app/src/state/useGenerationWorker.ts",
-          "line": 33,
-          "summary": "`attach` wires only `worker.onmessage`. The Worker's own `error` and `messageerror` channels are unhandled, so a failure that prevents the worker script from ever posting a message (module-load failure on a stale deploy where the hashed worker chunk 404s, a CSP worker-src refusal, an OOM during instantiation) never transitions state. `status` stays \"running\" indefinitely, App renders the `Generating…` overlay forever, and the App error effect — which keys entirely off `bg.status === \"error\"` — never fires, so no toast appears and the documented recovery path (reopen the setup modal on a first-generation failure) never runs.",
-          "failure": "Traced: the only `onerror` in app/src is FileReader's in readFileText.ts:19; there is no `worker.onerror` or `worker.onmessageerror` anywhere. The try/catch in generate.worker.ts only covers exceptions thrown *inside* a delivered onmessage, i.e. exactly the failures that already have a response path. For a worker that never runs its module, `runningRef.current` stays true, `setState({status:'running'})` is never superseded, and the App effect's `if (bg.status === \"error\")` branch is dead. The user's only escape is the Cancel button (bg.cancel → reset), and on a first generation the modal reopens only because cancelGeneration checks `!view` — the error itself is never reported. appErrorRecovery.test.tsx exercises the error branch only by mocking useGenerationWorker's state directly, so it cannot catch the missing transition.",
-          "remediation": "In `attach`, also set `worker.onerror` and `worker.onmessageerror` to clear runningRef and setState({status:'error', result:null, error: <message>}) — mirroring the ok:false branch — so every way a worker can fail converges on the one state the App already knows how to recover from.",
-          "invariant": "After any error event on the generation Worker (an ok:false response, an `error` event, or a `messageerror` event) GenState.status === 'error' and GenState.error is a non-empty string; GenState.status === 'running' is reachable only while a computation can still deliver a result."
+          "class": "absolute-caption-over-relative-score",
+          "theme": "the quality gauge and its caption are scored relative to the graph's own degree but worded absolutely, so the caption can contradict the raw hop numbers displayed two lines above it",
+          "file": "/home/user/ringweave/.sextant-worktrees/wt-18/app/src/model.ts",
+          "line": 158,
+          "summary": "`assembleMetrics` scores quality as the Moore gap at `degreeMax`, so any Moore-optimal-for-its-degree graph reads 100. `connectionSummary` then thresholds that degree-relative percentage and emits the absolute phrase \"everyone's well-linked\". For a 2-regular graph the two disagree loudly: the panel shows \"avg hops 25.3\" and \"most steps between anyone: 50\" directly above a 100 gauge captioned \"everyone's well-linked\". Reachable without any import — BUDDY_MIN is 2, so 100 people at the minimum buddy setting hits it.",
+          "failure": "Set Buddies each = 2 with a 100-name roster. Reproduced: `buildBuddyGraph(100, 2, {seed:12345, polish:\"auto\"})` returns exactly the 100-cycle (edge list byte-identical to the canonical cycle), aspl 25.2525, diameter 50, asplGap 0. `assembleMetrics` -> quality 1; QualityPanel renders gauge \"100\" + \"everyone's well-linked\" beside \"25.3 avg hops\" and \"50 most steps\". Because a reroll regenerates the identical cycle, `onIdenticalReroll` also fires and App flashes \"That's already an optimal arrangement — a re-roll can't improve it.\" for a graph in which two people are 50 introductions apart. The suite blesses the 100 score (importExport.roundtrip.test.ts \"imports provably-optimal graphs at 100%\") but no test asserts anything about the caption's wording against the hop numbers shown next to it, so this passes green.",
+          "invariant": "I cannot state a non-arbitrary universal property here — the score is correct under its stated (degree-relative) definition, so any \"well-linked\" threshold on absolute hop counts would be a chosen constant rather than a derived one. Filed as case-only.",
+          "remediation": "Make the caption say what the score means rather than making an absolute claim: e.g. \"everyone's well-linked — as close as 2 buddies each allows\" when `degreeMax` is small, or gate the \"well-linked\" wording on an absolute companion (diameter) in addition to the relative percentage. The gauge tooltip already explains the Moore-bound framing; the caption should not out-claim it.",
+          "caseOnly": true
         },
         {
           "critic": "critic-solid",
           "severity": "suggestion",
           "verdict": "CONFIRMED",
-          "class": "unshared-graph-traversal",
-          "theme": "first/second-degree neighbor computation is embedded privately in the view component instead of a shared pure function",
+          "class": "graph-traversal-in-view-layer",
+          "theme": "no single owner for N-hop / path graph-traversal logic — the only precedent in app/src hand-rolls it directly over adjacency arrays in the view, and the next committed features (F8, F10) need the general form the core doesn't yet expose",
           "file": "app/src/graph/GraphCanvas.tsx",
-          "line": 178,
-          "summary": "GraphCanvas.tsx:178-188 computes the 1st-order (`first`) and 2nd-order (`second`) buddy Sets from `adjacency` inline inside the component, memoized on `focus` (hover/select) — it's the only implementation of this traversal anywhere in app/src (grepped; no shared helper exists). F8's node-explorer panel (PROJECT_PLAN.md:106, 'buddies (1st), reachable-in-2 (2nd)') needs the identical computation but driven by an explicitly-opened/searched node, independent of GraphCanvas's hover state and rendering lifecycle — it cannot call into GraphCanvas's private `useMemo`. Implementing F8 as specified either duplicates this BFS-adjacency-walk logic in the new explorer component (violating the project's own DRY/'one view model' principle and the 'UI never reimplements [graph] math... add it to the core' framing is moot here since this part is legitimately app-side, but duplicating it in two places is still a real seam gap) or forces a refactor of GraphCanvas to extract and export it — neither is free, and neither was anticipated by any comment in the file (unlike the FIT_MODES/positionsFor seam, which explicitly anticipates F8's *layout* needs but says nothing about this *panel-data* need).",
-          "failure": "Building NodeExplorer against the current code means either copy-pasting the Set-building loop from GraphCanvas.tsx:180-186 into a new panel file (two divergeable copies of 'first/second-order neighbors of vertex i'), or reaching into GraphCanvas internals that aren't exported.",
-          "invariant": "For any UI consumer that needs the first/second-degree buddy sets of a vertex from `adjacency`, there is exactly one implementation all such consumers call — not one instance embedded per component.",
-          "remediation": "Extract the first/second-degree computation (GraphCanvas.tsx:178-188) into a pure, exported function (e.g. `graph/neighbors.ts` or alongside `model.ts`) taking `(adjacency, focus)` and returning `{first, second}`; have both GraphCanvas and the new NodeExplorer call it, before either duplicates the logic."
+          "line": 177,
+          "summary": "GraphCanvas computes 1st/2nd-order neighbor sets for hover glow by hand-walking `adjacency` (view.buddies) with nested for-of loops, instead of going through ringweave's Graph/bfsDistances — a bounded BFS reimplemented in the UI. F8's node explorer (PROJECT_PLAN.md:106, 'buddies (1st), reachable-in-2 (2nd), eccentricity') needs the same 1st/2nd-order concept generalized to arbitrary depth (eccentricity = max over all depths), which this code cannot supply (it's hardcoded to exactly 2 levels) and which app/CLAUDE.md's own rule ('No BFS/ASPL/Moore code in app/. If a number is missing, add it to the core') says must come from ringweave. The natural F8 implementation therefore adds a second, independently-authored traversal (build a Graph from view.edges, call bfsDistances) alongside this one, so the same 'who is N hops from X' concept ends up with two owners that can silently diverge if the semantics of either ever change (e.g. how self-loops, disconnected components, or duplicate edges are treated).",
+          "failure": "Add F8's node-detail panel calling bfsDistances(graphFromView(view), i) for eccentricity/reachable-in-2 while GraphCanvas's unrelated hand-rolled walk keeps computing hover glow for the same node — the two computations happen to agree today only because both are fed the same edge list by construction; nothing enforces that they stay in agreement, and no test exercises GraphCanvas's first/second sets against the core's bfsDistances output.",
+          "remediation": "Before/while building F8, factor a single small core-backed helper (e.g. neighborsWithinDistance(g, focus, maxDepth) or reuse bfsDistances directly) that both the explorer panel and GraphCanvas's hover glow call, so there is exactly one traversal implementation for 'who is within k hops of X' instead of one hand-rolled and one core-sourced.",
+          "invariant": "for any GraphView and vertex i, every UI computation of 'vertices within k hops of i' (for any k) is produced by exactly one code path rooted in ringweave's exported graph primitives — grep for a second, independent nested-adjacency-walk implementing multi-hop reachability in app/src should find none"
         },
         {
           "critic": "critic-solid",
           "severity": "suggestion",
           "verdict": "CONFIRMED",
-          "class": "non-composable-highlight-model",
-          "theme": "the highlight-class functions assume exactly one active highlight concern and have no seam for a second, simultaneous one",
-          "file": "app/src/graph/GraphCanvas.tsx",
-          "line": 192,
-          "summary": "`nodeClass`/`edgeClass` (GraphCanvas.tsx:192-205) compute ONE mutually-exclusive className per node/edge from a single `focus` value (hover-or-select) via an if/else chain (sel/hi/hi2/faded and edge/lit/lit2/dim). F10 (path finder) needs to render an independent highlight — the shortest-chain edges/nodes between two selected people — that can be active at the same time as (or instead of) the existing hover-glow. There is no isolated extension point: adding path-highlighting means editing the branches of both functions to reconcile two simultaneous, potentially-conflicting highlight sources (e.g., is a node on the path AND second-degree-from-hover rendered as 'hi2' or as 'on-path'? which wins?), not adding an orthogonal case the way FIT_MODES/positionsFor's `assertNever` pattern allows for layout modes.",
-          "failure": "Attempting to add a `path: Set<number>` / `pathEdges: Set<string>` prop and folding it into `nodeClass`/`edgeClass` as written requires new precedence logic inside the existing conditional chain, not a clean additive branch — the functions have to be restructured (e.g., into a composable class-builder) rather than extended.",
-          "invariant": "Adding a second, independent highlight concern does not require editing the existing branches of nodeClass/edgeClass for the first concern.",
-          "remediation": "Before building F10's rendering, refactor nodeClass/edgeClass from a single-focus if/else into a small composable model (e.g., accumulate applicable class tokens per concern — hover-adjacency, path-membership, selection — and join them) so path-highlighting is an additive concern, not a rewrite of the hover logic."
-        },
-        {
-          "critic": "critic-solid",
-          "severity": "suggestion",
-          "verdict": "CONFIRMED",
-          "class": "missing-core-primitive",
-          "theme": "F10 needs an actual shortest path (vertex sequence), but the core only exposes distances, so a naive app-side implementation would violate the project's own 'no BFS in app/' rule",
+          "class": "missing-core-primitive-invites-ui-reimplementation",
+          "theme": "no single owner for N-hop / path graph-traversal logic — the only precedent in app/src hand-rolls it directly over adjacency arrays in the view, and the next committed features (F8, F10) need the general form the core doesn't yet expose",
           "file": "lib/src/core/metrics.ts",
           "line": 10,
-          "summary": "`bfsDistances` (lib/src/core/metrics.ts:10, re-exported via lib/src/core/index.ts:16) returns only a distance vector, with no predecessor tracking — there is no core function that reconstructs an actual shortest path (an ordered vertex list) between two nodes, and none is exported. F10's acceptance criterion is explicit: 'path matches BFS; ties broken deterministically.' Building this against `view.buddies` (adjacency) in app/src without a core addition means writing BFS-with-predecessor-tracking (real graph-search algorithm code, including the tie-break rule) inside app/, directly violating app/CLAUDE.md's 'The UI never reimplements math... No BFS/ASPL/Moore code in app/. If a number is missing, add it to the core (lib-first), not here.' The correct path is real fan-out into lib/ (new function + export + property/oracle-parity tests per lib/CLAUDE.md's 'change the Python first' rule) that must land, build, and be published to lib/dist before app/ can consume it — a two-package sequencing cost, not a same-repo one-file change.",
-          "failure": "A developer under time pressure reconstructing the path locally in app/src via `adjacency` (e.g. a home-grown BFS+predecessor walk in a new `panels/PathFinder.tsx`) would satisfy F10's acceptance test today but plant graph-search logic in the UI layer that the project's own architecture doc forbids, and whose tie-break rule could silently diverge from the core's determinism contract.",
-          "invariant": "No file under app/src performs a graph traversal (BFS/DFS/shortest-path) over `adjacency`/`edges` from scratch; every such traversal result is obtained by calling a `ringweave` core export.",
-          "remediation": "Add a `shortestPath(g, source, target): number[] | null` (or `bfsPredecessors`) function to lib/src/core/metrics.ts with a documented, deterministic tie-break (matching the reference Python), export it from lib/src/core/index.ts, add property/oracle-parity tests, rebuild lib/dist, then have F10's UI call it — before the app-only shortcut gets written."
+          "summary": "F10 ('select two people and see the shortest buddy-chain highlighted... path matches BFS; ties broken deterministically', PROJECT_PLAN.md:119-121) needs an actual vertex-sequence shortest path, not just distances. `bfsDistances` (lib/src/core/metrics.ts:10) returns only an Int32Array of distances — grepped the whole of lib/src for predecessor/parent/path/shortestPath and found no exported path-reconstruction function (the one `parent[]` array in metrics.ts is girth's internal cycle-detection scratch, not exported). F10 therefore cannot be implemented inside app/src alone under the app's own 'UI never reimplements math' rule; it requires a new lib-first export (e.g. `shortestPath(g, u, v)`) with the same deterministic tie-breaking bfsDistances already has via adjacency Set iteration order. Given GraphCanvas.tsx already contains one hand-rolled UI-side traversal (finding above), the risk is a second one appearing for F10 (a BFS-with-parent-tracking written directly in a new PathFinder panel/hook) rather than the lib addition the project's own architecture note prescribes.",
+          "failure": "F10 shipped as an app-side BFS-with-parent walk over view.buddies in a new hook, duplicating (and potentially tie-breaking differently from) the core's own BFS order in bfsDistances, so the highlighted path could disagree with what bfsDistances/allPairsSummary would report as the true distance for the same pair.",
+          "remediation": "Add `shortestPath(g, u, v)` (or equivalent) to lib/src/core/metrics.ts, exported through lib/src/core/index.ts, before/while building the F10 panel — matching the tie-breaking bfsDistances already uses — so app/src only ever renders a path the core computed.",
+          "invariant": "for any two reachable vertices u, v in a GraphView, the path the UI highlights for F10 has length equal to bfsDistances(g,u)[v] and is produced by a ringweave-exported function, never by a BFS/parent-tracking loop written in app/src"
         },
         {
           "critic": "critic-solid",
           "severity": "suggestion",
           "verdict": "PLAUSIBLE",
-          "class": "composition-root-drift",
-          "theme": "the composition root inlines cross-cutting UI state instead of following its own established hook-extraction convention",
+          "class": "inconsistent-state-extraction-convention",
+          "theme": "App.tsx composition root mixes an extraction convention (notice, generation) with inline useState for the concerns the next committed features will grow",
           "file": "app/src/App.tsx",
-          "line": 36,
-          "summary": "App.tsx already extracts cohesive state into hooks for notice (`useNotice`) and generation (`useBuddyGraph`/`useGenerationWorker`), but selection state (`selected`, `hovered`, and the paired `resetSelection` reset-on-every-graph-replacing-action logic at App.tsx:36-58) is inlined directly in the component with no equivalent hook. F8 adds search-query state, an explorer open/closed flag, and a back-stack of visited nodes; F10 adds a path-finder mode with two selected endpoints and an ESC-clears listener. All of that is selection-adjacent and, on the current trajectory, would land as more inline `useState`s in App.tsx rather than following the hook-extraction pattern the file already models elsewhere — growing the composition root inconsistently with its own convention rather than by it.",
-          "failure": "No concrete failure yet (F8/F10 don't exist) — this is a structural risk observed by tracing where the next two committed features' state would naturally land given the current file's shape, not a present defect.",
-          "invariant": "Every piece of cross-cutting UI state in App.tsx with its own reset/clear semantics (notice, generation, and — by the same logic — selection) is owned by a dedicated hook, consistent with the pattern the file already uses for notice and generation.",
-          "remediation": "Extract `selected`/`hovered`/`resetSelection` into a `useSelection` hook now (small, low-risk, matches existing convention), so F8's explorer/back-stack and F10's path-mode state have an established place to compose into rather than accreting as ad hoc useStates in App.tsx."
+          "line": 32,
+          "summary": "App.tsx extracts `useNotice` and `useBuddyGraph`/`useGenerationWorker` into src/state/ hooks for the concerns with nontrivial async/derived logic, but `selected`/`hovered`/`layout` stay as plain inline useState even though they're already consumed by multiple panels (GraphCanvas, BuddyList). F8 (fuzzy search + node explorer + a working back stack, PROJECT_PLAN.md:103-107) and F10 (a two-person path-finder selection mode, PROJECT_PLAN.md:119-121) both add state shaped exactly like today's selection concern (a search query, a navigation history stack, a second 'endpoint B' selection, an active-mode flag distinguishing 'exploring' from 'path-finding' from plain hover/select) with no established hook to grow into, so it's likely to accrete as more inline useState calls directly in the composition root rather than following the codebase's own extraction pattern.",
+          "failure": "Not a present defect — App.tsx at 6 useState + 1 ref today is not yet a god component. This is a forward-looking risk, not a traced failure.",
+          "remediation": "When F8/F10 land, consider extracting selection/navigation/path-mode state into a src/state/useSelection.ts (or similar) alongside useNotice/useBuddyGraph, consistent with the existing convention, rather than growing App.tsx's inline hook count further.",
+          "invariant": "no crisp invariant — this is a stylistic/consistency observation about which concerns get hook-extracted, not a property that holds or fails mechanically today",
+          "caseOnly": true
         },
         {
           "critic": "critic-interaction",
@@ -1341,10 +1317,95 @@
       ]
     }
   ],
+  "seedStatus": [
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "worktree": "wt-05",
+      "status": "found",
+      "statusStrict": "found",
+      "foundBy": [
+        "critic-correctness"
+      ],
+      "foundByStrict": [
+        "critic-correctness"
+      ],
+      "lensesMissing": [
+        "critic-security"
+      ]
+    },
+    {
+      "id": "sd-08-dedupe-count-boundary",
+      "worktree": "wt-08",
+      "status": "found",
+      "statusStrict": "found",
+      "foundBy": [
+        "critic-correctness"
+      ],
+      "foundByStrict": [
+        "critic-correctness"
+      ],
+      "lensesMissing": [
+        "critic-security"
+      ]
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "worktree": "wt-12",
+      "status": "found",
+      "statusStrict": "found",
+      "foundBy": [
+        "critic-correctness"
+      ],
+      "foundByStrict": [
+        "critic-correctness"
+      ],
+      "lensesMissing": [
+        "critic-security"
+      ]
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "worktree": "wt-13",
+      "status": "found",
+      "statusStrict": "found",
+      "foundBy": [
+        "critic-correctness"
+      ],
+      "foundByStrict": [
+        "critic-correctness"
+      ],
+      "lensesMissing": [
+        "critic-security"
+      ]
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "worktree": "wt-15",
+      "status": "found",
+      "statusStrict": "found",
+      "foundBy": [
+        "critic-correctness",
+        "critic-solid"
+      ],
+      "foundByStrict": [
+        "critic-correctness"
+      ],
+      "lensesMissing": [
+        "critic-security"
+      ]
+    }
+  ],
   "summary": {
     "completeRounds": 0,
     "partialRounds": 8,
-    "usable": false,
-    "warning": "8 round(s) are missing at least one lens and are NOT scoreable. Resume the run rather than scoring these."
+    "confirmedFound": 5,
+    "confirmedFoundStrict": 5,
+    "indeterminate": 0,
+    "indeterminateStrict": 0,
+    "confirmedMissed": 0,
+    "seeds": 5,
+    "recallComputable": true,
+    "recallComputableStrict": true,
+    "warning": "8 round(s) are missing a lens. FOUND results below are durable and may be cited; INDETERMINATE seeds must NOT be reported as misses or blind spots, and no recall ratio may be computed until every lens has reported. Resume the run to resolve them."
   }
 }

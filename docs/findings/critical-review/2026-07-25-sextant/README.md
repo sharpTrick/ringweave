@@ -128,7 +128,51 @@ Excluding it from the corpus is still correct: a seed on an uncovered line would
 measure "can the reviewer read code no test runs". But it is the single most actionable line in this
 document, and it is a test-suite gap, not a review-process one.
 
-### 4. E3 — seeded-defect recall *(in progress)*
+### 4. E3 — recall is 5/5, and one lens found everything
+
+Data in [`data/recovered-wf_09929847-e79.json`](./data/recovered-wf_09929847-e79.json), reconstructed
+from transcripts by `scripts/sextant/recover-run.mjs`.
+
+| seed | class | loose | strict | found by |
+| --- | --- | --- | --- | --- |
+| sd-05 | off-by-one boundary | FOUND | FOUND | correctness |
+| sd-08 | off-by-one boundary | FOUND | FOUND | correctness |
+| sd-12 | dropped guard clause | FOUND | FOUND | correctness |
+| sd-13 | wrong displayed state | FOUND | FOUND | correctness |
+| sd-15 | inverted comparison | FOUND | FOUND | correctness, solid |
+
+**Recall = 5/5 under both matching strictnesses, and it is durable even though every round is
+incomplete.** That is not a fudge, it follows from the direction of the error: rounds are missing
+`critic-security`, and a lens that has not yet reported can only *add* hits, never remove one. A
+positive observation does not become false when another reviewer shows up.
+
+**What is durable:**
+- Recall is 100% on this corpus. With 5 seeds a Wilson 95% CI still runs from roughly 57% to 100%,
+  so the honest reading is "no blind spot detected", not "no blind spots exist".
+- **Retiring any single lens other than correctness costs zero recall.** Correctness alone found all
+  five, so removing solid, maintainability, interaction *or* security cannot reduce 5/5. E4's
+  pre-registered "zero loss of recall" criterion is **met** for those four — on this corpus.
+
+**What is NOT durable, and must not be quoted yet:**
+- **Leave-correctness-out is indeterminate.** Four seeds were found *only* by correctness among the
+  lenses that have reported — but security has not reported, and might have found them too. Recall
+  is settled; *attribution* is not.
+- Marginal-recall-per-lens likewise waits on security.
+
+**The result that matters most is the negative one.** The first, contaminated run reported `sd-15`
+as a **blind spot**. It is not: correctness and solid both found it, strictly. Had that run been
+taken at face value, Sextant's headline would have been a fabricated blind spot in a defect class
+that the ensemble actually catches. The whole apparatus — treating a dead lens as errored, excluding
+partial rounds from denominators, separating existence claims from absence claims — exists because
+that nearly happened.
+
+**And a caution about the corpus, not the ensemble.** 5/5 on seeds that survived a green-suite gate
+sounds strong, but §3 showed the suite already catches 7 of 9 comparable mutations. What is left for
+the critics is a residue selected for being hard to test, not hard to *see* — four of the five are
+boundary or comparison flips in code a reader can check by eye. This says the ensemble reads
+carefully. It does not say it would find a defect class nobody thought to seed.
+
+### 4b. Original plan for this section *(superseded by 4)*
 
 Corpus construction is complete and the pre-registered allocation is mechanical
 ([`scripts/sextant/allocate.mjs`](../../../../scripts/sextant/allocate.mjs)). The prose-ensemble

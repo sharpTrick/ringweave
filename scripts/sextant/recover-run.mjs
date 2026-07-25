@@ -16,10 +16,21 @@
  * Usage:
  *   node scripts/sextant/recover-run.mjs <runId> [--json]
  *
- * IMPORTANT — it reports COMPLETENESS, not just results. A round missing a lens is marked
- * `complete: false` and excluded from any recall figure, for the same reason the runner now treats
- * a null agent as errored: a partial round scored as if whole produces a false blind spot, which is
- * the most misleading output this harness can emit.
+ * WHAT PARTIAL DATA CAN AND CANNOT SUPPORT. Incomplete does not mean worthless — the observations
+ * are real and are never discarded. The asymmetry is between two kinds of claim:
+ *
+ *   EXISTENCE  "critic-correctness found sd-13"  — VALID from a partial round. A positive
+ *              observation stands alone; it does not matter that another lens never ran.
+ *   ABSENCE    "the ensemble missed sd-15"       — INVALID. Absence requires that the whole
+ *              ensemble actually looked. This is the fabricated blind spot that the first
+ *              contaminated run nearly published.
+ *   RATIO      "recall = 4/5"                    — INVALID, because it is an absence claim wearing
+ *              a ratio's clothes: the denominator asserts the ensemble looked at all five.
+ *
+ * So per seed this reports `found` (a lens matched it — durable), or `indeterminate` (nothing
+ * matched YET and the ensemble is incomplete — say nothing), and only ever `missed` once every lens
+ * has reported. Resume remains the primary path; this is the backstop that keeps the confirmed hits
+ * while refusing to invent the misses.
  */
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -103,6 +114,21 @@ for (const r of results) {
   rounds.set(meta.worktree, round);
 }
 
+/** Mirrors the matcher in .claude/workflows/mutation-recall.js. The duplication is forced: workflow
+    scripts cannot import. Kept textually identical so the two cannot disagree about what a hit is. */
+const STOP = new Set(["that", "with", "from", "when", "this", "code", "test", "tests", "value", "values", "into"]);
+const normPath = (p) => String(p ?? "").replace(/^.*?((?:lib|app)\/)/, "$1").replace(/^\.\//, "");
+const tokens = (x) => new Set(String(x ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 3 && !STOP.has(t)));
+function matches(finding, seed) {
+  if (normPath(finding.file) !== normPath(seed.file)) return { strict: false, loose: false };
+  const nearby = finding.line != null && seed.line != null && Math.abs(finding.line - seed.line) <= 10;
+  const seedT = new Set([...tokens(seed.class), ...tokens(seed.theme)]);
+  const shared = [...tokens(finding.class), ...tokens(finding.theme)].some((t) => seedT.has(t));
+  // Both levels, because the pre-registration commits to reporting both: quoting only the
+  // flattering one would be the same error as quoting a single blame configuration.
+  return { strict: !!nearby, loose: !!nearby || shared };
+}
+
 const EXPECTED_LENSES = ["critic-correctness", "critic-security", "critic-solid", "critic-maintainability", "critic-interaction"];
 
 const out = {
@@ -133,13 +159,52 @@ const out = {
 };
 
 const complete = out.rounds.filter((r) => r.complete);
+
+// Per-seed status, honouring the existence/absence asymmetry above.
+let seedStatus = [];
+try {
+  const alloc = JSON.parse(readFileSync(join(ROOT, "docs/findings/critical-review/2026-07-25-sextant/data/allocation.json"), "utf8"));
+  const bySlot = new Map(alloc.proseSubset.map((s) => [s.worktree.split("/").pop(), s]));
+  seedStatus = out.rounds
+    .filter((r) => bySlot.has(r.worktree))
+    .map((r) => {
+      const seed = bySlot.get(r.worktree);
+      const scored = r.findings.map((f) => ({ f, m: matches(f, seed) }));
+      const looseHits = scored.filter((h) => h.m.loose);
+      const strictHits = scored.filter((h) => h.m.strict);
+      const st = (hits) => (hits.length > 0 ? "found" : r.complete ? "missed" : "indeterminate");
+      return {
+        id: seed.id,
+        worktree: r.worktree,
+        // FOUND is durable even from a partial round — a missing lens can only ADD hits, never
+        // remove one. MISSED is assertable only once every lens has reported; until then it is
+        // INDETERMINATE and must never be called a blind spot.
+        status: st(looseHits),
+        statusStrict: st(strictHits),
+        foundBy: [...new Set(looseHits.map((h) => h.f.critic))],
+        foundByStrict: [...new Set(strictHits.map((h) => h.f.critic))],
+        lensesMissing: r.lensesMissing,
+      };
+    });
+} catch {
+  /* allocation.json absent — skip per-seed status rather than guess */
+}
+out.seedStatus = seedStatus;
+
 out.summary = {
   completeRounds: complete.length,
   partialRounds: out.rounds.length - complete.length,
-  usable: complete.length > 0,
+  confirmedFound: seedStatus.filter((s) => s.status === "found").length,
+  confirmedFoundStrict: seedStatus.filter((s) => s.statusStrict === "found").length,
+  indeterminate: seedStatus.filter((s) => s.status === "indeterminate").length,
+  indeterminateStrict: seedStatus.filter((s) => s.statusStrict === "indeterminate").length,
+  confirmedMissed: seedStatus.filter((s) => s.status === "missed").length,
+  seeds: seedStatus.length,
+  recallComputable: seedStatus.length > 0 && seedStatus.every((s) => s.status !== "indeterminate"),
+  recallComputableStrict: seedStatus.length > 0 && seedStatus.every((s) => s.statusStrict !== "indeterminate"),
   warning:
     out.rounds.length > complete.length
-      ? `${out.rounds.length - complete.length} round(s) are missing at least one lens and are NOT scoreable. Resume the run rather than scoring these.`
+      ? `${out.rounds.length - complete.length} round(s) are missing a lens. FOUND results below are durable and may be cited; INDETERMINATE seeds must NOT be reported as misses or blind spots, and no recall ratio may be computed until every lens has reported. Resume the run to resolve them.`
       : null,
 };
 
@@ -157,7 +222,19 @@ if (process.argv.includes("--json")) {
         (r.complete ? "" : `   missing: ${r.lensesMissing.map((l) => l.replace("critic-", "")).join(", ")}`),
     );
   }
-  console.log(`\n  ${out.summary.completeRounds} complete, ${out.summary.partialRounds} partial`);
+  if (out.seedStatus.length) {
+    console.log("\n  per seed:");
+    for (const s of out.seedStatus) {
+      const tag = (v) => (v === "found" ? "FOUND" : v === "missed" ? "missed" : "indet.");
+      console.log(
+        `    loose=${tag(s.status).padEnd(6)} strict=${tag(s.statusStrict).padEnd(6)}  ${s.id}` +
+          (s.foundBy.length ? `  <- ${s.foundBy.map((c) => c.replace("critic-", "")).join(", ")}` : ""),
+      );
+    }
+  }
+  console.log(`\n  ${out.summary.completeRounds} complete, ${out.summary.partialRounds} partial` +
+    `\n  loose : found ${out.summary.confirmedFound}/${out.summary.seeds}, indeterminate ${out.summary.indeterminate}  -> recall ${out.summary.recallComputable ? "computable" : "NOT computable"}` +
+    `\n  strict: found ${out.summary.confirmedFoundStrict}/${out.summary.seeds}, indeterminate ${out.summary.indeterminateStrict}  -> recall ${out.summary.recallComputableStrict ? "computable" : "NOT computable"}`);
   if (out.summary.warning) console.log(`  ${out.summary.warning}`);
   console.log(`\n  written to ${dest.replace(ROOT + "/", "")}`);
 }
