@@ -91,10 +91,21 @@ token-swap; M2 ships the mock-faithful dark theme only.
   a successful return* via `report.refusals`. When constraints land (M3), the protocol needs a
   third notion (refused-with-reasons) and `viewFromResult` a constrained variant — don't build it
   now (YAGNI), but don't encode "failure == throw" as the only shape either.
-- **The focus/ego layout (F8, M3)** is selection-dependent; `GraphCanvas` computes ring eagerly
-  and the force settle lazily (only when the force layout is on), memoized on `[layout, n, edges]`.
-  Adding focus means extending that lazy-per-mode model with a selection-keyed layout, not just
-  extending `LayoutMode`.
+- **The focus/ego layout is DEFERRED PAST M3** (it was previously pencilled in as "F8, M3"). It is
+  not in F8's acceptance criteria (`PROJECT_PLAN.md:107` is fuzzy search, clickable panel names, and
+  a working back stack); it comes only from the mock and `DESIGN_HANDOFF.md`. The argument for
+  building it anyway was that it would "retire" the extension seam E1 spent rounds hardening — but
+  that is sunk cost, and the E1 record does not support it: the seam-specific findings are **8 across
+  6 rounds, every one `suggestion`, zero blocking**. Building the feature to justify the seam would
+  also reward the anti-pattern `REVIEW_PROTOCOL.md` now lists ("building an extension seam for a
+  deferred feature") and would convert a clean negative result into an unfalsifiable one.
+  If it is ever built, four things are unresolved and none are cosmetic: `GraphCanvas.tsx:177` uses
+  `focus = hovered ?? selected`, so keying the *layout* on it re-lays-out on every mouse-over — and
+  the animation effect only animates on `layoutChanged`, so it would **snap**; the mock's radii
+  (0.52 / 1.02 / **1.32** × R) exceed the unit-circle frame `computeFit` builds from `FIT_MODES`
+  alone, so the outer band **clips**; selecting focus with nothing selected is undefined (the mock
+  silently focuses node 0); and `positionsFor` gains a parameter, touching every call site plus
+  `graphCanvasFit.test.ts`.
 - **The force settle is synchronous and tick-scaled, not off-thread.** `forceLayout` runs a
   deterministic, n-scaled tick budget (`forceIters`) so the main-thread cost stays bounded
   (~200 ms at the n=1000 ceiling instead of ~1.5 s at a fixed 300 ticks), and `GraphCanvas`
