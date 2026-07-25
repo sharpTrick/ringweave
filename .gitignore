@@ -7,3 +7,4 @@ _site/
 coverage/
 __pycache__/
 *.pyc
+.sextant-worktrees/
