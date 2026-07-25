@@ -235,6 +235,39 @@ describe("PersonSearch", () => {
     }
   });
 
+  it("lets Escape through when there is no query to clear", () => {
+    // After picking a result the box is empty but still focused. Swallowing
+    // Escape there would silently disable the global handler — the route and the
+    // selection would both become unclearable from the keyboard.
+    const onEscape = vi.fn();
+    document.addEventListener("keydown", onEscape);
+    try {
+      render(<PersonSearch names={NAMES} onSelect={() => {}} />);
+      const input = screen.getByLabelText("Find a person") as HTMLInputElement;
+      expect(input.value).toBe("");
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(onEscape).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", onEscape);
+    }
+  });
+
+  it("lets Escape through once its own query has been cleared", () => {
+    const onEscape = vi.fn();
+    document.addEventListener("keydown", onEscape);
+    try {
+      render(<PersonSearch names={NAMES} onSelect={() => {}} />);
+      const input = screen.getByLabelText("Find a person") as HTMLInputElement;
+      type("john");
+      fireEvent.keyDown(input, { key: "Escape" }); // clears the query, swallowed
+      expect(onEscape).not.toHaveBeenCalled();
+      fireEvent.keyDown(input, { key: "Escape" }); // nothing left to clear
+      expect(onEscape).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", onEscape);
+    }
+  });
+
   it("shows no list at all until something is typed", () => {
     render(<PersonSearch names={NAMES} onSelect={() => {}} />);
     expect(screen.queryByRole("listbox")).toBeNull();

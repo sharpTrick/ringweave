@@ -54,7 +54,12 @@ export default function PersonSearch({ names, onSelect }: Props) {
         choose(matches[activeIndex].index);
       }
     } else if (e.key === "Escape") {
-      // See the note above: this Escape belongs to the search box.
+      // Claim Escape ONLY when there is a query to clear. Swallowing it
+      // unconditionally means a user who left focus in an empty box — which is
+      // where focus lands after picking a result, since choosing clears the query
+      // — presses Escape and nothing happens anywhere, because the global handler
+      // never sees the key. Found end-to-end, not by the unit suite.
+      if (query === "") return;
       e.stopPropagation();
       setQuery("");
       setActive(0);
