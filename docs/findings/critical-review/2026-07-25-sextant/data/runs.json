@@ -1,0 +1,16 @@
+{
+  "note": "Ledger of scoring runs, written at launch rather than reconstructed from memory. A usage-limit halt can end a session, and a fresh context has no way to discover an in-flight run id otherwise. Recover partial state with: node scripts/sextant/recover-run.mjs <runId>",
+  "runs": [
+    {
+      "runId": "wf_09929847-e79",
+      "config": "proposed-model-diverse",
+      "script": ".claude/workflows/mutation-recall.js",
+      "seeds": 5,
+      "controls": 4,
+      "expectedAgents": "9 rounds x 5 lenses (+ triage per round)",
+      "status": "in-flight (resumed twice: once after a session-limit halt, once after a container restart)",
+      "firstResultVoided": "The initial completion is VOID — see VOID-recall-diverse-contaminated.json. 33 of 49 agents died on a session limit and the runner scored the survivors as a whole ensemble.",
+      "argsRegeneration": "node -e 'const a=require(\"./docs/findings/critical-review/2026-07-25-sextant/data/allocation.json\"); console.log(JSON.stringify({config:\"proposed-model-diverse\",seeds:a.proseSubset.map(s=>({id:s.id,worktree:s.reviewTarget,file:s.file,line:s.line,stratum:s.stratum,class:s.class,theme:s.theme})),controls:a.controls.map(c=>({id:c.id,worktree:c.reviewTarget}))}))'"
+    }
+  ]
+}
