@@ -1,0 +1,787 @@
+{
+  "note": "SZZ-style forward blame attribution. Report LIFT over base rate, not the raw rate. The unknown bucket is not a failure of the instrument, it is the instrument declining to guess.",
+  "ref": "claude/m2-xapjhu",
+  "fixCommits": 21,
+  "excludedFromFixSet": [
+    {
+      "sha": "24b5dd6",
+      "reason": "M2 baseline implementation, not a review fix"
+    },
+    {
+      "sha": "ded306a",
+      "reason": "docs-only status banners"
+    },
+    {
+      "sha": "767cb87",
+      "reason": "review-harness tooling, not a code fix"
+    }
+  ],
+  "outlierReportedSeparately": "c872a6e",
+  "totalFindings": 92,
+  "primaryConfig": "-w -M -C",
+  "sensitivity": [
+    {
+      "config": "bare",
+      "classified": 87,
+      "selfInduced": 62,
+      "preExisting": 25,
+      "unknown": 5,
+      "unknownReasons": {
+        "uninformative-line": 5
+      },
+      "selfInducedRate": 0.7126,
+      "baseRate": 0.2143,
+      "lift": 3.33
+    },
+    {
+      "config": "-w",
+      "classified": 87,
+      "selfInduced": 62,
+      "preExisting": 25,
+      "unknown": 5,
+      "unknownReasons": {
+        "uninformative-line": 5
+      },
+      "selfInducedRate": 0.7126,
+      "baseRate": 0.2135,
+      "lift": 3.34
+    },
+    {
+      "config": "-w -M -C",
+      "classified": 87,
+      "selfInduced": 59,
+      "preExisting": 28,
+      "unknown": 5,
+      "unknownReasons": {
+        "uninformative-line": 5
+      },
+      "selfInducedRate": 0.6782,
+      "baseRate": 0.2013,
+      "lift": 3.37
+    },
+    {
+      "config": "-w -M -CCC",
+      "classified": 87,
+      "selfInduced": 59,
+      "preExisting": 28,
+      "unknown": 5,
+      "unknownReasons": {
+        "uninformative-line": 5
+      },
+      "selfInducedRate": 0.6782,
+      "baseRate": 0.2013,
+      "lift": 3.37
+    }
+  ],
+  "primary": {
+    "config": "-w -M -C",
+    "classified": 87,
+    "selfInduced": 59,
+    "preExisting": 28,
+    "unknown": 5,
+    "unknownReasons": {
+      "uninformative-line": 5
+    },
+    "selfInducedRate": 0.6782,
+    "baseRate": 0.2013,
+    "lift": 3.37,
+    "perFinding": [
+      {
+        "round": 4,
+        "class": "metrics-ignore-connectivity",
+        "file": "app/src/io/importGraph.ts",
+        "line": 115,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 4,
+        "class": "stale-async-result-clobbers-newer-state",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 20,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 4,
+        "class": "degenerate-metric-reads-as-optimal",
+        "file": "app/src/model.ts",
+        "line": 46,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 4,
+        "class": "unbounded-generation-work-from-imported-k",
+        "file": "app/src/io/importGraph.ts",
+        "line": 39,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 4,
+        "class": "disconnected-graph-scored-optimal",
+        "file": "app/src/model.ts",
+        "line": 46,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 4,
+        "class": "misleading-displayed-metric",
+        "file": "app/src/model.ts",
+        "line": 76,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 4,
+        "class": "duplicated-shape-that-can-drift",
+        "file": "app/src/io/schema.ts",
+        "line": 21,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 4,
+        "class": "stale-selection-state-on-regenerate",
+        "file": "app/src/App.tsx",
+        "line": 48,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 5,
+        "class": "disconnected-fraction-rounds-to-100",
+        "file": "app/src/panels/QualityPanel.tsx",
+        "line": 43,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "n1-import-well-linked-with-zero-quality",
+        "file": "app/src/panels/QualityPanel.tsx",
+        "line": 42,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "stale-busy-indicator-on-supersede",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 40,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "duplicate-quality-formula-off-display-path",
+        "file": "app/src/model.ts",
+        "line": 47,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 5,
+        "class": "uncapped-main-thread-work-on-hostile-import",
+        "file": "app/src/graph/layout.ts",
+        "line": 56,
+        "blamed": "c57da2d",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "superlinear-generation-uncancellable-worker",
+        "file": "app/src/io/feasibility.ts",
+        "line": 38,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "per-keystroke-work-unbounded-by-name-cap",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 27,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "misleading-display-caption",
+        "file": "app/src/panels/QualityPanel.tsx",
+        "line": 41,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "duplicated-magic-constant",
+        "file": "app/src/io/importGraph.ts",
+        "line": 6,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "duplicated-helper",
+        "file": "app/src/io/importGraph.ts",
+        "line": 28,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 5,
+        "class": "generation-connectivity-assumed-not-measured",
+        "file": "app/src/model.ts",
+        "line": 127,
+        "blamed": "c872a6e",
+        "selfInduced": true
+      },
+      {
+        "round": 5,
+        "class": "untrusted-field-into-generation-unclamped",
+        "file": "app/src/io/importGraph.ts",
+        "line": 47,
+        "blamed": "c57da2d",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "misleading-gate-message",
+        "file": "app/src/App.tsx",
+        "line": 57,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "shared-constant-conflates-distinct-concepts",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 21,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "lossy-roster-roundtrip",
+        "file": "app/src/App.tsx",
+        "line": 139,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 6,
+        "class": "mixed-responsibility-component",
+        "file": "app/src/App.tsx",
+        "line": 161,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 6,
+        "class": "unbounded-controlled-input-rerender",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 28,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "sync-uncapped-metric-on-main-thread",
+        "file": "app/src/io/importGraph.ts",
+        "line": 105,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 6,
+        "class": "coupled-constant-reuse",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 21,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "duplicated-magic-number",
+        "file": "app/src/io/importGraph.ts",
+        "line": 37,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 6,
+        "class": "hardcoded-token-value",
+        "file": "app/src/styles/app.css",
+        "line": 74,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 7,
+        "class": "import-name-not-roundtrip-stable-through-parser",
+        "file": "app/src/io/importGraph.ts",
+        "line": 93,
+        "blamed": "1da0d6b",
+        "selfInduced": true
+      },
+      {
+        "round": 7,
+        "class": "file-input-value-not-reset",
+        "file": "app/src/App.tsx",
+        "line": 156,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 7,
+        "class": "uncapped-worker-cost-no-cancel",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 52,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 7,
+        "class": "reroll-silent-noop",
+        "file": "app/src/App.tsx",
+        "line": 52,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 7,
+        "class": "seed-advance-precision",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 23,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 7,
+        "class": "silent-noop-primary-action",
+        "file": "app/src/App.tsx",
+        "line": 51,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 7,
+        "class": "stale-doc-comment",
+        "file": "app/CLAUDE.md",
+        "line": 79,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 7,
+        "class": "committed-dead-scratch",
+        "file": "app/_g.mjs",
+        "line": 1,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "silent-noop-reroll",
+        "file": "app/src/model.ts",
+        "line": 164,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "misleading-user-message",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "false-rejection-wrong-reason",
+        "file": "app/src/io/importGraph.ts",
+        "line": 104,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "reroll-silent-noop",
+        "file": "app/src/model.ts",
+        "line": 164,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "misleading-notice-text",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "unused-export",
+        "file": "app/src/model.ts",
+        "line": 83,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 8,
+        "class": "misleading-reroll-flash",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 8,
+        "class": "csv-formula-injection",
+        "file": "app/src/io/download.ts",
+        "line": 13,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 9,
+        "class": "misattributed-user-message",
+        "file": "app/src/App.tsx",
+        "line": 21,
+        "blamed": "2f7c2b5",
+        "selfInduced": true
+      },
+      {
+        "round": 9,
+        "class": "unclamped-seed-increment",
+        "file": "app/src/App.tsx",
+        "line": 54,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 9,
+        "class": "misleading-user-copy",
+        "file": "app/src/App.tsx",
+        "line": 21,
+        "blamed": "2f7c2b5",
+        "selfInduced": true
+      },
+      {
+        "round": 9,
+        "class": "inconsistent-naming",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 34,
+        "blamed": "2f7c2b5",
+        "selfInduced": true
+      },
+      {
+        "round": 9,
+        "class": "csv-formula-injection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 17,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 9,
+        "class": "incomplete-formula-neutralization",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 16,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 10,
+        "class": "embedded-delimiter-formula-injection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 21,
+        "blamed": "a98a2ff",
+        "selfInduced": true
+      },
+      {
+        "round": 10,
+        "class": "settings-default-single-source-drift",
+        "file": "app/src/io/importGraph.ts",
+        "line": 45,
+        "blamed": "1da0d6b",
+        "selfInduced": true
+      },
+      {
+        "round": 10,
+        "class": "magic-number-mirrors-unexported-core-constant",
+        "file": "app/src/model.ts",
+        "line": 41,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 10,
+        "class": "duplicated-projection-across-components",
+        "file": "app/src/panels/Slips.tsx",
+        "line": 12,
+        "blamed": "c57da2d",
+        "selfInduced": true
+      },
+      {
+        "round": 10,
+        "class": "reroll-policy-split-across-layers",
+        "file": "app/src/App.tsx",
+        "line": 60,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 11,
+        "class": "misleading-truncation-warning",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 45,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 11,
+        "class": "main-thread-force-layout-freeze",
+        "file": "app/src/graph/layout.ts",
+        "line": 56,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 11,
+        "class": "duplicated-projection",
+        "file": "app/src/panels/BuddyList.tsx",
+        "line": 21,
+        "blamed": "a98a2ff",
+        "selfInduced": true
+      },
+      {
+        "round": 11,
+        "class": "stale-comment",
+        "file": "app/src/io/importGraph.ts",
+        "line": 43,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 12,
+        "class": "flaky-slow-test-timeout",
+        "file": "app/test/graphCanvasDefer.test.tsx",
+        "line": 21,
+        "blamed": "88fd0a2",
+        "selfInduced": true
+      },
+      {
+        "round": 12,
+        "class": "duplicated-mode-decision",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 62,
+        "blamed": "88fd0a2",
+        "selfInduced": true
+      },
+      {
+        "round": 12,
+        "class": "unreachable-truncation-warning",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 30,
+        "blamed": "1da0d6b",
+        "selfInduced": true
+      },
+      {
+        "round": 13,
+        "class": "stale-comment",
+        "file": "app/src/model.ts",
+        "line": 40,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 13,
+        "class": "fit-union-invariant-broken-by-lazy-force",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 77,
+        "blamed": "7346787",
+        "selfInduced": true
+      },
+      {
+        "round": 13,
+        "class": "unguarded-cross-constant-coupling",
+        "file": "app/src/model.ts",
+        "line": 36,
+        "blamed": "50f9428",
+        "selfInduced": true
+      },
+      {
+        "round": 14,
+        "class": "stale-settings-on-idempotent-generate",
+        "file": "app/src/state/useBuddyGraph.ts",
+        "line": 54,
+        "blamed": "2f7c2b5",
+        "selfInduced": true
+      },
+      {
+        "round": 14,
+        "class": "magic-number-mirrors-uncrossed-core-constant",
+        "file": "app/src/model.ts",
+        "line": 52,
+        "blamed": "e28d5f4",
+        "selfInduced": true
+      },
+      {
+        "round": 14,
+        "class": "extension-seam-coupling",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 10,
+        "blamed": "7346787",
+        "selfInduced": true
+      },
+      {
+        "round": 15,
+        "class": "aspirational-abstraction-no-runtime-consumer",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 9,
+        "blamed": "7346787",
+        "selfInduced": true
+      },
+      {
+        "round": 16,
+        "class": "partial-data-drivenness",
+        "file": "app/src/styles/app.css",
+        "line": 106,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 16,
+        "class": "non-exhaustive-extension-seam",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 26,
+        "blamed": "7346787",
+        "selfInduced": true
+      },
+      {
+        "round": 16,
+        "class": "a11y-toggle-state-not-exposed",
+        "file": "app/src/panels/LayoutToggle.tsx",
+        "line": 13,
+        "blamed": "ad8e6f3",
+        "selfInduced": true
+      },
+      {
+        "round": 17,
+        "class": "display-rounding-vs-threshold-boundary",
+        "file": "app/src/model.ts",
+        "line": 135,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 17,
+        "class": "unused-export",
+        "file": "app/src/io/feasibility.ts",
+        "line": 4,
+        "blamed": "5f98c2b",
+        "selfInduced": true
+      },
+      {
+        "round": 17,
+        "class": "dead-css-hook",
+        "file": "app/src/panels/SettingsControls.tsx",
+        "line": 35,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 17,
+        "class": "mutable-public-constant",
+        "file": "app/src/graph/GraphCanvas.tsx",
+        "line": 9,
+        "blamed": "7346787",
+        "selfInduced": true
+      },
+      {
+        "round": 18,
+        "class": "dedupe-warning-casing-double-count",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 53,
+        "blamed": "88fd0a2",
+        "selfInduced": true
+      },
+      {
+        "round": 18,
+        "class": "unused-parameter",
+        "file": "app/src/io/readFileText.ts",
+        "line": 9,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 18,
+        "class": "quality-copy-bypasses-single-seam",
+        "file": "app/src/App.tsx",
+        "line": 25,
+        "blamed": "a98a2ff",
+        "selfInduced": true
+      },
+      {
+        "round": 19,
+        "class": "stale-ui-notice-not-reset",
+        "file": "app/src/panels/RosterModal.tsx",
+        "line": 78,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 19,
+        "class": "duplicated-user-copy",
+        "file": "app/src/io/parseRoster.ts",
+        "line": 34,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 19,
+        "class": "unit-mismatch-message",
+        "file": "app/src/io/readFileText.ts",
+        "line": 12,
+        "blamed": "796018b",
+        "selfInduced": true
+      },
+      {
+        "round": 19,
+        "class": "ocp-cross-file-contract-for-constraints",
+        "file": "app/src/worker/protocol.ts",
+        "line": 23,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 19,
+        "class": "srp-domain-logic-in-composition-root",
+        "file": "app/src/App.tsx",
+        "line": 61,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 20,
+        "class": "incomplete-error-recovery",
+        "file": "app/src/App.tsx",
+        "line": 41,
+        "blamed": "24b5dd6",
+        "selfInduced": false
+      },
+      {
+        "round": 21,
+        "class": "error-recovery-empty-message-deadend",
+        "file": "app/src/App.tsx",
+        "line": 42,
+        "blamed": "a66272c",
+        "selfInduced": true
+      }
+    ]
+  }
+}
