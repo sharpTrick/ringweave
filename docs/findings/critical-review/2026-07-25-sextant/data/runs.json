@@ -23,6 +23,16 @@
       "status": "in-flight",
       "whyFresh": "Adding `effort` to the agent options changes the cache key, so the prior run's 87 results cannot replay. That is correct rather than wasteful: they were produced at an unknown effort, and a configuration that was never specified is not one you can report.",
       "supersedes": "wf_09929847-e79"
+    },
+    {
+      "runId": "wf_88887b29-0f5",
+      "config": "m3-review-loop",
+      "script": ".claude/workflows/adversarial-review.js",
+      "target": "lib/src",
+      "round": 1,
+      "purpose": "Part 4: run the M3 changes through the reformed loop to convergence. This is the loop under test, not a scoring run \u2014 its per-round output is the E2/E4 dataset.",
+      "status": "in-flight",
+      "note": "Runs concurrently with the recall run; they share one agent-concurrency pool, so both are slower in wall-clock than either alone. The seeded worktrees are pinned at the pre-M3 commit and live in their own working directories, so M3 commits on this branch cannot contaminate them."
     }
   ]
 }
