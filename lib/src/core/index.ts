@@ -40,6 +40,9 @@ export {
 export {
   Constraints,
   validate,
+  validateDetailed,
+  formatReason,
+  type Reason,
   type TagPolicy,
   type Tag,
 } from "./constraints.js";

@@ -324,7 +324,7 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 // direct-call contract violation into a clear error instead of a cryptic crash
 // or a silent degree-cap breach. Cheap: O(#constraints), off the hot path.
 
-// Throw-on-first mirror of constraints.ts `structuralErrors` (which collects
+// Throw-on-first mirror of constraints.ts `structuralReasons` (which collects
 // reasons for validate); keep the two checks in step.
 function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
