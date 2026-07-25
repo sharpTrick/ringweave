@@ -107,6 +107,7 @@ const seedRuns = await pipeline(
     workflow('adversarial-review', {
       target: s.worktree,
       saturation: args?.saturation ?? {},
+      modelOverride: args?.modelOverride ?? null,
       round: 1,
     }).catch(() => null),
   (round, s) => {
@@ -134,7 +135,7 @@ phase('Precision')
 const controlRuns = controls.length
   ? await pipeline(
       controls,
-      (c) => workflow('adversarial-review', { target: c.worktree, saturation: args?.saturation ?? {}, round: 1 }).catch(() => null),
+      (c) => workflow('adversarial-review', { target: c.worktree, saturation: args?.saturation ?? {}, modelOverride: args?.modelOverride ?? null, round: 1 }).catch(() => null),
       (round, c) => ({
         control: c.id,
         errored: !round,

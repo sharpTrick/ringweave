@@ -180,8 +180,72 @@
       "worktree": ".sextant-worktrees/wt-11"
     },
     {
-      "id": "ctl-01",
+      "id": "sd-12-second-degree-overlap",
       "slot": "wt-12",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Drops the !f.has(c) exclusion, so every first-degree buddy also lands in the second-degree set. Executed by the render tests but its classification is not asserted.",
+      "worktree": ".sextant-worktrees/wt-12"
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "slot": "wt-13",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Inverts the documented hover contract (1st bright, 2nd dim, rest faded) so 2nd-degree is indistinguishable from unrelated nodes.",
+      "worktree": ".sextant-worktrees/wt-13"
+    },
+    {
+      "id": "sd-14-stale-worker-response",
+      "slot": "wt-14",
+      "stratum": "R-real",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "covered": false
+      },
+      "isControl": false,
+      "note": "Statement deletion of the id-correlation guard. A cancelled or superseded run's result is applied, clobbering a newer graph. E1 round 4, confirmed blocking. The suite mocks the HOOK, not the protocol, so no existing test exercises this line's logic.",
+      "worktree": ".sextant-worktrees/wt-14"
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "slot": "wt-15",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Negates the second-degree edge test, inverting which edges glow.",
+      "worktree": ".sextant-worktrees/wt-15"
+    },
+    {
+      "id": "ctl-01",
+      "slot": "wt-16",
       "admitted": true,
       "gates": {
         "applied": true,
@@ -192,11 +256,11 @@
       },
       "isControl": true,
       "note": "Unseeded. Every finding here is a candidate false positive.",
-      "worktree": ".sextant-worktrees/wt-12"
+      "worktree": ".sextant-worktrees/wt-16"
     },
     {
       "id": "ctl-02",
-      "slot": "wt-13",
+      "slot": "wt-17",
       "admitted": true,
       "gates": {
         "applied": true,
@@ -207,11 +271,11 @@
       },
       "isControl": true,
       "note": "Unseeded.",
-      "worktree": ".sextant-worktrees/wt-13"
+      "worktree": ".sextant-worktrees/wt-17"
     },
     {
       "id": "ctl-03",
-      "slot": "wt-14",
+      "slot": "wt-18",
       "admitted": true,
       "gates": {
         "applied": true,
@@ -222,11 +286,11 @@
       },
       "isControl": true,
       "note": "Unseeded.",
-      "worktree": ".sextant-worktrees/wt-14"
+      "worktree": ".sextant-worktrees/wt-18"
     },
     {
       "id": "ctl-04",
-      "slot": "wt-15",
+      "slot": "wt-19",
       "admitted": true,
       "gates": {
         "applied": true,
@@ -237,7 +301,7 @@
       },
       "isControl": true,
       "note": "Unseeded.",
-      "worktree": ".sextant-worktrees/wt-15"
+      "worktree": ".sextant-worktrees/wt-19"
     }
   ]
 }

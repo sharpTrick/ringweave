@@ -27,6 +27,11 @@ const input = typeof args === 'string' ? { target: args } : (args ?? {})
 const TARGET = (input.target ?? '').trim() || 'app/src'
 const changedPaths = input.changedPaths ?? []
 const priorSaturation = input.saturation ?? {}
+// Forces every lens onto one model, for the Sextant experiment's paired homogeneous arm. Holding the
+// LENS SET fixed and varying only the backbone is what isolates model diversity from lens count —
+// E1 ran four lenses all on opus, so a four-lens comparison would confound the two. Unset in normal
+// operation, where each lens keeps the model declared in its frontmatter.
+const modelOverride = input.modelOverride ?? null
 
 // The executable copy of each lens's gating config. The critic .md frontmatter carries the same
 // `surface`/`saturation_gate` for humans reading the agent definition; THIS is what actually runs,
@@ -209,15 +214,15 @@ function prompt(c) {
 phase('Review')
 const results = await parallel(
   active.map((c) => () =>
-    agent(prompt(c), { label: c.type, phase: 'Review', agentType: c.type, model: c.model, schema: SCHEMA })
+    agent(prompt(c), { label: c.type, phase: 'Review', agentType: c.type, model: modelOverride ?? c.model, schema: SCHEMA })
       .then((r) => ({
         critic: c.type,
-        model: c.model,
+        model: modelOverride ?? c.model,
         nothingFound: !!(r && r.nothingFound),
         checked: (r && r.checked) || '',
         findings: (r && r.findings) || [],
       }))
-      .catch(() => ({ critic: c.type, model: c.model, nothingFound: false, checked: '', findings: [], errored: true })),
+      .catch(() => ({ critic: c.type, model: modelOverride ?? c.model, nothingFound: false, checked: '', findings: [], errored: true })),
   ),
 )
 
@@ -275,6 +280,7 @@ for (const c of CRITICS) {
 return {
   target: TARGET,
   round: input.round ?? null,
+  modelOverride,
   converged,
   counts: {
     gating: gating.length,

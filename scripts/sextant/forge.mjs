@@ -164,8 +164,13 @@ for (const seed of allSeeds) {
   const libTest = seed.edits?.some((e) => e.file.startsWith("lib/")) ? trySh("npm test --silent", join(dir, "lib"), 600_000) : { ok: true };
   const appTest = trySh("npm test --silent", join(dir, "app"), 900_000);
   gates.tests = libTest.ok && appTest.ok;
-  const lint = trySh("npx oxlint --deny-warnings", dir, 300_000);
+  // The FULL gate, not just oxlint. An earlier version ran `npx oxlint` alone, so knip and the
+  // custom hygiene checks never executed — which made `lint=y` worthless as evidence that the
+  // linter misses a defect, and the two oracle probes exist precisely to test that. The gate must
+  // be the same command the review protocol requires to be clean before a critic is spawned.
+  const lint = trySh("npm run lint --silent", dir, 600_000);
   gates.lint = lint.ok;
+  gates.lintDetail = lint.ok ? null : lint.out.split("\n").filter((l) => /error|warning|hygiene|knip|Unused/.test(l)).slice(0, 4).join(" | ");
 
   // Coverage gate (Google's eligibility rule): the seeded line must be exercised by at least one
   // existing test. Without it, recall partly measures "can the reviewer read uncovered code".
