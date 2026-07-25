@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
-import type { BuddyResult } from "ringweave";
+import type { Reason } from "ringweave";
+import type { GraphResult } from "../src/worker/protocol";
 import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
 import { generateResult } from "./helpers";
 import { exportGraphJson } from "../src/io/exportGraph";
@@ -9,15 +10,21 @@ import { exportGraphJson } from "../src/io/exportGraph";
 // Drive App with a controllable stand-in for the generation worker so we can inject an error
 // state that buildBuddyGraph never actually produces for gated inputs (the branch is defensive).
 const hooks = vi.hoisted(() => {
-  const state: { status: "idle" | "running" | "done" | "error"; result: BuddyResult | null; error: string | null } = {
-    status: "idle",
-    result: null,
-    error: null,
-  };
+  const state: {
+    status: "idle" | "running" | "done" | "error" | "refused";
+    result: GraphResult | null;
+    error: string | null;
+    refusals: Reason[];
+  } = { status: "idle", result: null, error: null, refusals: [] };
   return {
     state,
     generate: vi.fn(() => { state.status = "running"; }),
-    reset: vi.fn(() => { state.status = "idle"; state.result = null; state.error = null; }),
+    reset: vi.fn(() => {
+      state.status = "idle";
+      state.result = null;
+      state.error = null;
+      state.refusals = [];
+    }),
   };
 });
 
@@ -26,6 +33,7 @@ vi.mock("../src/state/useGenerationWorker", () => ({
     status: hooks.state.status,
     result: hooks.state.result,
     error: hooks.state.error,
+    refusals: hooks.state.refusals,
     generate: hooks.generate,
     reset: hooks.reset,
   }),
@@ -37,6 +45,7 @@ beforeEach(() => {
   hooks.state.status = "idle";
   hooks.state.result = null;
   hooks.state.error = null;
+  hooks.state.refusals = [];
   hooks.generate.mockClear();
   hooks.reset.mockClear();
 });
@@ -98,5 +107,54 @@ describe("App recovers from a worker error", () => {
     });
 
     await waitFor(() => expect(screen.queryByText(/generation failed/i)).toBeNull()); // stale toast gone
+  });
+});
+
+/**
+ * Class: a worker REFUSAL is not an error, and it must land somewhere the user can act.
+ *
+ * This branch is reachable in a way that is easy to miss. The roster editor runs the same
+ * feasibility check before posting, so nothing typed there can reach the worker's gate — but
+ * an IMPORTED file carries rules that were never checked for feasibility against the imported
+ * buddy count, and "Different arrangement" re-generates with them and no editor in between.
+ */
+describe("App handles a refusal from the worker", () => {
+  it("explains it in the user's terms and reopens the editor", () => {
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "required-degree-exceeds-k", person: 1, required: 5, k: 4 }];
+      rerender(<App />);
+    });
+
+    // Named after the person, not "person 1" — and the editor is open to fix it.
+    expect(screen.getByText(/B has 5 must-be-buddies rules/)).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("never renders a refusal as a crash", () => {
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "prohibited-splits-group", person: 0 }];
+      rerender(<App />);
+    });
+    expect(screen.queryByText(/Generation failed/)).toBeNull();
+    expect(screen.getByText(/split the group/)).toBeTruthy();
+  });
+
+  it("falls back to a plain sentence if the reasons list is somehow empty", () => {
+    // Defensive: `refused` with no reasons should still say something actionable
+    // rather than showing an empty toast the user cannot interpret.
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [];
+      rerender(<App />);
+    });
+    expect(screen.getByText(/Those buddy rules can't all be met\./)).toBeTruthy();
   });
 });
