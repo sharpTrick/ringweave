@@ -12,6 +12,7 @@ interface Props {
   onSelect: (index: number) => void;
   onBack: () => void;
   onClose: () => void;
+  onFindPath: () => void;
 }
 
 /** Cap on second-degree chips before collapsing to a count. */
@@ -30,7 +31,7 @@ const SECOND_LIMIT = 24;
  * criterion and also the reason the whole feature is reachable without a mouse.
  */
 export default function PersonPanel({
-  view, graph, index, canGoBack, onSelect, onBack, onClose,
+  view, graph, index, canGoBack, onSelect, onBack, onClose, onFindPath,
 }: Props) {
   const { first, second } = useMemo(
     () => neighborhood(view.buddies, index),
@@ -80,6 +81,10 @@ export default function PersonPanel({
             </>
           )}
         </div>
+      </div>
+
+      <div className="pp-group">
+        <button className="chipbtn" onClick={onFindPath}>Find a path from here</button>
       </div>
 
       <p className="pp-reach">

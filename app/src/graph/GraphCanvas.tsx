@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { forceLayout, ringLayout, type Pt } from "./layout";
-import { neighborhood } from "../neighborhood";
+import { buildHighlight, edgeClass, nodeClass } from "./highlight";
 
 export type LayoutMode = "ring" | "force";
 
@@ -52,6 +52,8 @@ interface GraphCanvasProps {
   hovered: number | null;
   onSelect: (i: number | null) => void;
   onHover: (i: number | null) => void;
+  /** An active route to light, or null. Takes precedence over hover — see buildHighlight. */
+  route?: number[] | null;
 }
 
 const VB_W = 800;
@@ -88,7 +90,7 @@ function reducedMotion(): boolean {
 }
 
 export default function GraphCanvas({
-  names, edges, adjacency, layout, selected, hovered, onSelect, onHover,
+  names, edges, adjacency, layout, selected, hovered, onSelect, onHover, route,
 }: GraphCanvasProps) {
   const n = names.length;
   const ringPos = useMemo(() => ringLayout(n), [n]);
@@ -175,27 +177,12 @@ export default function GraphCanvas({
     return () => { sel.on(".zoom", null); };
   }, []);
 
-  const focus = hovered ?? selected;
-  // Shared with the person explorer (src/neighborhood.ts) so the two can't disagree
-  // about who counts as one or two steps away.
-  const { first, second } = useMemo(() => neighborhood(adjacency, focus), [focus, adjacency]);
+  const highlight = useMemo(
+    () => buildHighlight(adjacency, selected, hovered, route ?? null),
+    [adjacency, selected, hovered, route],
+  );
 
   const px = (p: Pt) => ({ x: fit.cx + p.x * fit.s, y: fit.cy + p.y * fit.s });
-
-  const nodeClass = (i: number): string => {
-    if (focus == null) return "node";
-    if (i === focus) return "node sel";
-    if (first.has(i)) return "node hi";
-    if (second.has(i)) return "node hi2";
-    return "node faded";
-  };
-
-  const edgeClass = (u: number, v: number): string => {
-    if (focus == null) return "edge";
-    if (u === focus || v === focus) return "edge lit";
-    if (second.has(u) || second.has(v)) return "edge lit2";
-    return "edge dim";
-  };
 
   return (
     // Deliberate, and narrowly scoped: the graph is a VIEW, never the only interface. It is
@@ -221,7 +208,7 @@ export default function GraphCanvas({
             return (
               <line
                 key={idx}
-                className={edgeClass(u, v)}
+                className={edgeClass(highlight, u, v)}
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
               />
             );
@@ -233,7 +220,7 @@ export default function GraphCanvas({
             return (
               <g
                 key={i}
-                className={nodeClass(i)}
+                className={nodeClass(highlight, i)}
                 transform={`translate(${c.x},${c.y})`}
                 onMouseEnter={() => onHover(i)}
                 onMouseLeave={() => onHover(null)}

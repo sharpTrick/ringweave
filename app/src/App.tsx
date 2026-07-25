@@ -8,11 +8,14 @@ import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
 import PersonSearch from "./panels/PersonSearch";
 import PersonPanel from "./panels/PersonPanel";
+import PathPanel from "./panels/PathPanel";
 import Slips from "./panels/Slips";
 import Notice from "./panels/Notice";
 import { useNotice } from "./state/useNotice";
 import { useExplorerHistory } from "./state/useExplorerHistory";
 import { useGraph } from "./state/useGraph";
+import { useEscape } from "./state/useEscape";
+import { usePathFinder } from "./state/usePathFinder";
 import { describeReasons } from "./io/constraintMessages";
 import type { ConstraintPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
@@ -49,7 +52,6 @@ export default function App() {
   // "where was I" is part of the model rather than something the user re-derives.
   const explorer = useExplorerHistory();
   const selected = explorer.current;
-  const setSelected = explorer.select;
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,27 @@ export default function App() {
   // Rebuilt only when the edge set changes; the explorer and the path finder both
   // need real core queries and neither may reimplement them.
   const graph = useGraph(view?.names.length ?? 0, view?.edges ?? EMPTY_EDGES);
+  const path = usePathFinder(graph);
+
+  /**
+   * The ONE way a person becomes selected, from any surface — the graph, the buddy
+   * list, a search result, an explorer chip. While a route is being drawn, the next
+   * pick completes it instead of navigating; routing that through a single seam is
+   * what keeps "pick the second person" working from every one of those places.
+   */
+  const setSelected = (i: number | null) => {
+    if (i !== null && path.complete(i)) return;
+    explorer.select(i);
+  };
+
+  // Escape clears the path first, then the selection — most-transient first, so one
+  // press never throws away more than the user meant. Suspended while the roster
+  // modal is open: it has no Escape handling of its own, and clearing state behind
+  // an open dialog is invisible.
+  useEscape(() => {
+    if (path.active) path.clear();
+    else explorer.select(null);
+  }, !modalOpen);
 
   useEffect(() => {
     if (bg.status === "refused") {
@@ -80,6 +103,7 @@ export default function App() {
   // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
   const resetSelection = () => {
     explorer.reset();
+    path.clear();
     setHovered(null);
   };
 
@@ -169,6 +193,7 @@ export default function App() {
                   hovered={hovered}
                   onSelect={setSelected}
                   onHover={setHovered}
+                  route={path.route}
                 />
               </div>
 
@@ -195,6 +220,18 @@ export default function App() {
                   onSelect={setSelected}
                   onBack={explorer.back}
                   onClose={() => setSelected(null)}
+                  onFindPath={() => path.start(selected)}
+                />
+              )}
+
+              {path.active && (
+                <PathPanel
+                  view={view}
+                  from={path.from}
+                  route={path.route}
+                  unreachable={path.unreachable}
+                  onSelect={(i) => explorer.select(i)}
+                  onClear={path.clear}
                 />
               )}
 
