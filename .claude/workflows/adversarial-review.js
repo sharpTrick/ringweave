@@ -215,14 +215,43 @@ phase('Review')
 const results = await parallel(
   active.map((c) => () =>
     agent(prompt(c), { label: c.type, phase: 'Review', agentType: c.type, model: modelOverride ?? c.model, schema: SCHEMA })
-      .then((r) => ({
+      // A DEAD LENS MUST NEVER READ AS A CLEAN ONE. `agent()` RETURNS null when a subagent dies on a
+      // terminal API error (rate limit, quota) — it does not throw, so `.catch` never fires. An
+      // earlier version mapped null through `(r && r.findings) || []`, which recorded a dead lens as
+      // `findings: 0, nothingFound: false, errored: undefined` — and since convergence requires
+      // `errored.length === 0`, a round in which EVERY lens died reported `converged: true`.
+      // That actually happened: a session-limit exhaustion killed 33 of 49 agents and the run
+      // reported a converged round and a recall figure. Anything that cannot distinguish "found
+      // nothing" from "never ran" is the silent gap this whole protocol exists to close.
+      .then((r) => {
+        if (r == null || !Array.isArray(r.findings)) {
+          return {
+            critic: c.type,
+            model: modelOverride ?? c.model,
+            nothingFound: false,
+            checked: '',
+            findings: [],
+            errored: true,
+            erroredReason: r == null ? 'agent returned null (died on a terminal API error)' : 'malformed result: findings is not an array',
+          }
+        }
+        return {
+          critic: c.type,
+          model: modelOverride ?? c.model,
+          nothingFound: !!r.nothingFound,
+          checked: r.checked || '',
+          findings: r.findings,
+        }
+      })
+      .catch((e) => ({
         critic: c.type,
         model: modelOverride ?? c.model,
-        nothingFound: !!(r && r.nothingFound),
-        checked: (r && r.checked) || '',
-        findings: (r && r.findings) || [],
-      }))
-      .catch(() => ({ critic: c.type, model: modelOverride ?? c.model, nothingFound: false, checked: '', findings: [], errored: true })),
+        nothingFound: false,
+        checked: '',
+        findings: [],
+        errored: true,
+        erroredReason: `threw: ${e?.message ?? String(e)}`,
+      })),
   ),
 )
 
@@ -254,7 +283,10 @@ if (all.length > 1) {
   if (clustered && Array.isArray(clustered.themes)) themes = clustered.themes
 }
 
-if (errored.length) log(`WARNING: lenses errored (not a clean round): ${errored.join(', ')}`)
+if (errored.length) {
+  log(`WARNING: lenses errored, so this is NOT a clean round and NOT a usable recall sample: ${errored.join(', ')}`)
+  for (const r of results.filter((x) => x.errored)) log(`  ${r.critic}: ${r.erroredReason ?? 'unknown'}`)
+}
 log(
   `Round over ${TARGET}: ${gating.length} gating (${blocking.length} blocking), ` +
     `${deferrals.length} deferral, ${plausible.length} plausible, across ${themes.length} theme(s).`,
@@ -297,6 +329,7 @@ return {
     findings: r.findings.length,
     checked: r.checked,
     errored: !!r.errored,
+    erroredReason: r.erroredReason ?? null,
   })),
   skipped,
   themes,

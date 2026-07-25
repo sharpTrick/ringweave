@@ -121,7 +121,22 @@ const seedRuns = await pipeline(
       round: 1,
     }).catch(() => null),
   (round, s) => {
-    if (!round) return { seed: s, errored: true, found: { strict: false, loose: false }, byLens: [], findings: 0 }
+    if (!round) return { seed: s, errored: true, reason: 'round did not return', found: { strict: false, loose: false }, byLens: [], findings: 0 }
+    // A round in which ANY lens died is not a usable recall sample. Scoring it would silently record
+    // "the ensemble missed this seed" when the truth is "part of the ensemble never ran" — a false
+    // blind spot, which is the single most misleading thing this harness could produce. Excluded from
+    // the denominator and reported separately, never averaged in.
+    const deadLenses = (round.byCritic ?? []).filter((c) => c.errored)
+    if (deadLenses.length > 0) {
+      return {
+        seed: s,
+        errored: true,
+        reason: `${deadLenses.length} lens(es) died: ${deadLenses.map((c) => `${c.critic} (${c.erroredReason ?? 'unknown'})`).join('; ')}`,
+        found: { strict: false, loose: false },
+        byLens: [],
+        findings: 0,
+      }
+    }
     const found = allFindings(round)
     const hits = found.map((f) => ({ f, m: matches(f, s) }))
     const strictHits = hits.filter((h) => h.m.strict)
@@ -154,6 +169,8 @@ const controlRuns = controls.length
         // only be settled by adjudication afterwards — this records the raw count honestly.
         findings: round ? allFindings(round).length : 0,
         gating: round?.counts?.gating ?? 0,
+        deadLenses: (round?.byCritic ?? []).filter((x) => x.errored).map((x) => x.critic),
+        usable: !!round && (round.byCritic ?? []).every((x) => !x.errored),
         byCritic: round?.byCritic ?? [],
       }),
     )
@@ -206,7 +223,12 @@ return {
   config,
   seedCount: seeds.length,
   scoredCount: scored.length,
-  erroredSeeds: errored.map((r) => r?.seed?.id ?? 'unknown'),
+  erroredSeeds: errored.map((r) => ({ id: r?.seed?.id ?? 'unknown', reason: r?.reason ?? 'unknown' })),
+  // Loud, because a partial denominator is the easiest way to publish a wrong recall number.
+  denominatorWarning:
+    errored.length > 0
+      ? `INCOMPLETE: ${errored.length} of ${seeds.length} seed runs were contaminated (a lens died) and are EXCLUDED from the denominator. Recall below is over ${scored.length} seeds only and must not be quoted as the corpus recall.`
+      : null,
   recall: { strict: Number(recallOf((r) => r.found.strict).toFixed(4)), loose: Number(recallOf((r) => r.found.loose).toFixed(4)) },
   matching: { lineWindow: LINE_WINDOW, note: 'strict = same file + line window; loose = strict OR shared class/theme token. Mechanical; no agent judges whether a finding counts.' },
   byStratum,
