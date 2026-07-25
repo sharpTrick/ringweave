@@ -115,6 +115,19 @@ them. Whatever the ratchet failed to do about themes, it did this.
 It also created a problem for this experiment, recorded rather than hidden: the coverage gate pushes
 seeds toward well-tested code, which is exactly where surviving mutants are rarest. See §4.
 
+**And it found a hole.** One candidate — deleting the worker's stale-response guard
+(`useGenerationWorker.ts:36`) — was rejected for the *opposite* reason: the coverage gate says **no
+test exercises that line at all.** The suite mocks the *hook*, never the message protocol, so
+`if (msg.id !== latestId.current) return;` is unexercised. That guard exists because of E1's round-4
+finding `stale-async-result-clobbers-newer-state`, which was **confirmed blocking**. So the ratchet
+locked the case one level *above* the defect: the hook's behaviour is asserted, the guard itself is
+not. A defect class the loop identified as blocking has a fix with zero coverage — which is precisely
+the "locked the case, not the theme" pattern, caught by a coverage map rather than by argument.
+
+Excluding it from the corpus is still correct: a seed on an uncovered line would make recall partly
+measure "can the reviewer read code no test runs". But it is the single most actionable line in this
+document, and it is a test-suite gap, not a review-process one.
+
 ### 4. E3 — seeded-defect recall *(in progress)*
 
 Corpus construction is complete and the pre-registered allocation is mechanical

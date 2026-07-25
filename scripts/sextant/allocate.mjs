@@ -41,7 +41,20 @@ const homogeneousArm = proseSubset.filter((_s, i) => i % 2 === 0).slice(0, 6);
 
 const enrich = (r) => {
   const d = defById.get(r.id) ?? {};
-  return { id: r.id, worktree: r.worktree, stratum: r.stratum, class: d.class, theme: d.theme, file: d.file, line: d.line };
+  return {
+    id: r.id,
+    worktree: r.worktree,
+    // Point the critics at app/src INSIDE the worktree, not at the worktree root. Every seed is in
+    // app/src, and the protocol's rule is "the whole component under review" — the component is the
+    // app, not the repo. Handing over the worktree root would also invite a critic to wander into
+    // lib/ or the tooling, which is neither the surface under test nor comparable to E1.
+    reviewTarget: `${r.worktree}/app/src (the BuddyGraph app)`,
+    stratum: r.stratum,
+    class: d.class,
+    theme: d.theme,
+    file: d.file,
+    line: d.line,
+  };
 };
 
 const out = {
@@ -56,7 +69,7 @@ const out = {
   proseSubset: proseSubset.map(enrich),
   homogeneousArm: homogeneousArm.map(enrich),
   oracleProbes: probes.map(enrich),
-  controls: controls.map((r) => ({ id: r.id, worktree: r.worktree })),
+  controls: controls.map((r) => ({ id: r.id, worktree: r.worktree, reviewTarget: `${r.worktree}/app/src (the BuddyGraph app)` })),
   powerNote:
     proseSubset.length < 12
       ? `SHORTFALL: only ${proseSubset.length} critic-corpus seeds admitted, against a planned 12. Reported as a power limitation per the pre-registration, not absorbed. A paired exact McNemar test needs >=6 discordant seeds in one direction for p<0.05, which ${proseSubset.length} seeds cannot supply; existence claims and per-seed blind-spot reporting remain valid.`
