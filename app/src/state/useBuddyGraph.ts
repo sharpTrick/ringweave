@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { POLISH_MAX_N, viewFromResult, type GraphView, type Settings } from "../model";
+import { splitPairs, pairKey, type ConstraintPair } from "../constraints";
 import { useGenerationWorker } from "./useGenerationWorker";
 
 function sameStrings(a: string[], b: string[]): boolean {
@@ -12,6 +13,21 @@ function sameEdges(a: [number, number][], b: [number, number][]): boolean {
     if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false;
   }
   return true;
+}
+
+/**
+ * Rule-set equality, order-insensitive via the canonical pair key.
+ *
+ * Needed because the "identical graph" short-circuit below compares names and
+ * edges only. A constraints-only edit can easily produce the SAME edges — adding
+ * a required pair the generator had already chosen, say — and without this the
+ * view would keep its old `constraints`/`report`, so export would write the wrong
+ * rules and a reroll would claim it "couldn't find a different arrangement".
+ */
+function sameConstraints(a: ConstraintPair[], b: ConstraintPair[]): boolean {
+  if (a.length !== b.length) return false;
+  const keys = new Set(a.map(pairKey));
+  return b.every((p) => keys.has(pairKey(p)));
 }
 
 function sameSettings(a: Settings, b: Settings): boolean {
@@ -39,7 +55,12 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
   viewRef.current = view;
   const onIdenticalRerollRef = useRef(onIdenticalReroll);
   onIdenticalRerollRef.current = onIdenticalReroll;
-  const pending = useRef<{ names: string[]; settings: Settings; reroll: boolean } | null>(null);
+  const pending = useRef<{
+    names: string[];
+    settings: Settings;
+    constraints: ConstraintPair[];
+    reroll: boolean;
+  } | null>(null);
   // consumed: the last worker result we've already turned into a view. Guards against a
   // benign effect re-run (e.g. StrictMode's dev double-invoke) re-applying a still-"done"
   // generation and clobbering a view set directly by loadView (an import).
@@ -49,7 +70,12 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     if (gen.status === "done" && gen.result && gen.result !== consumed.current && pending.current) {
       consumed.current = gen.result;
       const wasReroll = pending.current.reroll;
-      const next = viewFromResult(pending.current.names, pending.current.settings, gen.result);
+      const next = viewFromResult(
+        pending.current.names,
+        pending.current.settings,
+        pending.current.constraints,
+        gen.result,
+      );
       const cur = viewRef.current;
       // A re-generation on the same roster that produced an identical graph is a visual no-op:
       // keep the current graph rather than swapping in an indistinguishable one (no re-layout).
@@ -58,8 +84,23 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
       // so adopt next.settings while REUSING cur's edges/buddies by reference (so GraphCanvas sees
       // the same `edges` identity and doesn't re-lay-out/animate). Only a REROLL (an explicit
       // "Different arrangement") also surfaces a notice; an unchanged Edit→Generate is silent.
+      //
+      // The same argument applies to the CONSTRAINTS and their report: a rules-only edit can
+      // easily reproduce the same edges (requiring a pair the generator already chose), and
+      // keeping the old ones would export the wrong rules and show a stale report. So they are
+      // adopted alongside settings — carried over, not re-laid-out.
       if (cur && sameStrings(cur.names, next.names) && sameEdges(cur.edges, next.edges)) {
-        if (!sameSettings(cur.settings, next.settings)) setView({ ...cur, settings: next.settings });
+        const changed =
+          !sameSettings(cur.settings, next.settings) ||
+          !sameConstraints(cur.constraints, next.constraints);
+        if (changed) {
+          setView({
+            ...cur,
+            settings: next.settings,
+            constraints: next.constraints,
+            report: next.report,
+          });
+        }
         if (wasReroll) onIdenticalRerollRef.current?.(cur);
       } else {
         setView(next);
@@ -67,8 +108,13 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     }
   }, [gen.status, gen.result]);
 
-  const generate = useCallback((names: string[], settings: Settings, opts?: { reroll?: boolean }) => {
-    pending.current = { names, settings, reroll: opts?.reroll ?? false };
+  const generate = useCallback((
+    names: string[],
+    settings: Settings,
+    constraints: ConstraintPair[],
+    opts?: { reroll?: boolean },
+  ) => {
+    pending.current = { names, settings, constraints, reroll: opts?.reroll ?? false };
     // Never DISPATCH an explicit polish=on above the core's polish cap: it is O(n·m)/iter
     // and would run for tens of seconds. Downgrade to "auto" (which the core disables at
     // this size anyway), so a hostile imported polish=true can't drive a multi-minute run.
@@ -81,6 +127,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
         polish,
         seed: settings.seed,
       },
+      constraints: splitPairs(constraints),
     });
   }, [genGenerate]);
 
@@ -94,5 +141,13 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     setView(v);
   }, [genReset]);
 
-  return { view, status: gen.status, error: gen.error, generate, loadView, cancel: genReset };
+  return {
+    view,
+    status: gen.status,
+    error: gen.error,
+    refusals: gen.refusals,
+    generate,
+    loadView,
+    cancel: genReset,
+  };
 }

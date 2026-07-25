@@ -150,6 +150,25 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .stepper button:hover { background: rgba(255, 255, 255, 0.05); }
 .stepper .val { width: 34px; text-align: center; font-weight: 600; }
 .spacer { margin-left: auto; }
+/* F7 buddy-rule editor, inside the roster sheet. */
+.rules-block { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.rules-block summary { cursor: pointer; font-size: 13px; color: var(--ink-dim); }
+.rules-block summary:focus-visible { outline: 2px solid var(--cool); outline-offset: 3px; border-radius: 6px; }
+.rules-help { margin: 8px 0 10px; font-size: 12px; color: var(--ink-faint); }
+.rules { display: flex; flex-direction: column; gap: 8px; }
+.rule-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rule-who, .rule-kind { background: var(--input-bg); border: 1px solid var(--line2); border-radius: 9px; color: var(--ink); font-family: var(--font-ui); font-size: 13px; padding: 7px 9px; }
+.rule-who { flex: 1 1 130px; min-width: 0; }
+.rule-who:focus, .rule-kind:focus { outline: none; border-color: var(--cool); }
+.rule-who.unknown { border-color: var(--danger); }
+.rule-del { all: unset; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--ink-dim); cursor: pointer; }
+.rule-del:hover { background: rgba(255, 255, 255, 0.05); color: var(--ink); }
+.rule-del:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.rule-acts { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.rule-note { font-size: 12px; color: var(--ink-faint); }
+/* The constraint outcome line in the quality panel. */
+.rules-line { font-size: 12px; color: var(--ink-dim); margin-top: 10px; width: 100%; }
+
 .note { margin-top: 12px; font-size: 12px; color: var(--warm); min-height: 16px; }
 .note.blocking { color: var(--danger); }
 .filedrop { margin-top: 12px; font-size: 12px; color: var(--ink-faint); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }

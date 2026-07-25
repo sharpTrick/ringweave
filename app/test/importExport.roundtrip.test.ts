@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
+import { MAX_CONSTRAINT_PAIRS } from "../src/constraints";
+import { generateResult } from "./helpers";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, ImportError, MAX_IMPORT_N } from "../src/io/importGraph";
 import { parseRoster } from "../src/io/parseRoster";
@@ -18,8 +19,8 @@ describe("export -> import round-trip (F6)", () => {
   it("reproduces identical graph and metrics", () => {
     const settings: Settings = { ...DEFAULT_SETTINGS, buddies: 4 };
     const roster = names(30);
-    const result = buildBuddyGraph(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const view = viewFromResult(roster, settings, result);
+    const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
+    const view = viewFromResult(roster, settings, [], result);
 
     // Serialize through JSON (the real boundary) and back.
     const roundTripped = importGraph(JSON.parse(exportGraphJson(view)));
@@ -33,8 +34,8 @@ describe("export -> import round-trip (F6)", () => {
   it("exports canonical (u<v), sorted edges", () => {
     const settings = { ...DEFAULT_SETTINGS };
     const roster = names(20);
-    const result = buildBuddyGraph(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const file = exportGraph(viewFromResult(roster, settings, result));
+    const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
+    const file = exportGraph(viewFromResult(roster, settings, [], result));
     for (const [a, b] of file.edges) expect(a).toBeLessThan(b);
     const flat = file.edges.map(([a, b]) => a * 1000 + b);
     expect(flat).toEqual([...flat].sort((x, y) => x - y));
@@ -269,8 +270,8 @@ describe("import: lossless round-trip and defaults", () => {
 
 describe("file schema stays in sync with Metrics", () => {
   it("meta.metrics has exactly the keys of a produced Metrics object", () => {
-    const r = buildBuddyGraph(20, 4, { seed: 1, polish: false });
-    const view = viewFromResult(names(20), DEFAULT_SETTINGS, r);
+    const r = generateResult(20, 4, { seed: 1, polish: false });
+    const view = viewFromResult(names(20), DEFAULT_SETTINGS, [], r);
     const file = exportGraph(view);
     expect(Object.keys(file.meta.metrics).sort()).toEqual(Object.keys(view.metrics).sort());
   });
@@ -291,15 +292,46 @@ describe("import: validation & sanitization", () => {
     }
   });
 
-  it("refuses a constraint-bearing file rather than silently dropping constraints", () => {
+  it("round-trips buddy rules instead of dropping them", () => {
+    const view = importGraph({
+      version: 1,
+      people: peopleOf(4),
+      edges: square,
+      constraints: { required: [[0, 1]], prohibited: [[0, 2]] },
+    });
+    expect(view.constraints).toEqual([
+      { a: 0, b: 1, kind: "required" },
+      { a: 0, b: 2, kind: "prohibited" },
+    ]);
+    // Import rehydrates edges rather than regenerating, so nothing measured the rules.
+    // Null must read as "not measured", never as "all satisfied".
+    expect(view.report).toBeNull();
+    expect(exportGraph(view).constraints).toEqual({ required: [[0, 1]], prohibited: [[0, 2]] });
+  });
+
+  it("refuses malformed buddy rules rather than skipping them", () => {
+    const withRules = (constraints: unknown) => () =>
+      importGraph({ version: 1, people: peopleOf(4), edges: square, constraints });
+
+    expect(withRules({ required: [[0, 9]], prohibited: [] })).toThrow(/outside 0\.\.3/);
+    expect(withRules({ required: [[0, 0]], prohibited: [] })).toThrow(/themselves/i);
+    expect(withRules({ required: [[0, 1], [1, 0]], prohibited: [] })).toThrow(/twice/i);
+    expect(withRules({ required: [[0, 1]], prohibited: [[1, 0]] })).toThrow(/both/i);
+    expect(withRules({ required: [[0]], prohibited: [] })).toThrow(/\[a, b\] pair/);
+    expect(withRules({ required: "nope", prohibited: [] })).toThrow(/aren't a list/);
+    expect(withRules({ required: [[0.5, 1]], prohibited: [] })).toThrow(/outside 0\.\.3/);
+  });
+
+  it("caps the number of buddy rules before doing any per-pair work", () => {
+    const many = Array.from({ length: MAX_CONSTRAINT_PAIRS + 1 }, () => [0, 1]);
     expect(() =>
       importGraph({
         version: 1,
         people: peopleOf(4),
         edges: square,
-        constraints: { required: [[0, 1]], prohibited: [] },
+        constraints: { required: many, prohibited: [] },
       }),
-    ).toThrow(/constraint/i);
+    ).toThrow(/the limit is 200/);
   });
 
   it("rejects people whose id disagrees with their position", () => {

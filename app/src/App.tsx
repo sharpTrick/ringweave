@@ -9,6 +9,8 @@ import QualityPanel from "./panels/QualityPanel";
 import Slips from "./panels/Slips";
 import Notice from "./panels/Notice";
 import { useNotice } from "./state/useNotice";
+import { describeReasons } from "./io/constraintMessages";
+import type { ConstraintPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
@@ -32,6 +34,9 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(true);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [names, setNames] = useState<string[]>([]);
+  // The rules the current graph was generated under. Indices into `names`; the two are
+  // only ever replaced together (by generate or by import), so they cannot drift apart.
+  const [constraints, setConstraints] = useState<ConstraintPair[]>([]);
   const [layout, setLayout] = useState<LayoutMode>("ring");
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -39,7 +44,13 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (bg.status === "error") {
+    if (bg.status === "refused") {
+      // A refusal is not a failure: the rules simply admit no graph. Reopen the editor
+      // so the user is next to the controls that caused it — the reasons name people,
+      // and the roster modal is where those people are edited.
+      show(describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.");
+      setModalOpen(true);
+    } else if (bg.status === "error") {
       // Recovery must not hinge on the message being non-empty: a "" error would otherwise skip
       // BOTH the toast and the reopen. Always surface something and, on a first-generation failure
       // (no view, no running overlay), reopen the setup modal so the user is never stranded.
@@ -48,7 +59,7 @@ export default function App() {
     } else if (bg.status === "running") {
       clear(); // clear a stale error over a new run
     }
-  }, [bg.status, bg.error, view, show, clear]);
+  }, [bg.status, bg.error, bg.refusals, names, view, show, clear]);
 
   // Every graph-replacing action clears transient selection + hover, so no stale
   // highlight survives onto a different graph (keyboard reroll never fires mouseleave).
@@ -57,11 +68,12 @@ export default function App() {
     setHovered(null);
   };
 
-  const handleGenerate = (roster: string[], s: Settings) => {
+  const handleGenerate = (roster: string[], s: Settings, rules: ConstraintPair[]) => {
     setNames(roster);
     setSettings(s);
+    setConstraints(rules);
     resetSelection();
-    bg.generate(roster, s);
+    bg.generate(roster, s, rules);
     setModalOpen(false);
   };
 
@@ -84,7 +96,7 @@ export default function App() {
     }
     setSettings(s);
     resetSelection();
-    bg.generate(names, s, { reroll: true }); // intent: an identical result surfaces a notice
+    bg.generate(names, s, constraints, { reroll: true }); // intent: an identical result surfaces a notice
   };
 
   const cancelGeneration = () => {
@@ -100,6 +112,7 @@ export default function App() {
     bg.loadView(v);
     setNames(v.names);
     setSettings(v.settings);
+    setConstraints(v.constraints);
     resetSelection();
     clear(); // a superseding import must not leave a stale error/notice over the fresh graph
     setModalOpen(false);
@@ -166,6 +179,8 @@ export default function App() {
             <RosterModal
               initialText={names.join("\n")}
               settings={settings}
+              constraints={constraints}
+              constraintNames={names}
               canCancel={view !== null}
               onGenerate={handleGenerate}
               onCancel={() => setModalOpen(false)}

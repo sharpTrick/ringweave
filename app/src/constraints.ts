@@ -1,0 +1,158 @@
+/**
+ * The app's editable constraint model (F7).
+ *
+ * The core's `Constraints` class is deliberately not used as the UI's model: it
+ * has no removal API, no per-person enumeration, and private `#` Set fields — so
+ * it is not structured-clone-safe and cannot be posted to the worker. The app
+ * keeps a flat, plain-data list instead and the worker rebuilds a `Constraints`
+ * on the other side. Nothing here reimplements constraint *semantics*; that all
+ * still lives in the core.
+ */
+
+export type ConstraintKind = "required" | "prohibited";
+
+/** One editable rule. `a`/`b` are roster indices; order within a pair is not significant. */
+export interface ConstraintPair {
+  a: number;
+  b: number;
+  kind: ConstraintKind;
+}
+
+/**
+ * Cap on stored pairs. Constraint checking is O(pairs) per generation and the
+ * editor renders one row each, but the real reason is the import surface: pairs
+ * arrive from an untrusted file and feed `validate`, whose prohibited-pair
+ * connectivity walk is O(n²). Bounding the count before any of that runs keeps a
+ * hostile file cheap to refuse.
+ */
+export const MAX_CONSTRAINT_PAIRS = 200;
+
+/** Canonical key for a pair, so (a,b) and (b,a) of the same kind are one rule. */
+export function pairKey(p: ConstraintPair): string {
+  const [lo, hi] = p.a <= p.b ? [p.a, p.b] : [p.b, p.a];
+  return `${p.kind}:${lo},${hi}`;
+}
+
+/** Drop duplicate rules, keeping first occurrence. */
+function dedupePairs(pairs: ConstraintPair[]): ConstraintPair[] {
+  const seen = new Set<string>();
+  const out: ConstraintPair[] = [];
+  for (const p of pairs) {
+    const key = pairKey(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+/** Split into the two index-pair lists the worker protocol and file format carry. */
+export function splitPairs(pairs: ConstraintPair[]): {
+  required: [number, number][];
+  prohibited: [number, number][];
+} {
+  const required: [number, number][] = [];
+  const prohibited: [number, number][] = [];
+  for (const p of pairs) {
+    (p.kind === "required" ? required : prohibited).push([p.a, p.b]);
+  }
+  return { required, prohibited };
+}
+
+/** Rejoin the two lists into the editable model. */
+export function joinPairs(
+  required: [number, number][],
+  prohibited: [number, number][],
+): ConstraintPair[] {
+  return [
+    ...required.map(([a, b]): ConstraintPair => ({ a, b, kind: "required" })),
+    ...prohibited.map(([a, b]): ConstraintPair => ({ a, b, kind: "prohibited" })),
+  ];
+}
+
+/** Roster lookup keyed the way `parseRoster` de-duplicates: case-insensitively. */
+function indexByName(names: string[]): Map<string, number> {
+  const map = new Map<string, number>();
+  names.forEach((name, i) => {
+    const key = name.toLowerCase();
+    if (!map.has(key)) map.set(key, i);
+  });
+  return map;
+}
+
+/**
+ * A rule as the editor holds it: by NAME, not by roster position.
+ *
+ * This is the whole defence against the highest-severity hazard in the feature.
+ * Pairs are stored as positional indices everywhere else — in the view, the file
+ * format and the worker protocol — and the roster is editable: "Edit people"
+ * reopens the roster modal seeded with the current names. Delete one person and
+ * every stored `{a, b}` silently re-points at *different humans*, which is exactly
+ * the silent partial F7's acceptance criteria forbid.
+ *
+ * Rather than detect that afterwards, the editor never holds an index at all. It
+ * converts in on open and out on generate, against the roster in force at each
+ * moment, so there is no window in which an index and a name disagree.
+ */
+export interface NamedPair {
+  a: string;
+  b: string;
+  kind: ConstraintKind;
+}
+
+/**
+ * Index pairs → name pairs, for editing. A pair referencing a position the roster
+ * no longer has is dropped; it names nobody, so there is nothing to show.
+ */
+export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPair[] {
+  const out: NamedPair[] = [];
+  for (const p of pairs) {
+    const a = names[p.a];
+    const b = names[p.b];
+    if (typeof a !== "string" || typeof b !== "string") continue;
+    out.push({ a, b, kind: p.kind });
+  }
+  return out;
+}
+
+/**
+ * Name pairs → index pairs, against the roster they will be generated with.
+ *
+ * Returns the dropped count so the caller can say so out loud: a rule silently
+ * disappearing because its person was removed is the failure this is here to
+ * prevent, and losing it quietly would be barely better than mis-pointing it.
+ * Matching is case-insensitive, which is safe on both entry paths and both were
+ * checked — `parseRoster` de-duplicates case-insensitively (keeping
+ * first-occurrence casing), and `importGraph` hard-refuses any file whose names
+ * are not non-empty, unique case-insensitively, and free of commas or line breaks.
+ */
+export function resolveNamedPairs(
+  named: NamedPair[],
+  names: string[],
+): { pairs: ConstraintPair[]; dropped: number } {
+  const lookup = indexByName(names);
+  const resolved: ConstraintPair[] = [];
+  for (const p of named) {
+    const a = lookup.get(p.a.trim().toLowerCase());
+    const b = lookup.get(p.b.trim().toLowerCase());
+    if (a === undefined || b === undefined || a === b) continue;
+    resolved.push({ a, b, kind: p.kind });
+  }
+  const pairs = dedupePairs(resolved);
+  return { pairs, dropped: named.length - pairs.length };
+}
+
+/**
+ * Resolve typed text to a roster index, or -1 when it names nobody.
+ *
+ * Exact (case- and whitespace-insensitive) match only. The editor pairs this with
+ * a shared `<datalist>` rather than per-row `<select>` elements: at the roster
+ * ceiling two selects per row across the pair cap would mount hundreds of
+ * thousands of option nodes, while one datalist is mounted once.
+ */
+export function resolvePerson(text: string, names: string[]): number {
+  const needle = text.trim().toLowerCase();
+  if (needle === "") return -1;
+  const found = indexByName(names).get(needle);
+  return found === undefined ? -1 : found;
+}

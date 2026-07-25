@@ -86,11 +86,26 @@ token-swap; M2 ships the mock-faithful dark theme only.
   more than the app can generate, and the equality keeps the synchronous re-measure to a few
   hundred ms. A larger/denser hand-made graph is refused with a plain-language error. Lifting this
   means routing import re-measurement through the worker — a clean follow-on.
-- **Generation pipeline models failure as a thrown error only** (`worker/protocol.ts`
-  `GenerateResponse`). The constraint-aware core (`buildConstrainedBuddyGraph`) instead *refuses on
-  a successful return* via `report.refusals`. When constraints land (M3), the protocol needs a
-  third notion (refused-with-reasons) and `viewFromResult` a constrained variant — don't build it
-  now (YAGNI), but don't encode "failure == throw" as the only shape either.
+- ~~**Generation pipeline models failure as a thrown error only.**~~ **Retired in M3.**
+  `GenerateResponse` is now a three-way tagged union (`ok` / `error` / `refused`), and the refusal
+  carries structured `Reason`s rather than prose so the UI can name people. Both builders normalize
+  into one `GraphResult` payload instead of `viewFromResult` growing a constrained sibling — one
+  producer, no branch on which generator ran.
+- **CSV constraint import is DEFERRED.** F7's acceptance names "import from JSON/CSV"
+  (`PROJECT_PLAN.md:97`); JSON round-trips (rules are in the file schema, written on export and
+  validated on import) and CSV is not built. Recorded here rather than dropped, per the rule that a
+  cut item is cut as a deferral. There is no caller: the roster CSV path parses *names*, and a
+  constraints CSV would need its own column contract, which nothing in the app or the file format
+  currently defines.
+- **Buddy rules are not re-checked on import.** `importGraph` rehydrates edges rather than
+  regenerating, so no builder runs and there is no `ConstraintReport`. `GraphView.report` is null on
+  that path and the quality panel says "not re-checked on import" — deliberately NOT "satisfied",
+  which would be the disconnected-reads-as-optimal failure in a new place. Closing it properly means
+  verifying the rules against the imported edge set, which is a real (cheap) computation and a clean
+  follow-on; asserting satisfaction without it is not.
+- **The tag UI and the priors/`priorHard` toggle stay deferred.** Tags are P2 in `PROJECT_PLAN.md`
+  and `lib/CLAUDE.md` documents two unfixed hazards in them (a dominant tag materializes O(n²)
+  prohibited pairs; a `NaN` tag silently never groups). Priors are F9/M4. Neither has a caller.
 - **The focus/ego layout is DEFERRED PAST M3** (it was previously pencilled in as "F8, M3"). It is
   not in F8's acceptance criteria (`PROJECT_PLAN.md:107` is fuzzy search, clickable panel names, and
   a working back stack); it comes only from the mock and `DESIGN_HANDOFF.md`. The argument for

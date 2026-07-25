@@ -1,4 +1,5 @@
 import type { GraphView } from "../model";
+import { splitPairs } from "../constraints";
 import type { BuddyGraphFile } from "./schema";
 
 /** Order an edge as [min, max] so the exported list is canonical and diff-stable. */
@@ -18,7 +19,9 @@ export function exportGraph(view: GraphView): BuddyGraphFile {
   return {
     version: 1,
     people: view.names.map((name, id) => ({ id, name })),
-    constraints: { required: [], prohibited: [] },
+    // Real rules now, not the M2 placeholder: a file that omitted them would lose
+    // the user's constraints on the next import and silently regenerate without them.
+    constraints: splitPairs(view.constraints),
     edges,
     settings: {
       buddies: view.settings.buddies,

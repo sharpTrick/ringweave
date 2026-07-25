@@ -1,4 +1,6 @@
-import { asplGap, DEFAULT_MIN_SEPARATION, type BuddyResult } from "ringweave";
+import { asplGap, DEFAULT_MIN_SEPARATION, type ConstraintReport } from "ringweave";
+import type { ConstraintPair } from "./constraints";
+import type { GraphResult } from "./worker/protocol";
 
 /** Generation settings surfaced in the UI (mirrors the core's BuddyOptions + k). */
 export interface Settings {
@@ -136,6 +138,29 @@ export function isOptimal(m: Metrics): boolean {
   return m.quality === 1;
 }
 
+/**
+ * The buddy-rule outcome line, or null when there are no rules to report on.
+ *
+ * Deliberately distinct from `connectionSummary`: connectivity and rule
+ * satisfaction are different claims, and folding them together is how "the graph
+ * is split into three groups" ends up rendering as a clean tick.
+ *
+ * A null report means NOT MEASURED, never "satisfied". Import rehydrates edges
+ * without regenerating, so an imported constrained file has no report — and
+ * showing it as satisfied would be exactly the disconnected-reads-as-optimal
+ * class this app already guards elsewhere.
+ */
+export function constraintSummary(view: GraphView): string | null {
+  const total = view.constraints.length;
+  if (total === 0) return null;
+  const rules = `${total} buddy rule${total === 1 ? "" : "s"}`;
+  const report = view.report;
+  if (report === null) return `${rules} saved with this graph — not re-checked on import.`;
+  const broken = report.reqViolations + report.prohViolations;
+  if (broken === 0) return `all ${rules} satisfied`;
+  return `${broken} of ${rules} couldn't be met`;
+}
+
 /** Gauge percentage at/above which a connected graph reads as "well-linked" rather than "loosely". */
 const WELL_LINKED_PCT = 50;
 
@@ -239,6 +264,21 @@ export interface GraphView {
   buddies: number[][];
   settings: Settings;
   metrics: Metrics;
+  /**
+   * The buddy rules this graph was built under. A sibling of `settings`, not part
+   * of it — the file schema has always modelled them that way — so export, import
+   * and re-measure round-trip them.
+   */
+  constraints: ConstraintPair[];
+  /**
+   * How the rules turned out, or null when there were none to report on.
+   *
+   * Also null for an IMPORTED constrained graph: import rehydrates edges rather
+   * than regenerating, so no builder ran and there is nothing to report. That is
+   * a real gap and the panel says "not measured" rather than implying success —
+   * "no report" must never render as "all rules satisfied".
+   */
+  report: ConstraintReport | null;
 }
 
 /**
@@ -250,12 +290,19 @@ export interface GraphView {
  * fact about a *generator*, which is exactly the assumption that goes stale the
  * moment a second generator feeds the same view.
  */
-export function viewFromResult(names: string[], settings: Settings, r: BuddyResult): GraphView {
+export function viewFromResult(
+  names: string[],
+  settings: Settings,
+  constraints: ConstraintPair[],
+  r: GraphResult,
+): GraphView {
   return {
     names,
     edges: r.edges,
     buddies: r.buddies,
     settings,
+    constraints,
+    report: r.report,
     metrics: assembleMetrics(names.length, {
       aspl: r.aspl,
       diameter: r.diameter,

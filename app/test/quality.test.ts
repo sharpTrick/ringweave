@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
+import { generateResult } from "./helpers";
 import { connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
 
 function names(n: number): string[] {
@@ -32,8 +33,8 @@ describe("quality score (F5)", () => {
 
   it("the SHIPPED quality (via assembleMetrics/viewFromResult) is scored at degreeMax, regular AND irregular", () => {
     for (const [n, k] of [[24, 4], [25, 3], [15, 3]] as const) {
-      const r = buildBuddyGraph(n, k, { seed: 1 });
-      const v = viewFromResult(names(n), DEFAULT_SETTINGS, r);
+      const r = generateResult(n, k, { seed: 1 });
+      const v = viewFromResult(names(n), DEFAULT_SETTINGS, [], r);
       const expected = Math.max(0, Math.min(1, 1 - asplGap(r.aspl, n, r.degreeMax)));
       expect(v.metrics.quality).toBeCloseTo(expected, 12);
     }

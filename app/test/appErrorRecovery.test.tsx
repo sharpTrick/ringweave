@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
-import { buildBuddyGraph, type BuddyResult } from "ringweave";
+import type { BuddyResult } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+import { generateResult } from "./helpers";
 import { exportGraphJson } from "../src/io/exportGraph";
 
 // Drive App with a controllable stand-in for the generation worker so we can inject an error
@@ -88,7 +89,7 @@ describe("App recovers from a worker error", () => {
     expect(screen.getByText(/generation failed/i)).toBeTruthy();
 
     // Import a valid graph via the JSON file input.
-    const view = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, buildBuddyGraph(6, 2, { seed: 1, polish: false }));
+    const view = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], generateResult(6, 2, { seed: 1, polish: false }));
     const json = exportGraphJson(view);
     const input = document.querySelector('input[accept*="json"]') as HTMLInputElement;
     const file = new File([json], "graph.json", { type: "application/json" });

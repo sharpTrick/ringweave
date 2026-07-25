@@ -1,5 +1,12 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
+import { Constraints, validateDetailed } from "ringweave";
 import type { Settings } from "../model";
+import {
+  resolveNamedPairs, toNamedPairs,
+  type ConstraintPair, type NamedPair,
+} from "../constraints";
+import { describeReasons } from "../io/constraintMessages";
+import ConstraintsEditor from "./ConstraintsEditor";
 import { MAX_PARSE_CHARS, charCapNotice, parseRoster } from "../io/parseRoster";
 import { feasibility } from "../io/feasibility";
 import { readFileText } from "../io/readFileText";
@@ -9,16 +16,24 @@ import SettingsControls from "./SettingsControls";
 interface Props {
   initialText: string;
   settings: Settings;
+  /** The rules in force, with the roster their indices point into. */
+  constraints: ConstraintPair[];
+  constraintNames: string[];
   canCancel: boolean;
-  onGenerate: (names: string[], settings: Settings) => void;
+  onGenerate: (names: string[], settings: Settings, constraints: ConstraintPair[]) => void;
   onCancel: () => void;
 }
 
 /** F1 + F2: roster entry (paste or .txt/.csv drop, tolerant parse, duplicate warnings)
     and generate settings, with pre-run feasibility notes. */
-export default function RosterModal({ initialText, settings: initialSettings, canCancel, onGenerate, onCancel }: Props) {
+export default function RosterModal({
+  initialText, settings: initialSettings, constraints, constraintNames, canCancel, onGenerate, onCancel,
+}: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
+  // Rules are edited BY NAME, so a roster edit can never silently re-point them at
+  // different people. They are converted in here, once, and back out on generate.
+  const [rules, setRules] = useState<NamedPair[]>(() => toNamedPairs(constraints, constraintNames));
   const [fileError, setFileError] = useState<string | null>(null);
   const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -60,9 +75,31 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
     void readFile(e.dataTransfer.files[0]);
   };
 
+  // Resolve the name-keyed rules against the roster as currently typed. `dropped`
+  // counts rules naming somebody who is no longer there — surfaced below, never
+  // discarded quietly.
+  const resolved = useMemo(() => resolveNamedPairs(rules, parsed.names), [rules, parsed.names]);
+
+  /**
+   * The FIRST of F7's two feasibility gates: the same core check the worker will
+   * run, run here so an impossible rule set is explained in the editor instead of
+   * coming back as a refusal after a round trip. The worker's gate is the
+   * authority; this one exists so the message arrives next to the control that
+   * caused it.
+   */
+  const ruleProblems = useMemo(() => {
+    if (resolved.pairs.length === 0) return [];
+    const cons = new Constraints(parsed.names.length);
+    for (const p of resolved.pairs) {
+      if (p.kind === "required") cons.require(p.a, p.b);
+      else cons.prohibit(p.a, p.b);
+    }
+    return describeReasons(validateDetailed(cons, settings.buddies), parsed.names);
+  }, [resolved.pairs, parsed.names, settings.buddies]);
+
   const generate = () => {
-    if (!feas.canGenerate) return;
-    onGenerate(parsed.names, settings);
+    if (!feas.canGenerate || ruleProblems.length > 0) return;
+    onGenerate(parsed.names, settings, resolved.pairs);
   };
 
   return (
@@ -97,11 +134,26 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
           />
         </div>
 
+        <details className="rules-block">
+          <summary>
+            Buddy rules{rules.length > 0 ? ` (${rules.length})` : ""}
+          </summary>
+          <p className="rules-help">
+            Optional. Pin two people together, or keep them apart. Everything else is arranged
+            around the rules.
+          </p>
+          <ConstraintsEditor names={parsed.names} pairs={rules} onChange={setRules} />
+        </details>
+
         <div className="sheet-row">
           <SettingsControls settings={settings} onChange={setSettings} />
           <div className="spacer" />
           {canCancel && <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>}
-          <button className="btn btn-warm" disabled={!feas.canGenerate} onClick={generate}>
+          <button
+            className="btn btn-warm"
+            disabled={!feas.canGenerate || ruleProblems.length > 0}
+            onClick={generate}
+          >
             Generate buddy graph
           </button>
         </div>
@@ -113,6 +165,16 @@ export default function RosterModal({ initialText, settings: initialSettings, ca
         ))}
         {feas.messages.map((m, i) => (
           <div className={"note" + (feas.canGenerate ? "" : " blocking")} key={i}>{m}</div>
+        ))}
+        {resolved.dropped > 0 && (
+          <div className="note">
+            {resolved.dropped === 1
+              ? "1 buddy rule doesn't match anyone in this roster and won't be used."
+              : `${resolved.dropped} buddy rules don't match anyone in this roster and won't be used.`}
+          </div>
+        )}
+        {ruleProblems.map((m, i) => (
+          <div className="note blocking" key={i}>{m}</div>
         ))}
       </div>
     </div>

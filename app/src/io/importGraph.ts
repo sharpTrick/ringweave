@@ -5,6 +5,10 @@ import {
   type GraphView, type Settings,
 } from "../model";
 import { MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
+import {
+  MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
+  type ConstraintPair,
+} from "../constraints";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -52,6 +56,71 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
 }
 
 /**
+ * Validate and rehydrate the constraint block.
+ *
+ * Refuses rather than skipping bad pairs. Every other malformed input in this file
+ * throws, and switching constraints alone to lenient accept-with-skips would be
+ * inconsistent inside one function — worse, it would silently change the rules a
+ * user gets back from the rules they saved, which is the same silent-partial
+ * failure the constraints feature exists to avoid.
+ *
+ * A pair that is both required and prohibited is refused here too. It is a
+ * semantic contradiction the core would refuse at generation time anyway, and an
+ * imported graph that renders fine but can never be regenerated is a worse place
+ * to discover it. The app cannot produce such a file: a view only ever carries the
+ * rules a successful generation ran under.
+ */
+function readConstraints(
+  block: BuddyGraphFile["constraints"] | undefined,
+  n: number,
+): ConstraintPair[] {
+  if (block === undefined) return [];
+  if (typeof block !== "object" || block === null) {
+    throw new ImportError("That file's buddy rules aren't in the expected shape.");
+  }
+  const read = (value: unknown, label: string): [number, number][] => {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+      throw new ImportError(`That file's ${label} buddy rules aren't a list.`);
+    }
+    return value.map((pair) => {
+      if (!Array.isArray(pair) || pair.length !== 2) {
+        throw new ImportError(`A ${label} buddy rule isn't a [a, b] pair.`);
+      }
+      const [a, b] = pair as [unknown, unknown];
+      if (!Number.isInteger(a) || !Number.isInteger(b) ||
+          (a as number) < 0 || (b as number) < 0 ||
+          (a as number) >= n || (b as number) >= n) {
+        throw new ImportError(`A ${label} buddy rule refers to someone outside 0..${n - 1}.`);
+      }
+      if (a === b) {
+        throw new ImportError("A buddy rule pairs someone with themselves.");
+      }
+      return [a as number, b as number];
+    });
+  };
+
+  const pairs = joinPairs(read(block.required, "must-be"), read(block.prohibited, "never-be"));
+
+  const seen = new Set<string>();
+  for (const p of pairs) {
+    if (seen.has(pairKey(p))) throw new ImportError("That file lists the same buddy rule twice.");
+    seen.add(pairKey(p));
+  }
+  // Same two people under both kinds: the keys differ (kind is part of the key), so
+  // this needs its own pass over the un-kinded pair.
+  const unkinded = new Set<string>();
+  for (const p of pairs) {
+    const key = p.a <= p.b ? `${p.a},${p.b}` : `${p.b},${p.a}`;
+    if (unkinded.has(key)) {
+      throw new ImportError("That file sets the same pair to both be and never be buddies.");
+    }
+    unkinded.add(key);
+  }
+  return pairs;
+}
+
+/**
  * Rehydrate a GraphView from a file WITHOUT regenerating — the edges are in the file.
  * A `Graph` is rebuilt and metrics are recomputed with the core's own functions
  * (`allPairsSummary`/`girth`/`largestComponentFraction`), so imported (incl. hand-edited)
@@ -81,10 +150,12 @@ export function importGraph(data: unknown): GraphView {
   if (2 * f.edges.length > BUDDY_MAX * f.people.length) {
     throw new ImportError(`That file has too many edges for ${f.people.length} people — it's denser than a buddy graph.`);
   }
-  // M2 has no constraints UI; refuse a constraint-bearing file explicitly rather than
-  // silently dropping the constraints on import (and re-exporting them as empty).
-  if (f.constraints && ((f.constraints.required?.length ?? 0) > 0 || (f.constraints.prohibited?.length ?? 0) > 0)) {
-    throw new ImportError("That file has constraints, which aren't supported yet.");
+  // Bound the pair count BEFORE any per-pair work, and before `validate`'s O(n²)
+  // prohibited-pair connectivity walk could ever be reached on a later generate.
+  const declaredPairs =
+    (f.constraints?.required?.length ?? 0) + (f.constraints?.prohibited?.length ?? 0);
+  if (declaredPairs > MAX_CONSTRAINT_PAIRS) {
+    throw new ImportError(`That file has ${declaredPairs} buddy rules — the limit is ${MAX_CONSTRAINT_PAIRS}.`);
   }
 
   const n = f.people.length;
@@ -139,6 +210,8 @@ export function importGraph(data: unknown): GraphView {
     g.addEdge(a, b); // ignores self-loops and de-dupes symmetric entries
   }
 
+  const constraints = readConstraints(f.constraints, n);
+
   const summary = allPairsSummary(g);
   const [degreeMin, degreeMax] = degreeExtent(g.degrees());
   const buddies = g.adj.map((s) => Array.from(s).sort((x, y) => x - y));
@@ -149,6 +222,11 @@ export function importGraph(data: unknown): GraphView {
     edges: g.edgeList(),
     buddies,
     settings,
+    constraints,
+    // Import rehydrates edges rather than regenerating, so no builder ran and there is
+    // no constraint report to show. Null means "not measured" and the panel says so —
+    // it must never be read as "all rules satisfied".
+    report: null,
     metrics: assembleMetrics(n, {
       aspl: summary.aspl,
       diameter: summary.diameter,

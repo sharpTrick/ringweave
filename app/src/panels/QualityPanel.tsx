@@ -1,4 +1,4 @@
-import { connectionSummary, qualityPercent, type GraphView } from "../model";
+import { connectionSummary, constraintSummary, qualityPercent, type GraphView } from "../model";
 
 interface Props {
   view: GraphView;
@@ -16,6 +16,7 @@ const fmtInt = (x: number | null): string => (x == null ? "—" : String(x));
 export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
   const q = qualityPercent(m); // same rounded value the caption thresholds on
+  const rules = constraintSummary(view);
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">
@@ -38,6 +39,7 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         </div>
         <span className="l">{connectionSummary(m)}</span>
       </div>
+      {rules && <div className="rules-line">{rules}</div>}
       <div className="m-acts">
         <button className="btn btn-ghost" onClick={onImport}>Import ↑</button>
         <button className="btn btn-ghost" onClick={() => window.print()}>Print slips</button>

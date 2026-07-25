@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { buildBuddyGraph } from "ringweave";
 import { buddyLabel, DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+import { generateResult } from "./helpers";
 import { importGraph } from "../src/io/importGraph";
 import BuddyList from "../src/panels/BuddyList";
 
@@ -19,7 +19,7 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
   it("prefixes a name starting with '=' so a pasted cell isn't a live formula", async () => {
     // A hostile-but-valid imported name: non-empty, unique, no comma/newline -> passes import.
     const roster = ['=HYPERLINK("http://evil","x")', "Bob", "Cara", "Dana"];
-    const view = viewFromResult(roster, DEFAULT_SETTINGS, buildBuddyGraph(4, 2, { seed: 1 }));
+    const view = viewFromResult(roster, DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
 
     render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));

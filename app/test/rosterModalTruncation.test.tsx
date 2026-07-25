@@ -12,6 +12,8 @@ const renderModal = () =>
     <RosterModal
       initialText=""
       settings={DEFAULT_SETTINGS}
+      constraints={[]}
+      constraintNames={[]}
       canCancel={false}
       onGenerate={() => {}}
       onCancel={() => {}}

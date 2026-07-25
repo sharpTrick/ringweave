@@ -1,20 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BuddyResult } from "ringweave";
-import type { GenerateOptions, GenerateRequest, GenerateResponse } from "../worker/protocol";
+import type { Reason } from "ringweave";
+import type {
+  GenerateOptions,
+  GenerateRequest,
+  GenerateResponse,
+  GraphResult,
+} from "../worker/protocol";
 
 /** Module-local: `GenState.status` carries it structurally, so nothing outside needs the name. */
-type GenStatus = "idle" | "running" | "done" | "error";
+type GenStatus = "idle" | "running" | "done" | "error" | "refused";
 
+/**
+ * `refused` is a distinct status, not an error: the app worked and the input was
+ * well-formed, but the buddy rules admit no graph. Collapsing it into `error`
+ * would route a fixable, per-person explanation through copy that reads like a
+ * crash.
+ */
 export interface GenState {
   status: GenStatus;
-  result: BuddyResult | null;
+  result: GraphResult | null;
   error: string | null;
+  refusals: Reason[];
 }
 
 export interface GenerateArgs {
   n: number;
   k: number;
   options?: GenerateOptions;
+  constraints?: GenerateRequest["constraints"];
 }
 
 /**
@@ -24,19 +37,23 @@ export interface GenerateArgs {
  * computation and swaps in a fresh worker, so a slow/superseded run can't monopolize the
  * single worker (blocking the next reroll) or leave a false "running" status.
  */
+/** The cleared state every transition starts from, so no stale field survives a status change. */
+const IDLE: GenState = { status: "idle", result: null, error: null, refusals: [] };
+
 export function useGenerationWorker() {
   const workerRef = useRef<Worker | null>(null);
   const latestId = useRef(0);
   const runningRef = useRef(false);
-  const [state, setState] = useState<GenState>({ status: "idle", result: null, error: null });
+  const [state, setState] = useState<GenState>(IDLE);
 
   const attach = useCallback((worker: Worker) => {
     worker.onmessage = (e: MessageEvent<GenerateResponse>) => {
       const msg = e.data;
       if (msg.id !== latestId.current) return; // stale run — superseded by a newer request
       runningRef.current = false;
-      if (msg.ok) setState({ status: "done", result: msg.result, error: null });
-      else setState({ status: "error", result: null, error: msg.error });
+      if (msg.kind === "ok") setState({ ...IDLE, status: "done", result: msg.result });
+      else if (msg.kind === "refused") setState({ ...IDLE, status: "refused", refusals: msg.refusals });
+      else setState({ ...IDLE, status: "error", error: msg.error });
     };
   }, []);
 
@@ -64,15 +81,21 @@ export function useGenerationWorker() {
       runningRef.current = false;
       swapWorker(); // stop the running computation, fresh worker for next time
     }
-    setState({ status: "idle", result: null, error: null });
+    setState(IDLE);
   }, [swapWorker]);
 
   const generate = useCallback((args: GenerateArgs) => {
     if (runningRef.current) swapWorker(); // supersede a slow in-flight run instead of queueing behind it
     const id = ++latestId.current;
     runningRef.current = true;
-    setState({ status: "running", result: null, error: null });
-    const req: GenerateRequest = { id, n: args.n, k: args.k, options: args.options ?? {} };
+    setState({ ...IDLE, status: "running" });
+    const req: GenerateRequest = {
+      id,
+      n: args.n,
+      k: args.k,
+      options: args.options ?? {},
+      constraints: args.constraints ?? { required: [], prohibited: [] },
+    };
     workerRef.current?.postMessage(req);
   }, [swapWorker]);
 
