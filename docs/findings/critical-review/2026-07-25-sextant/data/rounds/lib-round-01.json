@@ -1,0 +1,412 @@
+{
+  "runId": "wf_88887b29-0f5",
+  "target": "{\"target\": \"lib/src (the ringweave core \u2014 M3 added shortestPath/eccentricity to metrics.ts, connected/largestComponentFraction to BuddyResult, and restructured validate() into validateDetailed() + formatReason() in constraints.ts)\", \"changedPaths\": [\"lib/src/core/metrics.ts\", \"lib/src/core/index.ts\", \"lib/src/core/constraints.ts\", \"lib/src/core/constrainedGreedy.ts\"], \"round\": 1, \"runId\": \"sextant-m3-lib\"}",
+  "round": null,
+  "tokens": {
+    "subagentTokens": 424685,
+    "toolCalls": 134,
+    "agents": 6
+  },
+  "argsNote": "args reached the workflow as a STRING, so the object form was not parsed: changedPaths was empty and round was null. Harmless for round 1 (no prior saturation state, so no lens could be gated), and the target text still named lib/src correctly \u2014 the critics' `checked` fields confirm they read the right files. Pass an actual JSON object next round.",
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 8,
+    "confirmed": 9,
+    "blocking": 3,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 5
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under /home/user/ringweave/lib/src/core (metrics, index, constraints, constrainedGreedy, graph, greedy, polish, swap, rng, bounds) and every file under /home/user/ringweave/lib/test, then built dist and ran scratch harnesses. Determinism: 600 random graphs rebuilt under shuffled/reversed edge-insertion order -> shortestPath, eccentricity, girth all identical; 400 constrained builds with prohibited pairs inserted in reversed order and reversed endpoints -> byte-identical BuddyResult including polish. Correctness oracles: shortestPath vs exhaustive enumeration of the lexicographically-smallest shortest path over 500 graphs and all (s,t) incl. s===t and unreachable; girth vs a brute-force edge-removal shortest-cycle oracle over 1500 graphs; eccentricity vs bfsDistances max/Infinity. Hard constraints: 1876 random FEASIBLE constraint sets (n in [3,20], k in [0,4], prohibited + required + priorHard) through constrainedGreedy and buildConstrainedBuddyGraph -> zero prohibited-present, zero required-missing, zero degree-cap breaches, zero non-maximal legal edges (so forceConnect is inert as documented). Report parity: report.connected / largestComponentFraction / aspl / diameter recomputed from the returned edge list on every non-refused result -> zero mismatches. Boundaries: n=0,1,2, k=0, k>=n, minSeparation NaN/negative/huge, mind demotion floor, refusedResult placeholders. Oracle parity: python3 test_core.py ALL PASS; python3 gen_fixtures.py regenerated lib/test/fixtures/reference.json byte-identically to the committed copy. npm test 204/204 green.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Full surface of lib/src/core (graph, metrics, bounds, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus lib/test, read against the app callers (worker/generate.ts, panels/RosterModal.tsx, panels/PersonPanel.tsx, state/usePathFinder.ts, io/importGraph.ts) to establish present-day reachability. Built lib/dist from current src and RAN: (a) 4000-case invariant fuzz on the M3 metrics \u2014 shortestPath length === bfsDistances(g,t)[s], endpoints, edge-adjacency of every consecutive pair, null iff unreachable, eccentricity === max finite dist / Infinity when any vertex unreachable, largestComponentFraction === 1 iff isConnected, allPairsSummary.connected agreement: 0 failures; (b) brute-force check on 1500 random graphs that shortestPath returns the lexicographically smallest shortest path among ALL shortest paths (documented claim): 0 failures; (c) 4500-case constrained-pipeline fuzz (required stars, dense prohibited, priorHard priors, mixed) asserting validateDetailed/validate parity, no throw from buildConstrainedBuddyGraph, zero req/proh violations whenever built, degree <= k, connected iff lcf===1, refused => lcf===0: 0 failures; (d) hostile scalar matrix for n and k (-0, 0, 1, 1.5, NaN, +/-Infinity, 2^53, 1e9, -5) on both builders \u2014 all refused/handled correctly, including the NaN-before-mismatch ordering in buildConstrainedBuddyGraph; k=9e15 correctly capped at n-1 with no hang; (e) timing sweeps of buildBuddyGraph/validate across sparse and dense k. Also traced: forceConnect's inertness argument (stuck-marking is monotone, so completion is legal-edge-maximal \u2014 holds, including k=0 and k=1); completionCap n*k*6 can never bind; connectivityReasons is O(n^2) and correctly gated behind prohibitedCount===0 and behind the MAX_CONSTRAINED_N refusal; degreeOf/Graph ctor/mooreLowerBounds n and k guards (mooreLowerBounds terminates for k=1, k=2, huge k, and non-integer k is refused); pairKey/keyToPair round-trip for -0, negatives, 1e21, NaN; RNG determinism with NaN/Infinity/fractional seeds; merge()'s NaN-n throw is unreachable from the public entry point. Untrusted-text-to-spreadsheet-sink lens does not apply to this target: lib/src handles no names or strings other than machine-generated reason text (the CSV/clipboard sinks live in app/, out of scope for this run).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read all of lib/src/core (graph.ts, metrics.ts, constraints.ts, constrainedGreedy.ts, index.ts, greedy.ts, bounds.ts) plus lib/CLAUDE.md, PROJECT_PLAN.md, app/CLAUDE.md, and lib/test/paths.props.test.ts. Traced the M3 additions (shortestPath/eccentricity in metrics.ts, connected/largestComponentFraction on BuddyResult, validateDetailed/formatReason split in constraints.ts) against their real, already-landed callers in app/src (PersonPanel.tsx, usePathFinder.ts, RosterModal.tsx, constraintMessages.ts, worker/generate.ts, worker/protocol.ts, importGraph.ts) rather than inventing hypothetical ones \u2014 the app's own CLAUDE.md confirms F7/F8/F10 are the \"M3 (next)\" items and marks the connectivity/refusal seams \"Retired in M3\", so this is genuinely the change the project committed to, and it is fully consumed on the app side already. Attempted the declared tag-policy seam (Constraints.fromTags/TagPolicy) \u2014 confirmed it is pre-existing (not part of this diff), has exactly one variant, and has zero live caller in app/src (grep confirmed); not filing it since it predates this round and the app CLAUDE.md already tracks tags as a deliberately-deferred P2 item with no caller \u2014 consistent with the deferral rule, but it's not new to this review round so I did not re-file it. Cross-checked ordering between constraints.ts `validateDetailed`/`structuralReasons` and constrainedGreedy.ts's `checkWellFormed`/`checkConstraintIds`, which the code comments claim are kept \"in step.\" Checked whether shortestPath/eccentricity's thrown-on-bad-index contract (`checkVertex`) is actually exercised safely by every current caller (PersonPanel, usePathFinder) \u2014 it is, since both only ever pass indices sourced from bounded UI selections. Checked for duplicate switches over `Reason` (constraints.ts formatReason vs app/src/io/constraintMessages.ts describeReason) \u2014 this is a deliberate, TS-exhaustiveness-enforced split (core reports indices, app has the roster to name them), matching the task's \"deliberate non-seam\" carve-out; not filed.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read lib/src/core/metrics.ts, index.ts, constraints.ts, and constrainedGreedy.ts (the full changed-paths target for this round) in full, plus scanned the rest of lib/src/core/ (bounds.ts, graph.ts, greedy.ts, polish.ts, rng.ts, swap.ts) for any DOM/UI surface. Grepped the entire lib/src/core directory for document., window., addEventListener, React, JSX, aria-, and role= \u2014 zero matches. This module is a pure, side-effect-free TypeScript computation library (graph metrics/eccentricity/shortestPath, buddy-result shape, constraint validation via validateDetailed()/formatReason(), and a constrained-greedy roster generator). It has no interactive elements, no focus targets, no ARIA attributes, no live regions, and no CSS/JS-driven animations for my lens (keyboard reachability, focus order/traps, live-region announcement timing, aria-pressed/aria-current state tracking, reduced-motion handling, error/empty-path screen-reader UX) to evaluate any invariant against. The scenario given to me (cold load, roster entry, graph generation, reading quality numbers, finding a person, exporting, recovering from an error) describes app-level UI interactions that live in app/ (panels, graph, io), but this round's target is explicitly scoped to lib/src/core, which the app presumably consumes but which itself renders nothing and binds no input. There is no adversarial-interaction/accessibility surface in the given target to break.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "Metrics derived from reachable-pairs-only aggregates hide disconnection \u2014 both in the optimization objective (which ends up rewarding fragmentation) and in the values surfaced to callers (which read as improved for a broken roster)",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "penalizedAspl applies a flat +10*n penalty to any disconnected graph while ASPL is averaged over reachable pairs only, so splitting a disconnected graph further strictly LOWERS the objective; polishConstrained (and polish) therefore hill-climb into deeper fragmentation via the same flat penalty at polish.ts:39 energy() and constrainedGreedy.ts:135 constrainedMeasure, with constrainedGreedy.ts:155's guard too narrow ('was connected, now isn't') to catch it.",
+        "allPairsSummary.diameter (and aspl) are maxima/means over reachable pairs only and are surfaced verbatim as BuddyResult.diameter / ConstrainedBuddyResult.diameter, so a disconnected roster reports a small finite 'longest separation' \u2014 the opposite convention from eccentricity, which deliberately returns Infinity for the same situation."
+      ],
+      "remediation": "Delete the two divergent reachable-pairs-only conventions (the flat disconnection bonus in penalizedAspl/energy/constrainedMeasure, and the silently-reachable-only diameter/aspl fields) and replace both the objective and the surfaced fields with one unreachable-pair convention \u2014 e.g. count unreachable ordered pairs at a fixed value above any achievable finite distance inside the same summary used everywhere, so no code path needs its own special-cased handling of disconnection."
+    },
+    {
+      "theme": "Expensive loops across the core generators (polish, ringGreedy, constrainedGreedy, fromTags) are gated inconsistently \u2014 by n alone, by an unvalidated option, by nothing, or by a check placed after the cost it's meant to bound \u2014 so several are unbounded or cliff-shaped in practice",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "resolveWantPolish gates the 20000-iteration polish pass on n<=120 alone; per-iteration cost is O(n\u00b7m+m log m) so cost is unbounded by the gate and even non-monotone in n (120,12)=33s vs (300,12)=1s, a 300x cliff with no corresponding warning in the app.",
+        "ringGreedy has only a memory-sized cache bound (MAX_CACHED_N); its ~O(n\u00b3) time cost has no budget at all, unlike the constrained sibling which explicitly refuses the same (n,k) via MAX_CONSTRAINED_WORK \u2014 validate() refuses (1000,999) while buildBuddyGraph accepts the identical input and ran 22+ minutes before being killed.",
+        "polishConstrained and polish use opts.iters/opts.maxIters directly as loop bounds with no finiteness/sign/integrality check, unlike every other numeric input in the core; JSON.parse can produce Infinity for these fields, and buildBuddyGraph/buildConstrainedBuddyGraph forward it straight into a loop that never terminates.",
+        "Constraints.fromTags takes n on faith and materializes O(n\u00b2) prohibited-pair keys before validate()'s MAX_CONSTRAINED_N check ever runs, so the size gate exists downstream of the very cost it's supposed to prevent."
+      ],
+      "remediation": "Remove the divergent, ad-hoc checks (the n<=120-only threshold, the absent ringGreedy budget, the unvalidated opts.iters/maxIters loop bounds, and the post-materialization n check in fromTags) and route every one of these entry points through the single work-budget guard the constrained path already has correct (MAX_CONSTRAINED_WORK-style: a monotone cost model checked, and options validated, before any loop or allocation runs) instead of each maintaining its own partial gate."
+    },
+    {
+      "theme": "Two functions documented as mirroring each other's precondition checks disagree on check order, so they can report a different first failure reason for the same invalid input",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "validateDetailed() checks structural validity before size/work-budget checks, but checkWellFormed() checks size/k/work first and only calls its structural mirror (checkConstraintIds) afterward, even though the comment claims the two are kept 'in step'."
+      ],
+      "remediation": "Remove the divergent ordering in checkWellFormed by reordering it to call checkConstraintIds before the size/k/work checks, matching validateDetailed's actual order, rather than maintaining two independently-ordered precondition sequences."
+    },
+    {
+      "theme": "Comment on a sentinel constant misstates its relationship to another sentinel, claiming distinctness where the values are identical",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment claims UNVISITED is 'distinct from' bfsDistances' UNREACHABLE but both are -1."
+      ],
+      "remediation": "Remove the inaccurate 'distinct from' wording and state plainly that UNVISITED is a function-scoped redefinition sharing UNREACHABLE's value, so no second definition needs to be reasoned about as if it differed."
+    },
+    {
+      "theme": "Code mixes references to the original and promoted constraint object within one control-flow block, breaking the established convention of the surrounding lines",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Line 273 checks cons.priorCount while the rest of buildConstrainedBuddyGraph (lines 259-282) consistently uses the promoted 'active' reference."
+      ],
+      "remediation": "Remove the stray reference to the stale 'cons' variable on line 273 and use 'active' there, eliminating the only inconsistency rather than adding any explanatory comment."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "objective-rewards-fragmentation",
+      "theme": "once a roster is disconnected, the quality score improves as the roster gets worse, so the optimizer breaks it up further and reports better numbers",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 151,
+      "summary": "penalizedAspl applies a flat +10*n penalty to any disconnected graph while ASPL is averaged over reachable pairs only, so splitting a disconnected graph further strictly LOWERS the objective; polishConstrained (and polish) therefore hill-climb into deeper fragmentation, and the ASPL/diameter reported to the caller improve while largestComponentFraction collapses.",
+      "failure": "buildConstrainedBuddyGraph(16, 2, cons) with cons prohibiting [[1,2],[12,15],[10,13],[12,13],[3,10],[12,14],[11,14],[5,11],[8,13],[7,10],[9,15],[13,15],[5,6],[2,12],[0,9],[2,13],[0,14],[6,10],[9,11],[4,10],[13,14],[8,9]] and DEFAULT options (auto-polish is on at n<=120) returns aspl=1.2777, diameter=3, report.connected=false, report.largestComponentFraction=0.25. The same call with {polish:false} returns aspl=4.9565, diameter=13, largestComponentFraction=0.875. Polish took the roster from one 14-person group to five fragments and the displayed average separation 'improved' from 5.0 to 1.3. Across 200 seeds on that instance every run ended worse than its input (best lcf reached 0.375 vs 0.875 at the start). Sibling on the unconstrained export, which has no connectivity guard at all: g = 12-cycle on 0..11 plus 4-cycle on 12..15; polish(g,{mode:'hill',seed:1,maxIters:4000}) returns 4 components (sizes 5,4,4,3), lcf 0.75 -> 0.3125, and reports aspl 1.36, connected false.",
+      "remediation": "Make the disconnection penalty monotone in fragmentation instead of flat, so no move that increases the number of components can ever lower the energy \u2014 e.g. penalize per stranded vertex / per extra component (aspl + 10*n*(n - largestComponentSize) or + 10*n*(components-1)), and count unreachable ordered pairs at a value above any achievable finite distance rather than dropping them from the mean. Per lib/CLAUDE.md the objective is mirrored, so change reference-python/core.py penalized_aspl (and constrained_gen.py's measure) first, regenerate fixtures, then mirror. Close the whole theme, not the reported call: the identical flat penalty is consumed by polish.ts:39 energy() (which has NO wasConnected guard, only the energy comparison) and by constrainedGreedy.ts:135 constrainedMeasure, and constrainedGreedy.ts:155's guard must be widened from 'was connected and now is not' to 'component count must never increase'.",
+      "invariant": "For every Graph g, every Constraints c, every seed and iteration budget: connectedComponents(polishConstrained(g,c,opts)).length <= connectedComponents(g).length AND largestComponentFraction(polishConstrained(g,c,opts)) >= largestComponentFraction(g); the same must hold for polish(g,opts).graph in both modes. Equivalently, for any two graphs on the same n, penalizedAspl must be strictly greater for the one with strictly more connected components.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "reachable-only-metric-surfaced-as-absolute",
+      "theme": "an aggregate computed over reachable pairs only is surfaced as if it described the whole roster, so a split group reads as tighter than a whole one",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 140,
+      "summary": "allPairsSummary.diameter (and aspl) are maxima/means over reachable pairs only and are surfaced verbatim as BuddyResult.diameter / ConstrainedBuddyResult.diameter, so a disconnected roster reports a small finite 'longest separation' \u2014 the exact convention eccentricity's own docstring (metrics.ts:97) rejects, where it deliberately returns Infinity instead of a small finite number for the same situation.",
+      "failure": "For the n=16,k=2 instance above, buildConstrainedBuddyGraph reports diameter: 3 and aspl: 1.2777 for a graph in which most pairs of people cannot reach each other at all; eccentricity(g, v) on the very same graph returns Infinity for every v. The two exported metrics disagree about what 'distance to an unreachable person' means, and the one a UI shows for 'longest separation' is the one that reads as excellent.",
+      "remediation": "Pick one convention across the module and apply it to the surfaced fields: either return Infinity for diameter (and aspl) when summary.connected is false, matching eccentricity, or rename the fields to state the restriction (asplWithinGroups / diameterWithinGroups) and require the connectivity flag to travel with them. If the Infinity route is taken, change reference-python/core.py all_pairs_summary first and regenerate fixtures, since fixture parity currently pins the finite value.",
+      "invariant": "For every Graph g and every vertex v: eccentricity(g,v) === Infinity implies that every consumer-facing distance aggregate for g (allPairsSummary(g).diameter and .aspl, BuddyResult.diameter/.aspl, ConstrainedBuddyResult.diameter/.aspl) is also Infinity \u2014 i.e. the module never reports a finite 'distance' aggregate for a graph whose connectivity flag is false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "cost-gate-counts-iterations-not-work",
+      "theme": "the polish stage's cost gate is an iteration count keyed on n alone, so the default-options cost at the threshold is tens of seconds and is non-monotone in n",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 331,
+      "summary": "resolveWantPolish enables a 20000-iteration polish pass whenever n <= 120, and polish's per-iteration cost is O(n\u00b7m + m log m) (a full edgeList() + allPairsSummary() re-measure). The threshold bounds n but nothing bounds the product, so the most expensive input on the entire unconstrained path sits just below the gate. Measured with default options: buildBuddyGraph(120,12) = 33.0 s (reproduced 34.0 s), buildBuddyGraph(120,4) = 18.5 s, buildBuddyGraph(121,12) = 0.1 s, buildBuddyGraph(300,12) = 1.0 s \u2014 a 300x cost cliff, and cost that DECREASES with n. This is default configuration, present-day reachable from the app: app/src/worker/generate.ts calls buildBuddyGraph(n,k,options) with polish:'auto', n up to MAX_ROSTER_N=1000 and k up to BUDDY_MAX=12, so a 120-name roster at 12 buddies runs ~33 s per generate and again per seed-bump reroll (in a worker, so the tab is not frozen \u2014 but app/src/io/feasibility.ts only warns above n>300, i.e. the slow case is exactly the one that gets no warning). It also contradicts the stated rationale: lib/CLAUDE.md justifies the n<=120 cap as what keeps polish affordable, and docs/findings/FINDINGS.md sizes polish in TIME ('thorough (8 s) polish budget'), while the shipped budget is a bare count that costs 4x that at the cap.",
+      "failure": "buildBuddyGraph(120, 12) with default options returns after 33.0 s; buildBuddyGraph(121, 12) returns after 0.1 s. Same k, one more person, 300x less work.",
+      "invariant": "For all (n, k) accepted by buildBuddyGraph, the modelled polish work under DEFAULT options \u2014 iterations \u00d7 per-iteration cost, i.e. iters\u00b7n\u00b7m where m is the edge count of the seed graph \u2014 is <= one declared constant budget; equivalently, the iteration budget must be derived from that budget rather than fixed, so that default-option generation cost is monotone non-decreasing in n at fixed k (today it is not: cost(120,k) >> cost(121,k)).",
+      "remediation": "Make the polish budget a work budget, not a count: derive maxIters from a declared cost ceiling (e.g. iters = clamp(BUDGET / (n\u00b7m))) and gate auto-polish on that modelled work rather than on `n <= 120` alone, so density/k participate. Pin the invariant with a test asserting default-option modelled work is bounded by the constant AND monotone in n across the old threshold (n=119..122 at k=BUDDY_MAX), which fails today by construction of the cliff. Update lib/CLAUDE.md's 'auto-polish is capped at n<=120' rationale with the measured cost at the cap.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-work-budget",
+      "theme": "the unconstrained generator has no work budget, so an (n,k) the constrained sibling explicitly refuses as unrunnable is accepted and runs for tens of minutes",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 62,
+      "summary": "ringGreedy's only size gate is MAX_CACHED_N (5000), documented in-file as a MEMORY bound on the n\u00d7n distance cache ('~100 MB at this n'); the same comment concedes completion is ~O(n\u00b3) time and no gate bounds it. k is not bounded at all beyond k>=2. The constrained path treats this exact class as a blocking hazard \u2014 MAX_CONSTRAINED_WORK + constrainedWork(n,k) exist solely to refuse dense-k rosters, with a whole findings doc (docs/findings/constrained-generation-cost-and-caps.md) explaining that the n-cap alone is insufficient \u2014 but buildBuddyGraph/ringGreedy get neither the work model nor the refusal. Measured: validate(new Constraints(1000), 999) refuses with 'roster size 1000 with 999 buddies each is too large to generate in reasonable time', while buildBuddyGraph(1000, 999, {polish:false}) accepted the identical (n,k) and had not returned after 22 minutes (killed). Same asymmetry at (5000,12): validate refuses; ringGreedy accepts (n <= MAX_CACHED_N). Sparse scaling measured at ~n\u00b3: (500,4)=0.55 s, (1000,4)=5.4 s, (1500,4)=16.8 s, (1000,12)=38.5 s, so the largest accepted sparse input (5000,12) extrapolates to tens of minutes. Present-day app reachability is bounded by app-side clamps (n<=1000, k<=12 \u2192 38 s in a worker); the unbounded case is reachable from any direct consumer of the published package, and lib/CLAUDE.md asserts the opposite ('The generators that ARE the untrusted surface are capped (MAX_CACHED_N, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK)').",
+      "failure": "buildBuddyGraph(1000, 999, {polish:false}) does not return within 22 minutes; validate(new Constraints(1000), 999) refuses the same (n,k) in under 1 ms as 'too large to generate in reasonable time'.",
+      "invariant": "For all integer n >= 0 and k >= 0, if any generation entry point ACCEPTS (n,k) (does not throw or refuse) then its modelled work is <= that path's declared budget. In particular the accept-sets must not disagree across paths for the same cost class: there is no (n,k) that validate() refuses as 'too large to generate' but ringGreedy/buildBuddyGraph accept (ringGreedy's own model must be at least as strict, since its per-edge cost is O(n\u00b2) cache update, not O(n) BFS).",
+      "remediation": "Give ringGreedy a work budget in the same shape as MAX_CONSTRAINED_WORK: a monotone model of its actual cost (~n\u00b2\u00b7edgesAdded \u2248 n\u00b3\u00b7min(k,n-1)/2, which is worse than constrainedWork) compared against a constant in graph.ts, enforced as a throw in ringGreedy alongside the existing MAX_CACHED_N check and surfaced through buildBuddyGraph's documented throw contract. Ratchet with a property test over integer (n,k) asserting the accept-set containment above, and correct the 'the untrusted generators are capped' claim in lib/CLAUDE.md.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-option-number",
+      "theme": "numeric fields of the options object are taken on faith while n and k are validated, so a non-finite budget becomes an unbounded loop",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 133,
+      "summary": "polishConstrained uses `opts.iters ?? 8000` directly as the loop bound (`for (let it = 0; it < iters; it++)`), and polish.ts:48 does the same with `opts.maxIters ?? 20000` (`while (iters < maxIters)`). Neither is checked for finiteness, integrality or sign, unlike every other numeric input in the core (n, k, and even Graph's ctor are guarded). Infinity is directly obtainable from a JSON settings object \u2014 JSON has no Infinity literal, but JSON.parse('{\"polishIters\":1e999}').polishIters === Infinity (verified) \u2014 and buildBuddyGraph/buildConstrainedBuddyGraph forward polishIters straight through. Verified: buildConstrainedBuddyGraph(30,4,new Constraints(30),{polish:true,polishIters:Infinity}) and buildBuddyGraph(30,4,{polish:true,polishIters:1e18}) both had to be killed by timeout; the only loop exit is edges.length < 2, so with >= 2 edges neither ever terminates. This also breaks buildConstrainedBuddyGraph's documented 'refuses, never throws' contract in the worst way \u2014 it neither refuses nor returns. The same unvalidated-option class produces garbage rather than a hang elsewhere: buildBuddyGraph(20,4,{minSeparation:NaN}) returns finalMinSeparation: NaN (a numeric result field that JSON.stringify writes as null), and minSeparation:-5 returns finalMinSeparation:-5. Not reachable from the app today \u2014 app/src/worker/protocol.ts's GenerateOptions carries only minSeparation/polish/seed, and importGraph sanitizes those \u2014 hence suggestion, not blocking; it is reachable from any direct consumer of the published package.",
+      "failure": "buildConstrainedBuddyGraph(30, 4, new Constraints(30), {polish: true, polishIters: Infinity}) never returns (killed at 10 s; the loop bound is literally Infinity). Secondary: buildBuddyGraph(20, 4, {minSeparation: NaN}).finalMinSeparation === NaN.",
+      "invariant": "For every exported entry point, every loop bound derived from an options object is a finite non-negative integer \u2014 a value outside that domain is refused (throw on the unconstrained path / refusal on the constrained path) or replaced by the documented default before use; consequently every call returns in work bounded by a function of (n, k) and that finite budget. Corollary for the same fix: no numeric field of a non-refused result is NaN.",
+      "remediation": "Validate the options object where n and k are validated: in buildBuddyGraph/buildConstrainedBuddyGraph and in polish/polishConstrained, coerce or refuse non-integer/non-finite/negative polishIters|maxIters|iters (and minSeparation) instead of using them as loop bounds. Property-test: for every entry point and every options field, a non-finite/non-integer/negative value either throws/refuses or produces the same result as the documented default, and the call completes within a bounded step count.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "mirrored-guard-order-drift",
+      "theme": "two functions that document themselves as mirroring each other's precondition checks actually check in a different order, so they can report a different *first* reason for the same invalid input",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 329,
+      "summary": "validateDetailed() (constraints.ts) checks structural validity (out-of-range constraint ids / self-pairs) BEFORE the size/work-budget checks and returns early on a structural hit. checkWellFormed() (constrainedGreedy.ts, the throw-based precondition for direct callers of constrainedGreedy) checks n/MAX_CONSTRAINED_N/k/MAX_CONSTRAINED_WORK FIRST and only calls checkConstraintIds() (the structural mirror) afterward. The comment on checkConstraintIds says it is a 'Throw-on-first mirror of constraints.ts structuralReasons... keep the two checks in step' -- true for the id-validity logic in isolation, but the two entry points disagree on which class of problem is reported first when an input is both oversized AND structurally invalid.",
+      "failure": "n = 10000 (over MAX_CONSTRAINED_N = 5000) with a constraint pair referencing person 99999: validateDetailed(cons, k) returns [{code:'unknown-person', person:99999, n:10000}] (structural short-circuit fires before the n>MAX_CONSTRAINED_N check ever runs), while a direct call to constrainedGreedy(10000, k, cons) throws \"roster size 10000 exceeds the constrained maximum of 5000\" (checkWellFormed's n-cap check fires before checkConstraintIds runs). Same malformed input, two different 'first' diagnoses depending on which of the two documented-as-mirrored guards is asked.",
+      "remediation": "Reorder checkWellFormed to run checkConstraintIds before the size/k/work checks (matching validateDetailed's actual order), or state explicitly in both comments that only the *content* of the structural check is mirrored, not its priority relative to the size/work gates, so a future reader doesn't rely on 'in step' meaning identical precedence.",
+      "invariant": "for any (n, k, cons) that is both structurally invalid (out-of-range id or self-pair) and over a size/work cap, the Reason.code that would be first in validateDetailed(cons,k) matches the class of error thrown first by calling constrainedGreedy(n,k,cons) directly.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-sentinel-comment",
+      "theme": "ambiguous constant relationship comment could mislead on whether values are identical",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 210,
+      "summary": "Comment claims UNVISITED is 'distinct from' UNREACHABLE but both are -1",
+      "failure": "Line 7 defines UNREACHABLE = -1; line 210 defines UNVISITED = -1 with comment 'distinct from bfsDistances' UNREACHABLE'. A maintainer reading 'distinct from' may assume they should have different values, then refactor them apart, breaking the logic. Both serve as visit-markers (same semantic function, different scopes) and sharing -1 is intentional and correct.",
+      "invariant": "When two constants in the same module share an identical value for valid semantic reasons, the comment must clarify the value reuse is intentional, not accidental. The word 'distinct' must not be used to describe a relationship where values are identical.",
+      "remediation": "Change the comment from 'distinct from bfsDistances' UNREACHABLE' to 'local redefinition of UNREACHABLE; same value (-1) but function-scoped', or 'per-source BFS marker; mirrors UNREACHABLE sentinel value'."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "inconsistent-variable-reference",
+      "theme": "mixing original and promoted constraint references within same control flow breaks readability",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 273,
+      "summary": "Line 273 checks cons.priorCount; rest of buildConstrainedBuddyGraph (lines 259-282) consistently uses active",
+      "failure": "Function creates active = withHardPriors(cons) at line 259, then validates active (260), passes active to constrainedGreedy (263) and polishConstrained (276). But at line 273, deciding priorWeight, it checks cons.priorCount instead of active.priorCount. While functionally equivalent (active and cons have identical priors when priorHard is false), it breaks the local convention. A future maintainer modifying the promotion logic might assume the split reference is intentional and create a subtle bug.",
+      "invariant": "Within a single function where a promoted variant (active) is derived from an original (cons), references to the constraint set should use active consistently unless the comment explicitly justifies using the original.",
+      "remediation": "Change line 273 from 'cons.priorCount > 0' to 'active.priorCount > 0' for consistency with lines 260, 263, 271, 276."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "objective-rewards-fragmentation",
+      "theme": "once a roster is disconnected, the quality score improves as the roster gets worse, so the optimizer breaks it up further and reports better numbers",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 151,
+      "summary": "penalizedAspl applies a flat +10*n penalty to any disconnected graph while ASPL is averaged over reachable pairs only, so splitting a disconnected graph further strictly LOWERS the objective; polishConstrained (and polish) therefore hill-climb into deeper fragmentation, and the ASPL/diameter reported to the caller improve while largestComponentFraction collapses.",
+      "failure": "buildConstrainedBuddyGraph(16, 2, cons) with cons prohibiting [[1,2],[12,15],[10,13],[12,13],[3,10],[12,14],[11,14],[5,11],[8,13],[7,10],[9,15],[13,15],[5,6],[2,12],[0,9],[2,13],[0,14],[6,10],[9,11],[4,10],[13,14],[8,9]] and DEFAULT options (auto-polish is on at n<=120) returns aspl=1.2777, diameter=3, report.connected=false, report.largestComponentFraction=0.25. The same call with {polish:false} returns aspl=4.9565, diameter=13, largestComponentFraction=0.875. Polish took the roster from one 14-person group to five fragments and the displayed average separation 'improved' from 5.0 to 1.3. Across 200 seeds on that instance every run ended worse than its input (best lcf reached 0.375 vs 0.875 at the start). Sibling on the unconstrained export, which has no connectivity guard at all: g = 12-cycle on 0..11 plus 4-cycle on 12..15; polish(g,{mode:'hill',seed:1,maxIters:4000}) returns 4 components (sizes 5,4,4,3), lcf 0.75 -> 0.3125, and reports aspl 1.36, connected false.",
+      "remediation": "Make the disconnection penalty monotone in fragmentation instead of flat, so no move that increases the number of components can ever lower the energy \u2014 e.g. penalize per stranded vertex / per extra component (aspl + 10*n*(n - largestComponentSize) or + 10*n*(components-1)), and count unreachable ordered pairs at a value above any achievable finite distance rather than dropping them from the mean. Per lib/CLAUDE.md the objective is mirrored, so change reference-python/core.py penalized_aspl (and constrained_gen.py's measure) first, regenerate fixtures, then mirror. Close the whole theme, not the reported call: the identical flat penalty is consumed by polish.ts:39 energy() (which has NO wasConnected guard, only the energy comparison) and by constrainedGreedy.ts:135 constrainedMeasure, and constrainedGreedy.ts:155's guard must be widened from 'was connected and now is not' to 'component count must never increase'.",
+      "invariant": "For every Graph g, every Constraints c, every seed and iteration budget: connectedComponents(polishConstrained(g,c,opts)).length <= connectedComponents(g).length AND largestComponentFraction(polishConstrained(g,c,opts)) >= largestComponentFraction(g); the same must hold for polish(g,opts).graph in both modes. Equivalently, for any two graphs on the same n, penalizedAspl must be strictly greater for the one with strictly more connected components.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "reachable-only-metric-surfaced-as-absolute",
+      "theme": "an aggregate computed over reachable pairs only is surfaced as if it described the whole roster, so a split group reads as tighter than a whole one",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 140,
+      "summary": "allPairsSummary.diameter (and aspl) are maxima/means over reachable pairs only and are surfaced verbatim as BuddyResult.diameter / ConstrainedBuddyResult.diameter, so a disconnected roster reports a small finite 'longest separation' \u2014 the exact convention eccentricity's own docstring (metrics.ts:97) rejects, where it deliberately returns Infinity instead of a small finite number for the same situation.",
+      "failure": "For the n=16,k=2 instance above, buildConstrainedBuddyGraph reports diameter: 3 and aspl: 1.2777 for a graph in which most pairs of people cannot reach each other at all; eccentricity(g, v) on the very same graph returns Infinity for every v. The two exported metrics disagree about what 'distance to an unreachable person' means, and the one a UI shows for 'longest separation' is the one that reads as excellent.",
+      "remediation": "Pick one convention across the module and apply it to the surfaced fields: either return Infinity for diameter (and aspl) when summary.connected is false, matching eccentricity, or rename the fields to state the restriction (asplWithinGroups / diameterWithinGroups) and require the connectivity flag to travel with them. If the Infinity route is taken, change reference-python/core.py all_pairs_summary first and regenerate fixtures, since fixture parity currently pins the finite value.",
+      "invariant": "For every Graph g and every vertex v: eccentricity(g,v) === Infinity implies that every consumer-facing distance aggregate for g (allPairsSummary(g).diameter and .aspl, BuddyResult.diameter/.aspl, ConstrainedBuddyResult.diameter/.aspl) is also Infinity \u2014 i.e. the module never reports a finite 'distance' aggregate for a graph whose connectivity flag is false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "cost-gate-counts-iterations-not-work",
+      "theme": "the polish stage's cost gate is an iteration count keyed on n alone, so the default-options cost at the threshold is tens of seconds and is non-monotone in n",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 331,
+      "summary": "resolveWantPolish enables a 20000-iteration polish pass whenever n <= 120, and polish's per-iteration cost is O(n\u00b7m + m log m) (a full edgeList() + allPairsSummary() re-measure). The threshold bounds n but nothing bounds the product, so the most expensive input on the entire unconstrained path sits just below the gate. Measured with default options: buildBuddyGraph(120,12) = 33.0 s (reproduced 34.0 s), buildBuddyGraph(120,4) = 18.5 s, buildBuddyGraph(121,12) = 0.1 s, buildBuddyGraph(300,12) = 1.0 s \u2014 a 300x cost cliff, and cost that DECREASES with n. This is default configuration, present-day reachable from the app: app/src/worker/generate.ts calls buildBuddyGraph(n,k,options) with polish:'auto', n up to MAX_ROSTER_N=1000 and k up to BUDDY_MAX=12, so a 120-name roster at 12 buddies runs ~33 s per generate and again per seed-bump reroll (in a worker, so the tab is not frozen \u2014 but app/src/io/feasibility.ts only warns above n>300, i.e. the slow case is exactly the one that gets no warning). It also contradicts the stated rationale: lib/CLAUDE.md justifies the n<=120 cap as what keeps polish affordable, and docs/findings/FINDINGS.md sizes polish in TIME ('thorough (8 s) polish budget'), while the shipped budget is a bare count that costs 4x that at the cap.",
+      "failure": "buildBuddyGraph(120, 12) with default options returns after 33.0 s; buildBuddyGraph(121, 12) returns after 0.1 s. Same k, one more person, 300x less work.",
+      "invariant": "For all (n, k) accepted by buildBuddyGraph, the modelled polish work under DEFAULT options \u2014 iterations \u00d7 per-iteration cost, i.e. iters\u00b7n\u00b7m where m is the edge count of the seed graph \u2014 is <= one declared constant budget; equivalently, the iteration budget must be derived from that budget rather than fixed, so that default-option generation cost is monotone non-decreasing in n at fixed k (today it is not: cost(120,k) >> cost(121,k)).",
+      "remediation": "Make the polish budget a work budget, not a count: derive maxIters from a declared cost ceiling (e.g. iters = clamp(BUDGET / (n\u00b7m))) and gate auto-polish on that modelled work rather than on `n <= 120` alone, so density/k participate. Pin the invariant with a test asserting default-option modelled work is bounded by the constant AND monotone in n across the old threshold (n=119..122 at k=BUDDY_MAX), which fails today by construction of the cliff. Update lib/CLAUDE.md's 'auto-polish is capped at n<=120' rationale with the measured cost at the cap.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-work-budget",
+      "theme": "the unconstrained generator has no work budget, so an (n,k) the constrained sibling explicitly refuses as unrunnable is accepted and runs for tens of minutes",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 62,
+      "summary": "ringGreedy's only size gate is MAX_CACHED_N (5000), documented in-file as a MEMORY bound on the n\u00d7n distance cache ('~100 MB at this n'); the same comment concedes completion is ~O(n\u00b3) time and no gate bounds it. k is not bounded at all beyond k>=2. The constrained path treats this exact class as a blocking hazard \u2014 MAX_CONSTRAINED_WORK + constrainedWork(n,k) exist solely to refuse dense-k rosters, with a whole findings doc (docs/findings/constrained-generation-cost-and-caps.md) explaining that the n-cap alone is insufficient \u2014 but buildBuddyGraph/ringGreedy get neither the work model nor the refusal. Measured: validate(new Constraints(1000), 999) refuses with 'roster size 1000 with 999 buddies each is too large to generate in reasonable time', while buildBuddyGraph(1000, 999, {polish:false}) accepted the identical (n,k) and had not returned after 22 minutes (killed). Same asymmetry at (5000,12): validate refuses; ringGreedy accepts (n <= MAX_CACHED_N). Sparse scaling measured at ~n\u00b3: (500,4)=0.55 s, (1000,4)=5.4 s, (1500,4)=16.8 s, (1000,12)=38.5 s, so the largest accepted sparse input (5000,12) extrapolates to tens of minutes. Present-day app reachability is bounded by app-side clamps (n<=1000, k<=12 \u2192 38 s in a worker); the unbounded case is reachable from any direct consumer of the published package, and lib/CLAUDE.md asserts the opposite ('The generators that ARE the untrusted surface are capped (MAX_CACHED_N, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK)').",
+      "failure": "buildBuddyGraph(1000, 999, {polish:false}) does not return within 22 minutes; validate(new Constraints(1000), 999) refuses the same (n,k) in under 1 ms as 'too large to generate in reasonable time'.",
+      "invariant": "For all integer n >= 0 and k >= 0, if any generation entry point ACCEPTS (n,k) (does not throw or refuse) then its modelled work is <= that path's declared budget. In particular the accept-sets must not disagree across paths for the same cost class: there is no (n,k) that validate() refuses as 'too large to generate' but ringGreedy/buildBuddyGraph accept (ringGreedy's own model must be at least as strict, since its per-edge cost is O(n\u00b2) cache update, not O(n) BFS).",
+      "remediation": "Give ringGreedy a work budget in the same shape as MAX_CONSTRAINED_WORK: a monotone model of its actual cost (~n\u00b2\u00b7edgesAdded \u2248 n\u00b3\u00b7min(k,n-1)/2, which is worse than constrainedWork) compared against a constant in graph.ts, enforced as a throw in ringGreedy alongside the existing MAX_CACHED_N check and surfaced through buildBuddyGraph's documented throw contract. Ratchet with a property test over integer (n,k) asserting the accept-set containment above, and correct the 'the untrusted generators are capped' claim in lib/CLAUDE.md.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-option-number",
+      "theme": "numeric fields of the options object are taken on faith while n and k are validated, so a non-finite budget becomes an unbounded loop",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 133,
+      "summary": "polishConstrained uses `opts.iters ?? 8000` directly as the loop bound (`for (let it = 0; it < iters; it++)`), and polish.ts:48 does the same with `opts.maxIters ?? 20000` (`while (iters < maxIters)`). Neither is checked for finiteness, integrality or sign, unlike every other numeric input in the core (n, k, and even Graph's ctor are guarded). Infinity is directly obtainable from a JSON settings object \u2014 JSON has no Infinity literal, but JSON.parse('{\"polishIters\":1e999}').polishIters === Infinity (verified) \u2014 and buildBuddyGraph/buildConstrainedBuddyGraph forward polishIters straight through. Verified: buildConstrainedBuddyGraph(30,4,new Constraints(30),{polish:true,polishIters:Infinity}) and buildBuddyGraph(30,4,{polish:true,polishIters:1e18}) both had to be killed by timeout; the only loop exit is edges.length < 2, so with >= 2 edges neither ever terminates. This also breaks buildConstrainedBuddyGraph's documented 'refuses, never throws' contract in the worst way \u2014 it neither refuses nor returns. The same unvalidated-option class produces garbage rather than a hang elsewhere: buildBuddyGraph(20,4,{minSeparation:NaN}) returns finalMinSeparation: NaN (a numeric result field that JSON.stringify writes as null), and minSeparation:-5 returns finalMinSeparation:-5. Not reachable from the app today \u2014 app/src/worker/protocol.ts's GenerateOptions carries only minSeparation/polish/seed, and importGraph sanitizes those \u2014 hence suggestion, not blocking; it is reachable from any direct consumer of the published package.",
+      "failure": "buildConstrainedBuddyGraph(30, 4, new Constraints(30), {polish: true, polishIters: Infinity}) never returns (killed at 10 s; the loop bound is literally Infinity). Secondary: buildBuddyGraph(20, 4, {minSeparation: NaN}).finalMinSeparation === NaN.",
+      "invariant": "For every exported entry point, every loop bound derived from an options object is a finite non-negative integer \u2014 a value outside that domain is refused (throw on the unconstrained path / refusal on the constrained path) or replaced by the documented default before use; consequently every call returns in work bounded by a function of (n, k) and that finite budget. Corollary for the same fix: no numeric field of a non-refused result is NaN.",
+      "remediation": "Validate the options object where n and k are validated: in buildBuddyGraph/buildConstrainedBuddyGraph and in polish/polishConstrained, coerce or refuse non-integer/non-finite/negative polishIters|maxIters|iters (and minSeparation) instead of using them as loop bounds. Property-test: for every entry point and every options field, a non-finite/non-integer/negative value either throws/refuses or produces the same result as the documented default, and the call completes within a bounded step count.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-materialization-before-gate",
+      "theme": "tag compilation materializes O(n\u00b2) pair constraints and validates nothing about n, so the size gate can never run",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "Constraints.fromTags takes n on faith \u2014 no Number.isInteger / MAX_ROSTER check, unlike degreeOf (same file, line 39), the Graph ctor, and validate \u2014 and then materializes one Set key per same-tag pair. Measured: fromTags(3000, Array(3000).fill('A')) takes 3.4 s and builds 4 498 500 prohibited keys; the cost is paid inside the constructor, so validate()'s MAX_CONSTRAINED_N refusal never gets a chance to run (this is the 'gate after the work it is meant to bound' shape). fromTags(2e7, []) runs a pure 2e7-iteration loop with no allocation and no guard, so a large non-integer-checked n is a straight time sink. Filed as DEFERRAL per the reporting contract: grep shows no caller outside lib/test/constrained.test.ts \u2014 the app never calls fromTags \u2014 so nothing untrusted reaches it in the current tree. The O(n\u00b2) materialization half is already tracked in lib/CLAUDE.md's known limitations ('Sanitize + size-check tags when F6 lands'); the missing n validation is not.",
+      "failure": "Constraints.fromTags(3000, new Array(3000).fill('A')) spends 3.4 s and 4.5M Set keys before any validate() can refuse; Constraints.fromTags(1e15, []) loops with no guard at all.",
+      "invariant": "Constraints.fromTags refuses an n that is not an integer in [0, MAX_ROSTER] BEFORE any loop, and refuses a tag distribution whose implied pair count exceeds a declared cap BEFORE materializing pairs \u2014 i.e. the number of Set insertions performed by fromTags is bounded by a constant for every (n, tags) it does not refuse.",
+      "remediation": "Reuse the same n guard degreeOf already has, and pre-count group sizes (one O(n) pass over tags) to compute sum(size\u00b7(size-1)/2) and refuse against a declared pair cap before the double loop. Defer until a caller exists; keep it in the known-limitations list until then.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "mirrored-guard-order-drift",
+      "theme": "two functions that document themselves as mirroring each other's precondition checks actually check in a different order, so they can report a different *first* reason for the same invalid input",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 329,
+      "summary": "validateDetailed() (constraints.ts) checks structural validity (out-of-range constraint ids / self-pairs) BEFORE the size/work-budget checks and returns early on a structural hit. checkWellFormed() (constrainedGreedy.ts, the throw-based precondition for direct callers of constrainedGreedy) checks n/MAX_CONSTRAINED_N/k/MAX_CONSTRAINED_WORK FIRST and only calls checkConstraintIds() (the structural mirror) afterward. The comment on checkConstraintIds says it is a 'Throw-on-first mirror of constraints.ts structuralReasons... keep the two checks in step' -- true for the id-validity logic in isolation, but the two entry points disagree on which class of problem is reported first when an input is both oversized AND structurally invalid.",
+      "failure": "n = 10000 (over MAX_CONSTRAINED_N = 5000) with a constraint pair referencing person 99999: validateDetailed(cons, k) returns [{code:'unknown-person', person:99999, n:10000}] (structural short-circuit fires before the n>MAX_CONSTRAINED_N check ever runs), while a direct call to constrainedGreedy(10000, k, cons) throws \"roster size 10000 exceeds the constrained maximum of 5000\" (checkWellFormed's n-cap check fires before checkConstraintIds runs). Same malformed input, two different 'first' diagnoses depending on which of the two documented-as-mirrored guards is asked.",
+      "remediation": "Reorder checkWellFormed to run checkConstraintIds before the size/k/work checks (matching validateDetailed's actual order), or state explicitly in both comments that only the *content* of the structural check is mirrored, not its priority relative to the size/work gates, so a future reader doesn't rely on 'in step' meaning identical precedence.",
+      "invariant": "for any (n, k, cons) that is both structurally invalid (out-of-range id or self-pair) and over a size/work cap, the Reason.code that would be first in validateDetailed(cons,k) matches the class of error thrown first by calling constrainedGreedy(n,k,cons) directly.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-sentinel-comment",
+      "theme": "ambiguous constant relationship comment could mislead on whether values are identical",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 210,
+      "summary": "Comment claims UNVISITED is 'distinct from' UNREACHABLE but both are -1",
+      "failure": "Line 7 defines UNREACHABLE = -1; line 210 defines UNVISITED = -1 with comment 'distinct from bfsDistances' UNREACHABLE'. A maintainer reading 'distinct from' may assume they should have different values, then refactor them apart, breaking the logic. Both serve as visit-markers (same semantic function, different scopes) and sharing -1 is intentional and correct.",
+      "invariant": "When two constants in the same module share an identical value for valid semantic reasons, the comment must clarify the value reuse is intentional, not accidental. The word 'distinct' must not be used to describe a relationship where values are identical.",
+      "remediation": "Change the comment from 'distinct from bfsDistances' UNREACHABLE' to 'local redefinition of UNREACHABLE; same value (-1) but function-scoped', or 'per-source BFS marker; mirrors UNREACHABLE sentinel value'."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "inconsistent-variable-reference",
+      "theme": "mixing original and promoted constraint references within same control flow breaks readability",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 273,
+      "summary": "Line 273 checks cons.priorCount; rest of buildConstrainedBuddyGraph (lines 259-282) consistently uses active",
+      "failure": "Function creates active = withHardPriors(cons) at line 259, then validates active (260), passes active to constrainedGreedy (263) and polishConstrained (276). But at line 273, deciding priorWeight, it checks cons.priorCount instead of active.priorCount. While functionally equivalent (active and cons have identical priors when priorHard is false), it breaks the local convention. A future maintainer modifying the promotion logic might assume the split reference is intentional and create a subtle bug.",
+      "invariant": "Within a single function where a promoted variant (active) is derived from an original (cons), references to the constraint set should use active consistently unless the comment explicitly justifies using the original.",
+      "remediation": "Change line 273 from 'cons.priorCount > 0' to 'active.priorCount > 0' for consistency with lines 260, 263, 271, 276."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-materialization-before-gate",
+      "theme": "tag compilation materializes O(n\u00b2) pair constraints and validates nothing about n, so the size gate can never run",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "Constraints.fromTags takes n on faith \u2014 no Number.isInteger / MAX_ROSTER check, unlike degreeOf (same file, line 39), the Graph ctor, and validate \u2014 and then materializes one Set key per same-tag pair. Measured: fromTags(3000, Array(3000).fill('A')) takes 3.4 s and builds 4 498 500 prohibited keys; the cost is paid inside the constructor, so validate()'s MAX_CONSTRAINED_N refusal never gets a chance to run (this is the 'gate after the work it is meant to bound' shape). fromTags(2e7, []) runs a pure 2e7-iteration loop with no allocation and no guard, so a large non-integer-checked n is a straight time sink. Filed as DEFERRAL per the reporting contract: grep shows no caller outside lib/test/constrained.test.ts \u2014 the app never calls fromTags \u2014 so nothing untrusted reaches it in the current tree. The O(n\u00b2) materialization half is already tracked in lib/CLAUDE.md's known limitations ('Sanitize + size-check tags when F6 lands'); the missing n validation is not.",
+      "failure": "Constraints.fromTags(3000, new Array(3000).fill('A')) spends 3.4 s and 4.5M Set keys before any validate() can refuse; Constraints.fromTags(1e15, []) loops with no guard at all.",
+      "invariant": "Constraints.fromTags refuses an n that is not an integer in [0, MAX_ROSTER] BEFORE any loop, and refuses a tag distribution whose implied pair count exceeds a declared cap BEFORE materializing pairs \u2014 i.e. the number of Set insertions performed by fromTags is bounded by a constant for every (n, tags) it does not refuse.",
+      "remediation": "Reuse the same n guard degreeOf already has, and pre-count group sizes (one O(n) pass over tags) to compute sum(size\u00b7(size-1)/2) and refuse against a declared pair cap before the double loop. Defer until a caller exists; keep it in the known-limitations list until then.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    }
+  }
+}

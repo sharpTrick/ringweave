@@ -113,9 +113,24 @@ export function isConnected(g: Graph): boolean {
 }
 
 export interface Summary {
+  /**
+   * Mean shortest-path length over REACHABLE ordered pairs. A WITHIN-GROUP
+   * value: when `connected` is false this describes only the pairs that can
+   * reach each other, so a split roster reports a small, healthy-looking
+   * average. Never surface it without `connected` beside it — `penalizedAspl`
+   * exists precisely because an optimizer that forgets this hill-climbs into
+   * fragmentation.
+   */
   aspl: number;
+  /** Longest shortest path over REACHABLE pairs. Within-group, exactly as `aspl` is. */
   diameter: number;
   connected: boolean;
+  /**
+   * Ordered pairs (s, t), s !== t, with t reachable from s. Counted by the same
+   * sweep that produces `aspl`, so it is free; it is what lets `penalizedAspl`
+   * charge for unreachability instead of applying a flat penalty.
+   */
+  reachablePairs: number;
 }
 
 /**
@@ -143,12 +158,49 @@ export function allPairsSummary(g: Graph): Summary {
     if (reached < n - 1) connected = false;
   }
   const aspl = count ? total / count : Infinity;
-  return { aspl, diameter, connected };
+  return { aspl, diameter, connected, reachablePairs: count };
 }
 
-/** ASPL with a heavy penalty when disconnected — a single scalar for optimizers. */
+/** Weight by which every disconnected graph is made worse than every connected one. */
+const DISCONNECTED_PENALTY = 10;
+
+/**
+ * The optimizer objective: ASPL, with disconnection made strictly costly.
+ *
+ * A FLAT penalty is not enough, and that was a real defect rather than a
+ * refinement. `aspl` is averaged over REACHABLE pairs only, so breaking a
+ * disconnected graph into smaller pieces LOWERS it — with a constant
+ * disconnection term the optimizers (`polish`, `polishConstrained`) hill-climbed
+ * into deeper fragmentation while the reported average separation "improved".
+ * Measured before the fix: a 16-person roster went from one group of 14 to five
+ * fragments, and the reported separation fell from 5.0 to 1.3.
+ *
+ * So unreachable pairs are CHARGED at `n`, strictly greater than any achievable
+ * finite distance (at most n-1), and the mean is taken over ALL ordered pairs.
+ * Any move that makes a pair unreachable then strictly increases the objective,
+ * so an optimizer accepting only strict decreases cannot fragment — the
+ * guarantee lives in the objective's shape rather than in a guard that each call
+ * site has to remember.
+ *
+ * The flat term is kept ON TOP, because the charged mean alone does not make
+ * every disconnected graph worse than every connected one (a clique plus one
+ * isolated vertex can beat a sparse connected graph on the charged mean).
+ *
+ * A CONNECTED graph returns exactly `summary.aspl`, by the early return rather
+ * than by arithmetic that happens to agree — so nothing about the connected case
+ * moves, not even in the last bit. Every fixture is a connected case.
+ *
+ * Mirrored in `reference-python/core.py` `penalized_aspl`.
+ */
 export function penalizedAspl(summary: Summary, n: number): number {
-  return summary.connected ? summary.aspl : summary.aspl + 10 * n;
+  if (summary.connected) return summary.aspl;
+  const totalPairs = n * (n - 1);
+  if (totalPairs === 0) return summary.aspl;
+  const reachable = summary.reachablePairs;
+  // `aspl` is Infinity when nothing is reachable, and Infinity * 0 is NaN.
+  const reachedTotal = reachable === 0 ? 0 : summary.aspl * reachable;
+  const charged = (reachedTotal + (totalPairs - reachable) * n) / totalPairs;
+  return charged + DISCONNECTED_PENALTY * n;
 }
 
 /** How many of `pairs` are currently present as edges in `g`. */
@@ -207,7 +259,11 @@ export function largestComponentFraction(g: Graph): number {
  * hand-built graph of hundreds of thousands of vertices is slow by design.
  */
 export function girth(g: Graph): number {
-  const UNVISITED = -1; // per-source BFS marker; distinct from bfsDistances' UNREACHABLE
+  // Per-source BFS marker. Same value (-1) as UNREACHABLE and deliberately so —
+  // it is a separate, function-scoped constant because it means "not yet seen in
+  // THIS sweep", not "unreachable from the source". Do not merge them, and do not
+  // "fix" the shared value: it is reuse, not a collision.
+  const UNVISITED = -1;
   const n = g.n;
   let best = Infinity;
   for (let s = 0; s < n; s++) {

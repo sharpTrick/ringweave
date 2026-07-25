@@ -49,6 +49,8 @@ type EdgePredicate = (u: number, v: number) => boolean;
 interface Measured {
   energy: number;
   connected: boolean;
+  /** Number of connected components — the quantity the fragmentation guard compares. */
+  components: number;
 }
 
 export interface ConstrainedGreedyOptions {
@@ -115,8 +117,8 @@ export function constrainedGreedy(
 
 /**
  * Constraint-preserving swap polish: degree-preserving double edge swaps that
- * never break a required edge, create a prohibited one, or disconnect an
- * already-connected graph — keeping only strictly-improving moves. The objective
+ * never break a required edge, create a prohibited one, or leave the roster in more
+ * pieces than it arrived in — keeping only strictly-improving moves. The objective
  * is ASPL (with a large disconnection penalty) plus an optional
  * prior-preservation penalty for churn. Returns just the graph — run-level
  * metrics (unlike `polish`'s `PolishResult`) come from the caller's report in
@@ -138,7 +140,7 @@ export function polishConstrained(
   const startDegrees = input.degrees();
   const g = input.copy();
   const start = measure(g);
-  const wasConnected = start.connected;
+  const startComponents = start.components;
   let current = start.energy;
   let best = g.copy();
   let bestEnergy = current;
@@ -151,8 +153,14 @@ export function polishConstrained(
 
     applySwap(g, swap);
     const next = measure(g);
-    // never trade connectivity away, however large the prior weight
-    if (wasConnected && !next.connected) {
+    // Never trade connectivity away, however large the prior weight. Stated as
+    // "the roster must not end up in MORE pieces than it started in" rather than
+    // "was connected and now is not": the old form left an ALREADY-disconnected
+    // input entirely unguarded, so a big enough prior weight could buy further
+    // fragmentation. penalizedAspl now charges for that too, but the prior term
+    // is added on top of it and could still outweigh it — this guard is the part
+    // that does not depend on relative weights.
+    if (next.components > startComponents) {
       revertSwap(g, swap);
       continue;
     }
@@ -305,7 +313,9 @@ function constrainedMeasure(
     if (usePriorPenalty) {
       energy += priorWeight * (priors.length - countPresentEdges(g, priors));
     }
-    return { energy, connected: summary.connected };
+    // The component count is what the fragmentation guard compares, and it is
+    // O(n+m) beside the O(n·(n+m)) sweep just performed — free at this scale.
+    return { energy, connected: summary.connected, components: connectedComponents(g).length };
   };
 }
 
@@ -326,6 +336,14 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 
 // Throw-on-first mirror of constraints.ts `structuralReasons` (which collects
 // reasons for validate); keep the two checks in step.
+//
+// "In step" means the CONTENT of the id check, not its precedence. `validateDetailed`
+// returns structural reasons before it looks at the size/work caps, while
+// `checkWellFormed` below checks the caps first and calls this afterwards — so an
+// input that is both oversized AND structurally invalid gets a different FIRST
+// diagnosis depending on which entry point is asked. Both diagnoses are true and
+// both refuse; only the ordering differs, and it is stated here rather than left
+// for a reader to infer from the word "mirror".
 function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
     !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;

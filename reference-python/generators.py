@@ -10,7 +10,7 @@ import math
 import random
 import time
 from collections import deque
-from core import Graph, ring, bfs_distances, all_pairs_summary, is_connected
+from core import penalized_aspl, Graph, ring, bfs_distances, all_pairs_summary, is_connected
 
 
 # ----------------------------------------------------------------------------
@@ -242,8 +242,7 @@ def polish(g, rng, budget_s, mode="anneal", sampled_aspl_srcs=None):
     def energy(gr):
         if sampled_aspl_srcs:
             return _sampled_aspl(gr, sampled_aspl_srcs)
-        aspl, _, conn = all_pairs_summary(gr)
-        return aspl if conn else aspl + 10 * gr.n
+        return penalized_aspl(gr)
 
     cur_e = energy(g)
     best_g = g.copy()

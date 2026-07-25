@@ -55,6 +55,70 @@ export function constrainedWork(n: number, k: number): number {
   return n * n * Math.min(k, Math.max(0, n - 1));
 }
 
+// Work budget for the UNCONSTRAINED generator (ringGreedy). MAX_CACHED_N bounds
+// its MEMORY (the flat n×n distance cache) and says so; nothing bounded its TIME,
+// which is the larger hazard: completion updates the O(n²) cache once per edge
+// added and adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n³·k/2. The n-cap
+// alone let (1000, 999) — which `validate` refuses outright on the constrained
+// path — run for over 22 minutes without returning.
+//
+// Calibrated against measurement on this machine, taking the slowest observed
+// rate (~1.5e8 work-units/s at the dense end; sparse runs are 2-3x faster):
+//   (500, 4)    2.5e8  ->  0.55 s
+//   (1000, 4)   2.0e9  ->  5.4 s
+//   (1000, 12)  6.0e9  ->  38.5 s      <- the app's own ceiling, deliberately still allowed
+//   (1500, 4)   6.8e9  ->  16.8 s
+//   (1000, 999) 5.0e11 ->  refused (was: >22 min)
+//   (5000, 4)   2.5e11 ->  refused (was: tens of minutes)
+// 1e10 is therefore ~60 s worst case. It is NOT tighter than that on purpose: the
+// app advertises rosters up to 1000 at up to 12 buddies, and a budget below 6e9
+// would refuse a configuration that ships today.
+//
+// DELIBERATELY NOT the same budget as MAX_CONSTRAINED_WORK, and the two accept-sets
+// are NOT nested. The paths have different cost models (this one pays O(n²) per
+// edge for the cache update; the constrained one pays O(n) per edge for a BFS), so
+// a single constant would either refuse working configurations here or admit
+// hanging ones there.
+export const MAX_GREEDY_WORK = 10_000_000_000;
+
+/** Estimated ringGreedy cost, ∝ vertices² × edges-added. Monotone in n and k. */
+export function greedyWork(n: number, k: number): number {
+  return n * n * ((n * Math.min(k, Math.max(0, n - 1))) / 2);
+}
+
+// Work budget for the polish pass, expressed in the unit polish actually costs:
+// iterations × (per-iteration edge-list build + full all-pairs re-measure), i.e.
+// iters·n·m. The previous gate was `n <= 120`, which bounds n and nothing else —
+// so the most expensive input on the whole default path sat just below it.
+// Measured with default options before the change:
+//   buildBuddyGraph(120, 12) -> 33.0 s
+//   buildBuddyGraph(121, 12) ->  0.1 s     (one more person, 300x less work)
+// Density never participated, and cost DECREASED with n across the threshold.
+//
+// The value is chosen to reproduce the old threshold exactly at k=4 — the
+// configuration every fixture and the reroll boundary test use — so nothing that
+// is pinned today moves: polishWork(120, 4) = 5.76e8 is admitted and
+// polishWork(121, 4) = 5.86e8 is not. Denser rosters, which the n-cap waved
+// through, are now refused: polishWork(120, 12) = 1.73e9.
+//
+// HONEST RESIDUAL: this bounds the cost and makes the gate k-aware, but any
+// on/off gate still has a discontinuity at its boundary — cost jumps from the
+// budget to ~0 as n crosses it. Removing that entirely means deriving the
+// ITERATION COUNT from the budget rather than switching polish off, which changes
+// every polished output and would have to be mirrored in reference-python first.
+// Recorded as a follow-on in lib/CLAUDE.md rather than done here.
+export const MAX_POLISH_WORK = 576_000_000;
+
+/**
+ * Estimated polish cost: iterations × per-iteration work (an edge-list build plus
+ * an all-pairs re-measure, both linear in n·m). `m` is estimated from (n, k) at
+ * the gate, where the seed graph does not exist yet.
+ */
+export function polishWork(n: number, k: number, iters: number): number {
+  const m = (n * Math.min(k, Math.max(0, n - 1))) / 2;
+  return iters * n * m;
+}
+
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
 // option). Shared so the three generation entry points can't drift apart.
 export const DEFAULT_MIN_SEPARATION = 5;

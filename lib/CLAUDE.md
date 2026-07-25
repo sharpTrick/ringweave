@@ -63,6 +63,22 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 ## Known limitations / tracked follow-ons
 
 Surfaced by review, deliberately deferred (not silently ignored):
+- **`Constraints.fromTags` validates no `n` and materializes O(n²) pairs before any gate can run.**
+  `degreeOf` in the same file, the `Graph` constructor and `validate` all guard `n`; `fromTags`
+  takes it on faith and then builds one Set key per same-tag pair, so the cost is paid inside the
+  constructor and `validate`'s `MAX_CONSTRAINED_N` refusal never gets a chance. Measured:
+  `fromTags(3000, Array(3000).fill('A'))` spends 3.4 s building 4.5M keys, and
+  `fromTags(1e15, [])` loops with no guard at all. **Deferred, not fixed:** `fromTags` has no
+  caller outside `lib/test`, so nothing untrusted reaches it in the current tree — the same
+  no-caller rule this repo applies to speculative code applies to speculative hardening. When the
+  tag UI lands, guard `n` first and pre-count group sizes to refuse against a pair cap *before*
+  the double loop.
+- **The polish gate is still a discontinuity, just a better-placed one.** `MAX_POLISH_WORK` makes
+  the auto-polish decision k-aware and bounds its cost, which is what fixed a 33 s default-path
+  generation at (120, 12). But any on/off gate jumps from "the whole budget" to "nothing" at its
+  boundary. Removing that means deriving the ITERATION COUNT from the budget instead of switching
+  polish off — which changes every polished output and so has to go through `reference-python`
+  and a fixture regeneration first.
 - **`shortestPath` / `eccentricity` are deliberately NOT mirrored in `reference-python/`,** and this
   is the one documented exception to the mirror rule above. The rule is conditional on changing an
   *algorithm*; these add none, they query `bfsDistances`, which is itself oracle-validated. More to
@@ -93,7 +109,11 @@ Surfaced by review, deliberately deferred (not silently ignored):
 - **`girth` (and the other exported all-pairs metrics) are O(n²)** and uncapped — deliberately, since
   they are pure diagnostics run on a `Graph` the caller already built (n bounded by `MAX_ROSTER`), not
   generation entry points fed untrusted `(n,k,constraints)`. The generators that *are* the untrusted
-  surface are capped (`MAX_CACHED_N`, `MAX_CONSTRAINED_N`, `MAX_CONSTRAINED_WORK`). `girth`'s only
+  surface are capped (`MAX_CACHED_N` and `MAX_GREEDY_WORK` on the unconstrained path;
+  `MAX_CONSTRAINED_N` and `MAX_CONSTRAINED_WORK` on the constrained one). Note the pairing: each
+  path needs BOTH a size cap (memory) and a work cap (time), and for a while `ringGreedy` had only
+  the first — which is how `(1000, 999)`, an input `validate` refuses outright, ran for over 22
+  minutes. `girth`'s only
   internal call is in `buildBuddyGraph` on the `ringGreedy` output (bounded by `MAX_CACHED_N`); the
   constrained path deliberately omits `girth`. Documented, not guarded, to avoid a contract change on
   every metric.

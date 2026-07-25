@@ -97,6 +97,11 @@ def all_pairs_summary(g):
     aspl = average shortest path length over all ordered reachable pairs
     (equivalently unordered; symmetric). If disconnected, connected=False and
     aspl/diameter computed over reachable pairs only (callers decide penalty).
+
+    WITHIN-GROUP VALUES. When connected is False both aspl and diameter describe
+    only the pairs that CAN reach each other, so a split roster reports a small,
+    healthy-looking separation. They must never be shown without the flag; see
+    penalized_aspl for what an optimizer has to do with them.
     """
     n = g.n
     total = 0
@@ -118,6 +123,51 @@ def all_pairs_summary(g):
             connected = False
     aspl = total / count if count else math.inf
     return aspl, diameter, connected
+
+
+def penalized_aspl(g):
+    """The optimizer objective: ASPL, with disconnection made strictly costly.
+
+    A flat penalty is not enough, and that was a real defect. ASPL is averaged
+    over REACHABLE pairs only, so splitting a disconnected graph further LOWERS
+    it — with a constant disconnection term the optimizer then hill-climbs into
+    deeper fragmentation while the reported average separation "improves".
+
+    So unreachable pairs are CHARGED at n, which is strictly greater than any
+    achievable finite distance (<= n-1), and the mean is taken over all ordered
+    pairs. Every move that makes a pair unreachable then strictly increases the
+    objective, so no optimizer accepting only strict decreases can fragment.
+
+    The flat 10*n term is kept ON TOP so that every disconnected graph still
+    scores worse than every connected one; the charged mean alone does not
+    guarantee that.
+
+    A connected graph returns EXACTLY its aspl, unchanged, so nothing about the
+    connected case (which is every fixture) moves.
+    """
+    n = g.n
+    total = 0
+    reachable = 0
+    connected = True
+    for s in range(n):
+        dist = bfs_distances(g, s)
+        reached = 0
+        for t in range(n):
+            d = dist[t]
+            if d > 0:
+                total += d
+                reachable += 1
+                reached += 1
+        if reached < n - 1:
+            connected = False
+
+    if connected:
+        return total / reachable if reachable else math.inf
+    total_pairs = n * (n - 1)
+    if total_pairs == 0:
+        return math.inf
+    charged = (total + (total_pairs - reachable) * n) / total_pairs
+    return charged + 10 * n
 
 
 def largest_component_fraction(g):

@@ -7,7 +7,7 @@
  * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
  * shortest-path identity is classical (see CONCEPT_LINEAGE).
  */
-import { Graph, ring, DEFAULT_MIN_SEPARATION } from "./graph.js";
+import { Graph, ring, DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, greedyWork } from "./graph.js";
 import { bfsDistances } from "./metrics.js";
 
 // Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
@@ -62,6 +62,16 @@ export function ringGreedy(
   if (Number.isInteger(n) && n > MAX_CACHED_N) {
     throw new Error(
       `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
+    );
+  }
+  // MAX_CACHED_N is a MEMORY bound and says so; this is the TIME bound it does not
+  // provide. Without it, (1000, 999) — which `validate` refuses outright on the
+  // constrained path — ran for over 22 minutes without returning. Same shape as
+  // MAX_CONSTRAINED_WORK, different constant: see MAX_GREEDY_WORK on why the two
+  // budgets are deliberately not shared.
+  if (Number.isInteger(n) && Number.isInteger(k) && greedyWork(n, k) > MAX_GREEDY_WORK) {
+    throw new Error(
+      `roster size ${n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
     );
   }
   const mind = opts.mind ?? DEFAULT_MIN_SEPARATION;

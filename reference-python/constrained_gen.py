@@ -13,7 +13,7 @@ Plus:
 """
 import math
 import random
-from core import Graph, ring, bfs_distances, all_pairs_summary, is_connected
+from core import penalized_aspl, Graph, ring, bfs_distances, all_pairs_summary, is_connected
 from constraints import pair
 
 
@@ -270,8 +270,8 @@ def polish_constrained(g, cons, rng=None, iters=8000, prior_weight=0.0):
     priors = cons.priors
 
     def measure():
-        aspl, _, conn = all_pairs_summary(g)
-        e = aspl if conn else aspl + 10 * g.n
+        _, _, conn = all_pairs_summary(g)
+        e = penalized_aspl(g)
         if prior_weight and priors:
             kept = sum(1 for p in priors if g.has_edge(*p))
             e += prior_weight * (len(priors) - kept)

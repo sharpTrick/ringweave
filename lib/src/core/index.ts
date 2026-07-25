@@ -53,7 +53,13 @@ export {
   type PolishConstrainedOptions,
 } from "./constrainedGreedy.js";
 
-import { Graph, MAX_ROSTER, DEFAULT_MIN_SEPARATION } from "./graph.js";
+import {
+  Graph,
+  MAX_ROSTER,
+  DEFAULT_MIN_SEPARATION,
+  MAX_POLISH_WORK,
+  polishWork,
+} from "./graph.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
 import {
@@ -70,11 +76,15 @@ import { constrainedGreedy, polishConstrained } from "./constrainedGreedy.js";
 export interface BuddyOptions {
   /** Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5. */
   minSeparation?: number;
-  /** Run a fixed-seed polish pass to tighten ASPL. Default: auto (n <= 120). */
+  /**
+   * Run a fixed-seed polish pass to tighten ASPL. Default "auto": on when the
+   * pass's modelled work fits `MAX_POLISH_WORK`, which is k-aware — not when n
+   * alone is small. An explicit `true` is honoured regardless.
+   */
   polish?: boolean | "auto";
   /** Seed for the polish pass. Default 12345 (matches the `polish` backend). */
   seed?: number;
-  /** Iteration budget for polish. Default 20000 (the `polish` backend's budget). */
+  /** Iteration budget for polish. Default 20000. A non-integer or negative value falls back to it. */
   polishIters?: number;
 }
 
@@ -85,6 +95,20 @@ export interface BuddyResult {
   regular: boolean;
   degreeMin: number;
   degreeMax: number;
+  /**
+   * Mean separation over pairs that CAN reach each other, and the longest such
+   * separation. WITHIN-GROUP values: when `connected` is false they describe only
+   * the reachable pairs, so a split roster reports a small, healthy-looking
+   * number. Always read them with `connected` — which is why it is now here.
+   *
+   * They are deliberately NOT Infinity when disconnected, unlike `eccentricity`.
+   * That asymmetry is not an oversight: these two are pinned byte-for-byte
+   * against `reference-python`'s `all_pairs_summary` and its fixtures, whereas
+   * `eccentricity` is new and had no such constraint, so it could take the safer
+   * convention from the start. Changing these would mean changing the oracle and
+   * regenerating every fixture to remove a hazard that `connected` already
+   * closes for every consumer in this repo.
+   */
   aspl: number;
   diameter: number;
   girth: number;
@@ -130,7 +154,8 @@ export function buildBuddyGraph(
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
   const seed = options.seed ?? 12345;
-  const wantPolish = resolveWantPolish(options.polish, n);
+  const polishIters = checkedIterations(options.polishIters, DEFAULT_POLISH_ITERS, "polishIters");
+  const wantPolish = resolveWantPolish(options.polish, n, k, DEFAULT_POLISH_ITERS);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
 
@@ -141,7 +166,7 @@ export function buildBuddyGraph(
     // input (disconnection is penalized, so a connected input stays connected) —
     // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
     // polishConstrained.
-    g = polish(g, { mode: "anneal", seed, maxIters: options.polishIters ?? 20000 }).graph;
+    g = polish(g, { mode: "anneal", seed, maxIters: polishIters }).graph;
     polished = true;
   }
 
@@ -167,11 +192,14 @@ export function buildBuddyGraph(
 export interface ConstrainedBuddyOptions {
   /** Minimum degrees of separation to aim for during completion. Default 5. */
   minSeparation?: number;
-  /** Run constraint-preserving polish. Default: auto (n <= 120). */
+  /**
+   * Run constraint-preserving polish. Default "auto": on when the pass's modelled
+   * work fits `MAX_POLISH_WORK` (k-aware), not when n alone is small.
+   */
   polish?: boolean | "auto";
   /** Seed for the polish pass. Default 0 (matches the `polishConstrained` backend). */
   seed?: number;
-  /** Iteration budget for polish. Default 8000 (the `polishConstrained` backend's budget). */
+  /** Iteration budget for polish. Default 8000. A non-integer or negative value falls back to it. */
   polishIters?: number;
   /**
    * Soft penalty weight for keeping prior buddies (churn). Ignored when priors
@@ -214,6 +242,7 @@ export interface ConstrainedBuddyResult {
   regular: boolean;
   degreeMin: number;
   degreeMax: number;
+  /** Within-group values — see the note on {@link BuddyResult.aspl}. Read with `report.connected`. */
   aspl: number;
   diameter: number;
   polished: boolean;
@@ -266,16 +295,21 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
-  if (resolveWantPolish(options.polish, n)) {
+  const polishIters = checkedIterations(
+    options.polishIters,
+    DEFAULT_CONSTRAINED_POLISH_ITERS,
+    "polishIters",
+  );
+  if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
     const priorWeight = active.priorHard
       ? 0
-      : (options.priorWeight ?? (cons.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0));
+      : (options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0));
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
     g = polishConstrained(g, active, {
       seed: options.seed ?? 0,
-      iters: options.polishIters ?? 8000,
+      iters: polishIters,
       priorWeight,
     });
     polished = true;
@@ -321,15 +355,78 @@ function summarize(g: Graph): {
   return { degreeMin, degreeMax, summary, buddies };
 }
 
+/** Default polish iteration budget on the unconstrained path (matches the `polish` backend). */
+const DEFAULT_POLISH_ITERS = 20000;
+/** Default polish iteration budget on the constrained path (matches `polishConstrained`). */
+const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
+
+/**
+ * Validate a caller-supplied iteration budget, which becomes a LOOP BOUND.
+ *
+ * `n` and `k` are validated everywhere; the options object was taken on faith,
+ * and one of its fields is used directly as `for (let i = 0; i < iters; i++)`.
+ * `Infinity` is reachable from JSON without an Infinity literal —
+ * `JSON.parse('{"polishIters":1e999}').polishIters === Infinity` — and the only
+ * other loop exit is "fewer than two edges", so with a real graph neither polish
+ * pass ever returns. That breaks `buildConstrainedBuddyGraph`'s documented
+ * "refuses, never throws" contract in the worst possible way: it does neither.
+ *
+ * Refusing outright would be a new failure mode for existing callers, so a
+ * malformed value falls back to the documented default instead — the same
+ * treatment the app's import path already gives untrusted settings.
+ */
+function checkedIterations(value: number | undefined, fallback: number, label: string): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < 0) {
+    // Non-finite, fractional or negative: not a budget. `label` keeps the reason
+    // attributable if this ever needs to be surfaced rather than absorbed.
+    void label;
+    return fallback;
+  }
+  return value;
+}
+
 // Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
 // step function — any weight >= ~0.5 saturates it (98% kept at n=30, 86% at n=60, 64% at
 // n=120), at negligible ASPL cost. 2 sits on that plateau with margin above the activation
 // threshold. Tests check monotonicity in the weight, not this value. A product-tunable dial.
 const DEFAULT_PRIOR_WEIGHT = 2;
 
-/** Resolve the polish option: "auto" (default) enables polish for n <= 120. */
-function resolveWantPolish(option: boolean | "auto" | undefined, n: number): boolean {
-  return option === undefined || option === "auto" ? n <= 120 : option === true;
+/**
+ * Resolve the polish option. "auto" (the default) enables polish when its
+ * MODELLED WORK fits the budget, rather than when n alone is small.
+ *
+ * The old rule was `n <= 120`, which bounds n and nothing else — so the most
+ * expensive input on the entire default path sat just below the gate:
+ * `buildBuddyGraph(120, 12)` ran for 33 s while `buildBuddyGraph(121, 12)` took
+ * 0.1 s. Density never participated, and cost DECREASED as the roster grew.
+ *
+ * `MAX_POLISH_WORK` is calibrated to reproduce the old threshold exactly at k=4
+ * — the configuration the fixtures and the reroll boundary test pin — so nothing
+ * currently pinned moves; see the constant for the arithmetic.
+ *
+ * An EXPLICIT `polish: true` is still honoured. The caller has asked for it, and
+ * the app already refuses to dispatch one above its own ceiling; overriding a
+ * direct instruction with a heuristic would be worse than the cost.
+ *
+ * The decision is modelled on the DEFAULT iteration budget, not on whatever the
+ * caller passed. "Is this a configuration we auto-polish?" is a property of the
+ * roster (n, k), and it is mirrored by the app as `POLISH_MAX_N` to word its
+ * reroll copy ("above the cap a seed bump is a no-op", because polish is the only
+ * seed-dependent stage). Letting a small `polishIters` flip the gate on would
+ * make that copy wrong in a corner and would tie a stable contract to a tuning
+ * knob.
+ */
+function resolveWantPolish(
+  option: boolean | "auto" | undefined,
+  n: number,
+  k: number,
+  defaultIters: number,
+): boolean {
+  if (option === undefined || option === "auto") {
+    return polishWork(n, k, defaultIters) <= MAX_POLISH_WORK;
+  }
+  return option === true;
 }
 
 /** Min and max of a degree sequence, loop-based to avoid arg-spread limits. */
