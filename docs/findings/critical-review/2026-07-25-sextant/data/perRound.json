@@ -1,0 +1,34 @@
+[
+  {
+    "round": 1,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 3,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 5,
+    "totalFindings": 10,
+    "files": [
+      "lib/src/core/metrics.ts",
+      "lib/src/core/index.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/constraints.ts"
+    ],
+    "classes": [
+      "objective-rewards-fragmentation",
+      "reachable-only-metric-surfaced-as-absolute",
+      "cost-gate-counts-iterations-not-work",
+      "missing-work-budget",
+      "unvalidated-option-number",
+      "unbounded-materialization-before-gate",
+      "mirrored-guard-order-drift",
+      "misleading-sentinel-comment",
+      "inconsistent-variable-reference"
+    ],
+    "subagentTokens": 424685,
+    "agents": 6,
+    "toolCalls": 134
+  }
+]

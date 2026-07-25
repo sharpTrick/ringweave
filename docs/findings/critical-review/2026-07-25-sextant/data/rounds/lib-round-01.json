@@ -1,7 +1,7 @@
 {
   "runId": "wf_88887b29-0f5",
-  "target": "{\"target\": \"lib/src (the ringweave core \u2014 M3 added shortestPath/eccentricity to metrics.ts, connected/largestComponentFraction to BuddyResult, and restructured validate() into validateDetailed() + formatReason() in constraints.ts)\", \"changedPaths\": [\"lib/src/core/metrics.ts\", \"lib/src/core/index.ts\", \"lib/src/core/constraints.ts\", \"lib/src/core/constrainedGreedy.ts\"], \"round\": 1, \"runId\": \"sextant-m3-lib\"}",
-  "round": null,
+  "target": "lib/src",
+  "round": 1,
   "tokens": {
     "subagentTokens": 424685,
     "toolCalls": 134,
@@ -408,5 +408,6 @@
       "lastRound": null,
       "skipped": false
     }
-  }
+  },
+  "targetRaw": "{\"target\": \"lib/src (the ringweave core \u2014 M3 added shortestPath/eccentricity to metrics.ts, connected/largestComponentFraction to BuddyResult, and restructured validate() into validateDetailed() + formatReason() in constraints.ts)\", \"changedPaths\": [\"lib/src/core/metrics.ts\", \"lib/src/core/index.ts\", \"lib/src/core/constraints.ts\", \"lib/src/core/constrainedGreedy.ts\"], \"round\": 1, \"runId\": \"sextant-m3-lib\"}"
 }
