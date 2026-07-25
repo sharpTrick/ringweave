@@ -34,3 +34,9 @@ the other places the project remembers things:
 - **`constrained-generation-cost-and-caps.md`** — the cost model of constrained generation,
   the two safety caps that bound it, and how the naive cost metric was disproved by
   measurement.
+- **`churn-priors-weight.md`** — the prior-weight sweep behind the honest F9 claim: how much
+  of an existing buddy assignment survives a roster change, and at what ASPL cost.
+- **`critical-review/`** — experiments on the *review mechanism itself* rather than on the
+  graph algorithms: what the adversarial-review loop actually costs, what it finds, and what
+  it manufactures. Has its own README and its own dating convention, because a process
+  experiment is an episode.

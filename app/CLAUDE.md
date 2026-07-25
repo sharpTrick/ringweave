@@ -26,8 +26,10 @@ CI (`.github/workflows/ci.yml` `app` job) and Pages (`.github/workflows/pages.ym
 ## Review (required before commit)
 
 Non-trivial app changes get the same adversarial review as the core. The authoritative process is
-[`../docs/REVIEW_PROTOCOL.md`](../docs/REVIEW_PROTOCOL.md) — full-surface every round, all four
-critics, run until a round changes nothing. Don't hand-orchestrate; run the committed runner:
+[`../docs/REVIEW_PROTOCOL.md`](../docs/REVIEW_PROTOCOL.md) — full-surface every round, **all
+non-saturated lenses** every round, ratchet the **invariant** (not the case), run until a round
+changes nothing and then one more. **`npm run lint` at the repo root must be clean first** — it owns
+the lint classes the critics are told not to file. Don't hand-orchestrate; run the committed runner:
 
 ```
 Workflow({ name: "adversarial-review", args: "app/src (the BuddyGraph app)" })
@@ -35,7 +37,10 @@ Workflow({ name: "adversarial-review", args: "app/src (the BuddyGraph app)" })
 
 App lens the critics apply: React state/effect bugs and StrictMode; numbers the UI *displays* vs the
 core's actual output; size gates that must run *before* a read/parse (not after); and any uncapped
-core metric / synchronous parse on the main thread. Keep `npm test` green at the end of every round.
+core metric / synchronous parse on the main thread. `critic-interaction` additionally covers what
+the a11y linter cannot see statically — keyboard reachability *across* components, focus order and
+dead ends, live-region announcement, reduced motion, and the error/empty paths. Keep `npm test`
+green at the end of every round.
 
 ## Architecture (respect)
 

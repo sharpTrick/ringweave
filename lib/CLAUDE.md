@@ -98,9 +98,12 @@ Non-trivial changes get **adversarial sub-agent review** using the committed cri
 and try to break the change.
 
 **The authoritative, repo-wide process is [`../docs/REVIEW_PROTOCOL.md`](../docs/REVIEW_PROTOCOL.md)**
-— full-surface every round, all four critics in parallel, verify each finding, ratchet the *class*
-into the suite, and run until a round changes nothing substantive. Do not orchestrate rounds by
-hand; run the committed runner, which enforces that and computes convergence:
+— full-surface every round, **all non-saturated lenses** in parallel, verify each finding, ratchet
+the **invariant** (a property that holds for all inputs, not a table of cases) into the suite, and
+run until a round changes nothing substantive and then one more. **`npm run lint` at the repo root
+must be clean before a critic is spawned** — it owns the lint classes the critics are told not to
+file. Do not orchestrate rounds by hand; run the committed runner, which enforces that and computes
+convergence:
 
 ```
 Workflow({ name: "adversarial-review", args: "lib/src (the ringweave core)" })
@@ -111,5 +114,6 @@ Lib-specific lens the critics apply on top of that process:
   is a finding.
 - **Oracle parity:** metrics must match `reference-python/`; regenerate fixtures
   (`python3 gen_fixtures.py`) if an algorithm changed, and keep `test/identity.test.ts` green.
-- **Ratchet into property tests / oracle-parity checks**, and keep `npm test` green at the end of
+- **Ratchet the invariant into property tests / oracle-parity checks** — `test/*.props.test.ts` is
+  the natural home, since a property test *is* an invariant. Keep `npm test` green at the end of
   every round.
