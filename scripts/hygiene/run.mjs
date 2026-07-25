@@ -175,11 +175,11 @@ try {
 }
 if (agentFiles.length > 0) {
   const runner = readFileSync(RUNNER, "utf8");
-  const blocks = [...runner.matchAll(/\{\s*type:\s*'(critic-[\w-]+)',\s*model:\s*'(\w+)',\s*saturationGate:\s*(\d+),\s*surface:\s*(\[[^\]]*\])/g)];
+  const blocks = [...runner.matchAll(/\{\s*type:\s*'(critic-[\w-]+)',\s*model:\s*'(\w+)',\s*effort:\s*'(\w+)',\s*saturationGate:\s*(\d+),\s*surface:\s*(\[[^\]]*\])/g)];
   const runnerLenses = new Map(
-    blocks.map(([, type, model, gate, surface]) => [
+    blocks.map(([, type, model, effort, gate, surface]) => [
       type,
-      { model, gate: Number(gate), surface: JSON.parse(surface.replace(/'/g, '"')) },
+      { model, effort, gate: Number(gate), surface: JSON.parse(surface.replace(/'/g, '"')) },
     ]),
   );
 
@@ -195,6 +195,10 @@ if (agentFiles.length > 0) {
     if (!inRunner) {
       report("critic-runner-drift", path, `\`${name}\` has no entry in adversarial-review.js — it would never run`);
       continue;
+    }
+    const effort = /^effort:\s*(\S+)/m.exec(fm)?.[1];
+    if (effort !== inRunner.effort) {
+      report("critic-runner-drift", path, `effort \`${effort}\` but the runner spawns it at \`${inRunner.effort}\``);
     }
     if (model !== inRunner.model) {
       report("critic-runner-drift", path, `model \`${model}\` but the runner spawns it on \`${inRunner.model}\``);

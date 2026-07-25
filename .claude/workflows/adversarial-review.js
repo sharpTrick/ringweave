@@ -37,6 +37,11 @@ const modelOverride = input.modelOverride ?? null
 // `surface`/`saturation_gate` for humans reading the agent definition; THIS is what actually runs,
 // and `scripts/hygiene/run.mjs` fails the lint gate if the two ever disagree.
 //
+// EFFORT IS PASSED EXPLICITLY. Omitting it makes each lens inherit the SESSION's reasoning effort,
+// which silently contradicts the `effort: medium` every critic declares in its frontmatter and that
+// docs/REVIEW_PROTOCOL.md documents. That drift also made runs unpredictably slow. Same class as the
+// model/surface drift the hygiene check guards — which is why that check now covers effort too.
+//
 // Models are deliberately spread across families. Four personas on one backbone buy far less
 // independence than they appear to — measured work on agent ensembles puts prompt-persona diversity
 // at roughly a fifth the decorrelation of different backbone models, with homogeneous ensembles
@@ -46,6 +51,7 @@ const CRITICS = [
   {
     type: 'critic-correctness',
     model: 'opus',
+    effort: 'medium',
     saturationGate: 3,
     surface: ['lib/src/**', 'app/src/model.ts', 'app/src/state/**', 'app/src/graph/**', 'app/src/io/**', 'app/src/worker/**'],
     lens: 'correctness — determinism (including Set/Map iteration-order dependence), off-by-one, wrong output or wrong DISPLAYED numbers, contract violations, and whether the tests would actually catch the failure',
@@ -53,6 +59,7 @@ const CRITICS = [
   {
     type: 'critic-security',
     model: 'opus',
+    effort: 'medium',
     saturationGate: 2,
     surface: ['**/io/**', '**/worker/**', '**/*parse*', '**/*import*', '**/*export*', '**/*download*', 'lib/src/core/graph.ts', 'lib/src/core/constraints.ts'],
     lens: 'robustness/DoS — unbounded work from attacker-chosen numbers, size gates that run after the work they should bound, untrusted names reaching a spreadsheet/clipboard sink, and any hang (incl. main-thread) reachable from hostile input',
@@ -60,6 +67,7 @@ const CRITICS = [
   {
     type: 'critic-solid',
     model: 'sonnet',
+    effort: 'medium',
     saturationGate: 2,
     surface: ['lib/src/**', 'app/src/**'],
     lens: 'SOLID/architecture — responsibility boundaries, coupling, over-abstraction, and whether the declared extension seams are genuinely open for a change the project has actually committed to',
@@ -67,6 +75,7 @@ const CRITICS = [
   {
     type: 'critic-maintainability',
     model: 'haiku',
+    effort: 'medium',
     saturationGate: 2,
     surface: ['lib/src/**', 'app/src/**'],
     lens: 'maintainability — comments that are now FALSE (not merely missing), misleading names, silently drifting duplication, and a public surface that is easy to misuse',
@@ -74,6 +83,7 @@ const CRITICS = [
   {
     type: 'critic-interaction',
     model: 'sonnet',
+    effort: 'medium',
     saturationGate: 2,
     surface: ['app/src/**'],
     lens: 'interaction/accessibility — keyboard reachability across components, focus order and dead ends, live-region announcement, reduced motion, and the error/empty paths',
@@ -214,7 +224,7 @@ function prompt(c) {
 phase('Review')
 const results = await parallel(
   active.map((c) => () =>
-    agent(prompt(c), { label: c.type, phase: 'Review', agentType: c.type, model: modelOverride ?? c.model, schema: SCHEMA })
+    agent(prompt(c), { label: c.type, phase: 'Review', agentType: c.type, model: modelOverride ?? c.model, effort: c.effort, schema: SCHEMA })
       // A DEAD LENS MUST NEVER READ AS A CLEAN ONE. `agent()` RETURNS null when a subagent dies on a
       // terminal API error (rate limit, quota) — it does not throw, so `.catch` never fires. An
       // earlier version mapped null through `(r && r.findings) || []`, which recorded a dead lens as
@@ -278,7 +288,7 @@ if (all.length > 1) {
       ``,
       JSON.stringify(all.map((f) => ({ critic: f.critic, severity: f.severity, class: f.class, theme: f.theme, file: f.file, summary: f.summary, remediation: f.remediation }))),
     ].join(' '),
-    { label: 'triage:theme-dedup', phase: 'Triage', model: 'sonnet', schema: CLUSTER_SCHEMA },
+    { label: 'triage:theme-dedup', phase: 'Triage', model: 'sonnet', effort: 'medium', schema: CLUSTER_SCHEMA },
   ).catch(() => null)
   if (clustered && Array.isArray(clustered.themes)) themes = clustered.themes
 }
