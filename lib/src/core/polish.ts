@@ -12,7 +12,7 @@
  */
 import { Graph } from "./graph.js";
 import { allPairsSummary, penalizedAspl } from "./metrics.js";
-import { boundedPolishIterations } from "./budgets.js";
+import { boundedPolishIterations, checkPolishSize } from "./budgets.js";
 import { RNG } from "./rng.js";
 import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
@@ -53,6 +53,10 @@ export function polish(
   opts: PolishOptions = {},
 ): PolishResult {
   const mode = opts.mode ?? "anneal";
+  // BEFORE the copy and before `energy`, which is the whole point: both are
+  // Theta(n·(n+m)) and neither is reachable by the iteration budget below, so a
+  // call priced at zero iterations still ran for 160 s at n=40000.
+  checkPolishSize(input.n, input.degrees().reduce((a, b) => a + b, 0) / 2);
   const rng = new RNG(opts.seed ?? 12345);
   const g = input.copy();
   let edges = g.edgeList();

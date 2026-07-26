@@ -9,6 +9,23 @@
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:4173";
+
+/**
+ * Wait for a generation to FINISH, not merely for the results panel to exist.
+ *
+ * `waitForSelector("#metrics")` is not a wait at all after the first generation — the
+ * panel is still mounted from the previous one, so it returns instantly while the new run
+ * is still going. That race was invisible while the page stayed interactive during
+ * generation; now that `#app` is correctly `inert` behind the "Generating…" overlay, the
+ * next step lands on a non-interactive control instead. Waiting for the overlay to go is
+ * the condition that was always meant.
+ */
+async function generationSettles(page) {
+  await page.waitForSelector("#metrics", { timeout: 15000 });
+  await page.waitForSelector(".busy", { state: "detached", timeout: 20000 });
+  await page.waitForSelector("#app:not([inert])", { timeout: 20000 });
+}
+
 const EXEC = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 
 const results = [];
@@ -31,6 +48,28 @@ page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 
+// ---- a11y: the setup dialog must be operable on the very first paint ---------
+// The regression this exists for: RosterModal was rendered INSIDE the element carrying
+// `inert`, and `inert` cascades with no way for a descendant to opt back in. Since the
+// modal opens on load, that made the entire first paint unreachable by keyboard and absent
+// from the accessibility tree — while rendering perfectly. A jsdom test can assert the
+// containment but not the behaviour, because jsdom does not implement inert; only a real
+// browser can be asked whether the control can actually be focused and typed into.
+{
+  const dialogInert = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) return "no dialog";
+    for (const el of document.querySelectorAll("[inert]")) if (el.contains(dialog)) return "inert ancestor";
+    return "ok";
+  });
+  check("the setup dialog is not inside an inert ancestor", dialogInert === "ok", dialogInert);
+
+  const roster = page.getByLabel("Roster names");
+  await roster.focus();
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+  check("the roster field can actually take focus on cold load", focused === "Roster names", focused ?? "(none)");
+}
+
 // ---- roster + rules -------------------------------------------------------
 await page.getByLabel("Roster names").fill(ROSTER.join("\n"));
 await page.locator(".rules-block > summary").click();
@@ -43,7 +82,7 @@ await page.getByLabel("Rule 2, second person").fill("Chloe Diaz");
 await page.getByLabel("Rule 2, kind").selectOption("prohibited");
 
 await page.getByText("Generate buddy graph").click();
-await page.waitForSelector("#metrics", { timeout: 15000 });
+await generationSettles(page);
 
 const rulesLine = await page.locator(".rules-line").textContent();
 check("constrained generation reports its rules", /all 2 buddy rules satisfied/.test(rulesLine ?? ""), rulesLine ?? "(none)");
@@ -69,7 +108,7 @@ check("generate is blocked while infeasible", disabled);
 // Back to a feasible set: remove the five bad rules.
 for (let i = 7; i >= 3; i--) await page.getByLabel(`Remove rule ${i}`).click();
 await page.getByText("Generate buddy graph").click();
-await page.waitForSelector("#metrics", { timeout: 15000 });
+await generationSettles(page);
 
 // ---- F8: fuzzy search -----------------------------------------------------
 await page.getByLabel("Find a person").fill("jsmi");
@@ -124,6 +163,21 @@ const parsed = JSON.parse(text);
 check("export carries the rules",
   parsed.constraints.required.length === 1 && parsed.constraints.prohibited.length === 1,
   JSON.stringify(parsed.constraints));
+
+// ---- a11y: closing a panel must not strand focus on <body> ------------------
+// Removing the focused element moves focus to <body> per spec, so the next Tab restarts at
+// the top of the document. Nothing in app/src called .focus() at all.
+{
+  await page.locator(".brow").first().click();
+  await page.waitForSelector("#person");
+  await page.getByLabel("Close person details").focus();
+  await page.getByLabel("Close person details").click();
+  const landed = await page.evaluate(() => {
+    const a = document.activeElement;
+    return a === document.body || !a ? "body" : (a.getAttribute("aria-label") ?? a.tagName);
+  });
+  check("closing the person panel keeps focus somewhere usable", landed !== "body", landed);
+}
 
 check("no page errors or console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 

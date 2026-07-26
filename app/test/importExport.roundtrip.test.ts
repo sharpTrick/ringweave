@@ -169,11 +169,47 @@ describe("import: disconnected / degenerate graphs are scored honestly", () => {
 describe("import: untrusted settings are clamped to the UI range", () => {
   const star = (n: number): [number, number][] => Array.from({ length: n - 1 }, (_, i) => [0, i + 1]);
 
-  it("a star graph's degree-(n-1) fallback is clamped to BUDDY_MAX", () => {
+  it("refuses a star graph outright rather than clamping its settings", () => {
+    // This used to be ACCEPTED with its derived `buddies` clamped to BUDDY_MAX, which
+    // treated a per-vertex degree of 199 as a settings problem. It is a payload problem:
+    // the density gate compares only the AVERAGE (2m <= BUDDY_MAX*n), which a star passes
+    // trivially, and the hub then becomes the buddy label of every leaf — 480 MB of DOM
+    // text from a 512 KB file. `neighborhood.ts` already asserted in prose that degree is
+    // capped at BUDDY_MAX; on this path that was false.
     const n = 200;
-    const v = importGraph({ version: 1, people: peopleOf(n), edges: star(n) }); // no settings block
-    expect(v.settings.buddies).toBe(BUDDY_MAX); // clamped from degree 199
-    expect(v.settings.buddies).toBeGreaterThanOrEqual(BUDDY_MIN);
+    expect(() => importGraph({ version: 1, people: peopleOf(n), edges: star(n) })).toThrow(
+      /more than the 12 a buddy graph allows/,
+    );
+    // Still accepted at the boundary, so the gate refuses hubs and not buddy graphs.
+    const legal = importGraph({
+      version: 1,
+      people: peopleOf(n),
+      edges: Array.from({ length: BUDDY_MAX }, (_, i) => [0, i + 1] as [number, number]),
+    });
+    expect(legal.settings.buddies).toBe(BUDDY_MAX);
+    expect(legal.settings.buddies).toBeGreaterThanOrEqual(BUDDY_MIN);
+  });
+
+  it("bounds the text every buddy-label sink has to materialize", () => {
+    // The invariant behind both import gates, stated as the product the old gates left
+    // unbounded: (one name's length) x (how many people it labels).
+    const n = 300;
+    const hugeName = "x".repeat(500);
+    expect(() =>
+      importGraph({
+        version: 1,
+        people: [{ id: 0, name: hugeName }, ...peopleOf(n).slice(1)],
+        edges: [[0, 1]],
+      }),
+    ).toThrow(/A name is too long/);
+    // And an unbounded value can no longer become an unbounded message.
+    expect(() => importGraph({ version: 1, people: peopleOf(3), edges: [] })).not.toThrow();
+    try {
+      importGraph({ version: "A".repeat(100_000) });
+      throw new Error("expected a refusal");
+    } catch (err) {
+      expect((err as Error).message.length).toBeLessThan(200);
+    }
   });
 
   it("a declared oversized buddies is clamped to BUDDY_MAX", () => {

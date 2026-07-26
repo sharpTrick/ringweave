@@ -1,4 +1,9 @@
-import { asplGap, DEFAULT_MIN_SEPARATION, type ConstraintReport } from "ringweave";
+import {
+  asplGap,
+  autoPolishEnabled,
+  DEFAULT_MIN_SEPARATION,
+  type ConstraintReport,
+} from "ringweave";
 import type { ConstraintPair } from "./constraints";
 import type { GraphResult } from "./worker/protocol";
 
@@ -46,15 +51,25 @@ export const SEPARATION_DEFAULT = Math.max(SEPARATION_MIN, Math.min(SEPARATION_M
     an O(n²) freeze on load. */
 export const MAX_ROSTER_N = 1000;
 
-/** Roster size above which the core auto-disables polish (mirrors the `n <= 120` literal in the
-    un-exported `resolveWantPolish`, lib/src/core/index.ts). Polish is the ONLY seed-dependent
-    stage, and it is O(n·m)/iter, so above this the app (a) never forces polish=on — that would
-    run for tens of seconds — and (b) knows a seed-bump reroll can't vary the RNG-free greedy
-    output. This is not a free-floating literal: a boundary test in app/test/reroll.test.ts pins
-    it to the core's ACTUAL behavior (polished flips off at POLISH_MAX_N+1), so a core threshold
-    move turns that test red rather than silently mis-wording reroll copy. (The value coincides
-    with layout.ts's FORCE_TICK_KNEE_N, an UNRELATED force-tick concept — don't consolidate them.) */
-export const POLISH_MAX_N = 120;
+/**
+ * Whether a seed bump can vary this configuration at all — asked of the CORE, not
+ * predicted here.
+ *
+ * This used to be `POLISH_MAX_N = 120`, a literal mirroring the core's auto-polish
+ * gate. The core's gate is not a flat n: it compares modelled polish work against a
+ * budget, so the real cutoff is k-dependent (146 at k=2, 131 at k=3, 120 at k=4, 78
+ * at k=12) and different again for the constrained builder. 120 was correct only at
+ * k=4 — the one value the boundary test pinned — and it disagreed in BOTH directions
+ * everywhere else. Above 120 at k<4 the app refused to dispatch at all, telling the
+ * user "this group is too large to shuffle" about a roster the core would happily
+ * polish into a different arrangement.
+ *
+ * Exporting the core's *number* would have re-created the same drift one release
+ * later, so the core exports the *predicate* and this asks it.
+ */
+function seedCanVary(n: number, settings: Settings, constrained: boolean): boolean {
+  return autoPolishEnabled(n, settings.buddies, { constrained });
+}
 
 /** Seeds are clamped to [0, SEED_MAX] so a `seed + 1` reroll always advances at float
     precision (integers past 2^53 don't). */
@@ -225,14 +240,20 @@ export function degreeLabel(m: Metrics): string {
  * Why a seed-bump "Different arrangement" CAN'T vary the graph, or null if it might.
  *
  * The seed only feeds the polish RNG and the greedy is RNG-free, so a re-roll can only vary
- * when polish runs (n <= POLISH_MAX_N and polish not off). This is a NECESSARY, not sufficient,
+ * when polish runs (the core's own gate says so, and polish is not off). NECESSARY, not sufficient —
  * condition — a small polished graph can still converge to the same optimum, which only a
  * post-generation edge comparison (in useBuddyGraph) can detect. This function gives the cheap,
  * accurate reason for the two cases we CAN predict pre-hoc, with actionable, non-contradictory
  * copy (it never tells a user to enable polish they've already enabled).
  */
-export function rerollBlockReason(n: number, settings: Settings): string | null {
-  if (n > POLISH_MAX_N) {
+export function rerollBlockReason(
+  n: number,
+  settings: Settings,
+  // Which builder will run, because the two have different polish budgets. Defaults
+  // to the unconstrained path, which is what a caller with no rules is asking about.
+  constrained = false,
+): string | null {
+  if (!seedCanVary(n, settings, constrained)) {
     return "This group is too large to shuffle — a different arrangement is only possible for smaller groups.";
   }
   if (settings.polish === false) {

@@ -174,6 +174,34 @@ export function polishWork(n: number, k: number, iters: number): number {
   return iters * (POLISH_ITER_OVERHEAD + n * (n + m));
 }
 
+/**
+ * The size cap the polish paths were missing.
+ *
+ * `boundedPolishIterations` is a WORK cap, and it was the only gate on `polish` /
+ * `polishConstrained` — but both pay two to three full `allPairsSummary` sweeps
+ * (Theta(n·(n+m)) each) plus two graph copies OUTSIDE the loop, to compute the
+ * starting energy and the baseline measurement. Work before the loop is work the
+ * iteration budget cannot reach, so a call the budget prices at ZERO iterations
+ * still ran: `polish(ring(40000), { maxIters: 0 })` took 160 seconds, and
+ * `polishConstrained(ring(30000), cons, { iters: 0 })` took 48.
+ *
+ * The module header says every path needs both a size cap and a work cap; polish
+ * had one. The threshold is not a new number — a single sweep must fit the same
+ * `MAX_POLISH_WORK` the whole loop is held to, which is the tightest bound that
+ * cannot refuse a configuration the loop itself would have accepted. It leaves the
+ * documented ceilings intact: n=5000 at k=4 on the constrained path costs 7.5e7,
+ * comfortably inside, while the 40000-ring costs 3.2e9 and is refused.
+ */
+export function checkPolishSize(n: number, m: number): void {
+  const sweep = n * (n + m);
+  if (sweep > MAX_POLISH_WORK) {
+    throw new Error(
+      `graph too large to polish: one all-pairs sweep costs ${sweep} against a budget of ` +
+        `${MAX_POLISH_WORK} (n=${n}, m=${m}) — reduce the roster or skip polish`,
+    );
+  }
+}
+
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
 // option). Shared so the three generation entry points can't drift apart.
 export const DEFAULT_MIN_SEPARATION = 5;

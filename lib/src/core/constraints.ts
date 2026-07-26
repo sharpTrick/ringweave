@@ -104,7 +104,13 @@ export class Constraints {
     policy: TagPolicy = "prohibit_same",
   ): Constraints {
     const c = new Constraints(n);
-    const tagOf = (i: number): Tag => (i < tags.length ? tags[i] : null);
+    // `?? null` rather than a length check, because the length check was not the
+    // whole nullish story: an in-range hole or an explicit `undefined` returned
+    // `undefined`, and `undefined === undefined` made every pair of UNGROUPED
+    // people compare equal and get prohibited — the exact inverse of the documented
+    // "never grouped" contract. The Python reference tests `is not None`, which
+    // covers both, so this was a port defect. Subsumes the range branch too.
+    const tagOf = (i: number): Tag => tags[i] ?? null;
     switch (policy) {
       case "prohibit_same":
         for (let i = 0; i < n; i++) {
@@ -244,7 +250,7 @@ export function validateDetailed(cons: Constraints, k: number): Reason[] {
   if (structural.length > 0) return normalize(structural);
 
   // Roster too large for the O(n²) constrained path (rationale on MAX_CONSTRAINED_N
-  // in graph.ts); refuse before the O(n²) connectivity walk and generation.
+  // in budgets.ts); refuse before the O(n²) connectivity walk and generation.
   if (cons.n > MAX_CONSTRAINED_N) {
     return [
       { code: "roster-too-large-constrained", n: cons.n, max: MAX_CONSTRAINED_N },
@@ -256,7 +262,7 @@ export function validateDetailed(cons: Constraints, k: number): Reason[] {
   }
 
   // Dense k blows generation up past the n-cap (rationale on MAX_CONSTRAINED_WORK
-  // in graph.ts); refuse when the estimated work exceeds the budget. Mirrored as a
+  // in budgets.ts); refuse when the estimated work exceeds the budget. Mirrored as a
   // throw in constrainedGreedy's checkWellFormed.
   if (constrainedWork(cons.n, k) > MAX_CONSTRAINED_WORK) {
     return [{ code: "work-too-large", n: cons.n, k }];

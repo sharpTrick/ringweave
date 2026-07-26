@@ -63,6 +63,28 @@ export default function App() {
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
+  // The stable place focus goes when a panel removes itself. The search box is mounted
+  // for the whole life of a view, which is what makes it a valid anchor.
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Close something whose own close button lives inside it, without dropping focus.
+   *
+   * When the focused element is removed from the DOM the browser moves focus to
+   * `<body>`, so the next Tab restarts at the top of the document — a keyboard user who
+   * dismisses the person panel is thrown back to the header and has to walk the whole
+   * page to get back. Nothing in the app called `.focus()` anywhere.
+   *
+   * Focus is only moved when it is ABOUT TO BE DESTROYED — i.e. when the active element
+   * is inside the panel being closed. Escape can be pressed with focus on the graph or
+   * the buddy list, and yanking it to the search box then would be its own bug.
+   */
+  const closeWithFocus = (panelId: string, close: () => void) => {
+    const active = document.activeElement;
+    const losing = active instanceof Node && !!document.getElementById(panelId)?.contains(active);
+    close();
+    if (losing) searchRef.current?.focus();
+  };
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
   // need real core queries and neither may reimplement them.
@@ -85,8 +107,10 @@ export default function App() {
   // modal is open: it has no Escape handling of its own, and clearing state behind
   // an open dialog is invisible.
   useEscape(() => {
-    if (path.active) path.clear();
-    else explorer.select(null);
+    // Same focus rule as the panels' own buttons: Escape removes the same elements, so it
+    // strands focus on <body> in exactly the same way when it is pressed from inside one.
+    if (path.active) closeWithFocus("route", path.clear);
+    else closeWithFocus("person", () => explorer.select(null));
   }, !modalOpen);
 
   useEffect(() => {
@@ -125,25 +149,34 @@ export default function App() {
   };
 
   const handleReroll = () => {
+    // EVERYTHING here comes from `view`, never from `names`/`settings`/`constraints`.
+    // Those three are committed when a generation is DISPATCHED, while `view` only
+    // advances when one SUCCEEDS — so after a cancelled, errored or refused attempt
+    // they describe a roster that was never built. Reading them made "↻ Different
+    // arrangement", whose entire promise is a different arrangement OF THE GRAPH ON
+    // SCREEN, silently replace it with a different roster, and computed the
+    // feasibility and block-reason preflight against the wrong n as well.
+    if (!view) return;
     // Advance the seed within its declared range [0, SEED_MAX] (nextRerollSeed) so a stored
     // seed always honors the contract and can't drift past float-safe integer range.
-    const s = { ...settings, seed: nextRerollSeed(settings.seed) };
-    const feas = feasibility(names.length, s.buddies);
+    const s = { ...view.settings, seed: nextRerollSeed(view.settings.seed) };
+    const feas = feasibility(view.names.length, s.buddies);
     if (!feas.canGenerate) {
       flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
       return;
     }
-    // Cheap pre-hoc gate for the two cases we can predict (too large / polish off) with
-    // actionable copy. The uniquely-determined / polish-converged plateau is caught post-hoc
-    // by the identical-reroll callback above.
-    const reason = rerollBlockReason(names.length, s);
+    // Cheap pre-hoc gate for the cases we can predict (the core would not polish this
+    // configuration / polish is off) with actionable copy. The uniquely-determined or
+    // polish-converged plateau is caught post-hoc by the identical-reroll callback above.
+    const reason = rerollBlockReason(view.names.length, s, view.constraints.length > 0);
     if (reason) {
       flash(reason);
       return;
     }
     setSettings(s);
     resetSelection();
-    bg.generate(names, s, constraints, { reroll: true }); // intent: an identical result surfaces a notice
+    // Intent: an identical result surfaces a notice.
+    bg.generate(view.names, s, view.constraints, { reroll: true });
   };
 
   const cancelGeneration = () => {
@@ -179,11 +212,24 @@ export default function App() {
 
   return (
     <>
-      {/* `inert` while the dialog is open: RosterModal is a sibling rendered AFTER
-          this subtree, so without it Tab walks straight out of an aria-modal dialog
-          into the graph, the buddy list and the export buttons behind it. One
-          attribute does what a focus trap would, and the browser enforces it. */}
-      <div id="app" inert={modalOpen}>
+      {/* `inert` while an overlay owns the screen, so Tab cannot walk out of an
+          aria-modal dialog into the graph, the buddy list and the export buttons
+          behind it. One attribute does what a focus trap would, and the browser
+          enforces it.
+
+          THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS. `inert`
+          cascades to every descendant with no way to opt back in, and the previous
+          version of this comment claimed RosterModal was a sibling while it was
+          actually rendered inside <main> in here. Since `modalOpen` starts `true`,
+          that made the entire first paint — the dialog included — unreachable by
+          keyboard and absent from the accessibility tree. The comment described the
+          design; the JSX did something else; nothing checked.
+
+          The busy overlay is in the same position for the same reason, and it also
+          closes a hole the mouse-blocking scrim never did: while "Generating…" is up,
+          the buddy-list rows and search box behind it stayed focusable and
+          Enter-activatable. */}
+      <div id="app" inert={modalOpen || bg.status === "running"}>
         <header>
           <div className="brand">
             <div className="mark"><div className="r" /><div className="d d1" /><div className="d d2" /><div className="d d3" /></div>
@@ -221,7 +267,7 @@ export default function App() {
 
               <LayoutToggle layout={layout} onChange={setLayout} />
               <div className="hint">Hover a person to light their buddies</div>
-              <PersonSearch names={view.names} onSelect={setSelected} />
+              <PersonSearch names={view.names} onSelect={setSelected} inputRef={searchRef} />
 
               {selected !== null && (
                 <PersonPanel
@@ -231,7 +277,7 @@ export default function App() {
                   canGoBack={explorer.canGoBack}
                   onSelect={setSelected}
                   onBack={explorer.back}
-                  onClose={() => setSelected(null)}
+                  onClose={() => closeWithFocus("person", () => setSelected(null))}
                   onFindPath={() => path.start(selected)}
                 />
               )}
@@ -243,7 +289,7 @@ export default function App() {
                   route={path.route}
                   unreachable={path.unreachable}
                   onSelect={(i) => explorer.select(i)}
-                  onClear={path.clear}
+                  onClear={() => closeWithFocus("route", path.clear)}
                 />
               )}
 
@@ -252,28 +298,33 @@ export default function App() {
             </>
           )}
 
-          {modalOpen && (
-            <RosterModal
-              initialText={names.join("\n")}
-              settings={settings}
-              constraints={constraints}
-              constraintNames={names}
-              canCancel={view !== null}
-              onGenerate={handleGenerate}
-              onCancel={() => setModalOpen(false)}
-            />
-          )}
-
-          {bg.status === "running" && (
-            <div className="busy" role="status" aria-live="polite">
-              <div className="busy-inner">
-                <span>Generating…</span>
-                <button className="btn btn-ghost" onClick={cancelGeneration}>Cancel</button>
-              </div>
-            </div>
-          )}
         </main>
       </div>
+
+      {/* Outside `#app` — see the inert comment above. Both are `position: fixed` so
+          they cover the viewport rather than only <main>'s box, which additionally
+          fixes the narrow-window case where `main { overflow: auto }` let content
+          scroll out from under the scrim. */}
+      {modalOpen && (
+        <RosterModal
+          initialText={names.join("\n")}
+          settings={settings}
+          constraints={constraints}
+          constraintNames={names}
+          canCancel={view !== null}
+          onGenerate={handleGenerate}
+          onCancel={() => setModalOpen(false)}
+        />
+      )}
+
+      {bg.status === "running" && (
+        <div className="busy" role="status" aria-live="polite">
+          <div className="busy-inner">
+            <span>Generating…</span>
+            <button className="btn btn-ghost" onClick={cancelGeneration}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {view && <Slips view={view} />}
 

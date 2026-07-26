@@ -55,7 +55,12 @@ export {
 } from "./constrainedGreedy.js";
 
 import { Graph, MAX_ROSTER } from "./graph.js";
-import { DEFAULT_MIN_SEPARATION, MAX_POLISH_WORK, polishWork } from "./budgets.js";
+import {
+  DEFAULT_MIN_SEPARATION,
+  MAX_CONSTRAINED_N,
+  MAX_POLISH_WORK,
+  polishWork,
+} from "./budgets.js";
 import { ringGreedy } from "./greedy.js";
 import { polish, DEFAULT_POLISH_ITERS } from "./polish.js";
 import {
@@ -206,7 +211,17 @@ export function buildBuddyGraph(
 }
 
 export interface ConstrainedBuddyOptions {
-  /** Minimum degrees of separation to aim for during completion. Default 5. */
+  /**
+   * ACCEPTED AND IGNORED on this path. The constrained completion always takes the
+   * farthest legal partner rather than aiming at a target, so no value here can
+   * change the output — see `choosePartner` in `constrainedGreedy.ts`, whose own
+   * contract says the same. Kept for call-site compatibility with
+   * {@link BuddyOptions}; removing it would be a breaking change.
+   *
+   * It previously documented "Default 5", which was doubly wrong: nothing applies a
+   * default because nothing reads the field, and stating one invites a caller to
+   * believe passing 7 does something.
+   */
   minSeparation?: number;
   /**
    * Run constraint-preserving polish. Default "auto": on when the pass's modelled
@@ -241,7 +256,19 @@ export interface ConstraintReport {
    * constrained generator can leave (e.g. "94% of people are in one group").
    */
   largestComponentFraction: number;
-  /** Fraction (0..1) of prior buddies preserved, or null when there are no priors. */
+  /**
+   * Fraction (0..1) of prior buddies preserved, or null when priors were never
+   * WEIGHED — either because there were none, or because polish did not run at this
+   * (n, k) and so nothing ever consulted them.
+   *
+   * The second case used to report a number, and the number was meaningless: above
+   * roughly n≈190 at k=4 the auto-polish gate declines, `constrainedGreedy` never
+   * looks at priors at all, and whatever fraction happened to survive was pure
+   * coincidence. A caller reading "62% of prior buddies kept" could not tell that
+   * from "priors were honoured to the tune of 62%". `null` already means "not
+   * measured" on this field, so reusing it removes a misleading number rather than
+   * adding a flag that has to be interpreted alongside it.
+   */
   priorsKeptFraction: number | null;
   /** Plain-language reasons the input was refused (empty when generated). */
   refusals: string[];
@@ -315,9 +342,13 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
+  // Hoisted out of the branch because the report needs it: `priorsKeptFraction` is
+  // only meaningful when priors were actually WEIGHED, which needs both that polish
+  // ran and that the weight was non-zero.
+  let priorWeight = 0;
   if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
-    const priorWeight = active.priorHard
+    priorWeight = active.priorHard
       ? 0
       : (options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0));
     // polishConstrained returns the lowest-energy graph it saw, never worse
@@ -344,7 +375,12 @@ export function buildConstrainedBuddyGraph(
     // report from the ORIGINAL cons (not active): reqViolations reflects the
     // caller's declared requireds, not priors promoted to required — safe because
     // the postconditions guarantee every active-required edge is present.
-    report: buildReport(g, cons, summary.connected),
+    // Whether priors were ACCOUNTED FOR at all, by either of the two mechanisms that
+    // can do it: promoted to required edges (priorHard), or weighed as a soft penalty
+    // by a polish pass that actually ran. Only the remaining case — polish declined at
+    // this (n, k) and no promotion — leaves `priorsKeptFraction` measuring coincidence,
+    // and that is the case it must report as null.
+    report: buildReport(g, cons, summary.connected, active.priorHard || (polished && priorWeight !== 0)),
   };
 }
 
@@ -374,7 +410,7 @@ function summarize(g: Graph): {
 
 /*
  * The iteration clamp that used to live here is GONE, not moved twice.
- * `boundedPolishIterations` (graph.ts) now runs inside `polish` and
+ * `boundedPolishIterations` (budgets.ts) now runs inside `polish` and
  * `polishConstrained` — the only place it can actually bind, since both are
  * exported public API and a clamp in this wrapper left a direct caller
  * unbounded.
@@ -406,11 +442,8 @@ const DEFAULT_PRIOR_WEIGHT = 2;
  *
  * The decision is modelled on the DEFAULT iteration budget, not on whatever the
  * caller passed. "Is this a configuration we auto-polish?" is a property of the
- * roster (n, k), and it is mirrored by the app as `POLISH_MAX_N` to word its
- * reroll copy ("above the cap a seed bump is a no-op", because polish is the only
- * seed-dependent stage). Letting a small `polishIters` flip the gate on would
- * make that copy wrong in a corner and would tie a stable contract to a tuning
- * knob.
+ * roster (n, k). Letting a small `polishIters` flip the gate on would tie a stable
+ * contract to a tuning knob.
  */
 function resolveWantPolish(
   option: boolean | "auto" | undefined,
@@ -422,6 +455,34 @@ function resolveWantPolish(
     return polishWork(n, k, defaultIters) <= MAX_POLISH_WORK;
   }
   return option === true;
+}
+
+/**
+ * Whether the default ("auto") path polishes this configuration — the gate itself,
+ * exported, so a consumer never has to re-derive it.
+ *
+ * Polish is the only seed-dependent stage, so a UI that offers "give me a different
+ * arrangement" has to know this to avoid promising variation it cannot deliver. The
+ * app used to answer with its own `POLISH_MAX_N = 120` literal, which was correct
+ * only at k=4: the real cutoff is k-dependent (146 at k=2, 131 at k=3, 120 at k=4,
+ * 78 at k=12) and different again for the constrained builder. It disagreed with
+ * this function in BOTH directions, and the disagreement reached users as a false
+ * "this group is too large to shuffle".
+ *
+ * Exporting a number would have re-created the same problem one release later. The
+ * gate is a function of (n, k, which builder), so the export is the function.
+ */
+export function autoPolishEnabled(
+  n: number,
+  k: number,
+  opts: { constrained?: boolean } = {},
+): boolean {
+  return resolveWantPolish(
+    "auto",
+    n,
+    k,
+    opts.constrained ? DEFAULT_CONSTRAINED_POLISH_ITERS : DEFAULT_POLISH_ITERS,
+  );
 }
 
 /** Min and max of a degree sequence, loop-based to avoid arg-spread limits. */
@@ -440,6 +501,7 @@ function buildReport(
   g: Graph,
   cons: Constraints,
   connected: boolean,
+  priorsWeighed: boolean,
 ): ConstraintReport {
   let prohViolations = 0;
   for (const [a, b] of cons.prohibitedPairs()) if (g.hasEdge(a, b)) prohViolations++;
@@ -448,7 +510,7 @@ function buildReport(
 
   const priors = cons.priorPairs();
   const priorsKeptFraction =
-    priors.length > 0 ? countPresentEdges(g, priors) / priors.length : null;
+    priorsWeighed && priors.length > 0 ? countPresentEdges(g, priors) / priors.length : null;
 
   return {
     satisfied: reqViolations === 0 && prohViolations === 0 && connected,
@@ -464,7 +526,13 @@ function buildReport(
 function refusedResult(n: number, refusals: string[]): ConstrainedBuddyResult {
   // A malformed/oversized n reaches here (that IS what's being refused), so never
   // allocate an n-sized array from it — the caller reads `report.refusals` anyway.
-  const size = Number.isInteger(n) && n >= 0 && n <= MAX_ROSTER ? n : 0;
+  //
+  // Bounded by MAX_CONSTRAINED_N, not MAX_ROSTER. This builder cannot ACCEPT a
+  // roster above 5000, so clamping the placeholder to MAX_ROSTER (1e6) meant
+  // refusing an oversized roster allocated 200x more than accepting the largest
+  // legal one — a refusal that costs more than success is a denial-of-service
+  // gradient pointing the wrong way.
+  const size = Number.isInteger(n) && n >= 0 && n <= MAX_CONSTRAINED_N ? n : 0;
   return {
     buddies: Array.from({ length: size }, () => []),
     edges: [],

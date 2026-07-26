@@ -9,6 +9,8 @@
  * still lives in the core.
  */
 
+import { Constraints } from "ringweave";
+
 export type ConstraintKind = "required" | "prohibited";
 
 function assertNever(x: never): never {
@@ -72,6 +74,28 @@ export function splitPairs(pairs: ConstraintPair[]): {
     }
   }
   return { required, prohibited };
+}
+
+/**
+ * The ONE way the app turns its editable rules into a core `Constraints`.
+ *
+ * It was built in two places — the editor's pre-flight feasibility check and the
+ * worker's authoritative one — in two different orders: the editor followed the user's
+ * edit order, the worker did all requireds then all prohibiteds. Order happens not to
+ * matter today (both sets are `Set`-backed), which is exactly what made the duplication
+ * comfortable: the two could disagree the moment it did, and the failure would be the
+ * editor calling a rule set feasible that the worker then refuses — a silent
+ * disagreement between the message a user reads and the answer they get.
+ *
+ * Normalizes to required-then-prohibited so the order is stated once rather than
+ * inherited from whoever calls it.
+ */
+export function toConstraints(n: number, pairs: ConstraintPair[]): Constraints {
+  const { required, prohibited } = splitPairs(pairs);
+  const cons = new Constraints(n);
+  for (const [a, b] of required) cons.require(a, b);
+  for (const [a, b] of prohibited) cons.prohibit(a, b);
+  return cons;
 }
 
 /** Rejoin the two lists into the editable model. */

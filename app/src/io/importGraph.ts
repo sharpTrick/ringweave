@@ -4,7 +4,7 @@ import {
   BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN,
   type GraphView, type Settings,
 } from "../model";
-import { MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
+import { MAX_NAME_CHARS, MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
 import {
   MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
   type ConstraintPair,
@@ -128,13 +128,27 @@ function readConstraints(
  * the declared `settings`. Round-trips identically with `exportGraph`. Dimensions and density
  * are bounded up front so an oversized/dense file fails fast instead of freezing the tab.
  */
+/**
+ * Every interpolation of untrusted file content goes through this.
+ *
+ * `ImportError.message` is rendered straight into the DOM as the sole child of the
+ * toast, so an unbounded interpolation turns the whole 8 MB file budget into one text
+ * node: `{"version":"AAAA…"}` with a 7.9-million-character version string produced a
+ * 7.9-million-character toast. Bounding it at the SINK (useNotice) as well is belt and
+ * braces; bounding it here is what keeps the message readable.
+ */
+function quote(value: unknown, max = 80): string {
+  const text = JSON.stringify(value) ?? String(value);
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
 export function importGraph(data: unknown): GraphView {
   if (typeof data !== "object" || data === null) {
     throw new ImportError("That file isn't a BuddyGraph JSON object.");
   }
   const f = data as Partial<BuddyGraphFile>;
   if (f.version !== 1) {
-    throw new ImportError(`Unsupported file version: ${JSON.stringify(f.version)} (expected 1).`);
+    throw new ImportError(`Unsupported file version: ${quote(f.version)} (expected 1).`);
   }
   if (!Array.isArray(f.people) || f.people.length === 0) {
     throw new ImportError("That file has no people.");
@@ -163,9 +177,20 @@ export function importGraph(data: unknown): GraphView {
     if (!p || typeof p.name !== "string") {
       throw new ImportError(`Person at position ${i} is missing a name.`);
     }
+    // Per-NAME length, checked before any message can interpolate the name and before the
+    // collective-length check below. The existing gates bound only totals, so one name could
+    // be half a megabyte: it then becomes the buddy label of everyone adjacent to it, and
+    // BuddyList, Slips and the CSV export each materialize that. A 512 KB file reached 480 MB
+    // of DOM text and ~1 GB RSS. Refused rather than truncated because import refuses
+    // everything else it cannot round-trip; parseRoster, the tolerant authority, truncates.
+    if (p.name.length > MAX_NAME_CHARS) {
+      throw new ImportError(
+        `A name is too long (${p.name.length} characters, the limit is ${MAX_NAME_CHARS}).`,
+      );
+    }
     // Edges reference people by position; a present-but-mismatched id would mislabel them.
     if (p.id !== undefined && p.id !== i) {
-      throw new ImportError(`Person "${p.name}" has id ${p.id} but is at position ${i}.`);
+      throw new ImportError(`Person ${quote(p.name)} has id ${quote(p.id)} but is at position ${i}.`);
     }
     return p.name;
   });
@@ -210,10 +235,21 @@ export function importGraph(data: unknown): GraphView {
     g.addEdge(a, b); // ignores self-loops and de-dupes symmetric entries
   }
 
+  // Per-VERTEX degree, not just average density. The density gate above compares
+  // 2m <= BUDDY_MAX*n — an AVERAGE — so a star graph with one hub of degree n-1 passes it
+  // trivially (at n=1000 that is 2*999 <= 12*1000). `neighborhood.ts` states outright that
+  // "degree is capped at BUDDY_MAX = 12", which was false on this path, and the hub's name
+  // becomes every leaf's buddy label. Checked before the O(n^2) allPairsSummary below.
+  const [degreeMin, degreeMax] = degreeExtent(g.degrees());
+  if (degreeMax > BUDDY_MAX) {
+    throw new ImportError(
+      `Someone in that file has ${degreeMax} buddies — more than the ${BUDDY_MAX} a buddy graph allows.`,
+    );
+  }
+
   const constraints = readConstraints(f.constraints, n);
 
   const summary = allPairsSummary(g);
-  const [degreeMin, degreeMax] = degreeExtent(g.degrees());
   const buddies = g.adj.map((s) => Array.from(s).sort((x, y) => x - y));
   const settings = sanitizeSettings(f.settings, degreeMax);
 

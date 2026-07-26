@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
-import { Constraints, validateDetailed } from "ringweave";
+import { validateDetailed } from "ringweave";
 import type { Settings } from "../model";
 import {
-  resolveNamedPairs, toNamedPairs,
+  resolveNamedPairs, toConstraints, toNamedPairs,
   type ConstraintPair, type NamedPair,
 } from "../constraints";
 import { describeReasons } from "../io/constraintMessages";
@@ -89,11 +89,9 @@ export default function RosterModal({
    */
   const ruleProblems = useMemo(() => {
     if (resolved.pairs.length === 0) return [];
-    const cons = new Constraints(parsed.names.length);
-    for (const p of resolved.pairs) {
-      if (p.kind === "required") cons.require(p.a, p.b);
-      else cons.prohibit(p.a, p.b);
-    }
+    // The SAME builder the worker uses, so this pre-flight can never call a rule set
+    // feasible that the authoritative gate then refuses.
+    const cons = toConstraints(parsed.names.length, resolved.pairs);
     return describeReasons(validateDetailed(cons, settings.buddies), parsed.names);
   }, [resolved.pairs, parsed.names, settings.buddies]);
 

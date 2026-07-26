@@ -9,16 +9,28 @@ import { exportGraphJson } from "../src/io/exportGraph";
 
 // Drive App with a controllable stand-in for the generation worker so we can inject an error
 // state that buildBuddyGraph never actually produces for gated inputs (the branch is defensive).
-const hooks = vi.hoisted(() => {
+const hooks: {
+  state: { status: "idle" | "running" | "done" | "error" | "refused"; result: GraphResult | null; error: string | null; refusals: Reason[] };
+  calls: { n: number; k: number }[];
+  generate: ReturnType<typeof vi.fn>;
+  reset: ReturnType<typeof vi.fn>;
+} = vi.hoisted(() => {
   const state: {
     status: "idle" | "running" | "done" | "error" | "refused";
     result: GraphResult | null;
     error: string | null;
     refusals: Reason[];
   } = { status: "idle", result: null, error: null, refusals: [] };
+  const calls: { n: number; k: number }[] = [];
   return {
     state,
-    generate: vi.fn(() => { state.status = "running"; }),
+    // Records what it was ASKED to generate, not only that it was asked. The reroll
+    // desync below is entirely about the arguments, so a call-count spy cannot see it.
+    calls,
+    generate: vi.fn((req: { n: number; k: number }) => {
+      calls.push({ n: req.n, k: req.k });
+      state.status = "running";
+    }),
     reset: vi.fn(() => {
       state.status = "idle";
       state.result = null;
@@ -46,6 +58,7 @@ beforeEach(() => {
   hooks.state.result = null;
   hooks.state.error = null;
   hooks.state.refusals = [];
+  hooks.calls.length = 0;
   hooks.generate.mockClear();
   hooks.reset.mockClear();
 });
@@ -156,5 +169,112 @@ describe("App handles a refusal from the worker", () => {
       rerender(<App />);
     });
     expect(screen.getByText(/Those buddy rules can't all be met\./)).toBeTruthy();
+  });
+});
+
+// Class: an overlay must own the screen without swallowing itself, and a control that
+// removes its own panel must leave focus somewhere. Both are keyboard-only failures
+// that render perfectly and that a mouse-driven test cannot see.
+describe("overlays and focus", () => {
+  it("never nests the dialog inside an inert ancestor", () => {
+    // `inert` cascades to every descendant with no way to opt back in, so a modal
+    // rendered inside the element carrying it is unreachable — and since the modal
+    // is open on cold load, that was the whole first paint. Asserted structurally
+    // rather than by tabbing, because jsdom does not implement inert's focus
+    // behaviour: the property under test is the containment, which is what the
+    // browser acts on.
+    render(<App />);
+    const dialog = screen.getByRole("dialog");
+    for (const el of Array.from(document.querySelectorAll("[inert]"))) {
+      expect(el.contains(dialog)).toBe(false);
+    }
+    // And the guard is live, not vacuously true because nothing is inert.
+    expect(document.querySelector("#app")?.hasAttribute("inert")).toBe(true);
+  });
+
+  it("makes the page inert while generating, not just unclickable", () => {
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => { rerender(<App />); });
+    // The scrim blocked the mouse; the buddy list and search box behind it stayed
+    // focusable and Enter-activatable the whole time.
+    const app = document.querySelector("#app");
+    expect(app?.hasAttribute("inert")).toBe(true);
+    expect(app?.contains(document.querySelector(".busy"))).toBe(false);
+  });
+
+  it("rerolls the roster on screen, not one abandoned mid-generation", () => {
+    // handleGenerate committed names/settings/constraints at DISPATCH time while the
+    // view only advances on success, so cancelling or failing a second generation left
+    // those three describing a roster that was never built. Reroll read them instead of
+    // the view, and "Different arrangement" silently replaced the displayed graph with a
+    // different roster.
+    const { rerender } = render(<App />);
+    dispatchGenerate(); // 5 people
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    expect(document.querySelector(".rail-big")?.textContent).toBe("5");
+
+    // Dispatch a 9-person generation, then abandon it.
+    fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "A\nB\nC\nD\nE\nF\nG\nH\nI" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => { rerender(<App />); });
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    act(() => {
+      hooks.state.status = "done"; // cancel keeps the old view
+      rerender(<App />);
+    });
+    expect(document.querySelector(".rail-big")?.textContent).toBe("5");
+
+    hooks.calls.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: /different arrangement/i }));
+    expect(hooks.calls).toEqual([{ n: 5, k: 4 }]);
+  });
+});
+
+// Class: focus must never be stranded on <body>. Removing a focused element moves focus
+// there per spec, so the next Tab restarts at the top of the document — a keyboard user
+// who dismisses a panel is thrown back to the header. Nothing in app/src called .focus().
+describe("focus survives a panel closing itself", () => {
+  function withGraph(rerender: (ui: React.ReactElement) => void) {
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+  }
+
+  it("moves focus to the search box when the person panel's Close is used", () => {
+    const { rerender } = render(<App />);
+    withGraph(rerender);
+    // Open the panel from the buddy list, then close it from inside.
+    // Queried by class: a buddy-list row's accessible name is the person PLUS their
+    // buddy labels, so matching on the name alone does not find it.
+    fireEvent.click(document.querySelectorAll(".brow")[0]);
+    const close = screen.getByLabelText("Close person details");
+    close.focus();
+    expect(document.activeElement).toBe(close);
+    fireEvent.click(close);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
+  });
+
+  it("leaves focus alone when Escape is pressed from outside the panel", () => {
+    // The rule is "rescue focus that is about to be destroyed", not "grab focus on every
+    // clear" — Escape can be pressed with focus on the graph or the buddy list.
+    const { rerender } = render(<App />);
+    withGraph(rerender);
+    fireEvent.click(document.querySelectorAll(".brow")[0]);
+    const elsewhere = screen.getByLabelText("Find a person");
+    elsewhere.focus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(elsewhere);
   });
 });

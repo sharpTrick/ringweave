@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { POLISH_MAX_N, viewFromResult, type GraphView, type Settings } from "../model";
+import { viewFromResult, type GraphView, type Settings } from "../model";
+import { autoPolishEnabled } from "ringweave";
 import { splitPairs, pairKey, type ConstraintPair } from "../constraints";
 import { useGenerationWorker } from "./useGenerationWorker";
 
@@ -115,10 +116,19 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     opts?: { reroll?: boolean },
   ) => {
     pending.current = { names, settings, constraints, reroll: opts?.reroll ?? false };
-    // Never DISPATCH an explicit polish=on above the core's polish cap: it is O(n·m)/iter
-    // and would run for tens of seconds. Downgrade to "auto" (which the core disables at
-    // this size anyway), so a hostile imported polish=true can't drive a multi-minute run.
-    const polish = settings.polish === true && names.length > POLISH_MAX_N ? "auto" : settings.polish;
+    // Never DISPATCH an explicit polish=on for a configuration the core would not
+    // auto-polish: it is O(n·m)/iter and would run for tens of seconds. Downgrade to
+    // "auto" (which the core then declines anyway), so a hostile imported polish=true
+    // can't drive a multi-minute run.
+    //
+    // Asks the core rather than comparing against a mirrored cap. The old `names.length >
+    // POLISH_MAX_N` was k-blind, so at k=12 it happily dispatched an explicit polish=true
+    // at n=100 — well past the point the budget declines — which is the expensive
+    // direction of the same drift.
+    const wouldAutoPolish = autoPolishEnabled(names.length, settings.buddies, {
+      constrained: constraints.length > 0,
+    });
+    const polish = settings.polish === true && !wouldAutoPolish ? "auto" : settings.polish;
     genGenerate({
       n: names.length,
       k: settings.buddies,

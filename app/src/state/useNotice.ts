@@ -3,6 +3,25 @@ import { useCallback, useRef, useState } from "react";
 const AUTO_CLEAR_MS = 4000;
 
 /**
+ * Hard ceiling on any notice, applied at the SINK.
+ *
+ * Notices are rendered as the sole text child of the toast, so an unbounded message is an
+ * unbounded DOM text node — and the messages that carry untrusted content are exactly the
+ * import errors, which interpolate values straight out of the file. `importGraph` truncates
+ * at each interpolation, which is where a readable message comes from; this bounds EVERY
+ * producer, including ones written later that forget to.
+ *
+ * Two layers on purpose: per-site truncation cannot be enforced mechanically, one clamp here
+ * can.
+ */
+const MAX_NOTICE_CHARS = 300;
+
+/** Bound and keep it readable: a hard slice mid-word beats a multi-megabyte text node. */
+function clampNotice(message: string): string {
+  return message.length > MAX_NOTICE_CHARS ? `${message.slice(0, MAX_NOTICE_CHARS)}…` : message;
+}
+
+/**
  * Transient user notices (import errors, gate refusals, worker errors). `flash` shows a
  * message and auto-clears it after a few seconds (a newer message wins — it won't be
  * clobbered by an older flash's timer); `show`/`clear` are for status-driven messages the
@@ -13,11 +32,15 @@ export function useNotice() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clear = useCallback(() => setNotice(null), []);
-  const show = useCallback((message: string) => setNotice(message), []);
+  const show = useCallback((message: string) => setNotice(clampNotice(message)), []);
   const flash = useCallback((message: string) => {
-    setNotice(message);
+    const text = clampNotice(message);
+    setNotice(text);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setNotice((n) => (n === message ? null : n)), AUTO_CLEAR_MS);
+    // Compares the CLAMPED text, because that is what state holds — comparing the raw
+    // argument would make the "a newer message wins" guard never match, so a superseded
+    // timer would clear a newer notice.
+    timer.current = setTimeout(() => setNotice((n) => (n === text ? null : n)), AUTO_CLEAR_MS);
   }, []);
 
   return { notice, flash, show, clear };

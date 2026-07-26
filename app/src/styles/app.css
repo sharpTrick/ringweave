@@ -177,7 +177,12 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .m-acts { margin-left: auto; display: flex; gap: 9px; }
 
 /* modal */
-#modal { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(6, 9, 16, 0.72); backdrop-filter: blur(4px); }
+/* `fixed`, not `absolute`: these two overlays are siblings of #app (they must not be
+   descendants of the element carrying `inert`), so there is no positioned ancestor to
+   be absolute within — and covering the whole viewport is what a modal scrim should
+   do anyway. It also survives `main { overflow: auto }` at narrow widths, where an
+   absolutely-positioned scrim let content scroll out from under it. */
+#modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(6, 9, 16, 0.72); backdrop-filter: blur(4px); }
 .sheet { width: min(560px, 92vw); padding: 28px; border-radius: 18px; }
 .sheet h2 { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0 0 6px; }
 .sheet p { color: var(--ink-dim); font-size: 13.5px; margin: 0 0 18px; line-height: 1.5; }
@@ -215,7 +220,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .linklike { background: none; border: none; color: var(--cool); cursor: pointer; font-size: 12px; padding: 0; }
 .linklike:hover { text-decoration: underline; }
 
-.busy { position: absolute; inset: 0; display: grid; place-items: center; z-index: 15; color: var(--ink-dim); font-size: 14px; }
+.busy { position: fixed; inset: 0; display: grid; place-items: center; z-index: 15; color: var(--ink-dim); font-size: 14px; }
 .busy-inner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 /* The always-mounted live region (see Notice.tsx). It holds no layout of its own — the toast
    inside it is position:fixed — so an empty region is invisible and costs nothing. */

@@ -103,6 +103,20 @@ token-swap; M2 ships the mock-faithful dark theme only.
   which would be the disconnected-reads-as-optimal failure in a new place. Closing it properly means
   verifying the rules against the imported edge set, which is a real (cheap) computation and a clean
   follow-on; asserting satisfaction without it is not.
+- **F9's worker-protocol groundwork is DEFERRED, and named here so it is not rediscovered.**
+  `GenerateRequest.constraints` carries only `{required, prohibited}` and `GenerateOptions` has
+  no `priorWeight`/`priorHard`; `ConstraintPair` has no `prior` concept. A grep for
+  `priorWeight`/`priorHard`/`addPrior` across `app/src` returns nothing, so per the no-caller
+  rule this is a deferral rather than a gap. Two things make building it early actively wrong:
+  priors are not user-authored rules (they would be derived from the PREVIOUS view's edges and
+  resolved by name against a possibly-changed roster, for which there is no analogue of
+  `resolveNamedPairs`), and the toggle's home is undecided — `RosterModal` is the natural "Edit
+  people" surface but does not receive the live view's edges. **One hazard is recorded with it,
+  because it is a correctness trap rather than a design choice:** `buildConstrainedBuddyGraph`
+  promotes hard priors to required *before* validating, so an app-side pre-check that validates
+  the UN-promoted set would call a rule set feasible that the builder then refuses. The worker
+  now checks `report.refusals` after building instead of trusting its pre-check to be
+  equivalent, so that trap fails loudly rather than rendering an edgeless graph as satisfied.
 - **The tag UI and the priors/`priorHard` toggle stay deferred.** Tags are P2 in `PROJECT_PLAN.md`
   and `lib/CLAUDE.md` documents two unfixed hazards in them (a dominant tag materializes O(n²)
   prohibited pairs; a `NaN` tag silently never groups). Priors are F9/M4. Neither has a caller.

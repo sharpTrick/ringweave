@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { DEFAULT_SETTINGS, POLISH_MAX_N, viewFromResult } from "../src/model";
+import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+import { autoPolishEnabled } from "ringweave";
 import type { GraphResult } from "../src/worker/protocol";
 import { generateResult } from "./helpers";
 
@@ -164,17 +165,31 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view!.edges).toBe(priorEdges); // same reference -> no re-layout/animation
   });
 
-  it("never DISPATCHES polish=true above POLISH_MAX_N (cost gate)", () => {
+  // Parameterized over k, and asking the CORE where the boundary is rather than mirroring
+  // it. The previous version hardcoded the app's own POLISH_MAX_N at k=4, which is why a
+  // k-blind constant survived: the real gate is k-dependent, so at k=12 this downgrade was
+  // not happening anywhere near where it should — an explicit polish=true at n=100 was
+  // dispatched in full, which is the expensive direction of the same drift.
+  it("never DISPATCHES polish=true for a configuration the core would not auto-polish", () => {
     const { result } = renderHook(() => useBuddyGraph());
-    const big = Array.from({ length: POLISH_MAX_N + 50 }, (_, i) => `P${i}`);
-    act(() => result.current.generate(big, { buddies: 4, polish: true, seed: 1 }, []));
-    const req = hooks.generate.mock.calls.at(-1)![0];
-    expect(req.options.polish).not.toBe(true); // downgraded to "auto"
+    const firstRefused = (k: number) => {
+      for (let n = 4; n <= 4000; n++) if (!autoPolishEnabled(n, k)) return n;
+      throw new Error(`no non-polishing n for k=${k}`);
+    };
 
-    hooks.generate.mockClear();
-    const small = Array.from({ length: POLISH_MAX_N }, (_, i) => `P${i}`);
-    act(() => result.current.generate(small, { buddies: 4, polish: true, seed: 1 }, []));
-    const req2 = hooks.generate.mock.calls.at(-1)![0];
-    expect(req2.options.polish).toBe(true); // honored at/below the cap
+    for (const k of [2, 4, 12]) {
+      const boundary = firstRefused(k);
+      const roster = (count: number) => Array.from({ length: count }, (_, i) => `P${i}`);
+
+      hooks.generate.mockClear();
+      act(() => result.current.generate(roster(boundary), { buddies: k, polish: true, seed: 1 }, []));
+      expect(hooks.generate.mock.calls.at(-1)![0].options.polish).not.toBe(true);
+
+      hooks.generate.mockClear();
+      act(() =>
+        result.current.generate(roster(boundary - 1), { buddies: k, polish: true, seed: 1 }, []),
+      );
+      expect(hooks.generate.mock.calls.at(-1)![0].options.polish).toBe(true);
+    }
   });
 });

@@ -4,6 +4,12 @@ import { rankMatches } from "../search";
 interface Props {
   names: string[];
   onSelect: (index: number) => void;
+  /**
+   * Lets App return focus here when a panel that had focus removes itself. Exposed as a
+   * ref rather than an imperative `focus()` method because the anchor is the input
+   * itself, and a method would be a second way to say the same thing.
+   */
+  inputRef?: React.Ref<HTMLInputElement>;
 }
 
 /** How many results the list shows. Enough to find someone, short enough to scan. */
@@ -21,7 +27,7 @@ const RESULT_LIMIT = 8;
  * "clear this box" — falling through would clear both, and the first press would
  * appear to do the wrong thing.
  */
-export default function PersonSearch({ names, onSelect }: Props) {
+export default function PersonSearch({ names, onSelect, inputRef }: Props) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const listId = useId();
@@ -69,6 +75,7 @@ export default function PersonSearch({ names, onSelect }: Props) {
   return (
     <div id="search" className="glass">
       <input
+        ref={inputRef}
         className="search-in"
         type="text"
         role="combobox"

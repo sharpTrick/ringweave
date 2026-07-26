@@ -21,7 +21,13 @@
  * required-degree over k) but otherwise assume feasibility.
  */
 import { Graph } from "./graph.js";
-import { MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, boundedPolishIterations } from "./budgets.js";
+import {
+  MAX_CONSTRAINED_N,
+  MAX_CONSTRAINED_WORK,
+  constrainedWork,
+  boundedPolishIterations,
+  checkPolishSize,
+} from "./budgets.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -142,14 +148,15 @@ export function polishConstrained(
   checkConstraintIds(input.n, cons);
 
   const rng = new RNG(opts.seed ?? 0);
+  // A size cap as well as the work cap below. `boundedPolishIterations` cannot
+  // reach the all-pairs sweeps and graph copies this function pays outside its
+  // loop, so `polishConstrained(ring(30000), cons, { iters: 0 })` — priced at zero
+  // iterations — still ran for 48 s.
+  const m = input.edgeList().length;
+  checkPolishSize(input.n, m);
   // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
   // exported public API and a wrapper clamp does not apply to a direct caller.
-  const iters = boundedPolishIterations(
-    input.n,
-    input.edgeList().length,
-    opts.iters,
-    DEFAULT_CONSTRAINED_POLISH_ITERS,
-  );
+  const iters = boundedPolishIterations(input.n, m, opts.iters, DEFAULT_CONSTRAINED_POLISH_ITERS);
   // Finiteness-checked like `iters`, and for the same reason. A NaN weight
   // poisons every energy comparison — `next.energy < current` is false for all
   // NaN — so the pass ran its full iteration budget of O(n·m) re-measurements and

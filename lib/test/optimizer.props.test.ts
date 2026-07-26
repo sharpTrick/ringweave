@@ -38,7 +38,13 @@ import {
   buildBuddyGraph,
   buildConstrainedBuddyGraph,
 } from "../src/core/index.js";
-import { MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, polishWork } from "../src/core/budgets.js";
+import {
+  MAX_GREEDY_WORK,
+  greedyWork,
+  MAX_POLISH_WORK,
+  polishWork,
+  checkPolishSize,
+} from "../src/core/budgets.js";
 
 function graphOf(n: number, edges: [number, number][]): Graph {
   const g = new Graph(n);
@@ -361,6 +367,27 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(fromJson).toBe(Infinity);
     expect(polishConstrained(ring(20), cons, { iters: fromJson }).n).toBe(20);
     expect(performance.now() - started2).toBeLessThan(20_000);
+  });
+
+  it("refuses a graph whose PRE-LOOP sweeps already blow the budget", { timeout: 60_000 }, () => {
+    // A work cap is not a size cap. Both polish passes pay two-to-three full
+    // Theta(n(n+m)) all-pairs sweeps plus two graph copies OUTSIDE the loop, and
+    // boundedPolishIterations cannot reach any of it — so the budget priced these
+    // calls at ZERO iterations and they still ran for 160 s and 48 s respectively.
+    //
+    // Asserted as a refusal rather than a duration: a timing bound would only say
+    // this machine was fast enough today, and the property is that the work is
+    // never attempted at all.
+    const huge = ring(40000);
+    expect(() => polish(huge, { maxIters: 0 })).toThrow(/too large to polish/);
+    expect(() => polishConstrained(ring(30000), new Constraints(30000), { iters: 0 })).toThrow(
+      /too large to polish/,
+    );
+
+    // And the cap must not have closed anything the loop would have accepted. The
+    // constrained path documents n=5000 as its ceiling, so that has to still pass.
+    expect(() => checkPolishSize(5000, 10000)).not.toThrow();
+    expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
 
   it("charges the anneal calibration against the same budget as the loop", () => {

@@ -1,11 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { buildBuddyGraph } from "ringweave";
-import { rerollBlockReason, nextRerollSeed, POLISH_MAX_N, SEED_MAX, DEFAULT_SETTINGS } from "../src/model";
+import { buildBuddyGraph, autoPolishEnabled } from "ringweave";
+import { rerollBlockReason, nextRerollSeed, SEED_MAX, DEFAULT_SETTINGS } from "../src/model";
+
+/** A roster size the core will NOT auto-polish at this k — found, not assumed. */
+function tooLargeToVary(k: number): number {
+  for (let n = 4; n <= 4000; n++) if (!autoPolishEnabled(n, k)) return n;
+  throw new Error(`no non-polishing n found for k=${k}`);
+}
 
 describe("reroll gate messages (rerollBlockReason)", () => {
   it("a too-large group says so and never advises enabling already-on polish", () => {
     for (const polish of [false, "auto", true] as const) {
-      const reason = rerollBlockReason(POLISH_MAX_N + 1, { ...DEFAULT_SETTINGS, polish });
+      const reason = rerollBlockReason(tooLargeToVary(DEFAULT_SETTINGS.buddies), {
+        ...DEFAULT_SETTINGS,
+        polish,
+      });
       expect(reason).toMatch(/too large/i);
       expect(reason).not.toMatch(/turn on polish/i);
     }
@@ -50,19 +59,48 @@ describe("core reroll behavior (why post-hoc detection is needed)", () => {
   });
 
   it("above the polish cap a seed bump is always a no-op", () => {
-    const c = buildBuddyGraph(POLISH_MAX_N + 80, 4, { seed: 1 });
-    const d = buildBuddyGraph(POLISH_MAX_N + 80, 4, { seed: 99999 });
+    const big = tooLargeToVary(4) + 80;
+    const c = buildBuddyGraph(big, 4, { seed: 1 });
+    const d = buildBuddyGraph(big, 4, { seed: 99999 });
     expect(c.polished).toBe(false);
     expect(d.edges).toEqual(c.edges);
   });
 
-  // Pin the app's POLISH_MAX_N to the core's actual auto-cap: the core disables polish above
-  // this n, and the app mirrors the literal (model.ts) to gate reroll + polish=on downgrade.
-  // If the core's cap moves, this fails app CI instead of the two silently desyncing.
-  it("the app's POLISH_MAX_N is exactly where the core's auto-polish turns off", () => {
-    // polishIters:1 keeps it fast — we're pinning WHETHER auto-polish runs (the boundary), not
-    // how much it iterates; the `polished` flag reflects that the stage executed either way.
-    expect(buildBuddyGraph(POLISH_MAX_N, 4, { polish: "auto", polishIters: 1 }).polished).toBe(true);
-    expect(buildBuddyGraph(POLISH_MAX_N + 1, 4, { polish: "auto", polishIters: 1 }).polished).toBe(false);
+  // The app no longer mirrors the core's cap as a literal — it calls the core's own
+  // `autoPolishEnabled`. So the property to pin is no longer "120 is the boundary" but
+  // "the predicate the reroll copy is derived from agrees with what the builder does",
+  // AT EVERY k. The old test pinned k=4 only, which is exactly why a k-blind literal
+  // survived: 120 is right at k=4 and wrong at every other k the UI offers.
+  it("the predicate reroll copy is derived from agrees with the builder, at every k", () => {
+    // polishIters:1 keeps it fast — we're pinning WHETHER auto-polish runs, not how much
+    // it iterates; `polished` reflects that the stage executed either way.
+    for (const k of [2, 3, 4, 6, 12]) {
+      const boundary = tooLargeToVary(k);
+      expect(autoPolishEnabled(boundary - 1, k)).toBe(true);
+      expect(buildBuddyGraph(boundary - 1, k, { polish: "auto", polishIters: 1 }).polished).toBe(true);
+      expect(buildBuddyGraph(boundary, k, { polish: "auto", polishIters: 1 }).polished).toBe(false);
+      // And the user-facing copy follows the same predicate, so it can never claim a
+      // roster is "too large to shuffle" that the builder would in fact polish.
+      const settings = { ...DEFAULT_SETTINGS, buddies: k, polish: "auto" as const };
+      expect(rerollBlockReason(boundary - 1, settings)).toBeNull();
+      expect(rerollBlockReason(boundary, settings)).toMatch(/too large/i);
+    }
+  });
+
+  it("the k-blind literal it replaced would have been wrong here", { timeout: 60_000 }, () => {
+    // The regression this closes, stated as a fact about the old constant: 120 was the
+    // cap, and at k=3 the core polishes well past it — so the app refused to dispatch a
+    // reroll that would have worked.
+    expect(autoPolishEnabled(125, 3)).toBe(true);
+    // A reduced iteration count, because the claim is that the seed reaches the RNG at
+    // all — not that a full budget was spent. Two default-budget builds here cost 36 s;
+    // 1000 iterations is 2 s and still diverges. (300 does NOT — the two seeds converge
+    // to the same graph, which is the plateau this file's other tests are about, so the
+    // number is load-bearing rather than arbitrary.)
+    const a = buildBuddyGraph(125, 3, { seed: 1, polishIters: 1000 });
+    const b = buildBuddyGraph(125, 3, { seed: 2, polishIters: 1000 });
+    expect(a.polished).toBe(true);
+    expect(a.edges).not.toEqual(b.edges); // a seed bump DOES vary it
+    expect(rerollBlockReason(125, { ...DEFAULT_SETTINGS, buddies: 3 })).toBeNull();
   });
 });

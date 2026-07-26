@@ -11,7 +11,6 @@
  */
 import {
   Graph,
-  Constraints,
   buildBuddyGraph,
   buildConstrainedBuddyGraph,
   girth,
@@ -19,6 +18,7 @@ import {
   type BuddyResult,
   type ConstrainedBuddyResult,
 } from "ringweave";
+import { joinPairs, toConstraints } from "../constraints";
 import type { GenerateRequest, GenerateResponse, GraphResult } from "./protocol";
 
 /** Rebuild a core Graph from an edge list, so girth can be measured off-thread. */
@@ -90,14 +90,29 @@ export function runGeneration(req: GenerateRequest): GenerateResponse {
       return { id, kind: "ok", result: fromUnconstrained(buildBuddyGraph(n, k, options)) };
     }
 
-    const cons = new Constraints(n);
-    for (const [a, b] of constraints.required) cons.require(a, b);
-    for (const [a, b] of constraints.prohibited) cons.prohibit(a, b);
+    const cons = toConstraints(n, joinPairs(constraints.required, constraints.prohibited));
 
     const refusals = validateDetailed(cons, k);
     if (refusals.length > 0) return { id, kind: "refused", refusals };
 
-    return { id, kind: "ok", result: fromConstrained(n, buildConstrainedBuddyGraph(n, k, cons, options)) };
+    const built = buildConstrainedBuddyGraph(n, k, cons, options);
+    // The builder has its own refusal channel, and the pre-check above is NOT a proof
+    // that it stays empty — it is the same predicate only while the app has no priors to
+    // promote, which is what `withHardPriors` would change. Mapping a refusal to `kind:
+    // "ok"` renders an edgeless graph as "all rules satisfied", which is precisely the
+    // silent partial F7's acceptance criteria forbid. Checked rather than assumed, so the
+    // day a promotion step exists this fails loudly instead of lying.
+    if (built.report.refusals.length > 0) {
+      return {
+        id,
+        kind: "refused",
+        // The builder reports prose; the channel carries structured reasons. Re-derive
+        // them from the same validator rather than parsing its strings back — and if that
+        // somehow disagrees, the error channel is the honest answer, never "ok".
+        refusals: validateDetailed(cons, k),
+      };
+    }
+    return { id, kind: "ok", result: fromConstrained(n, built) };
   } catch (err) {
     return { id, kind: "error", error: err instanceof Error ? err.message : String(err) };
   }
