@@ -1,0 +1,372 @@
+{
+  "config": "proposed-model-diverse-medium-effort",
+  "seedCount": 5,
+  "scoredCount": 5,
+  "erroredSeeds": [],
+  "denominatorWarning": null,
+  "recall": {
+    "strict": 0.8,
+    "loose": 0.8
+  },
+  "matching": {
+    "lineWindow": 10,
+    "note": "strict = same file + line window; loose = strict OR shared class/theme token. Mechanical; no agent judges whether a finding counts."
+  },
+  "byStratum": [
+    {
+      "stratum": "M-mutation",
+      "n": 5,
+      "foundStrict": 4,
+      "foundLoose": 4
+    }
+  ],
+  "leaveOneOut": [
+    {
+      "lens": "critic-correctness",
+      "seedsFound": 4,
+      "soleSourceSeeds": [
+        "sd-05-roster-max-offbyone",
+        "sd-08-dedupe-count-boundary"
+      ],
+      "recallWithoutIt": 0.4
+    },
+    {
+      "lens": "critic-solid",
+      "seedsFound": 2,
+      "soleSourceSeeds": [],
+      "recallWithoutIt": 0.8
+    },
+    {
+      "lens": "critic-maintainability",
+      "seedsFound": 1,
+      "soleSourceSeeds": [],
+      "recallWithoutIt": 0.8
+    }
+  ],
+  "blindSpots": [
+    {
+      "id": "sd-12-second-degree-overlap",
+      "stratum": "M-mutation",
+      "class": "dropped-guard-clause",
+      "file": "app/src/graph/GraphCanvas.tsx"
+    }
+  ],
+  "controls": [
+    {
+      "control": "ctl-01",
+      "errored": false,
+      "findings": 13,
+      "gating": 9,
+      "deadLenses": [],
+      "usable": true,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 1,
+          "checked": "Full surface of app/src: model.ts, state/{useBuddyGraph,useGenerationWorker,useNotice}, io/{importGraph,exportGraph,parseRoster,feasibility,download,readFileText,schema}, worker/{generate.worker,protocol}, graph/{layout,GraphCanvas}, App.tsx and all panels, plus the 22 existing test files and the relevant lib/src/core (bounds, metrics, graph, index) contracts. Ran `npx vitest run` (135 pass). Scratch probes: (1) generation sweep n=3..24, k=2..12 comparing viewFromResult metrics against a recomputed allPairsSummary and comparing isOptimal against the core's asplGap \u2014 zero mismatches, zero disconnected outputs; (2) forceLayout determinism and edge-order sensitivity (order-sensitive, max 4.07 unit displacement on a reversed edge list, but export->import provably preserves edge order, so no user-reachable instability); (3) an App-level RTL reroll-after-cancel test that reproduced the finding below. Grepped for Math.random/Date.now/new Date \u2014 none. Audited every Set/Map iteration in app/src for order dependence \u2014 importGraph sorts adjacency, parseRoster's Maps are insertion-ordered and feed only warning copy, GraphCanvas's highlight sets are membership-only. Checked asplGap's asplLb<=0 escape hatch for a false 100% \u2014 unreachable given assembleMetrics' `measurable` gate and MAX_ROSTER=1e6. Checked import boundaries: n=1, n=2, edgeless, self-loops, disconnected, star K1,999, density cap, control chars, parseRoster round-trip gate, settings sanitization/clamping.",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 2,
+          "checked": "Full surface of app/src in .sextant-worktrees/wt-16 (io/{importGraph,exportGraph,parseRoster,download,readFileText,feasibility,schema}, model.ts, App.tsx, state/*, graph/{layout,GraphCanvas}, panels/*, worker/*) plus app/test. Constructed and RAN hostile inputs with vitest+jsdom against the real modules: (a) import fuzzing \u2014 oversized people, star n=1000 (degMax 999), max-density 12-regular n=1000, K13, self-loop-only, disconnected, constraints-as-string, settings-as-string, -0 / duplicate / symmetric edges, non-integer & Infinity & NaN buddies/minSeparation/seed, 7MB names, 5MB version object; (b) gate ordering \u2014 verified readFileText's 8MB byte gate precedes JSON.parse, and people.length<=1000 + the 2m<=BUDDY_MAX*n density gate both precede new Graph/allPairsSummary/girth/forceLayout (worst-case synchronous re-measure at the cap measured 72-103ms, not a hang); (c) numeric edges at the export boundary \u2014 every hostile graph yielded finite quality/largestComponentFraction and null (never Infinity/NaN) for aspl/diameter/girth, and exportGraphJson never emitted null where a number is declared; (d) settings injection \u2014 sanitizeSettings clamped a star import's degMax-999 fallback to buddies:12, useBuddyGraph downgraded imported polish:true above POLISH_MAX_N, and I could not drive an out-of-range n/k/minSeparation/seed into the worker; (e) spreadsheet sink, hard \u2014 =\"cmd|'/C calc'!A0\", +1+1, -2+3, @SUM(1), '=x, \"=x =y\", leading-space \" =x\", and embedded tab/CR/LF/comma: the leading-only neutralizeCell is SUFFICIENT because parseRoster splits on \\n and comma, maps C0+DEL to spaces and trims, and importGraph refuses control chars then requires a parseRoster round-trip, so no name in a GraphView can carry an embedded delimiter; both sinks (toCsv per cell, copyAll per leading name) share the one guard and I could not get an unneutralized formula into either; (f) parseRoster at the 500K char cap \u2014 all-duplicates 45ms, 1000-then-duplicates 20ms, one unbroken 500K token 2ms, 250K distinct 0.5ms (early exit), janky per keystroke but bounded; (g) forceLayout caps (FORCE_MAX_N/FORCE_MAX_EDGES) are consistent with the import density cap so no import can exceed them, and the hover second-neighborhood walk is O(m) not O(n^2).",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 4,
+          "checked": "Traced the two M3-committed changes named in docs/PROJECT_PLAN.md (\u00a76, \"M3 \u2014 exploration: F7 constraints UI, F8 fuzzy search + node explorer, F10 path finder\") against the app as it stands, reading every file in the fan-out: app/src/model.ts, App.tsx, state/useBuddyGraph.ts, state/useGenerationWorker.ts, worker/protocol.ts, worker/generate.worker.ts, io/schema.ts, io/exportGraph.ts, io/importGraph.ts, io/feasibility.ts, panels/RosterModal.tsx, panels/QualityPanel.tsx, panels/BuddyList.tsx, graph/GraphCanvas.tsx, graph/layout.ts. Cross-checked against lib/src/core/index.ts's actual public export surface (buildConstrainedBuddyGraph, ConstraintReport, validate, bfsDistances) to see which parts of F7/F8 the core already backs vs. what the app-side plumbing is missing. Also attempted the app's declared seam (GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor) for the one app feature it was built for (F8's focus/ego layout) \u2014 app/CLAUDE.md already documents that attempt exhaustively (4 concrete unresolved issues, 8 prior findings across 6 rounds, all suggestion/zero-blocking) and correctly declares the feature itself deferred past M3, so I did not re-litigate it; nothing new to add there.",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 3,
+          "checked": "",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 3,
+          "checked": "Traced the full keyboard/screen-reader path end to end against real components: App.tsx (modal open/close orchestration, generate/import/reroll/cancel handlers), RosterModal.tsx (setup dialog), SettingsControls.tsx, LayoutToggle.tsx, BuddyList.tsx, QualityPanel.tsx, Slips.tsx, Notice.tsx, useNotice.ts, useBuddyGraph.ts, useGenerationWorker.ts, GraphCanvas.tsx (incl. the reduced-motion branch and the click-only deselect path), app.css (stacking/z-index of #modal vs background panels, the global prefers-reduced-motion rule), importGraph.ts/feasibility.ts (error/empty paths). Reproduced two of the three findings with actual RTL + jsdom renders of the real App tree (not a mock): (1) DOM tab-order/focus-containment when the setup dialog reopens over an existing graph, both from a cold start and in isolation; (2) that no code path ever calls onSelect(null) except the SVG background click handler. Also checked: CSS transitions are blanket-disabled under prefers-reduced-motion (app.css:168) and GraphCanvas's own JS position-tween checks matchMedia before animating \u2014 both correctly honored, no defect found there. Checked Notice's live-region mount-once pattern and toast auto-clear timing \u2014 no defect found (region persists per Notice.tsx's own documented rationale, and the ~4s window did not present a reproducible read-before-vanish case worth filing).",
+          "errored": false,
+          "erroredReason": null
+        }
+      ]
+    },
+    {
+      "control": "ctl-02",
+      "errored": false,
+      "findings": 7,
+      "gating": 5,
+      "deadLenses": [
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 3,
+          "checked": "Full-surface read of all 24 files under app/src plus all 22 files under app/test, tracing into the worktree's own lib/ (graph.ts, metrics.ts, bounds.ts, greedy.ts, polish.ts, index.ts) for every number the UI displays. Reproduced with scratch Vitest runs (since deleted; suite left green at 22 files / 135 tests).\n\nAttacked and found clean: (a) DETERMINISM \u2014 no Math.random/Date.now in app/src; d3-force's jiggle PRNG is a per-simulation lcg() seeded s=1 (d3-force/src/simulation.js:26), verified forceLayout run-to-run identical; no Set/Map iteration-order dependence reaches a displayed value (importGraph uses g.edgeList() sorted + Array.from(s).sort numeric; GraphCanvas first/second Sets are read only via .has(); parseRoster Maps are insertion-ordered off a deterministic scan). (b) viewFromResult's hardcoded connected:true is actually SOUND, not merely assumed: greedy.ts never calls removeEdge so the ring seed survives, and polish() returns `best`, monotonically non-increasing in penalizedAspl from a connected input (energy < n) while every disconnected graph is >= 10n \u2014 so the \"disconnected reads as optimal\" failure cannot occur on the generation path. (c) IMPORT BOUNDARY \u2014 node cap, density cap (2m <= BUDDY_MAX*n, exactly equal to FORCE_MAX_EDGES=6000), settings clamping, parseRoster round-trip, control-char refusal, id-vs-position, constraint refusal, Map-not-object keying (no __proto__ hazard); fuzzed n=1, K2, two triangles, star21, path10, K6+isolate \u2014 all scored honestly (quality 0 and aspl null whenever disconnected). (d) ASYNC/STATE \u2014 worker id correlation, swapWorker supersession, pending/consumed refs, import-during-in-flight, identical-reroll settings adoption, loadView cancelling a stale run, App's error effect with `view` in deps; walked each interleaving, no clobber or stale-pairing path found. (e) OFF-BY-ONE \u2014 MAX_IMPORT_N == MAX_ROSTER_N == MAX_NAMES == 1000 boundary is consistent end-to-end; POLISH_MAX_N=120 matches the core's resolveWantPolish literal; nextRerollSeed wrap; computeFit degenerate spans at n=0/1/2; GraphCanvas's display.length===n render guard covers the one-frame stale-positions window.",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 2,
+          "checked": "Full surface of /home/user/ringweave/.sextant-worktrees/wt-17/app/src (all 27 files) plus app/test. Constructed and RAN hostile inputs through vitest against the real modules: (a) worst-case-legal import at both caps (n=1000, 6000 edges) \u2014 measured 100-105 ms synchronous re-measure, acceptable; (b) star import n=1000 with settings.buddies=1 \u2014 confirmed sanitizeSettings clamps the 999-degree fallback to BUDDY_MAX=12; (c) force settle at the density cap \u2014 381 ms, bounded by forceIters/FORCE_MAX_EDGES, no hang; (d) spreadsheet sinks: toCsv/neutralizeCell against `=cmd`, leading TAB, `\"=1+1`, ` =1+1`, and buddy-cell joins \u2014 every cell is RFC4180-quoted so embedded delimiters cannot escape a cell, and the two name producers (parseRoster normalizes C0/DEL to spaces; importGraph refuses C0/DEL outright and enforces a parseRoster round-trip) make an embedded tab/CR/comma/newline unreachable in a name, so the leading-char-only guard is sufficient TODAY; (e) numeric edges: seed=-0, non-integer/NaN/Infinity buddies/minSeparation/seed, version=1.0, self-loops, duplicate edges, mismatched ids, n=1, disconnected imports, degree-1 path graphs \u2014 sanitizeInt/clamps hold, no NaN ever reaches quality/qualityPercent, exported metrics are Infinity-free so JSON.stringify cannot corrupt them; (f) parseRoster degenerate inputs (250k duplicate tokens, 1000 distinct long names) \u2014 linear, ~50 ms, warning strings bounded; (g) gate ORDER in importGraph \u2014 the n cap, density cap and constraints refusal all precede the O(n^2) Graph build and allPairsSummary; (h) prototype-pollution via JSON keys, dangerouslySetInnerHTML/innerHTML/eval \u2014 none present; (i) worker protocol, StrictMode worker lifecycle, stale-id dropping, reset/supersede. Two things broke: both are unbounded attacker-controlled STRINGS reaching main-thread layout, not unbounded numbers.",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 2,
+          "checked": "Read the whole app/src surface (App.tsx, model.ts, GraphCanvas.tsx/layout.ts, io/*, worker/*, panels/*), the app's own CLAUDE.md, PROJECT_PLAN.md's M3 scope (F7 constraints UI, F8 fuzzy search/node explorer, F10 path finder), and the lib core's public API (lib/src/core/index.ts, metrics.ts, graph.ts) plus the Python reference oracle (core.py) to trace what M3's next committed features actually require. Attempted the extension for F10 (path finder, P1, PROJECT_PLAN.md:119-121: 'select two people and see the shortest buddy-chain highlighted... matches BFS; ties broken deterministically') against the real files, and cross-checked F8 (fuzzy search + node explorer) and F7 (constraints UI) for the same fan-out. Verified the declared GraphCanvas seam (LAYOUT_MODES/FIT_MODES/positionsFor) is not implicated by this extension (it's a layout concern, not a selection concern) so did not force a finding through it. Confirmed via grep that no PathFinder/shortestPath/eccentricity code exists yet in app/ or lib/, so this is a genuine forward trace, not diff review.",
+          "errored": false,
+          "erroredReason": null
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    },
+    {
+      "control": "ctl-03",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    },
+    {
+      "control": "ctl-04",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    }
+  ],
+  "perSeed": [
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness"
+      ],
+      "findings": 11,
+      "converged": false
+    },
+    {
+      "id": "sd-08-dedupe-count-boundary",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness"
+      ],
+      "findings": 12,
+      "converged": false
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": false,
+        "loose": false
+      },
+      "byLens": [],
+      "findings": 12,
+      "converged": false
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness",
+        "critic-solid",
+        "critic-maintainability"
+      ],
+      "findings": 12,
+      "converged": false
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness",
+        "critic-solid"
+      ],
+      "findings": 14,
+      "converged": false
+    }
+  ],
+  "caveats": [
+    "Recall is a RELATIVE discriminator between configurations, not an absolute capability estimate. Never state \"the loop finds N% of defects\".",
+    "At n~12 a Wilson 95% CI is roughly +/-25 points; existence and zero-loss claims are supportable, effect-size comparisons are not.",
+    "Strata are reported separately on purpose: hand-authored seeds are harder to detect than real faults, so cross-stratum comparison is invalid.",
+    "Controls measure raw false positives. Whether each is an EFFECTIVE false positive needs adjudication after the run."
+  ],
+  "runId": "wf_28dabccc-9c7",
+  "tokens": {
+    "subagentTokens": 2582545,
+    "agents": 52,
+    "toolCalls": 982
+  },
+  "provenance": "Completed on the SECOND resume, after two session-limit halts. 38 of 52 agents ran live this time; the rest replayed from cache. scoredCount === seedCount and denominatorWarning === null, so this is the pre-registered figure."
+}

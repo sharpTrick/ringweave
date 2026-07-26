@@ -118,5 +118,42 @@
     "subagentTokens": 485726,
     "agents": 6,
     "toolCalls": 128
+  },
+  {
+    "round": 5,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 12,
+    "blocking": 5,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 9,
+    "totalFindings": 14,
+    "files": [
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/bounds.ts",
+      "lib/src/core/polish.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/index.ts",
+      "lib/src/core/graph.ts"
+    ],
+    "classes": [
+      "weak-fragmentation-guard",
+      "inert-public-option",
+      "guarantee-only-in-dev",
+      "optimal-score-for-a-degenerate-graph",
+      "unbounded-work-outside-the-budget",
+      "uncapped-generator-entry-point",
+      "materialization-before-the-gate",
+      "duplicated-source-of-truth",
+      "false-comment-wrong-location",
+      "duplicated-constant-definitions",
+      "vocabulary-drift-public-api",
+      "vocabulary-drift-internal-aliases"
+    ],
+    "subagentTokens": 456875,
+    "agents": 6,
+    "toolCalls": 119
   }
 ]

@@ -338,5 +338,90 @@
         "skipped": false
       }
     }
+  },
+  {
+    "file": "lib-round-05.json",
+    "runId": "wf_400a620b-ab0",
+    "round": 5,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 11,
+      "confirmed": 12,
+      "blocking": 5,
+      "deferrals": 1,
+      "plausible": 1,
+      "themes": 9
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 5,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
   }
 ]

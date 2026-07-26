@@ -128,89 +128,92 @@ Excluding it from the corpus is still correct: a seed on an uncovered line would
 measure "can the reviewer read code no test runs". But it is the single most actionable line in this
 document, and it is a test-suite gap, not a review-process one.
 
-### 4. E3 — recall is 5/5, and one lens found everything
+### 4. E3 — recall is 4/5, and one lens carries it
 
-Data in [`data/recovered-wf_09929847-e79.json`](./data/recovered-wf_09929847-e79.json), reconstructed
-from transcripts by `scripts/sextant/recover-run.mjs`.
+**This supersedes two earlier readings of the same corpus.** The pre-registered figure comes from the
+one run that completed with a valid denominator — `config: proposed-model-diverse-medium-effort`,
+5 of 5 seeds scored, no dead lens in any scored round
+([`data/recall-diverse.json`](./data/recall-diverse.json)). Two earlier attempts were quoted here
+before that was true, and both were wrong in different directions; §4b records what that cost.
 
-| seed | class | loose | strict | found by |
-| --- | --- | --- | --- | --- |
-| sd-05 | off-by-one boundary | FOUND | FOUND | correctness |
-| sd-08 | off-by-one boundary | FOUND | FOUND | correctness |
-| sd-12 | dropped guard clause | FOUND | FOUND | correctness |
-| sd-13 | wrong displayed state | FOUND | FOUND | correctness |
-| sd-15 | inverted comparison | FOUND | FOUND | correctness, solid |
-
-**Recall = 5/5 under both matching strictnesses, and it is durable even though every round is
-incomplete.** That is not a fudge, it follows from the direction of the error: rounds are missing
-`critic-security`, and a lens that has not yet reported can only *add* hits, never remove one. A
-positive observation does not become false when another reviewer shows up.
-
-**What is durable:**
-- Recall is 100% on this corpus. With 5 seeds a Wilson 95% CI still runs from roughly 57% to 100%,
-  so the honest reading is "no blind spot detected", not "no blind spots exist".
-- **Retiring any single lens other than correctness costs zero recall.** Correctness alone found all
-  five, so removing solid, maintainability, interaction *or* security cannot reduce 5/5. E4's
-  pre-registered "zero loss of recall" criterion is **met** for those four — on this corpus.
-
-**Attribution, now settled by a second run.** §4 previously left leave-correctness-out
-*indeterminate*, because `critic-security` had not reported and might have found the same seeds. A
-second scoring run at explicitly-specified medium effort
-([`data/PARTIAL-recall-diverse-medium-effort.json`](./data/PARTIAL-recall-diverse-medium-effort.json))
-answers it. Security ran, and it did not.
-
-| | seeds found | sole source for | recall without it |
+| seed | class | found | by |
 | --- | --- | --- | --- |
-| `critic-correctness` | 4 of 4 | sd-05, sd-08, sd-13 | **0.25** |
-| `critic-security` | 1 of 4 | — | 1.00 |
-| `critic-solid` | 1 of 4 | — | 1.00 |
+| sd-05 | off-by-one boundary | FOUND | correctness |
+| sd-08 | off-by-one boundary | FOUND | correctness |
+| sd-12 | dropped guard clause | **MISSED** | — |
+| sd-13 | wrong displayed state | FOUND | correctness, solid, maintainability |
+| sd-15 | inverted comparison | FOUND | correctness, solid |
 
-So on this corpus the ensemble is **one lens plus three passengers**. Retiring security, solid,
-maintainability or interaction costs zero recall; retiring correctness costs three quarters of it.
-That is a sharp result and it cuts directly at Lever A3 — lens retirement should be gated on unique
-recall, and here four of five lenses have none.
+**Recall = 0.80 strict and loose** (identical, so no seed was matched only by the looser rule). Wilson
+95% CI on 4/5 runs from roughly **28% to 99%** — which is the honest width at n=5 and the reason this
+number is a discriminator between configurations, never a capability estimate.
 
-Read it narrowly. It is four seeds, all from one stratum, all mutation-style boundary and comparison
-flips — precisely the material a correctness lens is pointed at. It says nothing about whether the
-other lenses earn their place on the defect classes they *are* pointed at, and §4's own caution
-about the corpus applies with full force. The honest claim is about this corpus, not about lenses.
+**One lens carries the ensemble.**
 
-**What is still NOT measured, and must not be quoted:**
-- **Precision is unmeasured.** All four clean controls lost all five lenses to the session limit, so
-  the run has *nothing* to say about false positives. The corpus recall figure is likewise over
-  4 of 5 seeds, and the harness refuses to call that the corpus recall — see the
-  `denominatorWarning` in the data. A rerun is in flight; `sd-15`'s detection in the earlier run is
-  durable regardless, since a positive observation is not undone by a later halt.
+| lens | seeds found | sole source for | recall without it |
+| --- | --- | --- | --- |
+| `critic-correctness` | 4 | sd-05, sd-08 | **0.40** |
+| `critic-solid` | 2 | — | 0.80 |
+| `critic-maintainability` | 1 | — | 0.80 |
+| `critic-security`, `critic-interaction` | 0 | — | 0.80 |
 
-**The result that matters most is the negative one.** The first, contaminated run reported `sd-15`
-as a **blind spot**. It is not: correctness and solid both found it, strictly. Had that run been
-taken at face value, Sextant's headline would have been a fabricated blind spot in a defect class
-that the ensemble actually catches. The whole apparatus — treating a dead lens as errored, excluding
-partial rounds from denominators, separating existence claims from absence claims — exists because
-that nearly happened.
+Retiring any lens except correctness costs zero recall on this corpus; retiring correctness halves it.
+That is the sharpest available result on Lever A3, and it points the opposite way from "more lenses
+find more": four of five lenses have no unique recall here. Read narrowly — five seeds, one stratum,
+all mutation-style boundary and comparison flips, which is the material a correctness lens is aimed
+at. It says nothing about the classes the other lenses are aimed at.
 
-**And a caution about the corpus, not the ensemble.** 5/5 on seeds that survived a green-suite gate
+**The blind spot is real and it is a guard clause.** `sd-12` drops a guard in `GraphCanvas.tsx` so the
+neighbourhood glow misclassifies first-degree buddies as second-degree. No lens found it at medium
+effort. It *was* found in an earlier run at unspecified effort — so this is run-to-run variance, not a
+permanent hole, which is itself the finding: SWR-Bench reports that variance within one model nearly
+equals variance across models, and here the same corpus and the same ensemble differed on one seed in
+five between runs. A single run cannot support a blind-spot claim in either direction.
+
+**Precision could not be measured, and the reason is a methodological result.** Only one of four clean
+controls survived with all five lenses alive; the other three lost lenses to session limits. On that
+one control the ensemble filed **13 findings, 9 of them gating** — on unseeded code with no planted
+defect.
+
+The tempting reading is "precision ≈ 0". It is wrong, and the lib loop in §5 is why: those same
+critics found **three genuine blocking defects** in unseeded core code — an optimizer that made
+rosters worse while reporting better numbers, a 33 s default-path generation, and a generator with no
+time bound. A control worktree of your own un-reviewed code is *not* a clean-room. SWR-Bench's
+Clean-PRs can assume cleanliness because they are merged, reviewed changes; a snapshot of code that
+has never had five adversarial lenses pointed at it cannot.
+
+So the honest statement is: **13 findings on one clean control, precision unresolved**, and resolving
+it needs Google's *effective* false-positive definition — an issue nobody took positive action on —
+adjudicated per finding, not the raw count. That adjudication is not done. Recording the number
+without it would be the same error as quoting recall from a contaminated run.
+
+**And a caution about the corpus, not the ensemble.** 4/5 on seeds that survived a green-suite gate
 sounds strong, but §3 showed the suite already catches 7 of 9 comparable mutations. What is left for
-the critics is a residue selected for being hard to test, not hard to *see* — four of the five are
-boundary or comparison flips in code a reader can check by eye. This says the ensemble reads
-carefully. It does not say it would find a defect class nobody thought to seed.
+the critics is a residue selected for being hard to *test*, not hard to *see*. This says the ensemble
+reads carefully. It does not say it would find a defect class nobody thought to seed.
 
-### 4b. What two session-limit halts taught us about the instrument
+### 4b. Three readings of one corpus, and what the halts cost
 
-Both scoring runs were cut off mid-flight, and that is worth reporting rather than hiding, because
-the machinery built to survive it did.
+This section was written three times, and the first two were wrong. That is worth publishing, because
+the failure mode is not exotic — it is what happens by default when a long run is interrupted.
 
-- The harness **excluded** the contaminated seed from the denominator and marked every control
-  **unusable**, instead of scoring a dead lens as a clean one. Before that fix, a run in which every
-  lens died reported `converged: true`.
-- It emitted an explicit `denominatorWarning` rather than a number, so no downstream reader can
-  quote "recall" without meeting the caveat first.
-- The distinction that makes partial data usable at all: **a detection is durable, an absence is
-  not.** Every claim above is of the first kind; every claim withheld is of the second.
+| reading | source | claimed | actually |
+| --- | --- | --- | --- |
+| 1st | first run, 33 of 49 agents dead | recall 0.8, `sd-15` a **blind spot** | void — dead lenses scored as clean |
+| 2nd | recovered from transcripts | recall **5/5**, no blind spot | true of what reported; not the pre-registered config |
+| 3rd | medium-effort run, complete | recall **0.80**, `sd-12` the blind spot | the figure of record |
 
-The cost is real — two runs, ~2.4M subagent tokens, and precision still unmeasured. The alternative,
-though, is a number that looks identical whether it came from five working lenses or from five dead
-ones.
+The first reading is the dangerous one: it would have published a fabricated blind spot in a class the
+ensemble does catch. The machinery that stopped it — marking a dead lens `errored`, excluding
+contaminated rounds from denominators, refusing to emit a ratio without a valid denominator — was
+built *because* that nearly shipped, and it then held through two more halts.
+
+The distinction that makes partial data usable at all: **a detection is durable, an absence is not.**
+Reading 2 was a legitimate existence claim (`sd-15` really was found) and an illegitimate ratio. Every
+claim in §4 is now of the first kind or comes from the complete run.
+
+The cost was real: three runs, ~2.6M subagent tokens, and precision still unresolved. The alternative
+is a number that looks identical whether five lenses worked or five died.
 
 ### 4c. Original plan for this section *(superseded by 4)*
 
@@ -227,6 +230,67 @@ cannot supply. Existence claims and per-seed blind-spot reporting remain valid; 
 comparisons do not.
 
 ---
+
+### 5. The M3 review loop: five rounds, and it has not converged
+
+Data in [`data/rounds/`](./data/rounds/) and the normalized [`data/perRound.json`](./data/perRound.json).
+Target: `lib/src`, the ringweave core, after M3 added `shortestPath`/`eccentricity`, connectivity
+fields on `BuddyResult`, and the `validateDetailed` split.
+
+| round | confirmed | blocking | themes | quiet lenses | dead lenses |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 10 | 3 | 5 | 0 | 0 |
+| 2 | 3 | 2 | 3 | — | **3** (session limit) |
+| 3 | 14 | 4 | 8 | 2 | 0 |
+| 4 | 5 | 1 | 4 | 2 | 0 |
+| 5 | 13 | 5 | 9 | 1 | 0 |
+
+**It is not monotone, and round 4 was a false summit.** After four rounds of decline, round 5 found
+more than round 4 by every measure. Had the loop stopped at round 4's single blocking finding it would
+have stopped one round before its largest blocking count. This is the same shape E1 had, and the same
+shape Calboreanu published (15, 8, 12, 2, 8, 1, 4, 1, 0) — and it is the strongest evidence available
+for the two-consecutive-clean-rounds rule, which neither this loop nor E1's has yet satisfied.
+
+**Full-surface review of a component you just touched finds old bugs.** None of round 1's three
+blocking findings were in M3's new code. They were pre-existing core defects: `penalizedAspl`'s flat
+disconnection penalty meant both polish passes hill-climbed into *deeper* fragmentation while the
+average separation they reported "improved" (a 16-person roster went from one group of 14 to five
+fragments, reported separation falling 5.0 → 1.3); the polish gate bounded `n` and nothing else, so
+`buildBuddyGraph(120, 12)` took 33 s while `(121, 12)` took 0.1 s; and `ringGreedy` had a memory cap
+and no time cap, so `(1000, 999)` — which `validate` refuses outright on the constrained path — ran
+over 22 minutes without returning.
+
+**Self-induction, observed live for five consecutive rounds.** E1 could only measure this post-hoc via
+blame, at 68% of classifiable findings. Here the chain is visible with its causality intact, because
+each round's blocking finding names the previous round's fix:
+
+| round | introduced | next round found |
+| --- | --- | --- |
+| 1 | `MAX_POLISH_WORK` gate | consulted only on the auto path — one boolean reopened the 33 s case |
+| 2 | wrapper clamp on iterations | doesn't bind for direct callers; no constant term (`(3,2)` with `1e9` iterations ran **35.7 s** on a 3-vertex graph); calibration ran before the bound |
+| 3 | enforcement inside the primitives | cost model missing the n² term — `allPairsSummary` is Θ(n·(n+m)), so a 3000-vertex 4-edge graph got the full budget |
+| 4 | `n·(n+m)` model + overhead | fragmentation guard compares component *count*, weaker than largest-component *size* |
+
+Two things make this different from E1's tail, and both matter. Each fix was **right about the defect
+it named and wrong about where enforcement belonged** — so the sequence is a search converging on a
+design (budget in the wrapper → in the primitives → with the right cost model), not churn. And
+`MAX_POLISH_WORK` was re-derived twice to hold the `(120,4)`/`(121,4)` boundary that fixtures pin; both
+times the fixtures regenerated **byte-identical**, which is the check that a recalibration was honest
+rather than convenient.
+
+**The ensemble does something a single reviewer would not.** Two different lenses, three rounds apart,
+independently built exhaustive probes of the round-1 fix — one examining **432,954** fragmenting
+double-edge swaps, the other **1,293,327** — and neither found a swap that fragments while lowering the
+objective. Neither was asked to. That is stronger evidence than the property tests in the repo, and it
+came from something with no stake in the answer.
+
+**A hazard of the method, found the hard way.** A lens left its probe in the working tree as
+`lib/test/zz_frag.test.ts`. Vitest picked it up, it ran 90 s, timed out, and on the next `npm test`
+read as two *failing* tests — looking exactly like a regression in the fix just made, and it would have
+broken CI if committed. Lenses have Bash access on purpose; nothing tells them to clean up, and a
+prompt asking them to would be another instruction obeyed ~79% of the time. Closed mechanically
+instead: git is the oracle, an unstaged file in a test directory is residue, and the check proves
+itself by creating the thing it catches.
 
 ## Method & provenance
 
