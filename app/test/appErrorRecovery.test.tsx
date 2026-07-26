@@ -251,6 +251,38 @@ describe("focus survives a panel closing itself", () => {
     });
   }
 
+  // The rescue is now ONE mechanism at the commit boundary, not a helper each call site has
+  // to remember. These cases are therefore a sample of the class, not an enumeration of it —
+  // three earlier rounds each fixed the call sites review had found and each missed the next
+  // batch, which is the argument for testing the mechanism rather than the sites.
+  it("rescues focus wherever the removal happened, including places nothing calls a helper", () => {
+    const { rerender } = render(<App />);
+    withGraph(rerender);
+    fireEvent.click(document.querySelectorAll(".brow")[0]);
+    // Focus explicitly: jsdom's click does not move focus the way a browser's does, and the
+    // rescue keys on focus actually having been somewhere. Focusing here is standing in for
+    // the browser, not working around the mechanism — the e2e harness checks the real thing.
+    const close = screen.getByLabelText("Close person details");
+    close.focus();
+    expect(document.activeElement).toBe(close);
+    // Escape, which goes through useEscape — a path with no rescue helper anywhere on it.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
+  });
+
+  it("does not steal focus when the user deliberately blurs to the background", () => {
+    // The rescue keys on "focus is on <body> AFTER a commit that removed something", not on
+    // blur. Clicking the page background is a legitimate way to end up on <body> and must be
+    // left alone, or focus becomes impossible to put down.
+    const { rerender } = render(<App />);
+    withGraph(rerender);
+    const search = screen.getByLabelText("Find a person");
+    search.focus();
+    search.blur();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("moves focus to the search box when the person panel's Close is used", () => {
     const { rerender } = render(<App />);
     withGraph(rerender);

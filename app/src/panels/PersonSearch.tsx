@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rankMatches } from "../search";
 
 interface Props {
@@ -31,6 +31,10 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const listId = useId();
+  // The component's own handle on its input, so `choose` can return focus there directly.
+  // The global rescue would also catch this, but relying on a backstop for a case we know
+  // about is worse than handling it: the backstop is for the cases nobody thought of.
+  const ownInput = useRef<HTMLInputElement>(null);
   const rowId = (i: number) => `${listId}-r${i}`;
 
   const matches = useMemo(() => rankMatches(query, names, RESULT_LIMIT), [query, names]);
@@ -41,8 +45,12 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
 
   const choose = (index: number) => {
     onSelect(index);
+    // Clearing the query closes the listbox, unmounting the very option button a MOUSE user
+    // just clicked — so focus would land on <body>. The keyboard path never leaves the
+    // input and was unaffected, which is exactly why this went unnoticed.
     setQuery("");
     setActive(0);
+    ownInput.current?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -75,7 +83,11 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
   return (
     <div id="search" className="glass">
       <input
-        ref={inputRef}
+        ref={(node) => {
+          ownInput.current = node;
+          if (typeof inputRef === "function") inputRef(node);
+          else if (inputRef) (inputRef as React.RefObject<HTMLInputElement | null>).current = node;
+        }}
         className="search-in"
         type="text"
         role="combobox"

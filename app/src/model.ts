@@ -196,8 +196,16 @@ export function connectionSummary(m: Metrics): string {
     return `not everyone's connected — ${pct}% are in the largest group`;
   }
   if (m.aspl == null) return "not enough people yet to score";
-  if (qualityPercent(m) < WELL_LINKED_PCT) return "everyone's connected, but loosely linked";
-  return "everyone's well-linked";
+  // NAMES THE YARDSTICK. `quality` is the gap to the Moore bound FOR THE DEGREE THIS GRAPH
+  // ACTUALLY HAS — deliberately so, since a 3-regular graph can be exactly optimal for 3
+  // buddies and scoring it against a 12-buddy bound would call it bad for succeeding. But a
+  // bare "everyone's well-linked" reads as a claim about the group in the abstract, and two
+  // rosters with different buddy counts then sit next to different hop counts with captions
+  // that do not explain why. Saying what the score is relative to costs one clause and makes
+  // the sentence true as written.
+  const per = `${m.degreeMax} ${m.degreeMax === 1 ? "buddy" : "buddies"} each`;
+  if (qualityPercent(m) < WELL_LINKED_PCT) return `everyone's connected, but loosely linked for ${per}`;
+  return `everyone's well-linked for ${per}`;
 }
 
 /** Raw numeric metrics a graph yields, before display normalization. */

@@ -28,10 +28,13 @@ export const MAX_NAMES = MAX_ROSTER_N;
 export const MAX_NAME_CHARS = 120;
 
 const TOKEN = /[^\n,]+/g;
-// C0 control chars (incl. tab and CR) and DEL. They are not line/comma delimiters here, so
-// they'd otherwise survive inside a name and later act as a cell/row delimiter when the roster
-// is pasted into a spreadsheet (a formula-injection vector) — normalized to spaces below.
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+// Unicode control (Cc) and format (Cf) characters. They are not line/comma delimiters here,
+// so they'd otherwise survive inside a name and later act as a cell/row delimiter when the
+// roster is pasted into a spreadsheet (a formula-injection vector) — normalized to spaces
+// below. Categories rather than a hand-written C0+DEL range: that range missed the whole C1
+// block and every format character, including the bidi overrides that can visually reverse a
+// name. `importGraph` refuses the same set; this side, being the tolerant one, normalizes.
+const CONTROL_CHARS = /[\p{Cc}\p{Cf}]/gu;
 
 /** THE character-truncation notice — shared so the parser's own warning and the RosterModal UI
     can't drift in wording. (In the app, RosterModal pre-caps to MAX_PARSE_CHARS and shows this

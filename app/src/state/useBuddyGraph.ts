@@ -9,11 +9,7 @@ function sameStrings(a: string[], b: string[]): boolean {
 }
 
 function sameEdges(a: [number, number][], b: [number, number][]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false;
-  }
-  return true;
+  return a.length === b.length && a.every((e, i) => e[0] === b[i][0] && e[1] === b[i][1]);
 }
 
 /**

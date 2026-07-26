@@ -15,7 +15,13 @@ import type { BuddyGraphFile } from "./schema";
 export class ImportError extends Error {}
 
 /** C0 control chars + DEL — illegal inside a name (non-global so .test() is stateless). */
-const CONTROL_CHARS_TEST = /[\u0000-\u001f\u007f]/;
+// Unicode CATEGORIES, not a hand-written range. The previous class covered C0 and DEL and
+// missed the entire C1 block (U+0080-U+009F, including NEL U+0085, which some tools treat as
+// a line break) and every format character — the soft hyphen, the zero-width spaces, and the
+// bidi overrides U+202A-U+202E, which can visually reverse a name in a buddy list or a
+// printed slip. None of them are removed by trim() either, so they survived into the CSV and
+// the clipboard exactly like the characters this guard was written to stop.
+const CONTROL_CHARS_TEST = /[\p{Cc}\p{Cf}]/u;
 
 /**
  * Import bounds. The core's pure metric functions (`allPairsSummary`/`girth`) are UNCAPPED
@@ -41,7 +47,9 @@ function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): 
 }
 
 /** Sanitize the settings block: values come from arbitrary JSON. `buddies` and
-    `minSeparation` become generation targets a later reroll passes to the core, so both are
+    `minSeparation` are STORED on the view and handed to the core by any later reroll — the
+    import itself rehydrates edges and never generates, so they are not used now, which is
+    exactly why they have to be bounded now. Both are
     CLAMPED to the UI range [BUDDY_MIN, BUDDY_MAX] — an untrusted file must not inject a value
     the stepper can't express (a star import's near-n degree fallback — up to MAX_IMPORT_N-1,
     e.g. 999 — or a declared minSeparation of 1e9) and drive generation out of range. */

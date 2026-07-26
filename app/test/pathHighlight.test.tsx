@@ -139,17 +139,28 @@ describe("usePathFinder", () => {
     expect(route.length - 1).toBe(bfsDistances(graph, 0)[3]);
   });
 
-  it("draws the same line whichever end is picked first", () => {
-    // shortestPath is greedy from its source, so s->t and t->s can be different
-    // (both shortest) paths. Picking Ana then Dia is the same question as Dia
-    // then Ana, so the canonicalisation is what makes the UI make sense.
+  it("draws the same line whichever end is picked first, read from that end", () => {
+    // shortestPath is greedy from its source, so s->t and t->s can be different (both
+    // shortest) paths. Picking Ana then Dia is the same question as Dia then Ana, so the
+    // canonicalisation is what makes the UI make sense.
+    //
+    // But "the same line" is a claim about the EDGES LIT, not about array order. Asserting
+    // array equality also pinned the reading direction, and that pinned the wrong thing:
+    // starting from the higher-indexed person rendered the chain from the other end, while
+    // the panel's live region had just said "Starting from Dia". Same line, opposite
+    // sentence. So the property splits in two.
     const { result: a } = renderHook(() => usePathFinder(graph));
     act(() => a.current.start(0));
     act(() => { a.current.complete(3); });
     const { result: b } = renderHook(() => usePathFinder(graph));
     act(() => b.current.start(3));
     act(() => { b.current.complete(0); });
-    expect(a.current.route).toEqual(b.current.route);
+
+    // Same line: identical as a sequence once orientation is removed.
+    expect(a.current.route).toEqual([...b.current.route!].reverse());
+    // Read from the end the user named: each route starts at that user's own first pick.
+    expect(a.current.route![0]).toBe(0);
+    expect(b.current.route![0]).toBe(3);
   });
 
   it("reports no chain rather than an empty route", () => {

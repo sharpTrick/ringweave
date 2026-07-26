@@ -15,6 +15,7 @@ import { useNotice } from "./state/useNotice";
 import { useExplorerHistory } from "./state/useExplorerHistory";
 import { useGraph } from "./state/useGraph";
 import { useEscape } from "./state/useEscape";
+import { useFocusRescue } from "./state/useFocusRescue";
 import { usePathFinder } from "./state/usePathFinder";
 import { describeReasons } from "./io/constraintMessages";
 import { toNamedPairs, type ConstraintPair, type NamedPair } from "./constraints";
@@ -77,54 +78,16 @@ export default function App() {
   // for the whole life of a view, which is what makes it a valid anchor.
   const searchRef = useRef<HTMLInputElement>(null);
 
-  /**
-   * Close something whose own close button lives inside it, without dropping focus.
-   *
-   * When the focused element is removed from the DOM the browser moves focus to
-   * `<body>`, so the next Tab restarts at the top of the document — a keyboard user who
-   * dismisses the person panel is thrown back to the header and has to walk the whole
-   * page to get back. Nothing in the app called `.focus()` anywhere.
-   *
-   * Focus is only moved when it is ABOUT TO BE DESTROYED — i.e. when the active element
-   * is inside the panel being closed. Escape can be pressed with focus on the graph or
-   * the buddy list, and yanking it to the search box then would be its own bug.
-   */
-  const closeWithFocus = (panelId: string, close: () => void) => {
-    const active = document.activeElement;
-    const losing = active instanceof Node && !!document.getElementById(panelId)?.contains(active);
-    close();
-    if (losing) searchRef.current?.focus();
-  };
-
-  /**
-   * The same rescue for the two OVERLAYS, which the panel version could not cover.
-   *
-   * The first fix here handled the person and route panels and stopped there — so the
-   * three most common dismissals in the app still stranded focus on `<body>`: clicking
-   * "Generate buddy graph" on cold load (the very first action anyone takes), cancelling
-   * the roster editor, and cancelling a re-roll from the busy overlay. In each case the
-   * control that was clicked is unmounted by its own onClick. Fixing the reported case and
-   * calling the theme closed is the anti-pattern this repo's protocol names, and this is
-   * what it looks like from the inside.
-   *
-   * Queried by class rather than id because neither overlay carries one, and both live
-   * outside `#app` now.
-   */
-  const dismissOverlay = (selector: string, dismiss: () => void) => {
-    const active = document.activeElement;
-    const losing = active instanceof Node && !!document.querySelector(selector)?.contains(active);
-    dismiss();
-    // Falls back to the roster field when there is no graph yet — after a first-generation
-    // cancel the modal reopens and the search box does not exist, so the anchor has to be
-    // something that is actually on screen.
-    if (losing) {
-      requestAnimationFrame(() => {
-        const anchor =
-          searchRef.current ?? document.querySelector<HTMLElement>('[aria-label="Roster names"]');
-        anchor?.focus();
-      });
-    }
-  };
+  // ONE rescue for the whole app, at the commit boundary — see useFocusRescue. There is
+  // deliberately no per-call-site helper: two rounds of review found the call sites that had
+  // been missed, because "remember to call the helper" is not a mechanism.
+  //
+  // The anchor is resolved lazily at rescue time, not captured: which element is on screen
+  // depends on whether a graph exists yet, and the modal's roster field is the only landing
+  // spot during a first generation.
+  useFocusRescue(() =>
+    searchRef.current ?? document.querySelector<HTMLElement>('[aria-label="Roster names"]'),
+  );
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
   // need real core queries and neither may reimplement them.
@@ -147,10 +110,8 @@ export default function App() {
   // modal is open: it has no Escape handling of its own, and clearing state behind
   // an open dialog is invisible.
   useEscape(() => {
-    // Same focus rule as the panels' own buttons: Escape removes the same elements, so it
-    // strands focus on <body> in exactly the same way when it is pressed from inside one.
-    if (path.active) closeWithFocus("route", path.clear);
-    else closeWithFocus("person", () => explorer.select(null));
+    if (path.active) path.clear();
+    else explorer.select(null);
   }, !modalOpen);
 
   useEffect(() => {
@@ -190,7 +151,7 @@ export default function App() {
     setConstraintRows(rows);
     resetSelection();
     bg.generate(roster, s, rules);
-    dismissOverlay("#modal", () => setModalOpen(false));
+    setModalOpen(false);
   };
 
   const handleReroll = () => {
@@ -225,10 +186,8 @@ export default function App() {
   };
 
   const cancelGeneration = () => {
-    dismissOverlay(".busy", () => {
-      bg.cancel();
-      if (!view) setModalOpen(true); // first generation has no graph to fall back to
-    });
+    bg.cancel();
+    if (!view) setModalOpen(true); // first generation has no graph to fall back to
   };
 
   const handleExport = () => {
@@ -326,7 +285,7 @@ export default function App() {
                   canGoBack={explorer.canGoBack}
                   onSelect={setSelected}
                   onBack={explorer.back}
-                  onClose={() => closeWithFocus("person", () => setSelected(null))}
+                  onClose={() => setSelected(null)}
                   onFindPath={() => path.start(selected)}
                 />
               )}
@@ -338,7 +297,7 @@ export default function App() {
                   route={path.route}
                   unreachable={path.unreachable}
                   onSelect={(i) => explorer.select(i)}
-                  onClear={() => closeWithFocus("route", path.clear)}
+                  onClear={path.clear}
                 />
               )}
 
@@ -361,7 +320,7 @@ export default function App() {
           rules={constraintRows}
           canCancel={view !== null}
           onGenerate={handleGenerate}
-          onCancel={() => dismissOverlay("#modal", () => setModalOpen(false))}
+          onCancel={() => setModalOpen(false)}
         />
       )}
 

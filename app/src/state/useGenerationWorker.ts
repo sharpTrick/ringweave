@@ -55,6 +55,20 @@ export function useGenerationWorker() {
       else if (msg.kind === "refused") setState({ ...IDLE, status: "refused", refusals: msg.refusals });
       else setState({ ...IDLE, status: "error", error: msg.error });
     };
+    // The worker's OWN failure channels, not just the ones it reports over the protocol.
+    // Only `onmessage` was registered, so a worker that failed to load or died mid-run
+    // never produced a message at all and the hook sat at status "running" forever. That
+    // was cosmetic when the page stayed interactive; now that `#app` is `inert` while
+    // running, it locks the entire UI with the overlay up and no way out.
+    //
+    // Both map onto the existing "error" transition, whose recovery path (toast, and
+    // reopening the setup modal when there is no graph yet) is already tested.
+    const fail = (what: string) => {
+      runningRef.current = false;
+      setState({ ...IDLE, status: "error", error: what });
+    };
+    worker.onerror = () => fail("Generation failed to start.");
+    worker.onmessageerror = () => fail("Generation sent back something unreadable.");
   }, []);
 
   const swapWorker = useCallback(() => {

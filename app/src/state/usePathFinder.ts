@@ -10,6 +10,12 @@ import { shortestPath, type Graph } from "ringweave";
  * Ana then Ben and picking Ben then Ana are the same question, so they must draw
  * the same line; always running from the lower index guarantees that, and it also
  * makes the route stable across an export/import round trip.
+ *
+ * The RESULT is then oriented to the person the user started from. Returning it in
+ * canonical order meant that starting from the higher-indexed person rendered the chain
+ * from the other end, contradicting the "Starting from Ana — now pick the other person"
+ * sentence the same panel had just announced. A reversed shortest path is still the same
+ * shortest path, so reversing the array costs nothing the canonicalisation was protecting.
  */
 export function usePathFinder(graph: Graph) {
   const [from, setFrom] = useState<number | null>(null);
@@ -21,7 +27,9 @@ export function usePathFinder(graph: Graph) {
     if (a >= graph.n || b >= graph.n) return { route: null, unreachable: false };
     const [s, t] = a <= b ? [a, b] : [b, a];
     const path = shortestPath(graph, s, t);
-    return { route: path, unreachable: path === null };
+    // `ends[0]` is the person the user picked FIRST, whichever index they happen to have.
+    const oriented = path !== null && path[0] !== a ? [...path].reverse() : path;
+    return { route: oriented, unreachable: path === null };
   }, [ends, graph]);
 
   /** Begin a route from `i`, discarding any route already drawn. */

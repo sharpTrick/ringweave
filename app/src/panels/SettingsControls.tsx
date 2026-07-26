@@ -26,10 +26,29 @@ export default function SettingsControls({ settings, onChange }: Props) {
     <>
       <div className="field">
         Buddies each
+        {/* The value is announced two ways, because the two are for different moments.
+            `role="status"` reports the NEW number after a press — the buttons keep focus, so
+            without it a screen-reader user pressing "+" hears nothing at all and has no way to
+            know whether the press registered. The value in each button's own label reports the
+            CURRENT number to someone who has just tabbed onto the control and has not pressed
+            anything yet. LayoutToggle's `aria-pressed` is the same idea for a control whose
+            state is a choice rather than a count. */}
         <div className="stepper">
-          <button type="button" aria-label="fewer buddies" onClick={() => setK(settings.buddies - 1)}>−</button>
-          <span className="val tabnum">{settings.buddies}</span>
-          <button type="button" aria-label="more buddies" onClick={() => setK(settings.buddies + 1)}>+</button>
+          <button
+            type="button"
+            aria-label={`fewer buddies, currently ${settings.buddies}`}
+            onClick={() => setK(settings.buddies - 1)}
+          >
+            −
+          </button>
+          <span className="val tabnum" role="status" aria-live="polite">{settings.buddies}</span>
+          <button
+            type="button"
+            aria-label={`more buddies, currently ${settings.buddies}`}
+            onClick={() => setK(settings.buddies + 1)}
+          >
+            +
+          </button>
         </div>
       </div>
       <details>
