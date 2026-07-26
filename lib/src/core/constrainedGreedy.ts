@@ -257,7 +257,7 @@ function extendOne(
  * target value.
  *
  * There used to be a second pass here that scanned for the first candidate at
- * least `minSep` away, "falling back to the best available when none qualify".
+ * least `minSeparation` away, "falling back to the best available when none qualify".
  * That scan was provably a no-op and it is deleted rather than kept as decoration:
  * candidates are sorted by farness DESCENDING, and unreachable sorts to the top
  * (INFINITE_DISTANCE), so `candidates[0]` is always the farthest. If it qualifies
