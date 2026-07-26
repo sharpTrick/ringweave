@@ -60,3 +60,15 @@ and the out-of-scope classes) in your prompt. Follow it exactly. Two things bind
   you cannot state one, say so; the finding is filed but does not gate convergence.
 - **Do not file lint classes.** They are owned by `npm run lint`, which runs and must be clean
   *before* you are spawned.
+
+## Throwaway harnesses
+
+Measuring beats speculating, and you have Bash to do it with. Write any scratch
+script, benchmark or probe under **`.review-scratch/`** (create it if absent) — never
+under `app/test/` or `lib/test/`.
+
+Anything you leave in a test directory is picked up by vitest on the next run. A
+probe that loops for 90 seconds then times out reads as a FAILING test, which looks
+exactly like a regression in the fix you were checking, and it breaks CI if it gets
+committed. `.review-scratch/` is gitignored and outside every test glob, so work
+there freely and leave it behind if you like.

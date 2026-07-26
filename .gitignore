@@ -8,3 +8,15 @@ coverage/
 __pycache__/
 *.pyc
 .sextant-worktrees/
+
+# Throwaway harnesses review lenses write while checking a fix. They have Bash
+# access on purpose — one examined 432,954 graph swaps to verify an objective — but
+# nothing tells an agent to clean up, and a probe left under app/test or lib/test
+# gets picked up by vitest, runs for 90 s, times out, and reads as a FAILING test
+# on the next run. Give them somewhere that is neither a test glob nor tracked.
+# `scripts/hygiene/run.mjs` still fails on an untracked file under */test/, so this
+# is a designated place to work, not a way to hide residue.
+.review-scratch/
+
+# tsc --build cache; regenerated on demand and machine-specific.
+*.tsbuildinfo
