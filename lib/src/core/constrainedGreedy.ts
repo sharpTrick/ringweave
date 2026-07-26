@@ -10,10 +10,10 @@
  * against the Python reference on invariants and aggregate metrics rather than
  * byte-for-byte structure.
  *
- * Unlike `ringGreedy`, completion has no `demote` step: when no partner sits at
- * least `minSeparation` away, `choosePartner` falls back to the farthest legal
- * partner available (even if closer than the target) instead of iteratively
- * shrinking the target (matches the reference).
+ * Unlike `ringGreedy`, completion has no `demote` step and no separation target at
+ * all: `choosePartner` always takes the farthest legal partner. `minSeparation` is
+ * accepted on the options for call-site compatibility and cannot change the
+ * output — see `choosePartner`.
  *
  * These are low-level primitives; the safe entry point is
  * `buildConstrainedBuddyGraph`, which runs `validate` first. Called directly
@@ -21,7 +21,7 @@
  * required-degree over k) but otherwise assume feasibility.
  */
 import { Graph } from "./graph.js";
-import { DEFAULT_MIN_SEPARATION, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, boundedPolishIterations } from "./budgets.js";
+import { MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, boundedPolishIterations } from "./budgets.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -47,17 +47,28 @@ type EdgePredicate = (u: number, v: number) => boolean;
 interface Measured {
   energy: number;
   connected: boolean;
-  /** Number of connected components — the quantity the fragmentation guard compares. */
+  /** Number of connected components. */
   components: number;
+  /** Size of the largest component. Count alone is too weak — see the guard. */
+  largest: number;
 }
 
 export interface ConstrainedGreedyOptions {
-  /** Separation to aim for during completion. Default 5, clamped to floor(n/2). */
+  /**
+   * ACCEPTED AND IGNORED. Completion maximises separation greedily rather than
+   * aiming at a value, so this cannot change the output — see `choosePartner` for
+   * the proof. Kept for call-site compatibility; removing it is a breaking change.
+   */
   minSeparation?: number;
 }
 
-/** Documented default iteration budget for the constrained pass. */
-const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
+/**
+ * Documented default iteration budget for the constrained pass. Exported for the
+ * same reason as `DEFAULT_POLISH_ITERS`: the auto-polish gate in
+ * `buildConstrainedBuddyGraph` models it, and two declarations cannot be kept in
+ * step by hoping.
+ */
+export const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
 
 export interface PolishConstrainedOptions {
   /** Seed for the swap RNG (reproducible within JS). Default 0. */
@@ -70,7 +81,7 @@ export interface PolishConstrainedOptions {
 
 /**
  * Lay required edges first (never removed), greedily complete toward degree k
- * while honoring prohibited pairs and a soft minimum-separation target, then
+ * while honoring prohibited pairs and maximising separation greedily, then
  * force-connect leftover components without exceeding k. Sacrifices regularity
  * and, when the degree budget won't allow it, connectivity — never a hard
  * constraint.
@@ -79,7 +90,10 @@ export function constrainedGreedy(
   n: number,
   k: number,
   cons: Constraints,
-  opts: ConstrainedGreedyOptions = {},
+  // Accepted and unused: `minSeparation` is its only field and completion cannot
+  // act on it (see `choosePartner`). Named with a leading underscore so the
+  // unused-parameter rule confirms that rather than being suppressed.
+  _opts: ConstrainedGreedyOptions = {},
 ): Graph {
   checkWellFormed(n, k, cons);
 
@@ -87,11 +101,6 @@ export function constrainedGreedy(
   const legal = legalEdge(g, cons, k);
 
   for (const [a, b] of cons.requiredPairs()) g.addEdge(a, b);
-
-  const minSep = Math.min(
-    opts.minSeparation ?? DEFAULT_MIN_SEPARATION,
-    Math.floor(n / 2),
-  );
 
   // Most-deficient vertex connects to its farthest legal partner. A vertex with
   // no legal partner is skipped, not fatal — one stuck person must not starve
@@ -106,7 +115,7 @@ export function constrainedGreedy(
   for (let step = 0; step < completionCap; step++) {
     const under = deficientVertices(g, k, stuck);
     if (under.length === 0) break;
-    if (!extendOne(g, under, legal, minSep, stuck)) break;
+    if (!extendOne(g, under, legal, stuck)) break;
   }
 
   forceConnect(g, cons, k);
@@ -154,6 +163,7 @@ export function polishConstrained(
   const g = input.copy();
   const start = measure(g);
   const startComponents = start.components;
+  const startLargest = start.largest;
   let current = start.energy;
   let best = g.copy();
   let bestEnergy = current;
@@ -166,14 +176,19 @@ export function polishConstrained(
 
     applySwap(g, swap);
     const next = measure(g);
-    // Never trade connectivity away, however large the prior weight. Stated as
-    // "the roster must not end up in MORE pieces than it started in" rather than
-    // "was connected and now is not": the old form left an ALREADY-disconnected
-    // input entirely unguarded, so a big enough prior weight could buy further
-    // fragmentation. penalizedAspl now charges for that too, but the prior term
-    // is added on top of it and could still outweigh it — this guard is the part
-    // that does not depend on relative weights.
-    if (next.components > startComponents) {
+    // Never trade connectivity away, however large the prior weight, and never
+    // shrink the biggest group. BOTH quantities are needed: component count alone
+    // is too weak, because a swap that splits the largest group while merging two
+    // small ones leaves the count flat and passes — it was reachable at the
+    // library's own DEFAULT_PRIOR_WEIGHT of 2. Largest-size alone is also too
+    // weak, since splitting a small component leaves the largest untouched. The
+    // two together are the same pair the unconstrained pass's property tests
+    // assert, so both passes are now held to one invariant.
+    //
+    // This guard does not depend on relative weights, which is why it exists on
+    // top of penalizedAspl's charge for unreachable pairs: the prior term is added
+    // above that charge and could outweigh it.
+    if (next.components > startComponents || next.largest < startLargest) {
       revertSwap(g, swap);
       continue;
     }
@@ -220,7 +235,6 @@ function extendOne(
   g: Graph,
   under: number[],
   legal: EdgePredicate,
-  minSep: number,
   stuck: Uint8Array,
 ): boolean {
   for (const u of under) {
@@ -231,23 +245,33 @@ function extendOne(
       continue;
     }
     const dist = bfsDistances(g, u);
-    g.addEdge(u, choosePartner(candidates, dist, g, minSep));
+    g.addEdge(u, choosePartner(candidates, dist, g));
     return true;
   }
   return false;
 }
 
 /**
- * Prefer the farthest reachable (or unreachable) partner, then lower degree,
- * then lower index. Among that order, prefer partners at least `minSep` away,
- * falling back to the best available when none qualify.
+ * Prefer the farthest reachable (or unreachable) partner, then lower degree, then
+ * lower index. Completion MAXIMISES separation greedily; it does not aim at a
+ * target value.
+ *
+ * There used to be a second pass here that scanned for the first candidate at
+ * least `minSep` away, "falling back to the best available when none qualify".
+ * That scan was provably a no-op and it is deleted rather than kept as decoration:
+ * candidates are sorted by farness DESCENDING, and unreachable sorts to the top
+ * (INFINITE_DISTANCE), so `candidates[0]` is always the farthest. If it qualifies
+ * the scan returns it immediately; if it does not, nothing else can either — it is
+ * the maximum — and the fallback returns `candidates[0]` anyway. Every branch
+ * returned the same vertex.
+ *
+ * Consequence, stated because it is a public option behaving as a no-op:
+ * `minSeparation` cannot change the output of the constrained path. It is still
+ * ACCEPTED on `ConstrainedGreedyOptions`/`ConstrainedBuddyOptions` so the app's
+ * existing call does not break, and both are documented as ignoring it. Removing
+ * it from the public surface is a breaking change and a tracked follow-on.
  */
-function choosePartner(
-  candidates: number[],
-  dist: Int32Array,
-  g: Graph,
-  minSep: number,
-): number {
+function choosePartner(candidates: number[], dist: Int32Array, g: Graph): number {
   const farness = (v: number) =>
     dist[v] !== UNREACHABLE ? dist[v] : INFINITE_DISTANCE;
   candidates.sort((a, b) => {
@@ -259,9 +283,6 @@ function choosePartner(
     if (da !== db) return da - db;
     return a - b;
   });
-  for (const v of candidates) {
-    if (dist[v] === UNREACHABLE || dist[v] >= minSep) return v;
-  }
   return candidates[0];
 }
 
@@ -326,9 +347,12 @@ function constrainedMeasure(
     if (usePriorPenalty) {
       energy += priorWeight * (priors.length - countPresentEdges(g, priors));
     }
-    // The component count is what the fragmentation guard compares, and it is
-    // O(n+m) beside the O(n·(n+m)) sweep just performed — free at this scale.
-    return { energy, connected: summary.connected, components: connectedComponents(g).length };
+    // Both quantities come from one O(n+m) walk, beside the O(n·(n+m)) sweep just
+    // performed — free at this scale.
+    const comps = connectedComponents(g);
+    let largest = 0;
+    for (const c of comps) if (c.length > largest) largest = c.length;
+    return { energy, connected: summary.connected, components: comps.length, largest };
   };
 }
 
@@ -381,7 +405,7 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
     throw new Error(`roster size ${n} is not a valid count — call validate() first`);
   }
   // O(n²) generation; refuse an oversized roster before the k-check, mirroring
-  // validate's order (rationale on MAX_CONSTRAINED_N in graph.ts).
+  // validate's order (rationale on MAX_CONSTRAINED_N in budgets.ts).
   if (n > MAX_CONSTRAINED_N) {
     throw new Error(
       `roster size ${n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} — call validate() first`,

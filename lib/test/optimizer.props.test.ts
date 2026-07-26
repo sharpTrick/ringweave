@@ -466,3 +466,38 @@ describe("a non-finite priorWeight does not silently disable the pass", () => {
     expect(withNaN.aspl).toBeLessThanOrEqual(unpolished.aspl);
   });
 });
+
+
+describe("the fragmentation guard needs BOTH count and largest-size", () => {
+  it("never shrinks the largest group, at any prior weight", () => {
+    // Component count alone was too weak: a swap that splits the largest group
+    // while merging two small ones leaves the count flat and passed the guard —
+    // reachable at the library's own DEFAULT_PRIOR_WEIGHT of 2.
+    fc.assert(
+      fc.property(scenario, fc.integer({ min: 0, max: 50 }), (s2, priorWeight) => {
+        const g = graphOf(s2.n, s2.edges);
+        const cons = new Constraints(s2.n);
+        for (let v = 0; v + 3 < s2.n; v += 4) cons.addPrior(v, v + 3);
+        const out = polishConstrained(g, cons, { seed: s2.seed, iters: 400, priorWeight });
+        expect(largestComponentFraction(out)).toBeGreaterThanOrEqual(largestComponentFraction(g));
+        expect(components(out)).toBeLessThanOrEqual(components(g));
+      }),
+    );
+  });
+});
+
+describe("minSeparation is inert on the constrained path, provably and observably", () => {
+  it("produces the same graph for every value it can be given", () => {
+    // `choosePartner` always returns the farthest candidate, so the separation
+    // scan that used to sit there could not change the answer. The scan is gone;
+    // this pins that removing it changed nothing, and that the option is honest
+    // about being ignored.
+    const cons = new Constraints(24).require(0, 1).prohibit(4, 5);
+    const base = buildConstrainedBuddyGraph(24, 4, cons, { polish: false }).edges;
+    for (const minSeparation of [2, 3, 5, 8, 12, 0, 1000]) {
+      expect(
+        buildConstrainedBuddyGraph(24, 4, cons, { polish: false, minSeparation }).edges,
+      ).toEqual(base);
+    }
+  });
+});

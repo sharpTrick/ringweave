@@ -8,11 +8,10 @@
  * `adj` is typed read-only to callers so the symmetry invariant can only be
  * mutated through `addEdge`/`removeEdge`; internal mutators cast past it.
  *
- * As the dependency leaf (it imports nothing from the core), this module is also
- * home to the cross-cutting roster/work bounds every generation entry point
- * validates against — `MAX_ROSTER`, `MAX_CONSTRAINED_N`, `MAX_CONSTRAINED_WORK`,
- * `DEFAULT_MIN_SEPARATION`, and the `constrainedWork` estimate — so every module
- * can import them without an import cycle.
+ * It holds `MAX_ROSTER`, because the constructor is that bound's only in-file
+ * consumer. Every OTHER cross-cutting bound and estimator now lives in
+ * `budgets.ts` — a leaf that imports nothing, which is what made this module their
+ * home in the first place and is better served by a module that is only that.
  */
 // Upper bound on roster size for the O(n) structures — Graph adjacency, the
 // constrained path's per-BFS arrays, refusedResult. Bounds `new Array(n)` /

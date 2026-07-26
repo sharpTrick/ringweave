@@ -18,8 +18,13 @@ import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
 export type PolishMode = "hill" | "anneal";
 
-/** Documented default iteration budget, and (via MAX_POLISH_ITERS) also the ceiling. */
-const DEFAULT_POLISH_ITERS = 20000;
+/**
+ * Documented default iteration budget, and (via MAX_POLISH_ITERS) also the
+ * ceiling. Exported because `buildBuddyGraph`'s auto-polish gate has to model the
+ * same number — it was declared in both places, so a change to one would silently
+ * not reach the other.
+ */
+export const DEFAULT_POLISH_ITERS = 20000;
 
 export interface PolishOptions {
   /** Acceptance rule: "anneal" (Metropolis, default) or "hill" (improvements only). */

@@ -86,11 +86,19 @@ def constrained_greedy(n, k, cons, mind=5, rng=None):
                 continue
             _, far, dist = _ecc_and_far(g, u, proh, k)
             # allowed partners, farthest first (prefer joining components), then
-            # lower degree, then index; respect mind softly (prefer dist>=cur_mind).
+            # lower degree, then index. Completion MAXIMISES separation; it does
+            # not aim at `mind`.
+            #
+            # The `good = [...] or cands` filter that used to sit here was provably
+            # a no-op and is removed rather than kept as decoration: cands[0] is the
+            # farthest (unreachable sorts to 10**9), so if it passes the filter it
+            # is good[0], and if it fails then nothing passes — it is the maximum —
+            # and the fallback returns cands[0] anyway. `mind` therefore cannot
+            # change the output of this function. Mirrored in
+            # constrainedGreedy.ts's `choosePartner`.
             cands.sort(key=lambda v: (-(dist[v] if dist[v] >= 0 else 10**9),
                                       g.degree(v), v))
-            good = [v for v in cands if (dist[v] == -1 or dist[v] >= cur_mind)]
-            g.add_edge(u, (good or cands)[0])
+            g.add_edge(u, cands[0])
             progressed = True
             break
         if not progressed:

@@ -57,7 +57,7 @@ export {
 import { Graph, MAX_ROSTER } from "./graph.js";
 import { DEFAULT_MIN_SEPARATION, MAX_POLISH_WORK, polishWork } from "./budgets.js";
 import { ringGreedy } from "./greedy.js";
-import { polish } from "./polish.js";
+import { polish, DEFAULT_POLISH_ITERS } from "./polish.js";
 import {
   allPairsSummary,
   girth,
@@ -67,7 +67,11 @@ import {
 } from "./metrics.js";
 import { asplGap } from "./bounds.js";
 import { Constraints, validate } from "./constraints.js";
-import { constrainedGreedy, polishConstrained } from "./constrainedGreedy.js";
+import {
+  constrainedGreedy,
+  polishConstrained,
+  DEFAULT_CONSTRAINED_POLISH_ITERS,
+} from "./constrainedGreedy.js";
 
 export interface BuddyOptions {
   /** Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5. */
@@ -366,10 +370,7 @@ function summarize(g: Graph): {
   return { degreeMin, degreeMax, summary, buddies };
 }
 
-/** Default polish iteration budget on the unconstrained path (matches the `polish` backend). */
-const DEFAULT_POLISH_ITERS = 20000;
-/** Default polish iteration budget on the constrained path (matches `polishConstrained`). */
-const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
+
 
 /*
  * The iteration clamp that used to live here is GONE, not moved twice.
