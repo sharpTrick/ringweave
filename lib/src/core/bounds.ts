@@ -45,7 +45,13 @@ export function mooreLowerBounds(n: number, k: number): MooreBounds {
     } else {
       shell = shell * (k - 1);
     }
-    if (shell === 0) {
+    // `remaining > 0` matters: with every vertex already placed there is nothing
+    // to pad, and advancing `diameterLb` anyway claims a diameter LOWER BOUND
+    // above what an achievable graph reaches. mooreLowerBounds(2, 1) returned
+    // diameterLb 2 for K2 — the unique 1-regular graph on 2 vertices, which has
+    // diameter 1 and meets the ASPL bound exactly. `total` is unaffected either
+    // way (it adds dist * 0), so no ASPL fixture moves.
+    if (shell === 0 && remaining > 0) {
       total += dist * remaining;
       diameterLb = dist;
       remaining = 0;

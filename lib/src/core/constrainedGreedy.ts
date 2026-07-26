@@ -26,6 +26,7 @@ import {
   MAX_CONSTRAINED_N,
   MAX_CONSTRAINED_WORK,
   constrainedWork,
+  boundedPolishIterations,
 } from "./graph.js";
 import {
   bfsDistances,
@@ -39,8 +40,11 @@ import { RNG } from "./rng.js";
 import { Constraints } from "./constraints.js";
 import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
 
-// Unreachable vertices score as +infinity so completion prefers joining
-// disconnected pieces before shortening already-connected ones.
+// Unreachable vertices score as 1e9 — effectively infinity for graph distances,
+// which never exceed n-1 — so completion prefers joining disconnected pieces
+// before shortening already-connected ones. Not `Infinity` itself: this value is
+// arithmetic on, and a real Infinity would make every comparison between two
+// unreachable candidates a tie.
 const INFINITE_DISTANCE = 1e9;
 
 /** True when u–v may legally be added: distinct, absent, allowed, both under k. */
@@ -57,6 +61,9 @@ export interface ConstrainedGreedyOptions {
   /** Separation to aim for during completion. Default 5, clamped to floor(n/2). */
   minSeparation?: number;
 }
+
+/** Documented default iteration budget for the constrained pass. */
+const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
 
 export interface PolishConstrainedOptions {
   /** Seed for the swap RNG (reproducible within JS). Default 0. */
@@ -132,7 +139,14 @@ export function polishConstrained(
   checkConstraintIds(input.n, cons);
 
   const rng = new RNG(opts.seed ?? 0);
-  const iters = opts.iters ?? 8000;
+  // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
+  // exported public API and a wrapper clamp does not apply to a direct caller.
+  const iters = boundedPolishIterations(
+    input.n,
+    input.edgeList().length,
+    opts.iters,
+    DEFAULT_CONSTRAINED_POLISH_ITERS,
+  );
   const priorWeight = opts.priorWeight ?? 0;
   const measure = constrainedMeasure(cons, priorWeight);
   const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);

@@ -1,0 +1,519 @@
+{
+  "runId": "wf_0fa0df70-f65",
+  "target": "lib/src",
+  "round": 3,
+  "tokens": {
+    "subagentTokens": 428827,
+    "agents": 6,
+    "toolCalls": 113
+  },
+  "observations": [
+    {
+      "kind": "self-induction",
+      "note": "Third consecutive round whose blocking findings target the PREVIOUS round's fix. Round 1 introduced MAX_POLISH_WORK; round 2 found it was consulted only on the auto path; round 3 found the round-2 clamp sat in a wrapper the exported primitives bypass, used a cost model with no constant term (buildBuddyGraph(3,2,{polishIters:1e9}) ran 35.7 s on a THREE-vertex graph), and did not cover the anneal calibration that runs before the loop. Each fix was correct about the defect it named and wrong about where enforcement belonged. The enforcement point finally moved INTO polish/polishConstrained, which is where the work happens."
+    }
+  ],
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 8,
+    "confirmed": 9,
+    "blocking": 4,
+    "deferrals": 1,
+    "plausible": 5,
+    "themes": 8
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Read every file under /home/user/ringweave/lib/src/core (index, graph, greedy, constrainedGreedy, constraints, metrics, bounds, polish, swap, rng) plus all 9 test files. Ran `npm test` (226 pass, 70s). Regenerated the oracle fixtures with `python3 gen_fixtures.py` and `python3 test_core.py` \u2014 no diff, oracle parity intact. Fuzzed adjacency-Set iteration-order dependence over 400 random graphs x every source/target pair (girth, allPairsSummary, shortestPath, eccentricity, largestComponentFraction, connectedComponents, polish, polishConstrained): zero mismatches. Fuzzed 2106 feasible constrained builds under NODE_ENV=production (postconditions compiled out) for prohibited-edge leaks, missing required/hard-prior edges, degree-cap breaches, adjacency asymmetry, and report-vs-graph disagreement: zero failures. Verified forceConnect really is inert (completion is legal-edge-maximal; completionCap = n*k*6 can never bind since at most n*min(k,n-1)/2 edges are added), so its Set-order-dependent component walk never influences output. Confirmed no Math.random/Date.now in the core. Confirmed asplGap can never go negative (ringGreedy never exceeds degree k, polish preserves degrees).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of /home/user/ringweave/lib/src/core (index, graph, constraints, constrainedGreedy, greedy, polish, swap, metrics, bounds, rng) plus lib/test/*. Built to dist and RAN hostile inputs: (a) polishIters/maxIters/iters as attacker-chosen loop bounds across small and large (n,k), including JSON.parse('{\"x\":1e999}') -> Infinity; (b) a 50-case sweep of minSeparation/seed/priorWeight/polish over NaN, +/-Infinity, -0, 1.5, 1e308, \"5\", null against both builders, asserting no throw, no hard-constraint violation, finite metrics; (c) Constraints.fromTags with a dominant tag at n=5000 and n=200000; (d) validate cost at n=1000/2500/5000 with 0, 1 and 12.5M prohibited pairs; (e) refusedResult allocation at n=MAX_ROSTER; (f) k=1e9 / k>=n against constrainedWork/greedyWork; (g) n<=1 Infinity-ASPL edges and mooreLowerBounds non-integer/denormal loop. Held up: the whole option-object surface except polishIters, the O(n^2) connectivity walk (95 ms at n=5000), min(k,n-1) capping in both work models, refusedResult (377 ms at n=1e6), Graph/degreeOf/checkVertex n-guards, pairKey canonicalization under NaN/-0. Confirmed there is NO untrusted-text sink in lib: formatReason interpolates only numbers, tags are compared but never emitted, so no CSV/clipboard/DOM path exists in this component.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full surface of lib/src/core (graph.ts, greedy.ts, polish.ts, swap.ts, constraints.ts, constrainedGreedy.ts, metrics.ts, bounds.ts, rng.ts, index.ts) plus lib/test/optimizer.props.test.ts, against lib/CLAUDE.md's SOLID scoping and docs/PROJECT_PLAN.md's committed next milestone (M3: F7 constraints UI, F8 fuzzy search/node explorer, F10 path finder; M4: F9 recalc). Traced what each of those features actually needs from the core and whether it's present: F10/F8 need bfsDistances/shortestPath/eccentricity (present, deterministic by construction per metrics.ts:44-56); F7 needs Constraints/validate/validateDetailed/formatReason (present); F9 needs priors/priorWeight/priorHard (present, already exercised by buildConstrainedBuddyGraph and the churn benchmark per M1b). Cross-checked against app/ to confirm F7 is in fact already built there (app/src/panels/ConstraintsEditor.tsx, app/src/constraints.ts) and deliberately does NOT reuse core Constraints as its UI model (documented reason: no removal API/enumeration, private #Set fields not structured-clone-safe) \u2014 a correct SRP split, not a gap. Attempted the declared extension seam: added a hypothetical second TagPolicy case to constraints.ts's fromTags switch \u2014 confirmed it slots in as a pure `case` addition touching no caller, so the seam mechanically works as documented. Also confirmed, via lib/CLAUDE.md's own known-limitations section and app/CLAUDE.md, that fromTags itself currently has zero production callers (tag UI is P2/deferred, no caller in app/), so the seam's payoff is presently unverified by any live use \u2014 already correctly labeled as deferred in both CLAUDE.md files, not something I'm filing as new. Looked for responsibility leaks (graph math in a UI-adjacent module \u2014 none, core has no UI awareness), over-engineering (single-variant abstractions: TagPolicy has one live case but the switch costs nothing and mirrors reference-python's structure; RNG/Swap/Graph are minimal free-function/class splits with real invariants, not gratuitous wrapping), and the two intentionally-non-injectable seams named in the prompt (legalEdge, constrainedMeasure) \u2014 both are correctly kept non-injectable per the documented determinism/hard-constraint rationale and I found no counter-argument that would flip that.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 7,
+      "checked": "Full surface review of lib/src core (all .ts files: graph.ts, metrics.ts, greedy.ts, constrainedGreedy.ts, polish.ts, swap.ts, rng.ts, bounds.ts, constraints.ts, index.ts) plus test/optimizer.props.test.ts. Traced algorithm implementations, validation contracts, constant definitions, and API contracts.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read lib/src/core/index.ts in full (the changed file) and grepped the entire lib/src tree (all files: core/index.ts, swap.ts, graph.ts, rng.ts, metrics.ts, bounds.ts, constrainedGreedy.ts, constraints.ts, polish.ts, greedy.ts) for any DOM/interaction surface: document., window., addEventListener, aria-, role=, JSX elements, onClick/onKeyDown, tabIndex. Also reviewed lib/CLAUDE.md to confirm scope (lib/ is explicitly documented as a zero-runtime-dependency, framework-agnostic core that 'never reaches into UI'). Confirmed no matches anywhere in lib/src.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "The polish iteration budget is supposed to be authoritative but the enforcement point is disconnected from where the work actually happens: an outer wrapper clamp (index.ts boundedIterations) is easy to bypass via direct calls to the exported primitives, uses a cost model with no fixed per-iteration floor so it wildly over-affords iterations at small n, and doesn't even cover the up-to-100-trial calibration phase that runs before the loop it's meant to bound.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness",
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`polish`'s anneal temperature calibration performs up to 100 full O(n\u00b7m) all-pairs measurements before the main loop, and `boundedIterations`/MAX_POLISH_WORK bound only the main loop \u2014 so the clamp that is supposed to make the budget authoritative is silently bypassed.",
+        "`boundedIterations` clamps polish to `floor(MAX_POLISH_WORK / polishWork(n,k,1))`, and `polishWork` models per-iteration cost as `iters*n*m` with no constant term. Real per-iteration cost has a large fixed floor (edgeList build + sort, `new Set` in proposeSwap, one Int32Array per BFS source, `g.copy()`), so as n*m shrinks the afforded iteration count explodes: at (n=3,k=2) the model affords 64,000,000 iterations. The doc comment asserts the budget is authoritative and clamps ANY value \u2014 true of the model, false of the wall clock. Existing budget tests only pin regimes where the clamp binds tightly, leaving the inverted regime untested.",
+        "`polish` and `polishConstrained` are both exported public API with documented `maxIters`/`iters` options, and both use that value directly as the sole loop bound with no validation. `boundedIterations` guards only the two builder wrappers, leaving the primitives that actually contain the loop exported and unguarded \u2014 the guard is one call frame away from the loop it's meant to bound."
+      ],
+      "remediation": "Delete the wrapper-only clamp in index.ts as the sole enforcement point and move the bound inside `polish()`/`polishConstrained()` themselves so it sits at the actual loop; charge the calibration trials against that same budget (cap trials at `min(trials, maxIters)` or debit consumed trials from the remaining allowance). This removes the redundant, inaccurate outer guard and the parallel unbounded direct-call path in one stroke instead of patching the cost model with more constants."
+    },
+    {
+      "theme": "Fields in the returned result describe a pre-polish or pre-refusal target rather than the graph actually delivered, so headline numbers reported to the caller can diverge from what was returned without any signal that they've gone stale.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`BuddyResult.finalMinSeparation` is `ringGreedy`'s pre-polish target and is never re-derived after the polish pass (which is not separation-aware) \u2014 so the returned graph routinely contains buddy pairs closer than the separation the result advertises, and `GreedyResult.finalMind`'s doc comment falsely claims it's 'the mind target actually achieved.'",
+        "`asplGap` is scored against the Moore bound for the REQUESTED k while the generator's demotion floor can deliver a strictly smaller uniform degree, so a graph that is provably optimal for what it delivered reports a large gap, and `regular: true` reads as 'everyone got k buddies' when they did not."
+      ],
+      "remediation": "Delete the separate request-based/pre-polish figures as a source of truth: stop returning `finalMinSeparation` as computed pre-polish and stop scoring `asplGap` against the requested k \u2014 derive both solely from the graph actually returned (`girth(g)-1` after polish; `mooreLowerBounds(n, degreeMax)` for the delivered degree), removing the divergent second computation rather than adding reconciliation fields."
+    },
+    {
+      "theme": "A lower bound advertised as a floor on what is achievable can exceed the diameter of the graph that meets the companion ASPL bound, because a padding branch advances the bound even when there is no remainder left to pad.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The `shell === 0` padding branch in `mooreLowerBounds` advances `diameterLb` to `dist` even when `remaining` is already 0, producing a diameter lower bound strictly greater than the diameter of the graph that meets the ASPL bound."
+      ],
+      "remediation": "Remove the unconditional advance: guard the padding block on `remaining > 0` in both bounds.ts and the mirrored reference-python/core.py (Python first, regenerate fixtures) so the branch simply doesn't fire when there's nothing left to pad \u2014 no new logic added."
+    },
+    {
+      "theme": "A quadratic materialization runs before any of the system's size gates get a chance to refuse the input, because the gates all live downstream in validate/checkWellFormed while this entry point performs the expensive work unconditionally.",
+      "severity": "deferral",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`Constraints.fromTags` validates no `n` at all (unlike `degreeOf`, the `Graph` constructor, and `validate` in the same file) and runs a full O(n^2) double loop materializing one Set key per same-tag pair. Every size gate (MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, MAX_ROSTER) lives strictly downstream in validate/checkWellFormed. Filed as deferral: no caller outside lib/test, already recorded in lib/CLAUDE.md as deferred until the tag UI lands."
+      ],
+      "remediation": "Cut the cost out from in front of the gate: pre-count group sizes with a single O(n) pass and refuse against an explicit pair cap before the double loop runs, rather than materializing pairs first and hoping a downstream gate catches it."
+    },
+    {
+      "theme": "A comment makes a factual claim about system behavior that contradicts the documented validation contract elsewhere in the repo.",
+      "severity": "blocking",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment claims ringGreedy produces 'byte-identical edge sets to Python' but CLAUDE.md states algorithms are validated on invariants and aggregate metrics (ASPL, diameter, degree spread), not byte-for-byte edges."
+      ],
+      "remediation": "Strip the false 'byte-identical' claim out of the comment rather than rewriting it into a longer explanation \u2014 delete the specific wording that contradicts CLAUDE.md so there is nothing left to go stale against the actual (metrics-only) validation contract."
+    },
+    {
+      "theme": "Magic constants and approximate metaphors scattered across the core algorithms (annealing schedule, reject cap, disconnected penalty, infinite-distance sentinel) are asserted without any single shared source of rationale, so each one has to be independently trusted or re-derived.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment says unreachable vertices 'score as +infinity' but the constant INFINITE_DISTANCE is defined as 1e9, not Infinity.",
+        "DISCONNECTED_PENALTY constant is defined as 10 with no explanation of how this value was chosen or whether it is tunable.",
+        "Annealing schedule constants (alpha=0.995, temperature floor=1e-4*T0) are standard algorithm values but undefined in code comments.",
+        "rejectCap = 200 * g.n early-stop constant for 'hill' mode is marked 'empirically-tuned' but the measurement or rationale is not documented."
+      ],
+      "remediation": "Remove the inaccurate infinity metaphor outright rather than annotating it, and stop restating each tuned constant's justification separately at each site \u2014 point every comment at one existing named constant/definition instead of repeating (and drifting from) the value in prose, subtracting the redundant restatements rather than adding new explanatory blocks at each of the four sites."
+    },
+    {
+      "theme": "A ring-graph-specific value is named with a bare abbreviation that only makes sense given implicit knowledge of the seed graph's structure.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Variable 'perim' used for ring-perimeter distance is unclear without understanding that the seed graph is a Hamiltonian cycle."
+      ],
+      "remediation": "Drop the abbreviation and reuse the same descriptive term already used for this concept elsewhere in the codebase, rather than inventing new naming plus a new explanatory comment."
+    },
+    {
+      "theme": "A refusal path returns the same type-valid shape as a success path, so a caller can silently treat a refused request as if buddies/edges were actually produced.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "buildConstrainedBuddyGraph returns empty but type-valid structures (buddies=[[],[],[]], edges=[]) when refused, making it easy to forget checking report.refusals."
+      ],
+      "remediation": "On refusal, drop the empty buddies/edges fields from the returned object entirely (return only the report) instead of adding a new discriminated-union type \u2014 removing the misleading success-shaped placeholder is what stops silent misuse, not a new type layered on top."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbudgeted-work-before-the-loop-bound",
+      "theme": "the polish work budget is documented and tested as authoritative, but a fixed 100-evaluation calibration phase runs outside it, so the real cost exceeds MAX_POLISH_WORK by an unbounded factor exactly where the clamp bites hardest",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 60,
+      "summary": "`polish`'s anneal temperature calibration performs up to 100 full O(n\u00b7m) all-pairs measurements before the main loop, and `boundedIterations`/MAX_POLISH_WORK bound only the main loop \u2014 so the clamp that is supposed to make the budget authoritative is silently bypassed.",
+      "failure": "Reproduced. `polish(g, {mode:\"anneal\", maxIters: 0})` on a 300-vertex 4-regular graph takes 587 ms while `mode:\"hill\", maxIters: 0` takes 11 ms \u2014 100 unbudgeted energy evaluations. End-to-end on the reachable public path: for (n=400, k=100) \u2014 allowed by MAX_GREEDY_WORK (3.2e9 <= 1e10) \u2014 `boundedIterations` clamps to floor(MAX_POLISH_WORK / polishWork(400,100,1)) = 72 iterations, i.e. a budgeted 5.76e8 work units. Measured on that graph: hill(72) = 4817 ms, anneal(72) = 10822 ms, calibration-only = 6154 ms. `buildBuddyGraph` always uses mode \"anneal\", so `buildBuddyGraph(400, 100, {polish: true})` actually spends ~1.38e9 work units \u2014 2.4x the budget the comment on MAX_POLISH_WORK and the test block \"MAX_POLISH_WORK cannot be stepped around\" both assert is authoritative. The overshoot ratio is 100/clamp and grows without bound as n\u00b7m grows; the existing tests only exercise (120,12) where clamp=6666 and the 100 extra evals are 1.5% \u2014 invisible. This is exactly the hole the existing suite was written to close, one code line to the left of where it looked.",
+      "remediation": "Charge the calibration against the same budget the loop is charged against: pass the resolved iteration count into `polish` and cap `trials` at `Math.min(trials, maxIters)` (or subtract the trials actually run from the remaining iteration allowance), so total energy evaluations never exceed the clamped budget. Sibling to name before closing: `polish` is exported publicly, so the fix must live inside `polish`, not in `boundedIterations` \u2014 clamping only at the `index.ts` call site leaves the direct-call path unbudgeted.",
+      "invariant": "For every graph g and every options object, the number of full all-pairs energy evaluations `polish` performs is at most `(opts.maxIters ?? 20000) + 2`, independently of `mode` \u2014 checkable by counting `allPairsSummary` calls with a spy, for all inputs.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-metric-from-an-earlier-pipeline-stage",
+      "theme": "a headline number reported to the organizer describes a graph that is not the graph that was returned \u2014 polish rewires after the number is computed and nothing re-derives it",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 190,
+      "summary": "`BuddyResult.finalMinSeparation` is `ringGreedy`'s pre-polish target and is never re-derived after the polish pass, which is not separation-aware \u2014 so the returned graph routinely contains buddy pairs closer than the separation the result advertises.",
+      "failure": "Reproduced. `buildBuddyGraph(16, 5)` returns `finalMinSeparation: 3, polished: true, girth: 3`. Tracing the two stages: `ringGreedy(16, 5, {mind: 5, repair: true})` returns `finalMind = 3` and a graph with `girth = 4` \u2014 consistent, since linking two people 3 apart closes a 4-cycle. The polish pass then swaps edges with no separation term in its objective and drops girth to 3, i.e. some pair became buddies while only 2 degrees apart. The result still reports `finalMinSeparation: 3`. Same failure at (20,5), (24,5), (30,5), (20,6), (24,6) \u2014 every one reports 3 while delivering girth 3. An organizer told \"minimum separation 3\" is handed a triangle. No test asserts any relation between `finalMinSeparation` and the delivered graph; `identity.test.ts:33` only pins `finalMind` against the pre-polish fixture, so the whole suite passes.",
+      "remediation": "Either derive the reported value from the returned graph (`girth(g) - 1`, clamped, computed after polish \u2014 `girth` is already computed there) or rename/redocument the field as the generator's target rather than an achieved property and stop returning it as a quality metric. Sibling to name before closing: `GreedyResult.finalMind`'s own doc comment claims \"the mind target actually achieved\", which is only true of `ringGreedy`'s own output; whichever way this is resolved, that claim has to move too.",
+      "invariant": "For every (n, k, options), the BuddyResult r returned by buildBuddyGraph satisfies `r.finalMinSeparation <= girth(graphOf(r.edges)) - 1` whenever that girth is finite \u2014 the advertised minimum separation never exceeds the minimum separation actually present in the returned edge set.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "lower-bound-exceeds-achievable-value",
+      "theme": "a bound advertised as a floor on what is achievable reports a value no graph can meet, so 'provably optimal' scoring against it is wrong",
+      "file": "/home/user/ringweave/lib/src/core/bounds.ts",
+      "line": 48,
+      "summary": "The `shell === 0` padding branch in `mooreLowerBounds` advances `diameterLb` to `dist` even when `remaining` is already 0, producing a diameter lower bound strictly greater than the diameter of the graph that meets the ASPL bound.",
+      "failure": "Reproduced. `mooreLowerBounds(2, 1)` returns `{ asplLb: 1, diameterLb: 2 }`. K2 \u2014 the unique 1-regular graph on 2 vertices, which `buildConstrainedBuddyGraph(2, 1, new Constraints(2))` actually builds \u2014 has ASPL 1 and diameter 1. The bound claims no such graph can have diameter below 2. Trace: after the first shell, `remaining = 0` and `diameterLb = 1`; `dist` is then incremented to 2 and, because `k === 1` sets `shell = 0`, the padding block runs unconditionally and overwrites `diameterLb = 2` while adding `dist * 0 = 0` to `total` \u2014 so the ASPL bound stays correct and only the diameter bound is corrupted. Swept n in [2,60] x k in [1,60]: (2,1) is the sole violation. The same defect exists in `reference-python/core.py` `moore_lower_bounds` (lines 259-264), so oracle parity does not catch it and `identity.test.ts:50` pins the wrong value if a k=1 fixture is ever added; `metrics.test.ts` only checks (10,3).",
+      "remediation": "Guard the padding block on `remaining > 0` (`if (shell === 0 && remaining > 0)`) in both `bounds.ts` and `reference-python/core.py` \u2014 change the Python first and regenerate fixtures, per the mirror rule. `total` is unaffected either way, so no ASPL fixture moves.",
+      "invariant": "For all integers n > 1 and k > 0, `mooreLowerBounds(n,k).diameterLb <= mooreLowerBounds(n,k).asplLb * (n-1)` \u2014 the farthest shell the bound charges for cannot lie beyond the total distance it accumulated.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "quality-score-against-an-undelivered-target",
+      "theme": "the result reports no signal that the requested buddy count could not be delivered, and the headline quality score silently mixes wiring quality with that degree shortfall",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 188,
+      "summary": "`asplGap` is scored against the Moore bound for the REQUESTED k while the generator's demotion floor can deliver a strictly smaller uniform degree, so a graph that is provably optimal for what it delivered reports a large gap, and `regular: true` reads as \"everyone got k buddies\" when they did not.",
+      "failure": "Reproduced. `buildBuddyGraph(8, 6)` returns `degreeMin: 3, degreeMax: 3, regular: true, aspl: 1.571, asplGap: 0.375`. The delivered graph is 3-regular, not 6-regular: `mooreLowerBounds(8,3).asplLb` is 11/7 = 1.571, so the graph is exactly optimal for its delivered degree, yet the result advertises \"37.5% off optimal\". Cause: `ringGreedy`'s demotion stops at `curMind > 3`, so once the graph reaches diameter 2 no pair is >= 3 apart and both `findPair` and `repairDegrees` (minDist 3) stop, leaving degrees far below k. Same shape at (8,4) -> 3-regular gap 0.100, (8,5) -> 3-regular gap 0.222, (12,5) -> 4-regular gap 0.059, (12,6) -> 4-regular gap 0.125. This is oracle-consistent (the demotion floor mirrors reference-python), so it is a reporting defect rather than an algorithm divergence \u2014 but nothing in BuddyResult states that k was not met beyond the reader noticing degreeMax < k, and `regular: true` actively points the other way. lib/CLAUDE.md documents only the `k >= n` cap, not this k < n shortfall.",
+      "remediation": "Report the shortfall explicitly rather than folding it into the gap: either score `asplGap` against `mooreLowerBounds(n, degreeMax)` so 0 means \"optimal for what was delivered\", or add a field carrying the requested-vs-delivered degree so a consumer can distinguish \"badly wired\" from \"could not reach k buddies\". Do not close this by only documenting `regular` \u2014 the sibling is `asplGap`, and vice versa.",
+      "invariant": "For every (n, k), the BuddyResult r from buildBuddyGraph satisfies `r.asplGap === asplGap(r.aspl, n, r.degreeMax)` \u2014 the gap is scored against the degree actually delivered, so any graph meeting the Moore bound for its own delivered degree reports exactly 0.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-attacker-number",
+      "theme": "a caller-supplied iteration count becomes main-thread work that the work budget claims to bound but does not, because the cost model has no per-iteration constant",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 336,
+      "summary": "`boundedIterations` clamps polish to `floor(MAX_POLISH_WORK / polishWork(n,k,1))`, and `polishWork` models per-iteration cost as `iters*n*m` with no constant term. Real per-iteration cost has a large fixed floor (edgeList build + sort, `new Set` in proposeSwap, one Int32Array per BFS source, `g.copy()`), so as n*m shrinks the afforded iteration count explodes: at (n=3,k=2) the model affords 64,000,000 iterations. The doc comment on this function asserts the budget is \"authoritative rather than advisory\" and that \"ANY value is clamped to what MAX_POLISH_WORK affords\" \u2014 that is true of the model and false of the wall clock. The existing budget tests in optimizer.props.test.ts pin only (120,12) and (30,4), where the clamp binds to a few thousand iterations, so the regime where the model inverts is untested \u2014 the case-table failure mode this review contract warns about.",
+      "failure": "MEASURED: `buildBuddyGraph(3, 2, { polishIters: 1e9 })` -> 35,714 ms (no `polish: true` needed; auto-polish is already on at this size, and 1e9 survives the Number.isInteger/>=0 check). `buildBuddyGraph(4, 2, { polish: true, polishIters: 1e9 })` -> 33,532 ms. `buildConstrainedBuddyGraph(4, 2, new Constraints(4), { polishIters: 1e9 })` -> 37,937 ms, i.e. the documented \"refuses, never throws\" entry point neither refuses nor returns for 38 s. `polishIters: 1e308` at (10,3) -> 16,671 ms. Control with default options: 12 ms. In a browser this is a ~36 s frozen tab for a THREE-PERSON roster, driven by one integer in a settings object. Present-day reachability: the lib's own public API (this is the reviewed component); the BuddyGraph app never passes polishIters today, so app reachability is nil \u2014 this is a defect in the guard, not a live app exploit.",
+      "remediation": "Give the clamp a positive per-iteration floor and an absolute ceiling: in `boundedIterations`, use `Math.min(requested, Math.floor(MAX_POLISH_WORK / (POLISH_ITER_OVERHEAD + perIteration)), MAX_POLISH_ITERS)` with `POLISH_ITER_OVERHEAD` calibrated to the measured fixed cost of one polish iteration (edge-list build + proposal + copy). Keep `polishWork` itself unchanged for the auto-polish GATE, since polishWork(120,4)/polishWork(121,4) is what the fixtures and the reroll boundary test pin \u2014 only the iteration clamp needs the floor. Ratchet the invariant into optimizer.props.test.ts as a property over arbitrary (n,k,v) on the resolved iteration count, not as more (n,k) cases.",
+      "invariant": "For all n, k and all `polishIters` values v, the number of polish iterations actually executed, I(v,n,k), satisfies I(v,n,k) * (C + polishWork(n,k,1)) <= MAX_POLISH_WORK for a fixed constant C > 0 \u2014 equivalently, sup over all n,k,v of I(v,n,k) is a finite constant independent of n and k. Today I is unbounded as n*m -> 0 (I = 64,000,000 at n=3,k=2 versus 1,209 at n=120,k=12)."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-loop-bound",
+      "theme": "a caller-supplied iteration count becomes main-thread work that the work budget claims to bound but does not, because the guard sits in the wrapper instead of at the loop",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 56,
+      "summary": "`polish` (polish.ts) and `polishConstrained` (constrainedGreedy.ts) are both exported from the package index as public API with documented `maxIters` / `iters` options, and both use that value directly as the sole loop bound (`while (iters < maxIters)` / `for (let it = 0; it < iters; it++)`) with no type or magnitude validation. The only other exit is \"fewer than two edges\". `boundedIterations` in index.ts was added specifically because `JSON.parse('{\"polishIters\":1e999}')` yields Infinity \u2014 but it guards only the two builder wrappers, leaving the primitives that actually contain the loop exported and unguarded. The guard is one call frame away from the loop it is meant to bound.",
+      "failure": "MEASURED: `polish(ring(20), { maxIters: JSON.parse('{\"maxIters\":1e999}').maxIters })` never returns \u2014 killed by an external 60 s timeout, and the blocked event loop prevented even an unref'd 15 s watchdog timer from firing, so it is a hard main-thread hang rather than a slow return. `polishConstrained(g, cons, { iters: Infinity })` has the identical shape (`opts.iters ?? 8000`, no validation) and the same single loop exit. polish.ts carries no \"low-level primitive, call validate first\" disclaimer at all, unlike constrainedGreedy.ts.",
+      "remediation": "Move the bound to the loop: have `polish` and `polishConstrained` run their own iteration count through the same `Number.isInteger`/budget clamp (export `boundedIterations` from a shared module, e.g. graph.ts alongside MAX_POLISH_WORK, and call it from both primitives). The wrappers then become redundant rather than load-bearing, which is the correct direction for a guard.",
+      "invariant": "For every function exported from lib/src/core/index.ts that accepts an iteration count, the number of loop iterations executed is finite for all inputs and bounded by a constant derived from MAX_POLISH_WORK \u2014 i.e. no exported loop uses a caller-supplied number as its only bound without first clamping it. Checkable by calling every such export with Infinity / NaN / 1e308 / 1e15 under a wall-clock assertion."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "documentation contradicts actual validation contract",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 4,
+      "summary": "Comment claims ringGreedy produces 'byte-identical edge sets to Python' but CLAUDE.md states algorithms are validated on 'invariants and aggregate metrics (ASPL, diameter, degree spread), **not** byte-for-byte edges'",
+      "failure": "graph.ts line 4 says: 'produce byte-identical edge sets to Python'. CLAUDE.md lib/CLAUDE.md explicitly states: 'Core algorithms are validated against it on invariants and aggregate metrics...not byte-for-byte edges.' A contributor reading graph.ts would believe ringGreedy guarantees byte-identical output to Python, but the actual contract is metrics-only validation.",
+      "remediation": "Clarify the comment at graph.ts line 4-5. Change 'produce byte-identical edge sets to Python' to 'produce the same edge sets as Python (validated on metrics: ASPL, diameter, degree spread)' or similar wording that matches the actual CLAUDE.md validation contract. Specify that validation is on metrics, not byte-for-byte structures.",
+      "invariant": "Any algorithm documentation must accurately reflect its validation contract as stated in CLAUDE.md: metrics-only, not byte-for-byte edges"
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "imprecise-comment",
+      "theme": "comment uses infinity metaphor but constant is finite",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 42,
+      "summary": "Comment says unreachable vertices 'score as +infinity' but the constant INFINITE_DISTANCE is defined as 1e9, not Infinity",
+      "failure": "Line 42-43 comment: 'Unreachable vertices score as +infinity'. Line 44: const INFINITE_DISTANCE = 1e9. While 1e9 is effectively infinity for this algorithm (graph distances never exceed n-1), using 'infinity' in the comment when the actual value is 1e9 is imprecise. A maintainer wanting to tune the constant won't know if this is a mathematical infinity or an arbitrary large number.",
+      "remediation": "Change the comment at line 42-43 to: 'Unreachable vertices score as 1e9 (effectively infinity for graph distances) so completion prefers joining' or simply remove the metaphor and state: 'Unreachable vertices score very high (1e9) so completion prefers'.",
+      "invariant": "Distance sentinel comments must accurately reflect the actual constant value used; imprecise metaphors like 'infinity' for finite constants are out of scope for actual use"
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbudgeted-work-before-the-loop-bound",
+      "theme": "the polish work budget is documented and tested as authoritative, but a fixed 100-evaluation calibration phase runs outside it, so the real cost exceeds MAX_POLISH_WORK by an unbounded factor exactly where the clamp bites hardest",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 60,
+      "summary": "`polish`'s anneal temperature calibration performs up to 100 full O(n\u00b7m) all-pairs measurements before the main loop, and `boundedIterations`/MAX_POLISH_WORK bound only the main loop \u2014 so the clamp that is supposed to make the budget authoritative is silently bypassed.",
+      "failure": "Reproduced. `polish(g, {mode:\"anneal\", maxIters: 0})` on a 300-vertex 4-regular graph takes 587 ms while `mode:\"hill\", maxIters: 0` takes 11 ms \u2014 100 unbudgeted energy evaluations. End-to-end on the reachable public path: for (n=400, k=100) \u2014 allowed by MAX_GREEDY_WORK (3.2e9 <= 1e10) \u2014 `boundedIterations` clamps to floor(MAX_POLISH_WORK / polishWork(400,100,1)) = 72 iterations, i.e. a budgeted 5.76e8 work units. Measured on that graph: hill(72) = 4817 ms, anneal(72) = 10822 ms, calibration-only = 6154 ms. `buildBuddyGraph` always uses mode \"anneal\", so `buildBuddyGraph(400, 100, {polish: true})` actually spends ~1.38e9 work units \u2014 2.4x the budget the comment on MAX_POLISH_WORK and the test block \"MAX_POLISH_WORK cannot be stepped around\" both assert is authoritative. The overshoot ratio is 100/clamp and grows without bound as n\u00b7m grows; the existing tests only exercise (120,12) where clamp=6666 and the 100 extra evals are 1.5% \u2014 invisible. This is exactly the hole the existing suite was written to close, one code line to the left of where it looked.",
+      "remediation": "Charge the calibration against the same budget the loop is charged against: pass the resolved iteration count into `polish` and cap `trials` at `Math.min(trials, maxIters)` (or subtract the trials actually run from the remaining iteration allowance), so total energy evaluations never exceed the clamped budget. Sibling to name before closing: `polish` is exported publicly, so the fix must live inside `polish`, not in `boundedIterations` \u2014 clamping only at the `index.ts` call site leaves the direct-call path unbudgeted.",
+      "invariant": "For every graph g and every options object, the number of full all-pairs energy evaluations `polish` performs is at most `(opts.maxIters ?? 20000) + 2`, independently of `mode` \u2014 checkable by counting `allPairsSummary` calls with a spy, for all inputs.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-metric-from-an-earlier-pipeline-stage",
+      "theme": "a headline number reported to the organizer describes a graph that is not the graph that was returned \u2014 polish rewires after the number is computed and nothing re-derives it",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 190,
+      "summary": "`BuddyResult.finalMinSeparation` is `ringGreedy`'s pre-polish target and is never re-derived after the polish pass, which is not separation-aware \u2014 so the returned graph routinely contains buddy pairs closer than the separation the result advertises.",
+      "failure": "Reproduced. `buildBuddyGraph(16, 5)` returns `finalMinSeparation: 3, polished: true, girth: 3`. Tracing the two stages: `ringGreedy(16, 5, {mind: 5, repair: true})` returns `finalMind = 3` and a graph with `girth = 4` \u2014 consistent, since linking two people 3 apart closes a 4-cycle. The polish pass then swaps edges with no separation term in its objective and drops girth to 3, i.e. some pair became buddies while only 2 degrees apart. The result still reports `finalMinSeparation: 3`. Same failure at (20,5), (24,5), (30,5), (20,6), (24,6) \u2014 every one reports 3 while delivering girth 3. An organizer told \"minimum separation 3\" is handed a triangle. No test asserts any relation between `finalMinSeparation` and the delivered graph; `identity.test.ts:33` only pins `finalMind` against the pre-polish fixture, so the whole suite passes.",
+      "remediation": "Either derive the reported value from the returned graph (`girth(g) - 1`, clamped, computed after polish \u2014 `girth` is already computed there) or rename/redocument the field as the generator's target rather than an achieved property and stop returning it as a quality metric. Sibling to name before closing: `GreedyResult.finalMind`'s own doc comment claims \"the mind target actually achieved\", which is only true of `ringGreedy`'s own output; whichever way this is resolved, that claim has to move too.",
+      "invariant": "For every (n, k, options), the BuddyResult r returned by buildBuddyGraph satisfies `r.finalMinSeparation <= girth(graphOf(r.edges)) - 1` whenever that girth is finite \u2014 the advertised minimum separation never exceeds the minimum separation actually present in the returned edge set.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "lower-bound-exceeds-achievable-value",
+      "theme": "a bound advertised as a floor on what is achievable reports a value no graph can meet, so 'provably optimal' scoring against it is wrong",
+      "file": "/home/user/ringweave/lib/src/core/bounds.ts",
+      "line": 48,
+      "summary": "The `shell === 0` padding branch in `mooreLowerBounds` advances `diameterLb` to `dist` even when `remaining` is already 0, producing a diameter lower bound strictly greater than the diameter of the graph that meets the ASPL bound.",
+      "failure": "Reproduced. `mooreLowerBounds(2, 1)` returns `{ asplLb: 1, diameterLb: 2 }`. K2 \u2014 the unique 1-regular graph on 2 vertices, which `buildConstrainedBuddyGraph(2, 1, new Constraints(2))` actually builds \u2014 has ASPL 1 and diameter 1. The bound claims no such graph can have diameter below 2. Trace: after the first shell, `remaining = 0` and `diameterLb = 1`; `dist` is then incremented to 2 and, because `k === 1` sets `shell = 0`, the padding block runs unconditionally and overwrites `diameterLb = 2` while adding `dist * 0 = 0` to `total` \u2014 so the ASPL bound stays correct and only the diameter bound is corrupted. Swept n in [2,60] x k in [1,60]: (2,1) is the sole violation. The same defect exists in `reference-python/core.py` `moore_lower_bounds` (lines 259-264), so oracle parity does not catch it and `identity.test.ts:50` pins the wrong value if a k=1 fixture is ever added; `metrics.test.ts` only checks (10,3).",
+      "remediation": "Guard the padding block on `remaining > 0` (`if (shell === 0 && remaining > 0)`) in both `bounds.ts` and `reference-python/core.py` \u2014 change the Python first and regenerate fixtures, per the mirror rule. `total` is unaffected either way, so no ASPL fixture moves.",
+      "invariant": "For all integers n > 1 and k > 0, `mooreLowerBounds(n,k).diameterLb <= mooreLowerBounds(n,k).asplLb * (n-1)` \u2014 the farthest shell the bound charges for cannot lie beyond the total distance it accumulated.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "quality-score-against-an-undelivered-target",
+      "theme": "the result reports no signal that the requested buddy count could not be delivered, and the headline quality score silently mixes wiring quality with that degree shortfall",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 188,
+      "summary": "`asplGap` is scored against the Moore bound for the REQUESTED k while the generator's demotion floor can deliver a strictly smaller uniform degree, so a graph that is provably optimal for what it delivered reports a large gap, and `regular: true` reads as \"everyone got k buddies\" when they did not.",
+      "failure": "Reproduced. `buildBuddyGraph(8, 6)` returns `degreeMin: 3, degreeMax: 3, regular: true, aspl: 1.571, asplGap: 0.375`. The delivered graph is 3-regular, not 6-regular: `mooreLowerBounds(8,3).asplLb` is 11/7 = 1.571, so the graph is exactly optimal for its delivered degree, yet the result advertises \"37.5% off optimal\". Cause: `ringGreedy`'s demotion stops at `curMind > 3`, so once the graph reaches diameter 2 no pair is >= 3 apart and both `findPair` and `repairDegrees` (minDist 3) stop, leaving degrees far below k. Same shape at (8,4) -> 3-regular gap 0.100, (8,5) -> 3-regular gap 0.222, (12,5) -> 4-regular gap 0.059, (12,6) -> 4-regular gap 0.125. This is oracle-consistent (the demotion floor mirrors reference-python), so it is a reporting defect rather than an algorithm divergence \u2014 but nothing in BuddyResult states that k was not met beyond the reader noticing degreeMax < k, and `regular: true` actively points the other way. lib/CLAUDE.md documents only the `k >= n` cap, not this k < n shortfall.",
+      "remediation": "Report the shortfall explicitly rather than folding it into the gap: either score `asplGap` against `mooreLowerBounds(n, degreeMax)` so 0 means \"optimal for what was delivered\", or add a field carrying the requested-vs-delivered degree so a consumer can distinguish \"badly wired\" from \"could not reach k buddies\". Do not close this by only documenting `regular` \u2014 the sibling is `asplGap`, and vice versa.",
+      "invariant": "For every (n, k), the BuddyResult r from buildBuddyGraph satisfies `r.asplGap === asplGap(r.aspl, n, r.degreeMax)` \u2014 the gap is scored against the degree actually delivered, so any graph meeting the Moore bound for its own delivered degree reports exactly 0.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-attacker-number",
+      "theme": "a caller-supplied iteration count becomes main-thread work that the work budget claims to bound but does not, because the cost model has no per-iteration constant",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 336,
+      "summary": "`boundedIterations` clamps polish to `floor(MAX_POLISH_WORK / polishWork(n,k,1))`, and `polishWork` models per-iteration cost as `iters*n*m` with no constant term. Real per-iteration cost has a large fixed floor (edgeList build + sort, `new Set` in proposeSwap, one Int32Array per BFS source, `g.copy()`), so as n*m shrinks the afforded iteration count explodes: at (n=3,k=2) the model affords 64,000,000 iterations. The doc comment on this function asserts the budget is \"authoritative rather than advisory\" and that \"ANY value is clamped to what MAX_POLISH_WORK affords\" \u2014 that is true of the model and false of the wall clock. The existing budget tests in optimizer.props.test.ts pin only (120,12) and (30,4), where the clamp binds to a few thousand iterations, so the regime where the model inverts is untested \u2014 the case-table failure mode this review contract warns about.",
+      "failure": "MEASURED: `buildBuddyGraph(3, 2, { polishIters: 1e9 })` -> 35,714 ms (no `polish: true` needed; auto-polish is already on at this size, and 1e9 survives the Number.isInteger/>=0 check). `buildBuddyGraph(4, 2, { polish: true, polishIters: 1e9 })` -> 33,532 ms. `buildConstrainedBuddyGraph(4, 2, new Constraints(4), { polishIters: 1e9 })` -> 37,937 ms, i.e. the documented \"refuses, never throws\" entry point neither refuses nor returns for 38 s. `polishIters: 1e308` at (10,3) -> 16,671 ms. Control with default options: 12 ms. In a browser this is a ~36 s frozen tab for a THREE-PERSON roster, driven by one integer in a settings object. Present-day reachability: the lib's own public API (this is the reviewed component); the BuddyGraph app never passes polishIters today, so app reachability is nil \u2014 this is a defect in the guard, not a live app exploit.",
+      "remediation": "Give the clamp a positive per-iteration floor and an absolute ceiling: in `boundedIterations`, use `Math.min(requested, Math.floor(MAX_POLISH_WORK / (POLISH_ITER_OVERHEAD + perIteration)), MAX_POLISH_ITERS)` with `POLISH_ITER_OVERHEAD` calibrated to the measured fixed cost of one polish iteration (edge-list build + proposal + copy). Keep `polishWork` itself unchanged for the auto-polish GATE, since polishWork(120,4)/polishWork(121,4) is what the fixtures and the reroll boundary test pin \u2014 only the iteration clamp needs the floor. Ratchet the invariant into optimizer.props.test.ts as a property over arbitrary (n,k,v) on the resolved iteration count, not as more (n,k) cases.",
+      "invariant": "For all n, k and all `polishIters` values v, the number of polish iterations actually executed, I(v,n,k), satisfies I(v,n,k) * (C + polishWork(n,k,1)) <= MAX_POLISH_WORK for a fixed constant C > 0 \u2014 equivalently, sup over all n,k,v of I(v,n,k) is a finite constant independent of n and k. Today I is unbounded as n*m -> 0 (I = 64,000,000 at n=3,k=2 versus 1,209 at n=120,k=12)."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-loop-bound",
+      "theme": "a caller-supplied iteration count becomes main-thread work that the work budget claims to bound but does not, because the guard sits in the wrapper instead of at the loop",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 56,
+      "summary": "`polish` (polish.ts) and `polishConstrained` (constrainedGreedy.ts) are both exported from the package index as public API with documented `maxIters` / `iters` options, and both use that value directly as the sole loop bound (`while (iters < maxIters)` / `for (let it = 0; it < iters; it++)`) with no type or magnitude validation. The only other exit is \"fewer than two edges\". `boundedIterations` in index.ts was added specifically because `JSON.parse('{\"polishIters\":1e999}')` yields Infinity \u2014 but it guards only the two builder wrappers, leaving the primitives that actually contain the loop exported and unguarded. The guard is one call frame away from the loop it is meant to bound.",
+      "failure": "MEASURED: `polish(ring(20), { maxIters: JSON.parse('{\"maxIters\":1e999}').maxIters })` never returns \u2014 killed by an external 60 s timeout, and the blocked event loop prevented even an unref'd 15 s watchdog timer from firing, so it is a hard main-thread hang rather than a slow return. `polishConstrained(g, cons, { iters: Infinity })` has the identical shape (`opts.iters ?? 8000`, no validation) and the same single loop exit. polish.ts carries no \"low-level primitive, call validate first\" disclaimer at all, unlike constrainedGreedy.ts.",
+      "remediation": "Move the bound to the loop: have `polish` and `polishConstrained` run their own iteration count through the same `Number.isInteger`/budget clamp (export `boundedIterations` from a shared module, e.g. graph.ts alongside MAX_POLISH_WORK, and call it from both primitives). The wrappers then become redundant rather than load-bearing, which is the correct direction for a guard.",
+      "invariant": "For every function exported from lib/src/core/index.ts that accepts an iteration count, the number of loop iterations executed is finite for all inputs and bounded by a constant derived from MAX_POLISH_WORK \u2014 i.e. no exported loop uses a caller-supplied number as its only bound without first clamping it. Checkable by calling every such export with Infinity / NaN / 1e308 / 1e15 under a wall-clock assertion."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "cost-before-gate",
+      "theme": "a quadratic materialization runs upstream of every size gate, so the gate that would refuse the roster never gets to run",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "`Constraints.fromTags` validates no `n` at all (unlike `degreeOf` in the same file, the `Graph` constructor, and `validate`) and runs a full O(n^2) double loop materializing one Set key per same-tag pair. Every size gate in the system \u2014 MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, MAX_ROSTER \u2014 lives in `validate`/`checkWellFormed`, strictly downstream. Filed as deferral per the no-live-caller rule: `fromTags` has no caller outside lib/test, and lib/CLAUDE.md already records it as deliberately deferred until the tag UI lands. Reported here with numbers because I reproduced it and the measurement is sharper than the recorded one (the recorded note says 3.4 s at n=3000; the throw case is worse).",
+      "failure": "MEASURED: `Constraints.fromTags(200000, new Array(200000).fill('household'))` spends 24,746 ms and then throws a native `RangeError: Set maximum size exceeded` \u2014 for a roster `validate` would have refused instantly (200000 > MAX_CONSTRAINED_N = 5000). The failure is a raw RangeError from a constructor, not a refusal, so a caller following the documented \"call validate() first\" discipline still cannot avoid it. Even at a LEGAL roster size the amplification bites: `fromTags(5000, Array(5000).fill('h'))` = 21,199 ms building 12,497,500 keys, and the subsequent `validate(c, 4)` \u2014 which the work model accepts, since constrainedWork(5000,4) = 1e8 exactly equals MAX_CONSTRAINED_WORK \u2014 takes a further 28,020 ms, because prohibitedPairs() re-materializes all 12.5M tuples on each of its three call sites. ~49 s total from a 5000-entry tag column.",
+      "remediation": "Guard `n` at the top of `fromTags` (integer, 0..MAX_CONSTRAINED_N) and pre-count group sizes with a single O(n) pass, refusing against an explicit pair cap (sum over groups of size*(size-1)/2 <= MAX_PROHIBITED_PAIRS) BEFORE the double loop \u2014 so the cost is refused rather than paid. Separately, cache `prohibitedPairs()` or iterate the key Set directly in validateDetailed instead of rebuilding tuple arrays three times.",
+      "invariant": "For all n, tags and policy, `Constraints.fromTags` either throws a domain error before adding any key, or returns having added at most MAX_PROHIBITED_PAIRS keys; and its total work is O(n + returned pair count). No input causes it to exceed that pair cap or to raise a native RangeError."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "documentation contradicts actual validation contract",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 4,
+      "summary": "Comment claims ringGreedy produces 'byte-identical edge sets to Python' but CLAUDE.md states algorithms are validated on 'invariants and aggregate metrics (ASPL, diameter, degree spread), **not** byte-for-byte edges'",
+      "failure": "graph.ts line 4 says: 'produce byte-identical edge sets to Python'. CLAUDE.md lib/CLAUDE.md explicitly states: 'Core algorithms are validated against it on invariants and aggregate metrics...not byte-for-byte edges.' A contributor reading graph.ts would believe ringGreedy guarantees byte-identical output to Python, but the actual contract is metrics-only validation.",
+      "remediation": "Clarify the comment at graph.ts line 4-5. Change 'produce byte-identical edge sets to Python' to 'produce the same edge sets as Python (validated on metrics: ASPL, diameter, degree spread)' or similar wording that matches the actual CLAUDE.md validation contract. Specify that validation is on metrics, not byte-for-byte structures.",
+      "invariant": "Any algorithm documentation must accurately reflect its validation contract as stated in CLAUDE.md: metrics-only, not byte-for-byte edges"
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "imprecise-comment",
+      "theme": "comment uses infinity metaphor but constant is finite",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 42,
+      "summary": "Comment says unreachable vertices 'score as +infinity' but the constant INFINITE_DISTANCE is defined as 1e9, not Infinity",
+      "failure": "Line 42-43 comment: 'Unreachable vertices score as +infinity'. Line 44: const INFINITE_DISTANCE = 1e9. While 1e9 is effectively infinity for this algorithm (graph distances never exceed n-1), using 'infinity' in the comment when the actual value is 1e9 is imprecise. A maintainer wanting to tune the constant won't know if this is a mathematical infinity or an arbitrary large number.",
+      "remediation": "Change the comment at line 42-43 to: 'Unreachable vertices score as 1e9 (effectively infinity for graph distances) so completion prefers joining' or simply remove the metaphor and state: 'Unreachable vertices score very high (1e9) so completion prefers'.",
+      "invariant": "Distance sentinel comments must accurately reflect the actual constant value used; imprecise metaphors like 'infinity' for finite constants are out of scope for actual use"
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "cost-before-gate",
+      "theme": "a quadratic materialization runs upstream of every size gate, so the gate that would refuse the roster never gets to run",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "`Constraints.fromTags` validates no `n` at all (unlike `degreeOf` in the same file, the `Graph` constructor, and `validate`) and runs a full O(n^2) double loop materializing one Set key per same-tag pair. Every size gate in the system \u2014 MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, MAX_ROSTER \u2014 lives in `validate`/`checkWellFormed`, strictly downstream. Filed as deferral per the no-live-caller rule: `fromTags` has no caller outside lib/test, and lib/CLAUDE.md already records it as deliberately deferred until the tag UI lands. Reported here with numbers because I reproduced it and the measurement is sharper than the recorded one (the recorded note says 3.4 s at n=3000; the throw case is worse).",
+      "failure": "MEASURED: `Constraints.fromTags(200000, new Array(200000).fill('household'))` spends 24,746 ms and then throws a native `RangeError: Set maximum size exceeded` \u2014 for a roster `validate` would have refused instantly (200000 > MAX_CONSTRAINED_N = 5000). The failure is a raw RangeError from a constructor, not a refusal, so a caller following the documented \"call validate() first\" discipline still cannot avoid it. Even at a LEGAL roster size the amplification bites: `fromTags(5000, Array(5000).fill('h'))` = 21,199 ms building 12,497,500 keys, and the subsequent `validate(c, 4)` \u2014 which the work model accepts, since constrainedWork(5000,4) = 1e8 exactly equals MAX_CONSTRAINED_WORK \u2014 takes a further 28,020 ms, because prohibitedPairs() re-materializes all 12.5M tuples on each of its three call sites. ~49 s total from a 5000-entry tag column.",
+      "remediation": "Guard `n` at the top of `fromTags` (integer, 0..MAX_CONSTRAINED_N) and pre-count group sizes with a single O(n) pass, refusing against an explicit pair cap (sum over groups of size*(size-1)/2 <= MAX_PROHIBITED_PAIRS) BEFORE the double loop \u2014 so the cost is refused rather than paid. Separately, cache `prohibitedPairs()` or iterate the key Set directly in validateDetailed instead of rebuilding tuple arrays three times.",
+      "invariant": "For all n, tags and policy, `Constraints.fromTags` either throws a domain error before adding any key, or returns having added at most MAX_PROHIBITED_PAIRS keys; and its total work is O(n + returned pair count). No input causes it to exceed that pair cap or to raise a native RangeError."
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unexplained-constant",
+      "theme": "magic constant lacks justification or calibration documentation",
+      "file": "/home/user/ringweave/lib/src/core/metrics.ts",
+      "line": 165,
+      "summary": "DISCONNECTED_PENALTY constant is defined as 10 with no explanation of how this value was chosen or whether it is tunable",
+      "failure": "Line 164-165 defines: const DISCONNECTED_PENALTY = 10; with comment 'Weight by which every disconnected graph is made worse than every connected one'. The larger comment (lines 167-193) explains WHY a flat penalty term is needed but not WHY the specific value is 10. Is it arbitrary? Calibrated against what? No contributor can assess whether changing this constant is safe or would require recalibration.",
+      "remediation": "Add a comment explaining the origin of the constant, e.g.: '// Calibrated to ensure disconnected graphs always score worse than connected ones; see docs/findings/... for measurement data' or '// Empirically tuned; changes here must be validated against reference-python fixtures'.",
+      "invariant": "Any numeric constant used in the objective function that lacks an obvious derivation must document its calibration source or design rationale",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unexplained-constants",
+      "theme": "simulated annealing parameters documented as implementation details but their values lack justification",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 59,
+      "summary": "Annealing schedule constants (alpha=0.995, temperature floor=1e-4*T0) are standard algorithm values but undefined in code comments",
+      "failure": "Lines 59, 72, 75 define annealing parameters: const alpha = 0.995 (cooling rate), 1e-3 (min T0), and TFloor = 1e-4 * T0. These are well-known simulated annealing constants, but no comment explains: (a) why 0.995 vs other cooling rates, (b) why 1e-3 is the minimum initial temperature, (c) why TFloor is 0.0001 of T0. A contributor trying to tune polish for different workloads has no guidance.",
+      "remediation": "Add comment block before line 59: '// Simulated annealing schedule: alpha is the cooling rate (T *= 0.995 each iteration), T0 (initial temp) is calibrated from sample swaps bounded by [1e-3, ...], and TFloor is 0.0001 * T0. These values are from [citation or measurement reference]; changes require revalidation against polish test suite.'",
+      "invariant": "Tuning parameters in optimization algorithms must document their origin (standard reference, measurement, calibration) so future maintainers know whether they can be modified",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unexplained-constant",
+      "theme": "empirically-tuned early-exit threshold lacks measurement context",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 82,
+      "summary": "rejectCap = 200 * g.n early-stop constant for 'hill' mode is marked 'empirically-tuned' but the measurement or rationale is not documented",
+      "failure": "Line 82: const rejectCap = 200 * g.n; // empirically-tuned early-stop for 'hill' mode. The comment says it is 'empirically-tuned' but does not document: (a) on what input sizes/structures was it tuned, (b) what was the optimization target (speed vs solution quality tradeoff), (c) how sensitive is the result to this constant. A maintainer asked to improve polish convergence cannot assess whether this constant should be adjusted.",
+      "remediation": "Add to the comment: 'This was measured on [roster sizes/types]; tuning it requires rerunning the performance suite (tools/benchmark-polish.mjs or equivalent). Conservative changes are [\u00b110%] without re-measurement.'",
+      "invariant": "Any constant marked 'empirically-tuned' must reference the measurement/benchmark that produced it, or state how to re-measure it",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unclear-name",
+      "theme": "variable name abbreviation is obscure without ring-graph context",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 142,
+      "summary": "Variable 'perim' used for ring-perimeter distance is unclear without understanding that the seed graph is a Hamiltonian cycle",
+      "failure": "Lines 142-146 calculate: const perim = Math.min(|va-vb|, |va-vb-n|, |vb-va-n|). The name 'perim' (perimeter) is a conceptually correct abbreviation for 'distance around the ring surface', but only if the reader understands that the algorithm starts from a ring (cycle) graph. Without that context, 'perim' could mean any distance metric. The parameter is used in the heuristic key at line 147 but not explained inline.",
+      "remediation": "Rename 'perim' to 'ringDist' and add a one-line comment: const ringDist = Math.min(...); // distance on ring surface (shortest path in the cycle seed)",
+      "invariant": "Variable names that depend on implicit algorithm context must be named to be self-documenting or accompanied by an inline comment",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "easy-to-misuse-api",
+      "theme": "return value allows silent misuse when input is refused",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 246,
+      "summary": "buildConstrainedBuddyGraph returns empty but type-valid structures (buddies=[[],[],[]], edges=[]) when refused, making it easy to forget checking report.refusals",
+      "failure": "ConstrainedBuddyResult has non-nullable buddies/edges arrays. When refused, refusedResult returns {buddies: Array(size).fill([]), edges: [], ...}. A caller can iterate these fields without error even when the input was refused: 'for (const b of result.buddies) { }' works silently on empty arrays. The documentation (line 241) warns 'read report.refusals first' but the TypeScript type system does not enforce it\u2014any field access is valid and silent.",
+      "remediation": "Consider using a discriminated union return type: ConstrainedBuddyResult = SuccessResult | RefusedResult, where RefusedResult has only report and no buddies/edges. This would make the TypeScript compiler catch accidental field access. Alternatively, use a sealed pattern: if (result.report.refusals.length > 0) { return /* handle refusal */ } enforced by a linter rule.",
+      "invariant": "When a builder function can refuse input, its return type should make the failure path structurally distinct from the success path, or use a runtime guard documented in the type",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "{\"target\":\"lib/src (the ringweave core)\",\"round\":3,\"runId\":\"sextant-m3-lib\",\"changedPaths\":[\"lib/src/core/index.ts\",\"lib/test/optimizer.props.test.ts\"],\"saturation\":{\"critic-correctness\":{\"nothingFoundStreak\":0},\"critic-security\":{\"nothingFoundStreak\":0},\"critic-solid\":{\"nothingFoundStreak\":1},\"critic-maintainability\":{\"nothingFoundStreak\":0},\"critic-interaction\":{\"nothingFoundStreak\":1}}}"
+}

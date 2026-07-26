@@ -30,6 +30,8 @@ import {
   largestComponentFraction,
 } from "../src/core/metrics.js";
 import { polish } from "../src/core/polish.js";
+import { ring } from "../src/core/graph.js";
+import { mooreLowerBounds } from "../src/core/bounds.js";
 import {
   Constraints,
   polishConstrained,
@@ -307,10 +309,103 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     }
   });
 
-  it("does not divide by zero when there are no edges to swap", () => {
-    // polishWork(n, 0, 1) is 0; an unguarded division would produce Infinity —
-    // the very value being defended against.
-    expect(polishWork(5, 0, 1)).toBe(0);
+  it("never models an iteration as free, so the divisor is always positive", () => {
+    // The overhead term does double duty: it stops an edgeless graph from making
+    // the divisor zero (which would afford Infinity iterations), and it stops a
+    // tiny graph from being modelled as nearly free. Before it existed,
+    // buildBuddyGraph(3, 2, { polishIters: 1e9 }) ran for 35.7 SECONDS.
+    expect(polishWork(5, 0, 1)).toBeGreaterThan(0);
+    expect(polishWork(3, 2, 1)).toBeGreaterThan(0);
     expect(() => buildConstrainedBuddyGraph(5, 0, new Constraints(5), { polish: true })).not.toThrow();
+  });
+
+  it("bounds a huge iteration request on a TINY graph, where the work model alone cannot", () => {
+    // The defect the absolute ceiling closes: as n·m falls the affordable
+    // iteration count rises without limit, and fixed per-iteration cost then
+    // dominates a number the model thinks is cheap.
+    const started = performance.now();
+    const r = buildBuddyGraph(3, 2, { polishIters: 1e9 });
+    expect(performance.now() - started).toBeLessThan(5_000); // was 35,700 ms
+    expect(r.edges.length).toBeGreaterThan(0);
+  });
+
+  it("bounds the exported primitives, not just the wrappers around them", () => {
+    // `polish` and `polishConstrained` are public API. A clamp in
+    // buildBuddyGraph does not apply to a direct caller, and
+    // polish(ring(20), { maxIters: Infinity }) used to never return.
+    const started = performance.now();
+    const out = polish(ring(20), { mode: "hill", maxIters: Infinity });
+    expect(performance.now() - started).toBeLessThan(20_000);
+    expect(out.graph.n).toBe(20);
+
+    const cons = new Constraints(20);
+    const started2 = performance.now();
+    // Sourced the way it actually arrives — JSON has no Infinity literal, but
+    // parsing an over-large exponent yields one.
+    const fromJson = JSON.parse('{"iters":1e999}').iters as number;
+    expect(fromJson).toBe(Infinity);
+    expect(polishConstrained(ring(20), cons, { iters: fromJson }).n).toBe(20);
+    expect(performance.now() - started2).toBeLessThan(20_000);
+  });
+
+  it("charges the anneal calibration against the same budget as the loop", () => {
+    // 100 full O(n·m) energy evaluations ran before the loop regardless of the
+    // budget: polish(g, {mode:"anneal", maxIters:0}) took 587 ms on a 300-vertex
+    // graph against 11 ms for the same call in hill mode.
+    const g = ring(300);
+    const anneal = performance.now();
+    polish(g, { mode: "anneal", maxIters: 0 });
+    const annealMs = performance.now() - anneal;
+    const hill = performance.now();
+    polish(g, { mode: "hill", maxIters: 0 });
+    const hillMs = performance.now() - hill;
+    // A zero budget must buy zero work in BOTH modes, so they are now comparable.
+    expect(annealMs).toBeLessThan(hillMs + 200);
+  });
+});
+
+
+/** Two metrics that described an earlier pipeline stage rather than the result. */
+describe("reported metrics describe the graph actually returned", () => {
+  it("reports the separation the returned graph has, not the one generation aimed for", () => {
+    // buildBuddyGraph(16, 5) advertised finalMinSeparation 3 while returning a
+    // graph of girth 3 — buddies two steps apart. ringGreedy reported its own
+    // achievement and polish, which is not separation-aware, then ran.
+    const r = buildBuddyGraph(16, 5);
+    expect(Number.isFinite(r.girth)).toBe(true);
+    expect(r.finalMinSeparation).toBe(r.girth - 1);
+  });
+
+  it("holds across sizes, polished and unpolished", () => {
+    for (const [n, k] of [[16, 5], [24, 4], [40, 6], [12, 3]] as const) {
+      for (const polish of [true, false] as const) {
+        const r = buildBuddyGraph(n, k, { polish });
+        if (!Number.isFinite(r.girth)) continue;
+        expect(r.finalMinSeparation).toBe(r.girth - 1);
+      }
+    }
+  });
+
+  it("scores the gap against the degree delivered, not the one requested", () => {
+    // buildBuddyGraph(8, 6) returns a 3-regular graph whose ASPL equals the
+    // Moore bound for k=3 exactly, yet used to report a gap of 0.375 by scoring
+    // it against k=6 — a graph that is provably optimal reading as badly wired.
+    const r = buildBuddyGraph(8, 6);
+    expect(r.degreeMax).toBeLessThan(6); // the demotion floor really does bind here
+    expect(r.asplGap).toBeCloseTo(0, 12);
+  });
+
+  it("never claims a diameter lower bound above an achievable diameter", () => {
+    // K2 is the unique 1-regular graph on 2 vertices; it has diameter 1 and meets
+    // the ASPL bound, but mooreLowerBounds(2, 1) claimed diameterLb 2.
+    expect(mooreLowerBounds(2, 1)).toEqual({ asplLb: 1, diameterLb: 1 });
+    for (let n = 2; n <= 40; n++) {
+      for (let k = 1; k < n; k++) {
+        const b = mooreLowerBounds(n, k);
+        // A k-regular graph on n vertices always exists for some parity, and its
+        // diameter can never exceed n-1; a lower bound above that is vacuous.
+        expect(b.diameterLb).toBeLessThanOrEqual(n - 1);
+      }
+    }
   });
 });

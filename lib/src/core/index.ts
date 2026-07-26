@@ -158,7 +158,6 @@ export function buildBuddyGraph(
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
   const seed = options.seed ?? 12345;
-  const polishIters = boundedIterations(options.polishIters, DEFAULT_POLISH_ITERS, n, k);
   const wantPolish = resolveWantPolish(options.polish, n, k, DEFAULT_POLISH_ITERS);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
@@ -170,11 +169,12 @@ export function buildBuddyGraph(
     // input (disconnection is penalized, so a connected input stays connected) —
     // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
     // polishConstrained.
-    g = polish(g, { mode: "anneal", seed, maxIters: polishIters }).graph;
+    g = polish(g, { mode: "anneal", seed, maxIters: options.polishIters }).graph;
     polished = true;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);
+  const gi = girth(g);
 
   return {
     buddies,
@@ -184,10 +184,22 @@ export function buildBuddyGraph(
     degreeMax,
     aspl: summary.aspl,
     diameter: summary.diameter,
-    girth: girth(g),
-    asplGap: asplGap(summary.aspl, n, k),
+    girth: gi,
+    // Scored against the degree actually DELIVERED, not the one requested. The
+    // demotion floor can hand back a uniformly smaller degree, and scoring that
+    // graph against the requested k reports a large gap for one that is exactly
+    // optimal for what it delivered — buildBuddyGraph(8, 6) returns a 3-regular
+    // graph whose ASPL equals mooreLowerBounds(8, 3) exactly. `model.ts` already
+    // scores the displayed quality this way; this aligns the library's own field.
+    asplGap: asplGap(summary.aspl, n, degreeMax),
     polished,
-    finalMinSeparation: finalMind,
+    // Derived from the graph being RETURNED, not from the pre-polish target.
+    // `ringGreedy` reports the separation it reached; polish then runs and is NOT
+    // separation-aware, so the old value routinely over-advertised — for
+    // buildBuddyGraph(16, 5) it claimed 3 while the returned graph had girth 3,
+    // i.e. buddies two steps apart. Linking two people d apart closes a (d+1)
+    // cycle, so the achieved separation is girth - 1.
+    finalMinSeparation: Number.isFinite(gi) ? gi - 1 : finalMind,
     connected: summary.connected,
     largestComponentFraction: largestComponentFraction(g),
   };
@@ -303,7 +315,6 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
-  const polishIters = boundedIterations(options.polishIters, DEFAULT_CONSTRAINED_POLISH_ITERS, n, k);
   if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
     const priorWeight = active.priorHard
@@ -313,7 +324,7 @@ export function buildConstrainedBuddyGraph(
     // than its input on the objective, so adopting it is always safe.
     g = polishConstrained(g, active, {
       seed: options.seed ?? 0,
-      iters: polishIters,
+      iters: options.polishIters,
       priorWeight,
     });
     polished = true;
@@ -364,49 +375,13 @@ const DEFAULT_POLISH_ITERS = 20000;
 /** Default polish iteration budget on the constrained path (matches `polishConstrained`). */
 const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
 
-/**
- * Resolve the iteration count polish will actually run, from a caller-supplied
- * value that becomes a LOOP BOUND.
- *
- * Two things go wrong if this is only type-checked, and both were found by
- * review after a first attempt that did exactly that.
- *
- * TYPE. `n` and `k` are validated everywhere; the options object was taken on
- * faith, and one of its fields is used directly as `for (let i = 0; i < iters;
- * i++)`. `Infinity` is reachable from JSON without an Infinity literal —
- * `JSON.parse('{"polishIters":1e999}').polishIters === Infinity` — and the only
- * other loop exit is "fewer than two edges", so with a real graph neither polish
- * pass ever returned. That broke `buildConstrainedBuddyGraph`'s documented
- * "refuses, never throws" contract in the worst way: it did neither.
- *
- * MAGNITUDE. Rejecting `Infinity` and accepting `1e15` is not a budget, it is a
- * boundary one step to the left of the same defect. So the value is CLAMPED to
- * what `MAX_POLISH_WORK` affords at this (n, k), which makes the constant
- * authoritative rather than advisory — including for an explicit `polish: true`,
- * the path that otherwise let one boolean re-open the 33 s case the budget was
- * introduced to close.
- *
- * The clamp is a NO-OP wherever auto-polish currently runs: `resolveWantPolish`
- * only admits configurations whose default-iteration work already fits, so the
- * minimum is the requested value by construction. Nothing pinned moves.
- *
- * A malformed value falls back to the documented default rather than throwing —
- * refusing outright would be a new failure mode for existing callers, and it is
- * the same treatment the app's import path already gives untrusted settings.
+/*
+ * The iteration clamp that used to live here is GONE, not moved twice.
+ * `boundedPolishIterations` (graph.ts) now runs inside `polish` and
+ * `polishConstrained` — the only place it can actually bind, since both are
+ * exported public API and a clamp in this wrapper left a direct caller
+ * unbounded.
  */
-function boundedIterations(
-  value: number | undefined,
-  fallback: number,
-  n: number,
-  k: number,
-): number {
-  const requested = Number.isInteger(value) && (value as number) >= 0 ? (value as number) : fallback;
-  const perIteration = polishWork(n, k, 1);
-  // No edges to swap: the loop exits on its own, and dividing by zero here would
-  // produce Infinity — the very value being guarded against.
-  if (perIteration <= 0) return requested;
-  return Math.min(requested, Math.floor(MAX_POLISH_WORK / perIteration));
-}
 
 // Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
 // step function — any weight >= ~0.5 saturates it (98% kept at n=30, 86% at n=60, 64% at
@@ -428,7 +403,7 @@ const DEFAULT_PRIOR_WEIGHT = 2;
  * currently pinned moves; see the constant for the arithmetic.
  *
  * An EXPLICIT `polish: true` is still honoured — but it is no longer unbounded.
- * The caller decides WHETHER to polish; `boundedIterations` decides how much work
+ * The caller decides WHETHER to polish; `boundedPolishIterations` decides how much work
  * that may cost. Before, honouring the instruction meant one boolean could
  * re-open the exact 33 s case this budget was introduced to close.
  *

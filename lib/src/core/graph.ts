@@ -97,9 +97,14 @@ export function greedyWork(n: number, k: number): number {
 //
 // The value is chosen to reproduce the old threshold exactly at k=4 — the
 // configuration every fixture and the reroll boundary test use — so nothing that
-// is pinned today moves: polishWork(120, 4) = 5.76e8 is admitted and
-// polishWork(121, 4) = 5.86e8 is not. Denser rosters, which the n-cap waved
+// is pinned today moves: polishWork(120, 4, 20000) = 20000*(64 + 120*240) =
+// 577,280,000 is admitted exactly, and polishWork(121, 4, 20000) = 586,920,000 is
+// not. (The constant was re-derived when POLISH_ITER_OVERHEAD was added; the
+// boundary it reproduces is unchanged.) Denser rosters, which the n-cap waved
 // through, are now refused: polishWork(120, 12) = 1.73e9.
+//
+// This is the GATE only — whether auto-polish runs at all. What it may then cost
+// is enforced by `boundedPolishIterations` inside the primitives.
 //
 // HONEST RESIDUAL: this bounds the cost and makes the gate k-aware, but any
 // on/off gate still has a discontinuity at its boundary — cost jumps from the
@@ -107,7 +112,57 @@ export function greedyWork(n: number, k: number): number {
 // ITERATION COUNT from the budget rather than switching polish off, which changes
 // every polished output and would have to be mirrored in reference-python first.
 // Recorded as a follow-on in lib/CLAUDE.md rather than done here.
-export const MAX_POLISH_WORK = 576_000_000;
+export const MAX_POLISH_WORK = 577_280_000;
+
+/**
+ * Fixed cost of one polish iteration, in the same units as `n·m`.
+ *
+ * Without it the model says an iteration on a 3-person roster costs 9 units, so
+ * the budget affords 64 million of them — and 64 million iterations of anything
+ * is not free. MEASURED before this constant existed:
+ * `buildBuddyGraph(3, 2, { polishIters: 1e9 })` took 35.7 SECONDS, on a
+ * three-vertex graph, without even needing `polish: true`. Every iteration
+ * rebuilds and sorts the edge list, allocates a Set in `proposeSwap`, and copies
+ * the graph on improvement, none of which scales with n·m.
+ */
+const POLISH_ITER_OVERHEAD = 64;
+
+/**
+ * Absolute ceiling on polish iterations, independent of the work budget.
+ *
+ * The work budget alone cannot bound the small-n case: as n·m falls, the
+ * affordable iteration count rises without limit, and the fixed per-iteration
+ * cost then dominates a number the model thinks is cheap. This ceiling is simply
+ * the documented default, which makes `polishIters` an option that can only ask
+ * for LESS work than the default — never more. Nothing in this repo asks for
+ * more, and a knob that can only reduce cost cannot be turned into a hang.
+ */
+const MAX_POLISH_ITERS = 20_000;
+
+/**
+ * The iteration count polish may actually run, given the graph it was handed.
+ *
+ * THE ONE enforcement point, called from inside `polish` and `polishConstrained`
+ * rather than from the wrappers above them. Three separate defects came from
+ * having it anywhere else: the exported primitives are public API and bypassed a
+ * wrapper clamp entirely (`polish(ring(20), { maxIters: Infinity })` never
+ * returned); the cost model had no constant term; and the anneal calibration ran
+ * before the bound applied.
+ *
+ * `m` is the ACTUAL edge count, not an estimate from k — the primitives hold the
+ * graph, so they can afford to be exact where the pre-generation gate cannot.
+ */
+export function boundedPolishIterations(
+  n: number,
+  m: number,
+  requested: number | undefined,
+  fallback: number,
+): number {
+  const asked = Number.isInteger(requested) && (requested as number) >= 0 ? (requested as number) : fallback;
+  // The overhead term also guarantees a positive divisor when m is 0.
+  const perIteration = POLISH_ITER_OVERHEAD + n * m;
+  return Math.min(asked, Math.floor(MAX_POLISH_WORK / perIteration), MAX_POLISH_ITERS);
+}
 
 /**
  * Estimated polish cost: iterations × per-iteration work (an edge-list build plus
@@ -116,7 +171,7 @@ export const MAX_POLISH_WORK = 576_000_000;
  */
 export function polishWork(n: number, k: number, iters: number): number {
   const m = (n * Math.min(k, Math.max(0, n - 1))) / 2;
-  return iters * n * m;
+  return iters * (POLISH_ITER_OVERHEAD + n * m);
 }
 
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`

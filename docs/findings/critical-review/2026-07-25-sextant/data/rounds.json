@@ -168,5 +168,90 @@
         "skipped": false
       }
     }
+  },
+  {
+    "file": "lib-round-03.json",
+    "runId": "wf_0fa0df70-f65",
+    "round": 3,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 8,
+      "confirmed": 9,
+      "blocking": 4,
+      "deferrals": 1,
+      "plausible": 5,
+      "themes": 8
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 7,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
   }
 ]

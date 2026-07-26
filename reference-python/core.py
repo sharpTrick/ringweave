@@ -256,9 +256,13 @@ def moore_lower_bounds(n, k):
             shell = k  # a cycle: each shell is 2 (until wrap) -- approximation
         else:
             shell = shell * (k - 1)
-        if shell == 0:
+        if shell == 0 and remaining > 0:
             # can't expand further but vertices remain: pad at current dist+
-            # (keeps bound finite for infeasible params)
+            # (keeps bound finite for infeasible params).
+            # `remaining > 0` matters: with every vertex already placed there is
+            # nothing to pad, and advancing diameter_lb anyway claims a diameter
+            # LOWER BOUND above what an achievable graph reaches — moore_lower_bounds(2, 1)
+            # returned diameter_lb 2 for K2, which has diameter 1 and meets the ASPL bound.
             total += dist * remaining
             diameter_lb = dist
             remaining = 0

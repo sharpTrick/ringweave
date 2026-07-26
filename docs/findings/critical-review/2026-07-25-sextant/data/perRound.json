@@ -53,5 +53,44 @@
     "subagentTokens": 401727,
     "agents": 6,
     "toolCalls": 135
+  },
+  {
+    "round": 3,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 4,
+    "deferrals": 1,
+    "plausible": 5,
+    "themes": 8,
+    "totalFindings": 15,
+    "files": [
+      "lib/src/core/polish.ts",
+      "lib/src/core/index.ts",
+      "lib/src/core/bounds.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/graph.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/metrics.ts",
+      "lib/src/core/greedy.ts"
+    ],
+    "classes": [
+      "unbudgeted-work-before-the-loop-bound",
+      "stale-metric-from-an-earlier-pipeline-stage",
+      "lower-bound-exceeds-achievable-value",
+      "quality-score-against-an-undelivered-target",
+      "unbounded-work-from-attacker-number",
+      "unbounded-loop-bound",
+      "cost-before-gate",
+      "false-comment",
+      "imprecise-comment",
+      "unexplained-constant",
+      "unexplained-constants",
+      "unclear-name",
+      "easy-to-misuse-api"
+    ],
+    "subagentTokens": 428827,
+    "agents": 6,
+    "toolCalls": 113
   }
 ]
