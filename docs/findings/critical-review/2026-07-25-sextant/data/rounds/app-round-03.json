@@ -1,0 +1,394 @@
+{
+  "target": "app/src",
+  "round": 3,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 6,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 3,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of app/src, traced against lib/src where the app consumes it, plus 7 reproduction probes under /home/user/ringweave/.review-scratch/cr3/ (config `cfg.js` / `jsdom.config.js`).\n\nRead every file: App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, io/{importGraph,exportGraph,parseRoster,feasibility,constraintMessages,download,readFileText,schema}.ts, state/{useBuddyGraph,useGenerationWorker,useGraph,useNotice,useEscape,useExplorerHistory,usePathFinder}.ts, worker/{generate,generate.worker,protocol}.ts, graph/{GraphCanvas,layout,highlight}.ts(x), panels/* — plus all 29 files in app/test.\n\nRan and found CLEAN:\n- Export→import round-trip parity for 8 (n,k) configurations: metrics, settings and buddy ordering are byte-identical (`roundtrip.probe.ts`).\n- 3000-graph fuzz of the import path asserting: disconnected ⇒ quality 0 ∧ aspl null ∧ diameter null; isOptimal ⇒ connected; qualityPercent ∈ [0,100]; degreeLabel/degreeMin/degreeMax match the rebuilt adjacency; connected ⇔ fraction 1 (`fuzz.probe.ts`). No violations.\n- Generation path displayed-vs-actual: every metric on the view (connected, largestComponentFraction, aspl, diameter, degree extent, buddies) independently recomputed from the returned edge list with the core's own `allPairsSummary`/`largestComponentFraction`, for the unconstrained grid and 300 random constrained rule sets; and \"all N buddy rules satisfied\" cross-checked against the actual edge set for required/prohibited membership (`gen.probe.ts`). No violations — notably a constrained build that comes back disconnected still reports quality 0 and \"not everyone's connected\", never \"well-linked\".\n- Determinism/Set-order: the only path-reconstructing code is `usePathFinder` → core `shortestPath` over a `Graph` the app rebuilds from `view.edges`. Probed whether edge-list order (generator order vs. export's canonical sort) changes the drawn route: `edgeList()` is already sorted, so 0 route differences over all pairs for n=12..30, polished and constrained (`path.probe.ts`, `path2.probe.ts`). No Math.random/Date.now anywhere in app/src; force layout is ring-seeded and tick-scaled by a pure function of n.\n- Degree/force-connect boundary: 120-case fuzz over k ∈ [2,12] plus hand-built saturated-bridge cases (two K13 halves with a single legal crossing pair, 168–180 rules) never produced degreeMax > k, so the app's own export is never refused by importGraph's BUDDY_MAX degree gate (`deg.probe.ts`, `force.probe.ts`, `force2.probe.ts`).\n- Traced but found sound: RosterModal's pre-flight uses the same `toConstraints` + `validateDetailed` as the worker (identical accept-set); `useGenerationWorker` id/stale-drop and worker swap; `useBuddyGraph`'s consumed/pending guards and the identical-edges branch (settings+constraints+report adopted, metrics provably unchanged); App's `selected` clamp against a shrunken roster and `usePathFinder`'s `a >= graph.n` guard; feasibility gates vs. the core's MAX_GREEDY_WORK/MAX_CONSTRAINED_WORK budgets (no in-range config the UI admits and the core refuses); eccentricity returns Infinity so PersonPanel cannot claim \"everyone is within N steps\" on a split graph; importGraph's ordering of size → density → per-name length → control chars → parseRoster round-trip → per-vertex degree → O(n²) measure.\n\nnpm test in app/ is green (29 files, 256 tests) at HEAD 53477a4. (One transient failure I saw was a mid-edit working tree from a concurrent commit, not a defect.)",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of app/src plus app/test. Reproduced with throwaway vitest probes (written under app/.scratch with a scratch config, both removed afterwards; tree is clean per `git status --porcelain`). Specifically: (1) importGraph gate ORDER traced line by line and timed — n=1000/m=6000 valid import re-measures in 112-160 ms, 18 hostile shapes all refused in <=2 ms, and every size/shape gate provably precedes allPairsSummary/girth/largestComponentFraction; (2) settings injection — buddies:Infinity, seed:Infinity, minSeparation:-1e9, polish:\"yes\", -0 indices, non-integer n all sanitize to in-range values, and exportGraph JSON never contains Infinity; (3) 8 MB JSON.parse worst cases — 200k-deep nesting (83 ms), 1M-element flat array (43 ms), 1000 people x 7 KB junk (10 ms); (4) constraint block — declaredPairs cap runs before any per-pair work, {length:1e9} refused, duplicate/contradictory pairs refused; (5) force settle cost curve at max density across n = 60..1000 (172 ms -> 262 ms; forceIters genuinely flattens it, FORCE_MAX_EDGES == the densest importable graph); (6) main-thread per-keystroke cost in RosterModal at the adversarial max (500k chars of duplicates + 200 rules + 1000 names) = 63 ms parseRoster + 6 ms validateDetailed; (7) spreadsheet sinks — traced that no name surviving import or parseRoster can contain a comma, newline, tab, CR or any C0/DEL char, so no EMBEDDED delimiter can split a CSV cell or clipboard row; toCsv quotes every field and routes it through neutralizeCell, the clipboard line's leading name is neutralized, and the empty-buddy glyph is an em dash not \"-\"; tried a leading U+200B formula, which survives import but is exactly what stops a spreadsheet parsing it as a formula; (8) worker dispatch bounds — MAX_GREEDY_WORK / MAX_CONSTRAINED_WORK / MAX_CONSTRAINED_N in the core cover every n,k the app can send, and useGenerationWorker terminates-and-swaps so no run is orphaned; (9) search ranking cost — matchNormalized is bounded by name length (<=120) regardless of query size.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface pass over app/src (all 38 files: App.tsx, model.ts, constraints.ts, io/*, state/*, worker/*, panels/*, graph/*, styles/*), with the scenario being the next committed change: F9 'Preserve current buddies' (PROJECT_PLAN.md M4, flagship). Traced the concrete fan-out a real implementation would touch, cross-checking every claim already recorded in app/CLAUDE.md's 'F9's worker-protocol groundwork is DEFERRED' entry against the live code rather than taking the doc's word for it.\n\n1. worker/protocol.ts - GenerateRequest.constraints is a flat {required, prohibited} object (confirmed no `priors` field); GenerateOptions has no priorWeight/priorHard.\n2. worker/generate.ts - confirmed the documented promotion-order hazard is real in the core (lib/src/core/index.ts:332-337, buildConstrainedBuddyGraph calls withHardPriors(cons) BEFORE validate(active,k)) and confirmed the app-side mitigation already exists: runGeneration checks `built.report.refusals.length > 0` AFTER building (worker/generate.ts:105-114) rather than trusting the pre-hoc validateDetailed(cons,k) call on the un-promoted set - so the trap the doc describes is real and already defended against, not just narrated.\n3. constraints.ts - confirmed ConstraintKind is a closed 2-member union (required/prohibited) via the assertNever pattern in splitPairs; confirmed priors correctly do NOT belong in this type (they are not user-authored rules, per the doc, and my trace agrees: they would be derived from view.edges by name, needing a resolver analogous to resolveNamedPairs but keyed on edges, not typed rule rows).\n4. RosterModal.tsx - confirmed via the Props interface that it receives (initialText, settings, constraints, constraintNames, canCancel) and NOT the live view's edges, so a 'preserve buddies' toggle cannot be added to this component without a new prop from App.tsx.\n5. App.tsx / useBuddyGraph.ts - confirmed the existing onIdenticalReroll callback pattern in useBuddyGraph (capturing pre-generation state and diffing post-generation) is a directly reusable seam for the 'kept N of M pairs' report F9 needs, without inventing a new mechanism.\n6. exportGraph.ts / schema.ts / importGraph.ts - confirmed these need NO changes for F9: priors are ephemeral generation input (mirroring the core's own Constraints class, which does not serialize priors), not persisted view state, so the file schema/round-trip is untouched by this feature.\n\nGrepped app/src for priorWeight/priorHard/addPrior/prior - zero live matches outside comments, confirming the no-caller state per the mechanical test.\n\nVerdict on the scenario's central question (does the declared seam pay, or does it obstruct): F9's fan-out (worker/protocol.ts, worker/generate.ts, constraints.ts, RosterModal.tsx, App.tsx, useBuddyGraph.ts) is not evidence of modules that should not have known about each other - it is the SAME shape F7 (constraints UI) already used successfully (flat pair arrays crossing the worker boundary, one conversion module, prop-threading through the composition root, a hook-signature extension), and the one genuine correctness hazard in that path (prior-promotion-before-validate) is already pre-empted with a real, tested check rather than left as a TODO. The two real open design questions (whether the toggle lives in RosterModal or elsewhere; whether the 'kept N of M' UI belongs to App or a new panel) are UI placement decisions, not architecture violations, and the project's own CLAUDE.md already states them accurately rather than glossing over them.\n\nAlso did a lighter full-surface pass over the remaining files (GraphCanvas.tsx/layout.ts's LAYOUT_MODES/FIT_MODES/positionsFor seam, useGraph.ts, usePathFinder.ts, useExplorerHistory.ts, useNotice.ts, PersonSearch.tsx, parseRoster.ts, importGraph.ts) for SRP/OCP/god-component concerns; each hook and panel has one clear responsibility (useGraph rehydrates a core Graph, usePathFinder wraps shortestPath, useExplorerHistory owns only the back-stack, useNotice owns only transient message lifecycle), and App.tsx's size is accounted for by it being the genuine composition root for state that IS cross-cutting (selection affects the canvas, buddy list, person panel and search simultaneously) rather than a dumping ground for unrelated logic. No new SOLID findings beyond what prior rounds and app/CLAUDE.md already recorded.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Traced the full keyboard/interaction surface of app/src as it stands: App.tsx's focus-management scheme (closeWithFocus, useEscape, the inert-based modal/busy overlay), PersonSearch.tsx's combobox, RosterModal.tsx's dialog, Notice.tsx/PathPanel.tsx's live regions, GraphCanvas.tsx's reduced-motion and role=img delegation, LayoutToggle.tsx's aria-pressed, BuddyList.tsx/PersonPanel.tsx/QualityPanel.tsx/ConstraintsEditor.tsx/SettingsControls.tsx for reachability, state announcement and error/empty paths, and useExplorerHistory/useEscape/useNotice for order and timing. Built and ran three throwaway RTL harnesses (mounted App with a mocked useGenerationWorker, run via app/test/zzz-scratch-*.test.tsx then deleted, never committed) to reproduce focus location after: (1) clicking 'Generate buddy graph' on cold load, (2) clicking 'Cancel' on the roster editor with an existing view, (3) clicking 'Cancel' on the busy overlay during a reroll. All three reproduced document.activeElement === document.body. Also grepped for aria-current/aria-selected/aria-live/aria-pressed/setTimeout across app/src and confirmed BuddyList's selected row and 'Copied' confirmation have no ARIA/live-region counterpart while LayoutToggle/PathPanel/Notice/PersonSearch do. Ran the full `npm test` suite (256 passed) after removing scratch files to confirm no regressions were introduced by probing. CSS reduced-motion (`app.css:234`) and GraphCanvas's JS reducedMotion() gate were checked and found correctly comprehensive.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "connectionSummary clamps the displayed largest-group percentage at the top of the range (Math.min 99) but not the bottom, so Math.floor can silently print 0% for a non-empty largest group — a broken graph reads as emptier than it is.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "connectionSummary floors the largest-group share, so a badly shattered graph is reported as \"0% are in the largest group\" even though the largest group is non-empty — the guard exists at the top of the range (Math.min(99, …)) but not at the bottom."
+      ],
+      "remediation": "In connectionSummary, replace the one-sided Math.min(99, Math.floor(f*100)) with a two-sided clamp, Math.max(1, Math.min(99, Math.floor(f*100))), applied only at that single caption seam — no new helper, no second call site to keep in sync."
+    },
+    {
+      "theme": "The roster editor's own stated contract — an unrecognised buddy-rule row is 'kept and flagged, not deleted' — is violated because App's dispatch path only ever receives the resolved ConstraintPair[] and has no name-keyed representation to hand back, so any row that fails to resolve is permanently and silently dropped on Generate.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "On Generate the modal hands App only `resolved.pairs`, so any rule row that named someone not in the roster (or a self-pair, or a duplicate) is permanently discarded; the app's stored rule model is index pairs, so reopening \"Edit people\" cannot show it again — contradicting the editor's own stated contract that an unrecognised row is \"kept and flagged rather than deleted\"."
+      ],
+      "remediation": "Stop storing the lossy ConstraintPair[] as App's rule model — store the NamedPair[] the user actually typed and resolve to ConstraintPair[] only at the dispatch boundary (reusing the existing resolveNamedPairs). This removes the separate lossy round-trip path entirely rather than adding a second stored representation."
+    },
+    {
+      "theme": "Untrusted-length strings reaching a sink (an error message, a DOM text node) are supposed to be bounded before the expensive/rendering step, per the app's existing capText/clampNotice/MAX_NAME_CHARS convention — but two sinks break that convention, one by bounding after the costly work instead of before, one by not bounding at all.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`quote()` serializes the entire untrusted value with `JSON.stringify` and only then slices to 80 chars, so a deeply-nested value throws a RangeError that escapes `importGraph` as a non-ImportError, and a multi-megabyte value costs a full serialization to produce 80 characters.",
+        "The search query is stored, trimmed three times per render, and rendered in full into a DOM text node with no length cap — the only untrusted-string sink in the app without one (roster text is capped by `capText`, notices by `clampNotice`, names by `MAX_NAME_CHARS`)."
+      ],
+      "remediation": "Apply the app's one existing cap-at-sink pattern to both places instead of inventing a new guard: in `quote`, slice a string BEFORE calling JSON.stringify (and describe non-primitives structurally, no recursion) so the bound happens pre-serialization; in PersonSearch, slice the query for display the same way clampNotice already slices notice text. Both are the same subtraction — remove the unbounded code path, don't add a new bounding mechanism."
+    },
+    {
+      "theme": "resolveNamedPairs' doc comment describes only one of its five return fields, understating what callers (which use all five distinct fields for separate error messages) actually depend on.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "resolveNamedPairs comment says 'Returns the dropped count' but the function returns an object with five fields (pairs, unmatched, duplicate, selfPair, dropped)"
+      ],
+      "remediation": "Delete the stale one-field comment and replace it with a comment listing the actual return shape actually consumed by callers — a documentation-only change, no code path affected."
+    },
+    {
+      "theme": "describeReason's switch over Reason.code has no default arm, so an unhandled code returns undefined silently instead of failing loudly, relying entirely on the test suite's SAMPLES table staying in sync with the union.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "describeReason function switches on Reason.code with no default case; if a new Reason code is added to ringweave and the test SAMPLES table is not updated, the app silently returns undefined"
+      ],
+      "remediation": "Add a default arm to the switch that throws (`throw new Error(\\`Unhandled Reason code: ${r.code}\\`)`), removing the silent-undefined path rather than adding external tracking."
+    },
+    {
+      "theme": "App.tsx has one tested focus-rescue mechanism (closeWithFocus) for surfaces that unmount themselves while holding focus, but it was wired to only the person/route panels — the roster modal and the busy overlay are the same category of surface (removed from the DOM by the user's own click inside them) and were left outside it, so the exact bug the mechanism exists to prevent still happens through three other doors.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "Focus lands on document.body (stranding the next Tab back at the top of the page) after: (1) clicking 'Generate buddy graph' on cold load — the very first action in the scenario; (2) clicking 'Cancel' in the roster editor opened via 'Edit people' with an existing view; (3) clicking the busy overlay's 'Cancel' button while a re-roll is in progress. In every case the focused control (inside RosterModal or `.busy`) is unmounted by the state change its own onClick triggers (`setModalOpen(false)` in handleGenerate/onCancel, or the busy div disappearing when `bg.cancel()` returns status to 'done'), and nothing calls `.focus()` afterward the way `closeWithFocus` does for the person/route panels."
+      ],
+      "remediation": "Route RosterModal's onGenerate/onCancel and the busy overlay's Cancel through the same single closeWithFocus call already used for the person/route panels, instead of leaving those three handlers to call setModalOpen/bg.cancel directly — one rescue path for every self-unmounting surface, not a second bespoke one."
+    },
+    {
+      "theme": "BuddyList.tsx wasn't updated when the app established its accessibility conventions elsewhere (aria-pressed on LayoutToggle, aria-selected on PersonSearch, permanent live regions on Notice/PathPanel), so its selected-row state and its transient copy-confirmation are both expressed only visually/only via a button's own text, invisible to assistive tech.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "The buddy-list row for the currently selected person gets a visible highlight (`.brow.sel { background: … }`, app.css:164) via `className={\"brow\" + (selected === i ? \" sel\" : \"\")}` (BuddyList.tsx:51), but the `<button>` carries no `aria-current` (or `aria-pressed`/`aria-selected`) reflecting that state, unlike LayoutToggle's `aria-pressed` for the identical 'which one of these is active' pattern.",
+        "`copyAll` (BuddyList.tsx:16-30) flips the Copy button's own label from \"Copy\" to \"Copied\" for 1100ms via `setCopied`, with no `aria-live`/`role=\"status\"` region announcing the confirmation. A focused button's own accessible-name change is not reliably announced by screen readers the way a live region is — which is precisely the reasoning already applied to Notice.tsx (kept mounted so AT is 'already watching' it) and PathPanel.tsx (one live region, not three conditional ones)."
+      ],
+      "remediation": "Bring BuddyList.tsx into line with patterns the app already has, rather than adding new ones: add `aria-current` to the selected row button (mirroring LayoutToggle's existing `aria-pressed`), and reuse Notice.tsx's already-mounted live region for the 'Copied' confirmation instead of relying on the button's own label swap."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "floored-percentage-reads-as-zero",
+      "theme": "a number the panel prints disagrees with the metric the core measured, in the direction that makes a broken graph look emptier/better than it is",
+      "file": "app/src/model.ts",
+      "line": 191,
+      "summary": "connectionSummary floors the largest-group share, so a badly shattered graph is reported as \"0% are in the largest group\" even though the largest group is non-empty — the guard exists at the top of the range (Math.min(99, …)) but not at the bottom.",
+      "failure": "importGraph({version:1, people:[101 people], edges:[]}) → metrics.largestComponentFraction = 0.00990… and connectionSummary prints \"not everyone's connected — 0% are in the largest group\". Same for 302 people with a single edge (fraction 0.0066 → \"0%\"). Reproduced in .review-scratch/cr3/frac.probe.ts. The existing suite pins the 99 ceiling (app/test/quality.test.ts:46) and nothing pins the floor, so this passes today.",
+      "remediation": "Clamp the displayed percentage into [1, 99] whenever the graph is disconnected and largestComponentFraction > 0 — the same one-line symmetry the existing Math.min(99, …) guard already applies at the other end (e.g. Math.max(1, Math.min(99, Math.floor(f*100)))). Fix it in connectionSummary, the single caption seam, so no sibling sink can re-derive it.",
+      "invariant": "For every Metrics m produced by assembleMetrics with m.connected === false, the integer percentage rendered by connectionSummary(m) is 0 if and only if m.largestComponentFraction === 0; otherwise it lies in [1, 99].",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unresolved-rule-silently-deleted",
+      "theme": "a buddy rule the user authored disappears without being told it was deleted — the silent-partial the constraints feature exists to prevent",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 100,
+      "summary": "On Generate the modal hands App only `resolved.pairs`, so any rule row that named someone not in the roster (or a self-pair, or a duplicate) is permanently discarded; the app's stored rule model is index pairs, so reopening \"Edit people\" cannot show it again — contradicting the editor's own stated contract that an unrecognised row is \"kept and flagged rather than deleted\".",
+      "failure": "Open the roster modal with roster [Alice…Fran]; add rule (Alice, Zoe) — the note says \"1 buddy rule names someone who isn't in this roster and won't be used\" (present tense, not \"will be discarded\") — add a valid rule (Ben, Chloe); click Generate; reopen the modal seeded exactly as App seeds it (constraints=stored pairs, constraintNames=stored names). Two rows in, one row out. Reproduced in .review-scratch/cr3/rules.jprobe.tsx: expected 2 rule rows, got 1. The sibling is the roster-edit cycle the NamedPair design was built for: remove Dev from the roster text, Generate, re-add Dev — every Dev rule is gone for good, because App never held the name form. Existing tests (app/test/constraintsFlow.test.tsx) assert only that the unmatched pair is absent from onGenerate's payload, so the loss on reopen is unasserted.",
+      "remediation": "Make the NAME-keyed list the model App stores (App keeps NamedPair[] and resolves to ConstraintPair[] only at dispatch, next to the roster in force), so the editor round-trips exactly what the user typed; resolution stays where it already is in `resolveNamedPairs`. This is subtraction — one conversion at the dispatch boundary instead of a conversion in and a lossy conversion out — and it closes the roster-edit sibling at the same time. If the rules really are meant to be dropped, the note must say so (\"…and will be removed\") rather than \"won't be used\".",
+      "invariant": "For every editor state, the multiset of rule rows rendered after (Generate → reopen the roster modal) equals the multiset of rule rows the editor held at Generate; no row is removed without a message that states the row was removed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-the-bound",
+      "theme": "the guard that bounds untrusted file content in an error message does its bounding after the expensive step, so the guard itself becomes the failure",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 140,
+      "summary": "`quote()` serializes the entire untrusted value with `JSON.stringify` and only then slices to 80 chars, so a deeply-nested value throws a RangeError that escapes `importGraph` as a non-ImportError, and a multi-megabyte value costs a full serialization to produce 80 characters.",
+      "failure": "Import a file `{\"version\": X}` where X is a 20,000-deep nested array (JSON.parse handles 200,000 deep in 83 ms, so this parses fine). `quote(f.version)` at line 151 throws `RangeError: Maximum call stack size exceeded` instead of an `ImportError`; App.handleImportFile catches it as a generic Error and the toast reads \"Couldn't import that file: Maximum call stack size exceeded\" — an engine-internal string in a module whose entire contract is plain-language refusal. Same leak via `quote(p.id)` at line 193 with `{\"version\":1,\"people\":[{\"id\":<nested 20000>,\"name\":\"a\"},{\"name\":\"b\"}],\"edges\":[[0,1]]}`. Cost variant, same root cause: `{\"version\":\"A\".repeat(7_000_000)}` refuses correctly but takes 60 ms and allocates the whole 7 MB serialization to keep 80 characters.",
+      "remediation": "Bound the input before serializing rather than the output after. In `quote`, handle primitives only — for a string, slice to `max` BEFORE `JSON.stringify`; for a number/boolean/null, stringify directly; for anything else return a structural description (`\"a list of 1000000 items\"`, `\"an object\"`) without recursing. That closes both the RangeError and the O(|value|) allocation with one subtraction. Name the sibling: `quote` is called at two sites (`f.version`, `p.id`/`p.name`) and both are covered by fixing the helper, but the belt-and-braces half of the theme is that `importGraph` should be the single import authority — no caller should have to distinguish an `ImportError` from an engine error, so either wrap the body so only `ImportError` escapes, or have `App.handleImportFile` fall back to the generic message for a non-`ImportError`.",
+      "invariant": "For every value `d` obtainable from `JSON.parse` of any string, `importGraph(d)` either returns a GraphView or throws an `ImportError` — no other error type ever escapes; and `quote(v)` returns within a constant bound of `max` for every `v`, never throwing.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Function documentation describes only one return value when the function returns multiple distinct values that callers use for different error messages",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 164,
+      "summary": "resolveNamedPairs comment says 'Returns the dropped count' but the function returns an object with five fields (pairs, unmatched, duplicate, selfPair, dropped)",
+      "failure": "Developer reading the JSDoc comment for resolveNamedPairs learns only about 'dropped count' from the prose; the comment omits mention of unmatched, selfPair, and duplicate counts, which are all used by RosterModal to display distinct user-facing messages about different resolution failures (lines 170-190 of RosterModal.tsx)",
+      "remediation": "Revise the comment starting at line 166 to document the full return object: 'Returns the resolved pairs and counts of resolution failures by cause (unmatched, self-pairs, duplicates) plus total dropped, so the caller can report each issue separately.' This matches the actual usage and return type signature.",
+      "invariant": "Every exported function whose JSDoc describes a return value must document all fields in the actual return type. Specifically: the comment for resolveNamedPairs must mention that unmatched, duplicate, and selfPair are returned and are used by RosterModal for per-cause messages.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-stranded-on-dialog-dismiss",
+      "theme": "App.tsx has a documented, tested focus-rescue mechanism (closeWithFocus) for the person/route panels, but the roster setup dialog and the busy overlay — which are ALSO removed-from-DOM-while-focused surfaces, closed by the user's own actions inside them — were never wired into it, so the exact bug the mechanism was built to prevent still happens through three other doors.",
+      "file": "app/src/App.tsx",
+      "summary": "Focus lands on document.body (stranding the next Tab back at the top of the page) after: (1) clicking 'Generate buddy graph' on cold load — the very first action in the scenario; (2) clicking 'Cancel' in the roster editor opened via 'Edit people' with an existing view; (3) clicking the busy overlay's 'Cancel' button while a re-roll is in progress. In every case the focused control (inside RosterModal or `.busy`) is unmounted by the state change its own onClick triggers (`setModalOpen(false)` in handleGenerate/onCancel, or the busy div disappearing when `bg.cancel()` returns status to 'done'), and nothing calls `.focus()` afterward the way `closeWithFocus` does for the person/route panels.",
+      "failure": "Reproduced with RTL: render <App/>, type a roster, focus and click 'Generate buddy graph' -> document.activeElement === document.body. Same result focusing and clicking the editor's 'Cancel' with a view already present, and focusing/clicking the busy overlay's 'Cancel' during a reroll. A screen-reader/keyboard-only user in each case must now Tab from the very top of the document (past the header) to reach the graph that just appeared, instead of landing on the rail, search box, or wherever is contextually next — exactly the dead end App.tsx's own comment at line 73-76 describes and says 'nothing in the app called .focus() anywhere' to prevent, except three call sites of that same class were missed.",
+      "remediation": "Route RosterModal's onGenerate/onCancel and the busy overlay's Cancel through the same closeWithFocus-style rescue used for the person/route panels — e.g. check `document.activeElement` before calling `setModalOpen(false)`/`bg.cancel()` and refocus `searchRef.current` (or, when no view exists yet and the modal reopens, a stable element inside the reopened modal) when the outgoing focus was inside the dialog or the busy overlay.",
+      "invariant": "For every element E that is focused and then removed from the DOM as a direct result of activating E itself (RosterModal's Generate/Cancel buttons, the busy overlay's Cancel button, and the already-covered person/route panel close buttons), document.activeElement !== document.body immediately after the removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-selection-state-attribute",
+      "theme": "A control's selected/current state is expressed only through a CSS class, with no ARIA counterpart, so a screen-reader user tabbing the list cannot tell which row is currently selected — the same class of gap LayoutToggle's aria-pressed and PersonSearch's aria-selected were added to close, just not extended to this list.",
+      "file": "app/src/panels/BuddyList.tsx",
+      "summary": "The buddy-list row for the currently selected person gets a visible highlight (`.brow.sel { background: … }`, app.css:164) via `className={\"brow\" + (selected === i ? \" sel\" : \"\")}` (BuddyList.tsx:51), but the `<button>` carries no `aria-current` (or `aria-pressed`/`aria-selected`) reflecting that state, unlike LayoutToggle's `aria-pressed` for the identical 'which one of these is active' pattern.",
+      "failure": "A screen-reader user who selects a person from the graph or search, then tabs through the buddy list to review it, gets no announcement distinguishing the selected row from any other — every row reads only as \"<Name>: <buddies>, button\", with no cue that one of them is the person currently shown in PersonPanel.",
+      "remediation": "Add `aria-current={selected === i ? \"true\" : undefined}` (or `aria-pressed`) to the row button in BuddyList.tsx, mirroring LayoutToggle's pattern.",
+      "invariant": "For every row whose selected/active state is expressed by a CSS class, the same button also carries an ARIA state attribute (aria-current/aria-pressed/aria-selected) that is true exactly when the class is applied."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "floored-percentage-reads-as-zero",
+      "theme": "a number the panel prints disagrees with the metric the core measured, in the direction that makes a broken graph look emptier/better than it is",
+      "file": "app/src/model.ts",
+      "line": 191,
+      "summary": "connectionSummary floors the largest-group share, so a badly shattered graph is reported as \"0% are in the largest group\" even though the largest group is non-empty — the guard exists at the top of the range (Math.min(99, …)) but not at the bottom.",
+      "failure": "importGraph({version:1, people:[101 people], edges:[]}) → metrics.largestComponentFraction = 0.00990… and connectionSummary prints \"not everyone's connected — 0% are in the largest group\". Same for 302 people with a single edge (fraction 0.0066 → \"0%\"). Reproduced in .review-scratch/cr3/frac.probe.ts. The existing suite pins the 99 ceiling (app/test/quality.test.ts:46) and nothing pins the floor, so this passes today.",
+      "remediation": "Clamp the displayed percentage into [1, 99] whenever the graph is disconnected and largestComponentFraction > 0 — the same one-line symmetry the existing Math.min(99, …) guard already applies at the other end (e.g. Math.max(1, Math.min(99, Math.floor(f*100)))). Fix it in connectionSummary, the single caption seam, so no sibling sink can re-derive it.",
+      "invariant": "For every Metrics m produced by assembleMetrics with m.connected === false, the integer percentage rendered by connectionSummary(m) is 0 if and only if m.largestComponentFraction === 0; otherwise it lies in [1, 99].",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unresolved-rule-silently-deleted",
+      "theme": "a buddy rule the user authored disappears without being told it was deleted — the silent-partial the constraints feature exists to prevent",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 100,
+      "summary": "On Generate the modal hands App only `resolved.pairs`, so any rule row that named someone not in the roster (or a self-pair, or a duplicate) is permanently discarded; the app's stored rule model is index pairs, so reopening \"Edit people\" cannot show it again — contradicting the editor's own stated contract that an unrecognised row is \"kept and flagged rather than deleted\".",
+      "failure": "Open the roster modal with roster [Alice…Fran]; add rule (Alice, Zoe) — the note says \"1 buddy rule names someone who isn't in this roster and won't be used\" (present tense, not \"will be discarded\") — add a valid rule (Ben, Chloe); click Generate; reopen the modal seeded exactly as App seeds it (constraints=stored pairs, constraintNames=stored names). Two rows in, one row out. Reproduced in .review-scratch/cr3/rules.jprobe.tsx: expected 2 rule rows, got 1. The sibling is the roster-edit cycle the NamedPair design was built for: remove Dev from the roster text, Generate, re-add Dev — every Dev rule is gone for good, because App never held the name form. Existing tests (app/test/constraintsFlow.test.tsx) assert only that the unmatched pair is absent from onGenerate's payload, so the loss on reopen is unasserted.",
+      "remediation": "Make the NAME-keyed list the model App stores (App keeps NamedPair[] and resolves to ConstraintPair[] only at dispatch, next to the roster in force), so the editor round-trips exactly what the user typed; resolution stays where it already is in `resolveNamedPairs`. This is subtraction — one conversion at the dispatch boundary instead of a conversion in and a lossy conversion out — and it closes the roster-edit sibling at the same time. If the rules really are meant to be dropped, the note must say so (\"…and will be removed\") rather than \"won't be used\".",
+      "invariant": "For every editor state, the multiset of rule rows rendered after (Generate → reopen the roster modal) equals the multiset of rule rows the editor held at Generate; no row is removed without a message that states the row was removed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-the-bound",
+      "theme": "the guard that bounds untrusted file content in an error message does its bounding after the expensive step, so the guard itself becomes the failure",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 140,
+      "summary": "`quote()` serializes the entire untrusted value with `JSON.stringify` and only then slices to 80 chars, so a deeply-nested value throws a RangeError that escapes `importGraph` as a non-ImportError, and a multi-megabyte value costs a full serialization to produce 80 characters.",
+      "failure": "Import a file `{\"version\": X}` where X is a 20,000-deep nested array (JSON.parse handles 200,000 deep in 83 ms, so this parses fine). `quote(f.version)` at line 151 throws `RangeError: Maximum call stack size exceeded` instead of an `ImportError`; App.handleImportFile catches it as a generic Error and the toast reads \"Couldn't import that file: Maximum call stack size exceeded\" — an engine-internal string in a module whose entire contract is plain-language refusal. Same leak via `quote(p.id)` at line 193 with `{\"version\":1,\"people\":[{\"id\":<nested 20000>,\"name\":\"a\"},{\"name\":\"b\"}],\"edges\":[[0,1]]}`. Cost variant, same root cause: `{\"version\":\"A\".repeat(7_000_000)}` refuses correctly but takes 60 ms and allocates the whole 7 MB serialization to keep 80 characters.",
+      "remediation": "Bound the input before serializing rather than the output after. In `quote`, handle primitives only — for a string, slice to `max` BEFORE `JSON.stringify`; for a number/boolean/null, stringify directly; for anything else return a structural description (`\"a list of 1000000 items\"`, `\"an object\"`) without recursing. That closes both the RangeError and the O(|value|) allocation with one subtraction. Name the sibling: `quote` is called at two sites (`f.version`, `p.id`/`p.name`) and both are covered by fixing the helper, but the belt-and-braces half of the theme is that `importGraph` should be the single import authority — no caller should have to distinguish an `ImportError` from an engine error, so either wrap the body so only `ImportError` escapes, or have `App.handleImportFile` fall back to the generic message for a non-`ImportError`.",
+      "invariant": "For every value `d` obtainable from `JSON.parse` of any string, `importGraph(d)` either returns a GraphView or throws an `ImportError` — no other error type ever escapes; and `quote(v)` returns within a constant bound of `max` for every `v`, never throwing.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Function documentation describes only one return value when the function returns multiple distinct values that callers use for different error messages",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 164,
+      "summary": "resolveNamedPairs comment says 'Returns the dropped count' but the function returns an object with five fields (pairs, unmatched, duplicate, selfPair, dropped)",
+      "failure": "Developer reading the JSDoc comment for resolveNamedPairs learns only about 'dropped count' from the prose; the comment omits mention of unmatched, selfPair, and duplicate counts, which are all used by RosterModal to display distinct user-facing messages about different resolution failures (lines 170-190 of RosterModal.tsx)",
+      "remediation": "Revise the comment starting at line 166 to document the full return object: 'Returns the resolved pairs and counts of resolution failures by cause (unmatched, self-pairs, duplicates) plus total dropped, so the caller can report each issue separately.' This matches the actual usage and return type signature.",
+      "invariant": "Every exported function whose JSDoc describes a return value must document all fields in the actual return type. Specifically: the comment for resolveNamedPairs must mention that unmatched, duplicate, and selfPair are returned and are used by RosterModal for per-cause messages.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-stranded-on-dialog-dismiss",
+      "theme": "App.tsx has a documented, tested focus-rescue mechanism (closeWithFocus) for the person/route panels, but the roster setup dialog and the busy overlay — which are ALSO removed-from-DOM-while-focused surfaces, closed by the user's own actions inside them — were never wired into it, so the exact bug the mechanism was built to prevent still happens through three other doors.",
+      "file": "app/src/App.tsx",
+      "summary": "Focus lands on document.body (stranding the next Tab back at the top of the page) after: (1) clicking 'Generate buddy graph' on cold load — the very first action in the scenario; (2) clicking 'Cancel' in the roster editor opened via 'Edit people' with an existing view; (3) clicking the busy overlay's 'Cancel' button while a re-roll is in progress. In every case the focused control (inside RosterModal or `.busy`) is unmounted by the state change its own onClick triggers (`setModalOpen(false)` in handleGenerate/onCancel, or the busy div disappearing when `bg.cancel()` returns status to 'done'), and nothing calls `.focus()` afterward the way `closeWithFocus` does for the person/route panels.",
+      "failure": "Reproduced with RTL: render <App/>, type a roster, focus and click 'Generate buddy graph' -> document.activeElement === document.body. Same result focusing and clicking the editor's 'Cancel' with a view already present, and focusing/clicking the busy overlay's 'Cancel' during a reroll. A screen-reader/keyboard-only user in each case must now Tab from the very top of the document (past the header) to reach the graph that just appeared, instead of landing on the rail, search box, or wherever is contextually next — exactly the dead end App.tsx's own comment at line 73-76 describes and says 'nothing in the app called .focus() anywhere' to prevent, except three call sites of that same class were missed.",
+      "remediation": "Route RosterModal's onGenerate/onCancel and the busy overlay's Cancel through the same closeWithFocus-style rescue used for the person/route panels — e.g. check `document.activeElement` before calling `setModalOpen(false)`/`bg.cancel()` and refocus `searchRef.current` (or, when no view exists yet and the modal reopens, a stable element inside the reopened modal) when the outgoing focus was inside the dialog or the busy overlay.",
+      "invariant": "For every element E that is focused and then removed from the DOM as a direct result of activating E itself (RosterModal's Generate/Cancel buttons, the busy overlay's Cancel button, and the already-covered person/route panel close buttons), document.activeElement !== document.body immediately after the removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-selection-state-attribute",
+      "theme": "A control's selected/current state is expressed only through a CSS class, with no ARIA counterpart, so a screen-reader user tabbing the list cannot tell which row is currently selected — the same class of gap LayoutToggle's aria-pressed and PersonSearch's aria-selected were added to close, just not extended to this list.",
+      "file": "app/src/panels/BuddyList.tsx",
+      "summary": "The buddy-list row for the currently selected person gets a visible highlight (`.brow.sel { background: … }`, app.css:164) via `className={\"brow\" + (selected === i ? \" sel\" : \"\")}` (BuddyList.tsx:51), but the `<button>` carries no `aria-current` (or `aria-pressed`/`aria-selected`) reflecting that state, unlike LayoutToggle's `aria-pressed` for the identical 'which one of these is active' pattern.",
+      "failure": "A screen-reader user who selects a person from the graph or search, then tabs through the buddy list to review it, gets no announcement distinguishing the selected row from any other — every row reads only as \"<Name>: <buddies>, button\", with no cue that one of them is the person currently shown in PersonPanel.",
+      "remediation": "Add `aria-current={selected === i ? \"true\" : undefined}` (or `aria-pressed`) to the row button in BuddyList.tsx, mirroring LayoutToggle's pattern.",
+      "invariant": "For every row whose selected/active state is expressed by a CSS class, the same button also carries an ARIA state attribute (aria-current/aria-pressed/aria-selected) that is true exactly when the class is applied."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unbounded-string-to-dom-sink",
+      "theme": "every other untrusted string in the app is capped at its sink; the search query is the one that is not",
+      "file": "/home/user/ringweave/app/src/panels/PersonSearch.tsx",
+      "line": 126,
+      "summary": "The search query is stored, trimmed three times per render, and rendered in full into a DOM text node with no length cap — the only untrusted-string sink in the app without one (roster text is capped by `capText`, notices by `clampNotice`, names by `MAX_NAME_CHARS`).",
+      "failure": "Paste several megabytes into the \"Find a person…\" box. `query` is held uncapped in state; `open` calls `query.trim()`, `rankMatches` calls `query.trim().toLowerCase()`, and the zero-match branch renders `Nobody matches “{query.trim()}”` — so each keystroke allocates ~3x the pasted size and hands the browser a multi-megabyte text node inside a small wrapping div. Marked PLAUSIBLE rather than CONFIRMED: I verified the code path and that `rankMatches` itself stays cheap (matchNormalized is bounded by the 120-char name cap regardless of query size), but I could not reproduce the browser layout cost under jsdom. NOT reachable from an imported file or roster — names are capped at 120 chars — so this is a self-inflicted paste only.",
+      "remediation": "Cap at the sink the way `useNotice.clampNotice` already does: slice the query for display (and optionally add `maxLength` to the input), and trim once into a memo instead of three times per render. Subtraction, not a new guard.",
+      "invariant": "No string rendered as DOM text by any component in app/src exceeds a declared per-sink character cap, for every input — including one that never passed through parseRoster or importGraph.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "exhaustiveness-risk",
+      "theme": "Switch statement over discriminated union has no runtime guard against unhandled cases, relying only on compile-time test strictness",
+      "file": "/home/user/ringweave/app/src/io/constraintMessages.ts",
+      "line": 24,
+      "summary": "describeReason function switches on Reason.code with no default case; if a new Reason code is added to ringweave and the test SAMPLES table is not updated, the app silently returns undefined",
+      "failure": "A new Reason code added to the core's Reason type, if describeReason is not updated with a matching case, returns undefined implicitly. The test suite's Record<Reason['code'], Reason> type guard will catch the test failing to compile, but this only matters if the tests are run—runtime code could receive an unhandled code.",
+      "remediation": "Add a default case to the switch statement that throws or logs an error: 'default: throw new Error(`Unhandled Reason code: ${r.code}`);' This makes failures explicit rather than silent, catching them immediately at runtime rather than relying on test-suite discipline.",
+      "invariant": "describeReason(r, names) must always return a non-empty string for every possible Reason type. No input should result in undefined being returned or rendered.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unannounced-transient-confirmation",
+      "theme": "A transient success confirmation is expressed only as a change to the focused control's own visible text, with no accompanying live region — the same 'announcement, not just presence' gap Notice.tsx and PathPanel.tsx were explicitly built to avoid (see their comments about a live region needing to exist BEFORE the text change), just not extended to this control.",
+      "file": "app/src/panels/BuddyList.tsx",
+      "summary": "`copyAll` (BuddyList.tsx:16-30) flips the Copy button's own label from \"Copy\" to \"Copied\" for 1100ms via `setCopied`, with no `aria-live`/`role=\"status\"` region announcing the confirmation. A focused button's own accessible-name change is not reliably announced by screen readers the way a live region is — which is precisely the reasoning already applied to Notice.tsx (kept mounted so AT is 'already watching' it) and PathPanel.tsx (one live region, not three conditional ones).",
+      "failure": "A screen-reader user who activates 'Copy' may hear nothing confirming the copy succeeded, and by the time they explore to find out, the 1100ms window may have already reverted the label back to \"Copy\" — indistinguishable from the click not having registered.",
+      "remediation": "Add a small `role=\"status\" aria-live=\"polite\"` region (mounted permanently like Notice.tsx's toast-region) that receives \"Copied\" text on a successful copy, alongside (or instead of) the button-label swap.",
+      "invariant": "caseOnly: could not state a fully machine-checkable invariant without simulating actual AT announcement behavior (button-label-change announcement reliability is a live-AT-implementation fact, not something a DOM assertion alone proves) — filed as a traced code-level gap (no live region exists for this confirmation) rather than a proven non-announcement.",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 603332,
+    "agents": 6,
+    "toolCalls": 251
+  },
+  "observations": [
+    {
+      "kind": "harness-fix-not-deployed",
+      "note": "The parseArgs fix committed in 99ed8ea did NOT run: Workflow({name}) resolves against a session-start snapshot, not the file on disk. Verified by diffing the executed script (351 lines, no parseArgs) against the committed one (408 lines). So saturation gating still could not fire, and critic-interaction ran on lib/src for a 5th consecutive quiet round. Subsequent rounds must pass scriptPath."
+    },
+    {
+      "kind": "self-induction",
+      "note": "lib round 7: two of seven findings (priorWeight finiteness, and a false comment) target the priorsKeptFraction change made in round 6. app round 3: the single blocking finding is the SAME theme as round 2 (focus stranded on <body>) in the three places the round-2 fix did not reach — the fix closed the reported case, not the theme."
+    }
+  ]
+}

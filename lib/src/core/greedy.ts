@@ -46,6 +46,15 @@ export function ringGreedy(
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
+  // Same reasoning as `k`, and it was the one numeric option left unchecked: `mind`
+  // reaches `ecc < curMind`, and every comparison against NaN is false — so a NaN
+  // separation target silently disables the separation logic and produces a DIFFERENT
+  // graph, not an ignored option. It then propagates out as `finalMinSeparation`, so the
+  // result reports a target that was never applied.
+  const requestedMind = opts.mind ?? DEFAULT_MIN_SEPARATION;
+  if (!Number.isInteger(requestedMind) || requestedMind < 0) {
+    throw new Error(`minimum separation ${requestedMind} must be a non-negative integer`);
+  }
   // The ring seed gives every vertex degree 2 and completion only ADDS edges, so
   // ringGreedy structurally cannot honor k < 2 — it would silently return a
   // 2-regular graph. Refuse and point to the constrained path, which builds the
@@ -75,7 +84,7 @@ export function ringGreedy(
       `roster size ${n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
     );
   }
-  const mind = opts.mind ?? DEFAULT_MIN_SEPARATION;
+  const mind = requestedMind; // validated above
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 

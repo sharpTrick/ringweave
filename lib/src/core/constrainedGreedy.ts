@@ -146,6 +146,13 @@ export function polishConstrained(
   opts: PolishConstrainedOptions = {},
 ): Graph {
   checkConstraintIds(input.n, cons);
+  // ALWAYS-ON, not a dev-mode postcondition. This pass only ever SWAPS edges, so it
+  // cannot repair an input that already violates the constraints — yet the module header
+  // promises both functions guarantee them. The only check was the postcondition at the
+  // end, which is compiled out in production (so a violating input came back unflagged)
+  // and in dev blamed this function for its caller's defect. A precondition names the
+  // right culprit, and it is O(#constraints) — the same class as the id check above.
+  checkInputSatisfiesConstraints(input, cons);
 
   const rng = new RNG(opts.seed ?? 0);
   // A size cap as well as the work cap below. `boundedPolishIterations` cannot
@@ -388,6 +395,26 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 // diagnosis depending on which entry point is asked. Both diagnoses are true and
 // both refuse; only the ordering differs, and it is stated here rather than left
 // for a reader to infer from the word "mirror".
+/** The hard constraints must already hold on the graph handed to a swap-only pass. */
+function checkInputSatisfiesConstraints(g: Graph, cons: Constraints): void {
+  for (const [a, b] of cons.requiredPairs()) {
+    if (!g.hasEdge(a, b)) {
+      throw new Error(
+        `polishConstrained was given a graph missing required pair (${a},${b}) — it only swaps ` +
+          `edges and cannot add one; build with constrainedGreedy first`,
+      );
+    }
+  }
+  for (const [a, b] of cons.prohibitedPairs()) {
+    if (g.hasEdge(a, b)) {
+      throw new Error(
+        `polishConstrained was given a graph containing prohibited pair (${a},${b}) — it only ` +
+          `swaps edges and cannot remove one safely; build with constrainedGreedy first`,
+      );
+    }
+  }
+}
+
 function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
     !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;

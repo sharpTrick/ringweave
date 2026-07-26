@@ -17,7 +17,7 @@ import { useGraph } from "./state/useGraph";
 import { useEscape } from "./state/useEscape";
 import { usePathFinder } from "./state/usePathFinder";
 import { describeReasons } from "./io/constraintMessages";
-import type { ConstraintPair } from "./constraints";
+import { toNamedPairs, type ConstraintPair, type NamedPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
@@ -46,7 +46,17 @@ export default function App() {
   const [names, setNames] = useState<string[]>([]);
   // The rules the current graph was generated under. Indices into `names`; the two are
   // only ever replaced together (by generate or by import), so they cannot drift apart.
-  const [constraints, setConstraints] = useState<ConstraintPair[]>([]);
+  // What the user TYPED. There is deliberately no sibling `constraints` state: the rules a
+  // GENERATION ran under live on `view.constraints` (which is what reroll and export read,
+  // and the only copy that is guaranteed to describe the graph on screen), and the rules the
+  // EDITOR is holding live here. A third copy committed at dispatch time was write-only once
+  // reroll stopped reading it, and a write-only copy of state that two other places already
+  // disagree about is how the reroll desync happened in the first place.
+  //
+  // Name-keyed rather than derived from index pairs. A row naming someone no longer in the roster resolves to no index at all, so
+  // rebuilding rows from `constraints` deleted exactly the rows the editor promises to keep
+  // and flag. The two are only ever set together, by generate or by import.
+  const [constraintRows, setConstraintRows] = useState<NamedPair[]>([]);
   const [layout, setLayout] = useState<LayoutMode>("ring");
   // Selection carries a back stack: in the explorer every name is a link, so
   // "where was I" is part of the model rather than something the user re-derives.
@@ -84,6 +94,36 @@ export default function App() {
     const losing = active instanceof Node && !!document.getElementById(panelId)?.contains(active);
     close();
     if (losing) searchRef.current?.focus();
+  };
+
+  /**
+   * The same rescue for the two OVERLAYS, which the panel version could not cover.
+   *
+   * The first fix here handled the person and route panels and stopped there — so the
+   * three most common dismissals in the app still stranded focus on `<body>`: clicking
+   * "Generate buddy graph" on cold load (the very first action anyone takes), cancelling
+   * the roster editor, and cancelling a re-roll from the busy overlay. In each case the
+   * control that was clicked is unmounted by its own onClick. Fixing the reported case and
+   * calling the theme closed is the anti-pattern this repo's protocol names, and this is
+   * what it looks like from the inside.
+   *
+   * Queried by class rather than id because neither overlay carries one, and both live
+   * outside `#app` now.
+   */
+  const dismissOverlay = (selector: string, dismiss: () => void) => {
+    const active = document.activeElement;
+    const losing = active instanceof Node && !!document.querySelector(selector)?.contains(active);
+    dismiss();
+    // Falls back to the roster field when there is no graph yet — after a first-generation
+    // cancel the modal reopens and the search box does not exist, so the anchor has to be
+    // something that is actually on screen.
+    if (losing) {
+      requestAnimationFrame(() => {
+        const anchor =
+          searchRef.current ?? document.querySelector<HTMLElement>('[aria-label="Roster names"]');
+        anchor?.focus();
+      });
+    }
   };
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
@@ -139,13 +179,18 @@ export default function App() {
     setHovered(null);
   };
 
-  const handleGenerate = (roster: string[], s: Settings, rules: ConstraintPair[]) => {
+  const handleGenerate = (
+    roster: string[],
+    s: Settings,
+    rules: ConstraintPair[],
+    rows: NamedPair[],
+  ) => {
     setNames(roster);
     setSettings(s);
-    setConstraints(rules);
+    setConstraintRows(rows);
     resetSelection();
     bg.generate(roster, s, rules);
-    setModalOpen(false);
+    dismissOverlay("#modal", () => setModalOpen(false));
   };
 
   const handleReroll = () => {
@@ -180,8 +225,10 @@ export default function App() {
   };
 
   const cancelGeneration = () => {
-    bg.cancel();
-    if (!view) setModalOpen(true); // first generation has no graph to fall back to
+    dismissOverlay(".busy", () => {
+      bg.cancel();
+      if (!view) setModalOpen(true); // first generation has no graph to fall back to
+    });
   };
 
   const handleExport = () => {
@@ -192,7 +239,9 @@ export default function App() {
     bg.loadView(v);
     setNames(v.names);
     setSettings(v.settings);
-    setConstraints(v.constraints);
+    // An imported file carries only index pairs, so the rows are derived here — the one
+    // place that conversion is correct, because the file's names and indices do agree.
+    setConstraintRows(toNamedPairs(v.constraints, v.names));
     resetSelection();
     clear(); // a superseding import must not leave a stale error/notice over the fresh graph
     setModalOpen(false);
@@ -309,11 +358,10 @@ export default function App() {
         <RosterModal
           initialText={names.join("\n")}
           settings={settings}
-          constraints={constraints}
-          constraintNames={names}
+          rules={constraintRows}
           canCancel={view !== null}
           onGenerate={handleGenerate}
-          onCancel={() => setModalOpen(false)}
+          onCancel={() => dismissOverlay("#modal", () => setModalOpen(false))}
         />
       )}
 

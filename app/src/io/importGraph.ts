@@ -138,8 +138,18 @@ function readConstraints(
  * braces; bounding it here is what keeps the message readable.
  */
 function quote(value: unknown, max = 80): string {
-  const text = JSON.stringify(value) ?? String(value);
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  // Bounds the INPUT, not the output. Serializing first and slicing after still pays a
+  // full JSON.stringify of the untrusted value to produce 80 characters — and on a deeply
+  // nested value it throws a RangeError that escapes importGraph as something other than
+  // an ImportError, so the caller's "Couldn't import that file" path never runs.
+  if (typeof value === "string") {
+    return JSON.stringify(value.length > max ? `${value.slice(0, max)}…` : value);
+  }
+  if (value === null || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) return `a list of ${value.length} items`;
+  return typeof value === "object" ? "an object" : typeof value;
 }
 
 export function importGraph(data: unknown): GraphView {

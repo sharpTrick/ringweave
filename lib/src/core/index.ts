@@ -342,15 +342,21 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
-  // Hoisted out of the branch because the report needs it: `priorsKeptFraction` is
-  // only meaningful when priors were actually WEIGHED, which needs both that polish
-  // ran and that the weight was non-zero.
+  // Hoisted out of the branch because the report needs it. `priorsKeptFraction` is only
+  // meaningful when priors were ACCOUNTED FOR, and there are two ways that happens —
+  // promoted to required edges, or weighed as a soft penalty by a polish pass that ran.
+  // The full rule is at the `buildReport` call below; this only has to survive the branch.
   let priorWeight = 0;
   if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
-    priorWeight = active.priorHard
-      ? 0
-      : (options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0));
+    // Finiteness-checked HERE, not only inside `polishConstrained`. Both places used to
+    // decide independently: the optimizer coerced a non-finite weight to 0 and never
+    // weighed the priors, while the report tested the RAW value against `!== 0`, found
+    // NaN !== 0 true, and published a `priorsKeptFraction` — the exact coincidental number
+    // that field's contract says must be null. Resolving once means the optimizer and the
+    // report cannot disagree about what was actually optimized.
+    const requested = options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0);
+    priorWeight = active.priorHard || !Number.isFinite(requested) ? 0 : requested;
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
     g = polishConstrained(g, active, {

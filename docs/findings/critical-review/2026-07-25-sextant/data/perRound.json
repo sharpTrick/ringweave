@@ -77,6 +77,41 @@
     "toolCalls": 208
   },
   {
+    "round": 3,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 3,
+    "themes": 7,
+    "totalFindings": 9,
+    "files": [
+      "app/src/model.ts",
+      "app/src/panels/RosterModal.tsx",
+      "app/src/io/importGraph.ts",
+      "app/src/constraints.ts",
+      "app/src/App.tsx",
+      "app/src/panels/BuddyList.tsx",
+      "app/src/panels/PersonSearch.tsx",
+      "app/src/io/constraintMessages.ts"
+    ],
+    "classes": [
+      "floored-percentage-reads-as-zero",
+      "unresolved-rule-silently-deleted",
+      "unbounded-work-before-the-bound",
+      "misleading-comment",
+      "focus-stranded-on-dialog-dismiss",
+      "missing-selection-state-attribute",
+      "unbounded-string-to-dom-sink",
+      "exhaustiveness-risk",
+      "unannounced-transient-confirmation"
+    ],
+    "subagentTokens": 603332,
+    "agents": 6,
+    "toolCalls": 251
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -260,5 +295,35 @@
     "subagentTokens": 421533,
     "agents": 6,
     "toolCalls": 137
+  },
+  {
+    "round": 7,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 7,
+    "blocking": 3,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 5,
+    "totalFindings": 7,
+    "files": [
+      "lib/src/core/index.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/budgets.ts",
+      "lib/src/core/polish.ts"
+    ],
+    "classes": [
+      "report-disagrees-with-what-the-optimizer-actually-used",
+      "postcondition-standing-in-for-an-unchecked-precondition",
+      "unvalidated-numeric-option-reaches-a-comparison-and-a-reported-metric",
+      "gate-prices-part-of-the-work",
+      "unsanitized-option-reaches-the-report",
+      "false-comment-incomplete-semantics",
+      "false-comment-complexity-claim"
+    ],
+    "subagentTokens": 461606,
+    "agents": 6,
+    "toolCalls": 122
   }
 ]

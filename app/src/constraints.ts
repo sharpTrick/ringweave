@@ -163,7 +163,9 @@ export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPai
 /**
  * Name pairs → index pairs, against the roster they will be generated with.
  *
- * Returns the dropped count so the caller can say so out loud: a rule silently
+ * Returns the resolved pairs plus counts of every resolution failure BY CAUSE
+ * (`unmatched`, `selfPair`, `duplicate`) and the `dropped` total, so the caller can
+ * name each one separately rather than reporting a single number. A rule silently
  * disappearing because its person was removed is the failure this is here to
  * prevent, and losing it quietly would be barely better than mis-pointing it.
  * Matching is case-insensitive, which is safe on both entry paths and both were

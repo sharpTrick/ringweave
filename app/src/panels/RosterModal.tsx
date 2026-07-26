@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { validateDetailed } from "ringweave";
 import type { Settings } from "../model";
 import {
-  resolveNamedPairs, toConstraints, toNamedPairs,
+  resolveNamedPairs, toConstraints,
   type ConstraintPair, type NamedPair,
 } from "../constraints";
 import { describeReasons } from "../io/constraintMessages";
@@ -17,23 +17,34 @@ interface Props {
   initialText: string;
   settings: Settings;
   /** The rules in force, with the roster their indices point into. */
-  constraints: ConstraintPair[];
-  constraintNames: string[];
+  /**
+   * The rules as the user last TYPED them, name-keyed. Not index pairs plus a roster:
+   * a row naming someone who is no longer in the roster has no index to key on, and
+   * reconstructing rows from indices is what silently deleted those rows on Generate —
+   * contradicting the editor's own contract that an unrecognised row is kept and flagged.
+   */
+  rules: NamedPair[];
   canCancel: boolean;
-  onGenerate: (names: string[], settings: Settings, constraints: ConstraintPair[]) => void;
+  onGenerate: (
+    names: string[],
+    settings: Settings,
+    constraints: ConstraintPair[],
+    /** The typed rows, so the caller can hand them straight back when the editor reopens. */
+    rules: NamedPair[],
+  ) => void;
   onCancel: () => void;
 }
 
 /** F1 + F2: roster entry (paste or .txt/.csv drop, tolerant parse, duplicate warnings)
     and generate settings, with pre-run feasibility notes. */
 export default function RosterModal({
-  initialText, settings: initialSettings, constraints, constraintNames, canCancel, onGenerate, onCancel,
+  initialText, settings: initialSettings, rules: initialRules, canCancel, onGenerate, onCancel,
 }: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
   // Rules are edited BY NAME, so a roster edit can never silently re-point them at
   // different people. They are converted in here, once, and back out on generate.
-  const [rules, setRules] = useState<NamedPair[]>(() => toNamedPairs(constraints, constraintNames));
+  const [rules, setRules] = useState<NamedPair[]>(initialRules);
   const [fileError, setFileError] = useState<string | null>(null);
   const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -97,7 +108,7 @@ export default function RosterModal({
 
   const generate = () => {
     if (!feas.canGenerate || ruleProblems.length > 0) return;
-    onGenerate(parsed.names, settings, resolved.pairs);
+    onGenerate(parsed.names, settings, resolved.pairs, rules);
   };
 
   return (

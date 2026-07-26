@@ -188,7 +188,11 @@ const WELL_LINKED_PCT = 50;
  */
 export function connectionSummary(m: Metrics): string {
   if (!m.connected) {
-    const pct = Math.min(99, Math.floor(m.largestComponentFraction * 100));
+    // Clamped at BOTH ends. The Math.min(99, …) guard stopped a nearly-whole graph
+    // reading as "100% are in the largest group" while disconnected; the floor had the
+    // mirror-image problem, reporting "0% are in the largest group" for a badly shattered
+    // roster whose largest group is non-empty by definition. Same one-line symmetry.
+    const pct = Math.max(1, Math.min(99, Math.floor(m.largestComponentFraction * 100)));
     return `not everyone's connected — ${pct}% are in the largest group`;
   }
   if (m.aspl == null) return "not enough people yet to score";

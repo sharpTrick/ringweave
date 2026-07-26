@@ -44,6 +44,7 @@ import {
   MAX_POLISH_WORK,
   polishWork,
   checkPolishSize,
+  boundedPolishIterations,
 } from "../src/core/budgets.js";
 
 function graphOf(n: number, edges: [number, number][]): Graph {
@@ -388,6 +389,46 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // constrained path documents n=5000 as its ceiling, so that has to still pass.
     expect(() => checkPolishSize(5000, 10000)).not.toThrow();
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
+  });
+
+  it("charges the FIXED sweeps too, so the two gates cannot sum past the budget", () => {
+    // checkPolishSize and boundedPolishIterations each measured against the WHOLE budget,
+    // so a graph that just fit the size gate was then granted a full budget of loop
+    // iterations on top of its fixed sweeps — the two summed to roughly twice the constant
+    // they both cite. The property is that the TOTAL is what is bounded.
+    const sweep = (n: number, m: number) => n * (n + m);
+    // Near the size boundary the loop allowance must collapse rather than reset.
+    const bigN = 16000;
+    const bigM = bigN;
+    if (sweep(bigN, bigM) * 3 <= MAX_POLISH_WORK) {
+      expect(boundedPolishIterations(bigN, bigM, 20_000, 20_000)).toBe(0);
+    }
+    // And a small roster is untouched — the fix must not quietly shrink normal budgets.
+    expect(boundedPolishIterations(20, 40, 20_000, 20_000)).toBe(20_000);
+  });
+
+  it("refuses a NaN separation target instead of silently building a different graph", () => {
+    // `ecc < curMind` is false for every NaN, so a NaN target disabled the separation
+    // logic entirely and then came back out as `finalMinSeparation` — the result reported
+    // a target that was never applied. It was the one numeric option left unvalidated.
+    expect(() => buildBuddyGraph(20, 4, { minSeparation: NaN })).toThrow(/minimum separation/);
+    expect(() => buildBuddyGraph(20, 4, { minSeparation: -1 })).toThrow(/minimum separation/);
+    expect(() => buildBuddyGraph(20, 4, { minSeparation: 2.5 })).toThrow(/minimum separation/);
+    expect(buildBuddyGraph(20, 4, { minSeparation: 3 }).edges.length).toBeGreaterThan(0);
+  });
+
+  it("refuses a graph that already violates the constraints it is asked to preserve", () => {
+    // polishConstrained only SWAPS, so it cannot repair a violating input — but the only
+    // check was a dev-mode postcondition, compiled out in production and blaming this
+    // function for its caller's defect in dev.
+    const g = ring(8);
+    const cons = new Constraints(8);
+    cons.prohibit(0, 1); // ring(8) has this edge
+    expect(() => polishConstrained(g, cons, { iters: 10 })).toThrow(/prohibited pair/);
+
+    const missing = new Constraints(8);
+    missing.require(0, 4); // ring(8) does not have this edge
+    expect(() => polishConstrained(g, missing, { iters: 10 })).toThrow(/missing required pair/);
   });
 
   it("charges the anneal calibration against the same budget as the loop", () => {

@@ -155,7 +155,8 @@ export function boundedPolishIterations(
   const asked = Number.isInteger(requested) && (requested as number) >= 0 ? (requested as number) : fallback;
   // The overhead term also guarantees a positive divisor when m is 0.
   const perIteration = POLISH_ITER_OVERHEAD + n * (n + m);
-  return Math.min(asked, Math.floor(MAX_POLISH_WORK / perIteration), MAX_POLISH_ITERS);
+  // The budget LEFT after the fixed sweeps, not the whole budget — see `loopBudget`.
+  return Math.min(asked, Math.floor(loopBudget(n, m) / perIteration), MAX_POLISH_ITERS);
 }
 
 /**
@@ -192,14 +193,35 @@ export function polishWork(n: number, k: number, iters: number): number {
  * documented ceilings intact: n=5000 at k=4 on the constrained path costs 7.5e7,
  * comfortably inside, while the 40000-ring costs 3.2e9 and is refused.
  */
+/**
+ * All-pairs sweeps a polish pass pays OUTSIDE its loop: the starting energy, the final
+ * summary of the best graph, and the anneal calibration's amortised share. Three is the
+ * measured count for `polish`; `polishConstrained` pays two, and charging both the larger
+ * figure keeps one constant instead of two that could drift.
+ */
+const FIXED_POLISH_SWEEPS = 3;
+
 export function checkPolishSize(n: number, m: number): void {
-  const sweep = n * (n + m);
-  if (sweep > MAX_POLISH_WORK) {
+  const fixed = FIXED_POLISH_SWEEPS * n * (n + m);
+  if (fixed > MAX_POLISH_WORK) {
     throw new Error(
-      `graph too large to polish: one all-pairs sweep costs ${sweep} against a budget of ` +
-        `${MAX_POLISH_WORK} (n=${n}, m=${m}) — reduce the roster or skip polish`,
+      `graph too large to polish: the fixed all-pairs sweeps cost ${fixed} against a budget ` +
+        `of ${MAX_POLISH_WORK} (n=${n}, m=${m}) — reduce the roster or skip polish`,
     );
   }
+}
+
+/**
+ * What the loop may still spend once the fixed sweeps are paid for.
+ *
+ * `checkPolishSize` and `boundedPolishIterations` were each measuring against the WHOLE
+ * budget, so a graph that just fits the size gate was then granted a full budget of loop
+ * iterations on top — the two gates summed to more than the constant they both cite. The
+ * accept-set has to be defined by the total, so the size check charges the fixed work and
+ * the iteration count is derived from what is left.
+ */
+function loopBudget(n: number, m: number): number {
+  return Math.max(0, MAX_POLISH_WORK - FIXED_POLISH_SWEEPS * n * (n + m));
 }
 
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`

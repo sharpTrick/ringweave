@@ -170,6 +170,91 @@
     }
   },
   {
+    "file": "app-round-03.json",
+    "runId": null,
+    "round": 3,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 6,
+      "confirmed": 6,
+      "blocking": 1,
+      "deferrals": 0,
+      "plausible": 3,
+      "themes": 7
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
+  },
+  {
     "file": "lib-round-01.json",
     "runId": "wf_88887b29-0f5",
     "round": 1,
@@ -664,6 +749,91 @@
       },
       "critic-solid": {
         "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
+  },
+  {
+    "file": "lib-round-07.json",
+    "runId": null,
+    "round": 7,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 7,
+      "confirmed": 7,
+      "blocking": 3,
+      "deferrals": 0,
+      "plausible": 0,
+      "themes": 5
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 1,
         "lastRound": null,
         "skipped": false
       },

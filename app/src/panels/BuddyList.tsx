@@ -49,6 +49,10 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
           <button
             key={i}
             className={"brow" + (selected === i ? " sel" : "")}
+            // The row is visibly highlighted when selected (.brow.sel), and that state was
+            // conveyed by colour alone — LayoutToggle already uses aria-pressed for the
+            // identical "which of these is active" pattern.
+            aria-current={selected === i || undefined}
             onClick={() => onSelect(i)}
           >
             <span className="nm">{name}</span>
