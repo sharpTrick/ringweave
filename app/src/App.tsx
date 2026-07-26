@@ -51,18 +51,16 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(true);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [names, setNames] = useState<string[]>([]);
-  // The rules the current graph was generated under. Indices into `names`; the two are
-  // only ever replaced together (by generate or by import), so they cannot drift apart.
-  // What the user TYPED. There is deliberately no sibling `constraints` state: the rules a
-  // GENERATION ran under live on `view.constraints` (which is what reroll and export read,
-  // and the only copy that is guaranteed to describe the graph on screen), and the rules the
-  // EDITOR is holding live here. A third copy committed at dispatch time was write-only once
-  // reroll stopped reading it, and a write-only copy of state that two other places already
-  // disagree about is how the reroll desync happened in the first place.
+  // The rules the EDITOR is holding, as the user typed them. There is deliberately no sibling
+  // `constraints` state: the rules a GENERATION ran under live on `view.constraints`, which is
+  // what reroll and export read and the only copy guaranteed to describe the graph on screen. A
+  // third copy committed at dispatch time became write-only once reroll stopped reading it, and
+  // a write-only copy of state two other places already disagree about is how the reroll desync
+  // happened.
   //
-  // Name-keyed rather than derived from index pairs. A row naming someone no longer in the roster resolves to no index at all, so
-  // rebuilding rows from `constraints` deleted exactly the rows the editor promises to keep
-  // and flag. The two are only ever set together, by generate or by import.
+  // Name-keyed, not derived from index pairs: a row naming someone no longer in the roster
+  // resolves to no index at all, so rebuilding rows from index pairs deleted exactly the rows
+  // the editor promises to keep and flag.
   const [constraintRows, setConstraintRows] = useState<NamedPair[]>([]);
   const [layout, setLayout] = useState<LayoutMode>("ring");
   // Selection carries a back stack: in the explorer every name is a link, so
@@ -101,9 +99,14 @@ export default function App() {
     // Ask whether the candidate can actually take focus, not whether it exists.
     const reachable = (el: HTMLElement | null | undefined) =>
       el && !el.closest("[inert]") ? el : null;
+    // Three candidates, because there is a state where the first two are both unavailable: on
+    // the FIRST generation the roster field unmounts with the modal and the search box does not
+    // exist yet (no view), while #app is inert behind the busy overlay. The overlay's own Cancel
+    // button is the only focusable thing on screen at that moment, and it is outside #app.
     return (
       reachable(searchRef.current) ??
-      reachable(document.querySelector<HTMLElement>('[aria-label="Roster names"]'))
+      reachable(document.querySelector<HTMLElement>('[aria-label="Roster names"]')) ??
+      reachable(document.querySelector<HTMLElement>(".busy button"))
     );
   });
 

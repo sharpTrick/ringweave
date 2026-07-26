@@ -209,11 +209,31 @@ function lexLess(a: number[], b: number[]): boolean {
  * silently too, making `degree(v) < k` false everywhere — a silent no-op, the same failure
  * mode already closed for `mind` here and `priorWeight` in the constrained polish.
  */
+/**
+ * How much more a `repairDegrees` unit costs than a `ringGreedy` unit.
+ *
+ * Both are charged by `greedyWork`, but they do different work per unit: ringGreedy updates a
+ * distance cache, repair runs a full `bfsDistances` per vertex. Measured at ~4x. Kept here
+ * rather than folded into the estimator, because the estimator has two callers and bending it
+ * to fit one is how it stopped being an upper bound for the other.
+ */
+const REPAIR_SWEEP_FACTOR = 4;
+
 export function repairDegrees(g: Graph, k: number, minDist = 3): void {
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
-  if (greedyWork(g.n, k) > MAX_GREEDY_WORK) {
+  if (!Number.isInteger(minDist) || minDist < 0) {
+    // Same silent-no-op class as `k` and `mind`: `distv[v] < minDist` is false for every NaN,
+    // so a NaN floor disables the separation constraint and builds a DIFFERENT graph rather
+    // than ignoring an option.
+    throw new Error(`minimum separation ${minDist} must be a non-negative integer`);
+  }
+  // Charged as repair's OWN cost, not ringGreedy's. `greedyWork`'s floor prices one baseline
+  // sweep in cache-update units, but repair's sweep is n `bfsDistances` calls, roughly 4x more
+  // expensive per unit — so the shared budget admitted a 114-second synchronous call. Repair
+  // pays its own multiplier instead of the estimator being bent to fit two callers.
+  if (REPAIR_SWEEP_FACTOR * greedyWork(g.n, k) > MAX_GREEDY_WORK) {
     throw new Error(
       `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
     );

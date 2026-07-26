@@ -245,6 +245,14 @@ function normalize(reasons: Reason[]): Reason[] {
  * No Python mirror is needed: `validate`'s strings are unchanged, so the message
  * parity this module is held to is preserved by construction.
  */
+// DOES NOT consider `priorHard`. Promotion of priors to required happens in
+// `buildConstrainedBuddyGraph`, which calls `withHardPriors` BEFORE validating — so the safe
+// entry point is consistent, and a direct caller of this function or of the primitives is not.
+// Fixing it here would mean promoting inside the validator, which `reference-python` does not do
+// (its `prior_hard` is declared and unused), so it would trade oracle parity for a consistency
+// no live caller needs: nothing in this repo sets `priorHard`, and F9 — the feature that would —
+// is deferred. Recorded in lib/CLAUDE.md rather than papered over with a comment that claims
+// this is the whole gate.
 export function validateDetailed(cons: Constraints, k: number): Reason[] {
   const structural = structuralReasons(cons);
   if (structural.length > 0) return normalize(structural);

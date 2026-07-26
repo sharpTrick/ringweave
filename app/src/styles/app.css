@@ -182,8 +182,11 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
    be absolute within — and covering the whole viewport is what a modal scrim should
    do anyway. It also survives `main { overflow: auto }` at narrow widths, where an
    absolutely-positioned scrim let content scroll out from under it. */
-#modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(6, 9, 16, 0.72); backdrop-filter: blur(4px); }
-.sheet { width: min(560px, 92vw); padding: 28px; border-radius: 18px; }
+/* `overflow:auto` + `flex-start` + padding, not centred: the sheet has no max-height, so on a
+   short viewport a centred sheet in a non-scrolling container clips SYMMETRICALLY — the roster
+   field and the Generate button both go off-screen with no way to scroll to them. */
+#modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 16px 0; background: rgba(6, 9, 16, 0.72); backdrop-filter: blur(4px); }
+.sheet { width: min(560px, 92vw); max-height: calc(100vh - 32px); overflow: auto; padding: 28px; border-radius: 18px; }
 .sheet h2 { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0 0 6px; }
 .sheet p { color: var(--ink-dim); font-size: 13.5px; margin: 0 0 18px; line-height: 1.5; }
 .sheet textarea { width: 100%; height: 168px; resize: none; background: var(--input-bg); border: 1px solid var(--line2); border-radius: 11px; color: var(--ink); font-family: var(--font-ui); font-size: 13.5px; padding: 13px; line-height: 1.55; }

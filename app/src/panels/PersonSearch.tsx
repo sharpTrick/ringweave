@@ -12,6 +12,19 @@ interface Props {
   inputRef?: React.Ref<HTMLInputElement>;
 }
 
+/**
+ * Longest slice of the user's own query this echoes back.
+ *
+ * The input carries no `maxLength` and `query` was never capped — unlike the roster textarea,
+ * which is pre-capped before it reaches state — so pasting a multi-megabyte string put the whole
+ * thing into a VISIBLE, wrapping element and laid it out on the main thread. The third sink in
+ * this app to need clamping, after the notice text and the import-error quoter.
+ */
+const ECHO_MAX = 60;
+/** Hard cap on the input itself, so nothing downstream has to cope with a pasted megabyte. */
+const MAX_QUERY_CHARS = 200;
+const clampEcho = (text: string) => (text.length > ECHO_MAX ? `${text.slice(0, ECHO_MAX)}…` : text);
+
 /** How many results the list shows. Enough to find someone, short enough to scan. */
 const RESULT_LIMIT = 8;
 
@@ -97,6 +110,7 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
         aria-activedescendant={open && activeIndex >= 0 ? rowId(activeIndex) : undefined}
         aria-label="Find a person"
         placeholder="Find a person…"
+        maxLength={MAX_QUERY_CHARS}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -136,7 +150,7 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
           first message is the pattern that makes a live region silent, which is the one state
           where silence is indistinguishable from a broken box. */}
       <div className="search-empty" role="status" aria-live="polite">
-        {open && matches.length === 0 ? `Nobody matches “${query.trim()}”` : ""}
+        {open && matches.length === 0 ? `Nobody matches “${clampEcho(query.trim())}”` : ""}
       </div>
     </div>
   );

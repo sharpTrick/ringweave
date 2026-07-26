@@ -24,7 +24,7 @@ export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly Layout
 /**
  * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
  * points depend only on the graph, not on the current selection. A future SELECTION-DEPENDENT
- * mode (F8 focus, whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
+ * mode (a future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3), whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
  * but deliberately NOT here: folding its per-selection points into the frame would rescale the
  * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
  */
@@ -38,7 +38,7 @@ function assertNever(x: never): never {
  * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
  * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
  * `fit`, so those three can never disagree. EXHAUSTIVE over LayoutMode via assertNever: a future
- * selection-keyed mode (F8 focus) added to LAYOUT_MODES will fail to COMPILE here until it gets a
+ * selection-keyed mode (a future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3)) added to LAYOUT_MODES will fail to COMPILE here until it gets a
  * branch — a loud single-seam edit, not a silent ring fallback. (It stays out of FIT_MODES so it
  * can't perturb the fixed frame.)
  */

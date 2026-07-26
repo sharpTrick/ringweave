@@ -258,7 +258,7 @@
     "file": "app-round-04.json",
     "runId": null,
     "round": 4,
-    "target": "app/src (the BuddyGraph app)",
+    "target": "app/src",
     "converged": false,
     "counts": {
       "gating": 8,
@@ -343,7 +343,7 @@
     "file": "app-round-05.json",
     "runId": null,
     "round": 5,
-    "target": "app/src (the BuddyGraph app)",
+    "target": "app/src",
     "converged": false,
     "counts": {
       "gating": 9,
@@ -420,6 +420,91 @@
       "critic-interaction": {
         "nothingFoundStreak": 0,
         "lastRound": 5,
+        "skipped": false
+      }
+    }
+  },
+  {
+    "file": "app-round-06.json",
+    "runId": null,
+    "round": 6,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 10,
+      "confirmed": 11,
+      "blocking": 5,
+      "deferrals": 1,
+      "plausible": 0,
+      "themes": 9
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 6,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": 6,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 1,
+        "lastRound": 6,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 6,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 6,
         "skipped": false
       }
     }
@@ -1023,7 +1108,7 @@
     "file": "lib-round-08.json",
     "runId": null,
     "round": 8,
-    "target": "lib/src (the ringweave core)",
+    "target": "lib/src",
     "converged": false,
     "counts": {
       "gating": 4,
@@ -1105,7 +1190,7 @@
     "file": "lib-round-09.json",
     "runId": null,
     "round": 9,
-    "target": "lib/src (the ringweave core)",
+    "target": "lib/src",
     "converged": false,
     "counts": {
       "gating": 4,
@@ -1179,6 +1264,88 @@
       "critic-interaction": {
         "nothingFoundStreak": 5,
         "lastRound": 9,
+        "skipped": true
+      }
+    }
+  },
+  {
+    "file": "lib-round-10.json",
+    "runId": null,
+    "round": 10,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 7,
+      "confirmed": 8,
+      "blocking": 1,
+      "deferrals": 0,
+      "plausible": 0,
+      "themes": 7
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [
+      {
+        "critic": "critic-interaction",
+        "reason": "saturated (5 quiet rounds), surface untouched"
+      }
+    ],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 10,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": 10,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 10,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 10,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 5,
+        "lastRound": 10,
         "skipped": true
       }
     }

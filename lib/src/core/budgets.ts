@@ -254,6 +254,6 @@ function loopBudget(n: number, m: number): number {
 }
 
 // Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
-// option). Shared so the three generation entry points can't drift apart.
+// option). Shared so the two generation entry points can't drift apart.
 export const DEFAULT_MIN_SEPARATION = 5;
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { viewFromResult, type GraphView, type Settings } from "../model";
 import { autoPolishEnabled } from "ringweave";
-import { splitPairs, pairKey, type ConstraintPair } from "../constraints";
+import { splitPairs, type ConstraintPair } from "../constraints";
 import { useGenerationWorker } from "./useGenerationWorker";
 
 function sameStrings(a: string[], b: string[]): boolean {
@@ -12,24 +12,7 @@ function sameEdges(a: [number, number][], b: [number, number][]): boolean {
   return a.length === b.length && a.every((e, i) => e[0] === b[i][0] && e[1] === b[i][1]);
 }
 
-/**
- * Rule-set equality, order-insensitive via the canonical pair key.
- *
- * Needed because the "identical graph" short-circuit below compares names and
- * edges only. A constraints-only edit can easily produce the SAME edges — adding
- * a required pair the generator had already chosen, say — and without this the
- * view would keep its old `constraints`/`report`, so export would write the wrong
- * rules and a reroll would claim it "couldn't find a different arrangement".
- */
-function sameConstraints(a: ConstraintPair[], b: ConstraintPair[]): boolean {
-  if (a.length !== b.length) return false;
-  const keys = new Set(a.map(pairKey));
-  return b.every((p) => keys.has(pairKey(p)));
-}
 
-function sameSettings(a: Settings, b: Settings): boolean {
-  return a.buddies === b.buddies && a.minSeparation === b.minSeparation && a.polish === b.polish && a.seed === b.seed;
-}
 
 /**
  * Orchestrates generation: sends a job to the worker and maps its BuddyResult back into
@@ -87,17 +70,18 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
       // keeping the old ones would export the wrong rules and show a stale report. So they are
       // adopted alongside settings — carried over, not re-laid-out.
       if (cur && sameStrings(cur.names, next.names) && sameEdges(cur.edges, next.edges)) {
-        const changed =
-          !sameSettings(cur.settings, next.settings) ||
-          !sameConstraints(cur.constraints, next.constraints);
-        if (changed) {
-          setView({
-            ...cur,
-            settings: next.settings,
-            constraints: next.constraints,
-            report: next.report,
-          });
-        }
+        // Adopt all three unconditionally. The `changed` predicate tested only settings and
+        // constraints while the branch also adopted `report`, so a freshly measured report was
+        // DISCARDED whenever the regenerated graph came back byte-identical with the same rules
+        // — which is exactly the common reroll case. Predicting which of the adopted fields
+        // changed is a second, silently narrower copy of the adoption list; the object identity
+        // of `cur.edges` is what protects against a re-layout, and that is preserved either way.
+        setView({
+          ...cur,
+          settings: next.settings,
+          constraints: next.constraints,
+          report: next.report,
+        });
         if (wasReroll) onIdenticalRerollRef.current?.(cur);
       } else {
         setView(next);

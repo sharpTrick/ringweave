@@ -77,19 +77,17 @@ export function polish(
   const alpha = 0.995;
   if (mode === "anneal") {
     const deltas: number[] = [];
-    // Bounded by the SAME iteration budget the loop is (not sharing one pool with
-    // it — a full-budget run does up to 100 calibration evaluations and then
-    // maxIters loop iterations). These are full energy evaluations, and they used
-    // to run unconditionally: `polish(g, { mode: "anneal", maxIters: 0 })` did 100
-    // of them and took 587 ms on a 300-vertex graph, against 11 ms for the same
-    // call in hill mode. Work before the loop that the budget cannot reach is work
-    // the budget does not bound.
-    // Charged against the loop, not amortised into a constant. Each trial is a full
-    // `energy()` — one `allPairsSummary`, the same cost as a loop iteration — while
-    // `loopBudget` subtracts a fixed 3 sweeps regardless. When `maxIters <= 100`, which is
-    // exactly the large-n regime the budget exists for, the calibration could be the
-    // MAJORITY of the work and none of it was priced.
-    const trials = Math.min(100, Math.max(10, edges.length), maxIters);
+    // The calibration is real work, charged against the same budget as the loop, and capped
+    // at HALF of it. Each trial is a full `energy()` — one `allPairsSummary`, the same cost as
+    // a loop iteration — and it has taken three corrections to price honestly:
+    //   1. it ran unconditionally, so `{ maxIters: 0 }` still did 100 sweeps (587 ms at n=300);
+    //   2. it was then bounded by `maxIters` but not SUBTRACTED from it, so the two gates
+    //      together could spend twice the budget they both cite;
+    //   3. subtracting it while still capping at `maxIters` made any budget <= 100 vanish
+    //      entirely into setup — `loopIters` 0, no accept/reject decision, the input returned
+    //      byte-for-byte, and `polished: true` reported. A silent no-op sold as work.
+    // Half is the floor that keeps a decision affordable at every budget the gates admit.
+    const trials = Math.min(100, Math.max(10, edges.length), Math.floor(maxIters / 2));
     calibrationSweeps = trials;
     for (let i = 0; i < trials && edges.length >= 2; i++) {
       const sw = proposeSwap(g, edges, rng);

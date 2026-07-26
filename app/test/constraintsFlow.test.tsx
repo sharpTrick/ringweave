@@ -166,3 +166,24 @@ describe("rules survive the round trip through Generate", () => {
     expect((screen.getByLabelText("Rule 2, first person") as HTMLInputElement).value).toBe("Ben");
   });
 });
+
+describe("a row still being typed is not a broken rule", () => {
+  it("does not claim an empty row names a missing person", () => {
+    // `resolveNamedPairs` looked `""` up like any other name, so the modal announced
+    // "names someone who isn't in this roster" the instant a row was added — while the editor's
+    // own `unknownName` deliberately exempts empty text and left the row unflagged. Two views of
+    // one row, disagreeing, and the wrong one was the one that spoke.
+    renderModal();
+    addRule();
+    expect(screen.queryByText(/isn't in this roster/)).toBeNull();
+    expect(screen.getByText(/still missing a name/)).toBeTruthy();
+  });
+
+  it("still reports a genuinely unknown name", () => {
+    // The exemption must not swallow the real case it was carved out of.
+    renderModal();
+    addRule();
+    setRow(1, "Alice", "Nobody");
+    expect(screen.getByText(/isn't in this roster/)).toBeTruthy();
+  });
+});

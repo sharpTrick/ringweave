@@ -120,6 +120,15 @@ Surfaced by review, deliberately deferred (not silently ignored):
 - **`aspl`/`girth` are `Infinity`** for n≤1 (no reachable pairs); `JSON.stringify` turns that into
   `null`. Normalize or special-case at the export boundary (F6).
 - **`k ≥ n` is silently capped** at n-1 (feasible, no error). A soft "capped" note could help UX.
+- **`validate` does not consider `priorHard`, so it is the authoritative gate only for the safe
+  entry point.** `buildConstrainedBuddyGraph` calls `withHardPriors` *before* validating, so that
+  path is consistent; `validate`/`validateDetailed` called directly, and the `constrainedGreedy` /
+  `polishConstrained` primitives, all ignore the flag and will accept an input that the builder
+  would refuse after promotion. Deferred rather than fixed because the fix belongs inside the
+  validator and `reference-python`'s `prior_hard` is declared but never used — so promoting in TS
+  alone trades oracle parity for a consistency no live caller needs (nothing in the repo sets
+  `priorHard`; F9 is the feature that would). When F9 lands, mirror the promotion into the Python
+  validator first, then move `withHardPriors` into `validateDetailed` and regenerate fixtures.
 
 ## Review (required before commit)
 

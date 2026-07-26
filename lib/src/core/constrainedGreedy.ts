@@ -159,7 +159,10 @@ export function polishConstrained(
   // reach the all-pairs sweeps and graph copies this function pays outside its
   // loop, so `polishConstrained(ring(30000), cons, { iters: 0 })` — priced at zero
   // iterations — still ran for 48 s.
-  const m = input.edgeList().length;
+  // `degrees()` rather than `edgeList()`: the same m, without allocating m two-element arrays
+  // and sorting them, so the REFUSAL path no longer pays O(m log m) time and O(m) memory for a
+  // graph it is about to reject. `polish` already derives it this way.
+  const m = input.degrees().reduce((a, b) => a + b, 0) / 2;
   checkPolishSize(input.n, m);
   // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
   // exported public API and a wrapper clamp does not apply to a direct caller.
@@ -169,6 +172,14 @@ export function polishConstrained(
   // NaN — so the pass ran its full iteration budget of O(n·m) re-measurements and
   // returned the input unchanged while reporting `polished: true`. Silent no-ops
   // are worse than refusals.
+  // Sign-checked as well as finiteness-checked. `constrainedMeasure` subtracts
+  // `priorWeight * priorsKept`, so a NEGATIVE weight makes breaking a prior an IMPROVEMENT —
+  // the objective actively works against the option's stated purpose. This is the knob F9's
+  // "preserve current buddies" toggle drives, so the inversion would arrive with a feature
+  // whose whole point it reverses.
+  if (opts.priorWeight !== undefined && !(Number.isFinite(opts.priorWeight) && opts.priorWeight >= 0)) {
+    throw new Error(`prior weight ${opts.priorWeight} must be a non-negative finite number`);
+  }
   const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;
   const measure = constrainedMeasure(cons, priorWeight);
   const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);

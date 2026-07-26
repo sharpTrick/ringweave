@@ -47,7 +47,12 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         // IS optimal for the degree it delivered — but "optimal" and "what you asked for" are
         // different claims, and only one of them was on screen.
         <div className="rules-line">
-          You asked for {shortfall.asked} buddies each; this roster only allows {shortfall.got}.
+          {/* Worded about the GRAPH, not about the roster or the request. `targetShortfall` cannot
+              tell a generated view from an imported one, and an imported edge set no generator
+              ever built was being blamed on "this roster" — a limit that came from the file.
+              Describing what is true of the graph in front of the user is accurate on both
+              paths, and needed no provenance flag to get there. */}
+          Each person has {shortfall.got} buddies, not the {shortfall.asked} in Settings.
         </div>
       )}
       {rules && <div className="rules-line">{rules}</div>}

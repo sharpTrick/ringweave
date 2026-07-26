@@ -27,6 +27,9 @@ export const MAX_NAMES = MAX_ROSTER_N;
  */
 export const MAX_NAME_CHARS = 120;
 
+/** How many de-duplicated names a warning names before it says "and N more". */
+const WARNING_NAME_LIMIT = 10;
+
 const TOKEN = /[^\n,]+/g;
 // Unicode control (Cc) and format (Cf) characters. They are not line/comma delimiters here,
 // so they'd otherwise survive inside a name and later act as a cell/row delimiter when the
@@ -123,8 +126,16 @@ export function parseRoster(raw: string): ParsedRoster {
   }
   if (extras.size > 0) {
     const dropped = [...extras.values()].reduce((a, b) => a + b, 0);
-    // List each de-duplicated person once, by the casing we KEPT (first occurrence).
-    const list = [...extras.keys()].map((k) => keptByKey.get(k)!).join(", ");
+    // List each de-duplicated person once, by the casing we KEPT (first occurrence) — but at
+    // most WARNING_NAME_LIMIT of them. `extras` is bounded only by MAX_NAMES-1 and each name by
+    // MAX_NAME_CHARS, so enumerating all of them produced a ~122 KB warning string that
+    // RosterModal renders as a single DOM text node inside the dialog. Same shape as the
+    // "+N more" the person panel already uses for its chips.
+    const kept = [...extras.keys()].map((k) => keptByKey.get(k)!);
+    const shown = kept.slice(0, WARNING_NAME_LIMIT).join(", ");
+    const list = kept.length > WARNING_NAME_LIMIT
+      ? `${shown}, and ${kept.length - WARNING_NAME_LIMIT} more`
+      : shown;
     warnings.push(
       `Removed ${dropped} duplicate ${dropped === 1 ? "entry" : "entries"} (${list}). Each person appears once.`,
     );

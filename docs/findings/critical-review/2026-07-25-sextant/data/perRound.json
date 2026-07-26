@@ -113,7 +113,7 @@
   },
   {
     "round": 4,
-    "target": "app/src (the BuddyGraph app)",
+    "target": "app/src",
     "converged": false,
     "confirmed": 9,
     "blocking": 4,
@@ -151,7 +151,7 @@
   },
   {
     "round": 5,
-    "target": "app/src (the BuddyGraph app)",
+    "target": "app/src",
     "converged": false,
     "confirmed": 9,
     "blocking": 3,
@@ -184,6 +184,44 @@
     "subagentTokens": 582565,
     "agents": 6,
     "toolCalls": 205
+  },
+  {
+    "round": 6,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 11,
+    "blocking": 5,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 9,
+    "totalFindings": 12,
+    "files": [
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/constraints.ts",
+      "app/src/model.ts",
+      "app/src/io/parseRoster.ts",
+      "app/src/panels/PersonSearch.tsx",
+      "app/src/styles/app.css",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/App.tsx",
+      "app/src/panels/RosterModal.tsx"
+    ],
+    "classes": [
+      "stale-view-field-after-identical-regeneration",
+      "blank-row-counted-as-resolution-failure",
+      "generation-path-claim-rendered-on-import-path",
+      "unbounded-warning-text-strands-dialog",
+      "unbounded-query-echo-freezes-main-thread",
+      "non-scrollable-modal-has-no-overflow-guard",
+      "unbuilt-feature-fanout",
+      "false-comment",
+      "focus-rescue-anchor-gap",
+      "unannounced-validation-state",
+      "tab-order-visual-mismatch"
+    ],
+    "subagentTokens": 703414,
+    "agents": 6,
+    "toolCalls": 268
   },
   {
     "round": 1,
@@ -402,7 +440,7 @@
   },
   {
     "round": 8,
-    "target": "lib/src (the ringweave core)",
+    "target": "lib/src",
     "converged": false,
     "confirmed": 6,
     "blocking": 0,
@@ -431,7 +469,7 @@
   },
   {
     "round": 9,
-    "target": "lib/src (the ringweave core)",
+    "target": "lib/src",
     "converged": false,
     "confirmed": 5,
     "blocking": 2,
@@ -456,5 +494,37 @@
     "subagentTokens": 490611,
     "agents": 5,
     "toolCalls": 159
+  },
+  {
+    "round": 10,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 8,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 7,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/constraints.ts",
+      "lib/src/core/bounds.ts",
+      "lib/src/core/polish.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/budgets.ts"
+    ],
+    "classes": [
+      "preflight-disagrees-with-generation",
+      "lower-bound-is-not-a-lower-bound",
+      "budget-consumed-entirely-by-setup",
+      "unvalidated-non-finite-option",
+      "size-gate-after-the-work-it-bounds",
+      "work-budget-admits-past-its-stated-ceiling",
+      "unvalidated-numeric-option-sign",
+      "false-comment"
+    ],
+    "subagentTokens": 549959,
+    "agents": 5,
+    "toolCalls": 194
   }
 ]

@@ -2,41 +2,41 @@
   "app/src": {
     "critic-correctness": {
       "nothingFoundStreak": 0,
-      "lastRound": 5
+      "lastRound": 6
     },
     "critic-security": {
       "nothingFoundStreak": 0,
-      "lastRound": 5
+      "lastRound": 6
     },
     "critic-solid": {
-      "nothingFoundStreak": 0,
-      "lastRound": 5
+      "nothingFoundStreak": 1,
+      "lastRound": 6
     },
     "critic-maintainability": {
       "nothingFoundStreak": 0,
-      "lastRound": 5
+      "lastRound": 6
     },
     "critic-interaction": {
       "nothingFoundStreak": 0,
-      "lastRound": 5
+      "lastRound": 6
     }
   },
   "lib/src": {
     "critic-correctness": {
       "nothingFoundStreak": 0,
-      "lastRound": 9
+      "lastRound": 10
     },
     "critic-security": {
       "nothingFoundStreak": 0,
-      "lastRound": 9
+      "lastRound": 10
     },
     "critic-solid": {
       "nothingFoundStreak": 0,
-      "lastRound": 9
+      "lastRound": 10
     },
     "critic-maintainability": {
-      "nothingFoundStreak": 1,
-      "lastRound": 9
+      "nothingFoundStreak": 0,
+      "lastRound": 10
     },
     "critic-interaction": {
       "nothingFoundStreak": 5,

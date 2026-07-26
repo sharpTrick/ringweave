@@ -164,7 +164,7 @@ export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPai
  * Name pairs → index pairs, against the roster they will be generated with.
  *
  * Returns the resolved pairs plus counts of every resolution failure BY CAUSE
- * (`unmatched`, `selfPair`, `duplicate`) and the `dropped` total, so the caller can
+ * (`unmatched`, `selfPair`, `duplicate`, `incomplete`) and the `dropped` total, so the caller can
  * name each one separately rather than reporting a single number. A rule silently
  * disappearing because its person was removed is the failure this is here to
  * prevent, and losing it quietly would be barely better than mis-pointing it.
@@ -176,12 +176,29 @@ export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPai
 export function resolveNamedPairs(
   named: NamedPair[],
   names: string[],
-): { pairs: ConstraintPair[]; unmatched: number; duplicate: number; selfPair: number; dropped: number } {
+): {
+  pairs: ConstraintPair[];
+  unmatched: number;
+  duplicate: number;
+  selfPair: number;
+  incomplete: number;
+  dropped: number;
+} {
   const lookup = indexByName(names);
   const resolved: ConstraintPair[] = [];
   let unmatched = 0;
   let selfPair = 0;
+  let incomplete = 0;
   for (const p of named) {
+    // A half-filled row is NOT a resolution failure. Looking `""` up like any other name
+    // counted a row the user has not finished typing under `unmatched`, so the modal announced
+    // that a rule "names someone who isn't in this roster" the moment a row was added — while
+    // ConstraintsEditor's own `unknownName` deliberately exempts empty text and leaves the row
+    // unflagged. Two views of one row, disagreeing, and the wrong one was the one that spoke.
+    if (p.a.trim() === "" || p.b.trim() === "") {
+      incomplete++;
+      continue;
+    }
     const a = lookup.get(p.a.trim().toLowerCase());
     const b = lookup.get(p.b.trim().toLowerCase());
     if (a === undefined || b === undefined) {
@@ -203,6 +220,9 @@ export function resolveNamedPairs(
     unmatched,
     duplicate: resolved.length - pairs.length,
     selfPair,
+    incomplete,
+    // Rows that produced no pair for ANY reason, including ones still being filled in — so a
+    // caller reporting a single number does not have to know the taxonomy.
     dropped: named.length - pairs.length,
   };
 }

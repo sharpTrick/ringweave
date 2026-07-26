@@ -167,6 +167,15 @@ export default function RosterModal({
           </button>
         </div>
 
+        {/* ONE permanently-mounted live region around the whole note stack. Six kinds of text
+            appear and disappear here in response to typing, dropping a file, or editing a rule —
+            the file error, the character-cap notice, roster-parse warnings, feasibility messages,
+            the three by-cause rule notes, and the blocking rule problems — and none of them was
+            announced. Two of them GATE the primary action, so a keyboard-and-screen-reader user
+            could find "Generate buddy graph" disabled with no way to learn why.
+            Mounted around the stack rather than on each note, for the reason Notice.tsx documents:
+            a region that appears together with its first text is never announced. */}
+        <div role="status" aria-live="polite">
         {fileError && <div className="note blocking">{fileError}</div>}
         {inputCapped && <div className="note">{charCapNotice()}</div>}
         {parsed.warnings.map((w, i) => (
@@ -192,6 +201,13 @@ export default function RosterModal({
               : `${resolved.selfPair} buddy rules pair someone with themselves and won't be used.`}
           </div>
         )}
+        {resolved.incomplete > 0 && (
+          <div className="note">
+            {resolved.incomplete === 1
+              ? "1 buddy rule is still missing a name."
+              : `${resolved.incomplete} buddy rules are still missing a name.`}
+          </div>
+        )}
         {resolved.duplicate > 0 && (
           <div className="note">
             {resolved.duplicate === 1
@@ -202,6 +218,7 @@ export default function RosterModal({
         {ruleProblems.map((m, i) => (
           <div className="note blocking" key={i}>{m}</div>
         ))}
+        </div>
       </div>
     </div>
   );

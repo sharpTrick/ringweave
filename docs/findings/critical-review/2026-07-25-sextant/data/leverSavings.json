@@ -1,7 +1,7 @@
 {
   "generatedFrom": {
     "dataDir": "/home/user/ringweave/docs/findings/critical-review/2026-07-25-sextant/data",
-    "rounds": 12
+    "rounds": 16
   },
   "a1LintPreemption": {
     "what": "today's oxlint rule set, replayed over E1's own history",
@@ -69,8 +69,22 @@
         "collapsed": 2
       },
       {
-        "target": "app/src (the BuddyGraph app)",
+        "target": "app/src",
         "round": 4,
+        "rawFindings": 11,
+        "themes": 9,
+        "collapsed": 2
+      },
+      {
+        "target": "app/src",
+        "round": 5,
+        "rawFindings": 12,
+        "themes": 9,
+        "collapsed": 3
+      },
+      {
+        "target": "app/src",
+        "round": 6,
         "rawFindings": 11,
         "themes": 9,
         "collapsed": 2
@@ -125,23 +139,37 @@
         "collapsed": 2
       },
       {
-        "target": "lib/src (the ringweave core)",
+        "target": "lib/src",
         "round": 8,
         "rawFindings": 6,
         "themes": 4,
         "collapsed": 2
+      },
+      {
+        "target": "lib/src",
+        "round": 9,
+        "rawFindings": 5,
+        "themes": 4,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 10,
+        "rawFindings": 8,
+        "themes": 7,
+        "collapsed": 1
       }
     ],
-    "totalRaw": 110,
-    "totalThemes": 80,
-    "totalCollapsed": 30,
+    "totalRaw": 146,
+    "totalThemes": 109,
+    "totalCollapsed": 37,
     "caveat": "a deduplication figure only; multiple critics on one theme is not corroboration and carries no severity information"
   },
   "a3SaturationSkipping": {
     "what": "critic-rounds not spent because a lens was gated, × the measured mean agent cost",
-    "skippedCriticRounds": 1,
-    "meanAgentCostTokens": 82518,
-    "tokensSaved": 82518,
+    "skippedCriticRounds": 3,
+    "meanAgentCostTokens": 88015,
+    "tokensSaved": 264045,
     "perRound": [
       {
         "target": "app/src",
@@ -165,8 +193,22 @@
         "skippedLenses": []
       },
       {
-        "target": "app/src (the BuddyGraph app)",
+        "target": "app/src",
         "round": 4,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 5,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 6,
         "lensesRun": 5,
         "skipped": 0,
         "skippedLenses": []
@@ -221,8 +263,26 @@
         "skippedLenses": []
       },
       {
-        "target": "lib/src (the ringweave core)",
+        "target": "lib/src",
         "round": 8,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 9,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 10,
         "lensesRun": 4,
         "skipped": 1,
         "skippedLenses": [
@@ -232,9 +292,9 @@
     ]
   },
   "tokenTotals": {
-    "subagentTokens": 5858806,
-    "agents": 71,
-    "meanAgentCostTokens": 82518,
-    "roundsWithTokenData": 12
+    "subagentTokens": 8185355,
+    "agents": 93,
+    "meanAgentCostTokens": 88015,
+    "roundsWithTokenData": 16
   }
 }

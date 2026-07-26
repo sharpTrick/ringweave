@@ -11,6 +11,11 @@ export interface MooreBounds {
 }
 
 export function mooreLowerBounds(n: number, k: number): MooreBounds {
+  // No CONNECTED graph with max degree <= 1 exists above n=2 — a matching is the best
+  // possible and it is disconnected — so a Moore-tree bound for k=1 describes a graph that
+  // cannot be built. `asplGap` then returned a NEGATIVE gap: "better than provably optimal".
+  // A lower bound that no realisable graph attains is not a lower bound.
+  if (k === 1 && n > 2) return { asplLb: 0, diameterLb: 0 };
   // n and k must be whole numbers: a non-integer k drives the shell recurrence
   // (`shell *= k-1`, with k-1 < 1) into a denormal floating-point fixed point
   // that never reaches 0 — an infinite loop. Cap n so the k=2 O(n) branch can't
