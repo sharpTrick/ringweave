@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
-import { forceLayout, forceIters, ringLayout, FORCE_MAX_N, FORCE_MAX_EDGES } from "../src/graph/layout";
+import {
+  forceLayout, forceIters, ringLayout,
+  FORCE_MAX_N, FORCE_MAX_EDGES, FORCE_MIN_TICKS,
+} from "../src/graph/layout";
 import { BUDDY_MAX } from "../src/model";
 
 describe("layout determinism", () => {
@@ -45,15 +48,37 @@ describe("layout determinism", () => {
     }
   });
 
-  it("settles every in-range n within a wall-clock budget (no main-thread freeze)", () => {
-    for (const n of [250, 500, FORCE_MAX_N]) {
+  it("keeps the modelled settle cost bounded across the whole in-range band", () => {
+    // This asserted `performance.now()` deltas under 700 ms, which measures the MACHINE, not
+    // the code: under concurrent load on a 4-core container it reported 752 ms and failed,
+    // then passed in isolation seconds later. A timing assertion in a unit suite says only
+    // "this box was fast enough today", and a flake here reads exactly like a regression in
+    // whatever change is being reviewed — the same false signal a stray probe file produces.
+    //
+    // The real invariant is the one the comment above states: the settle is O(n · ticks) and
+    // ticks scale down past the knee, so the PRODUCT stays bounded. That is a pure function
+    // of n, so it is deterministic, machine-independent, and actually the property that keeps
+    // the main thread responsive.
+    // Past the knee, ticks are either the scaled value (so the product holds near the knee's
+    // product) or the floor (so the product is n · FORCE_MIN_TICKS). The floor is what makes
+    // the larger of the two the real ceiling — the product is NOT simply bounded by the knee,
+    // and asserting that it was is how this first got written wrong.
+    const ceiling = FORCE_MAX_N * FORCE_MIN_TICKS;
+    for (const n of [130, 250, 500, 750, FORCE_MAX_N]) {
+      expect(forceIters(n) * n).toBeLessThanOrEqual(ceiling);
+    }
+    // Load-bearing: without the tick scaling the product at the ceiling would be n · 300,
+    // which busts the bound by 7.5x. So the assertion above can actually fail.
+    expect(FORCE_MAX_N * 300).toBeGreaterThan(ceiling);
+    // And it still has to RUN — a bounded model of an exploding function is worthless. The
+    // wall-clock ceiling here is deliberately loose: it catches a hang or a return to fixed
+    // ticks, and cannot fail because a neighbouring process got busy.
+    for (const n of [250, FORCE_MAX_N]) {
       for (const m of [0, n]) {
         const edges: [number, number][] = Array.from({ length: m }, (_, i) => [i, (i + 1) % n]);
         const start = performance.now();
-        const pts = forceLayout(n, edges);
-        const ms = performance.now() - start;
-        expect(pts).toHaveLength(n);
-        expect(ms).toBeLessThan(700); // was ~1500ms at n=1000 with fixed 300 ticks
+        expect(forceLayout(n, edges)).toHaveLength(n);
+        expect(performance.now() - start).toBeLessThan(10_000);
       }
     }
   });

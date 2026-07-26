@@ -47,7 +47,10 @@ export const FORCE_MAX_EDGES = Math.ceil((MAX_ROSTER_N * BUDDY_MAX) / 2);
 // force pass is also computed lazily — only when the force layout is on — so ring-mode use and
 // re-rolls never pay it; see GraphCanvas.)
 const FORCE_FULL_TICKS = 300;
-const FORCE_MIN_TICKS = 40;
+// Exported for the cost-budget test: asserting "the settle stays bounded" needs the terms
+// of the bound, and re-stating 40 in the test would be the mirrored-constant class the lint
+// gate exists to catch.
+export const FORCE_MIN_TICKS = 40;
 const FORCE_TICK_KNEE_N = 120; // full ticks at/below this; fewer above to cap the wall-clock
 
 /** Deterministic tick budget for an n-node force settle: full ticks up to the knee, then
