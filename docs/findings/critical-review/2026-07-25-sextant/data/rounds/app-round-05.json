@@ -1,5 +1,5 @@
 {
-  "target": "app/src (the BuddyGraph app)",
+  "target": "app/src",
   "round": 5,
   "modelOverride": null,
   "converged": false,
@@ -529,5 +529,6 @@
     "subagentTokens": 582565,
     "agents": 6,
     "toolCalls": 205
-  }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)"
 }

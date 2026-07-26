@@ -1,5 +1,5 @@
 {
-  "target": "app/src (the BuddyGraph app)",
+  "target": "app/src",
   "round": 4,
   "modelOverride": null,
   "converged": false,
@@ -510,5 +510,6 @@
       "kind": "non-monotonic-convergence",
       "note": "app findings went 14 -> 9 -> 6 -> 9 and blocking 7 -> 6 -> 1 -> 4. The fourth round is up on both, against a target whose previous round had one blocking finding."
     }
-  ]
+  ],
+  "targetRaw": "app/src (the BuddyGraph app)"
 }

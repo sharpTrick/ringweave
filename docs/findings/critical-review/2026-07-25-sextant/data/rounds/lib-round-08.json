@@ -1,5 +1,5 @@
 {
-  "target": "lib/src (the ringweave core)",
+  "target": "lib/src",
   "round": 8,
   "modelOverride": null,
   "converged": false,
@@ -365,5 +365,6 @@
       "kind": "approaching-convergence",
       "note": "lib: 0 blocking findings for the first time (10,3,14,5,12,8,7 -> 6 confirmed, 4 gating, 0 blocking). Two of the six are deferrals already recorded in lib/CLAUDE.md, correctly filed as non-gating."
     }
-  ]
+  ],
+  "targetRaw": "lib/src (the ringweave core)"
 }

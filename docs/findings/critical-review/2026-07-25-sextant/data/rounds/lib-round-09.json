@@ -1,5 +1,5 @@
 {
-  "target": "lib/src (the ringweave core)",
+  "target": "lib/src",
   "round": 9,
   "modelOverride": null,
   "converged": false,
@@ -317,5 +317,6 @@
     "subagentTokens": 490611,
     "agents": 5,
     "toolCalls": 159
-  }
+  },
+  "targetRaw": "lib/src (the ringweave core)"
 }

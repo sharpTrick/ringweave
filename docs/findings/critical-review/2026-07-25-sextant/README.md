@@ -12,10 +12,17 @@ produced by an instrument the loop does not control: `git blame`, a linter, a co
 suite, seeded defects with known locations. Where judgment was unavoidable it is named as such and
 pushed onto a different model.
 
-**Status: partial.** The retrospective measurements over E1 are complete and are reported below. The
-seeded-defect recall run (E3) is in progress; its section says so explicitly rather than being left
-to look finished. The pre-registration is [`PRE-REGISTRATION.md`](./PRE-REGISTRATION.md), committed
-before any scoring run.
+**Status: partial, and the loop is still running.** The retrospective measurements over E1 are
+complete. E3 is complete with a valid denominator. The M3 review loop itself has run **14 rounds
+across two targets and has not converged** — §5 reports where it stands rather than waiting for a
+tidy ending, because a partial series that is honestly labelled is worth more than a complete one
+that stopped when the numbers looked good. The pre-registration is
+[`PRE-REGISTRATION.md`](./PRE-REGISTRATION.md), committed before any scoring run.
+
+**Two session-limit halts have interrupted the run** (§5's `lib` round 2, and a later pair of rounds
+that lost every lens). Neither is treated as a round: a round whose lenses died produced no
+observation, and the runner's own convergence rule already refuses to call a round with an errored
+lens converged. The affected runs are excluded and re-run rather than being counted as quiet.
 
 ---
 
@@ -240,25 +247,48 @@ comparisons do not.
 
 ---
 
-### 5. The M3 review loop: five rounds, and it has not converged
+### 5. The M3 review loop: fourteen rounds, and neither target has converged
 
 Data in [`data/rounds/`](./data/rounds/) and the normalized [`data/perRound.json`](./data/perRound.json).
-Target: `lib/src`, the ringweave core, after M3 added `shortestPath`/`eccentricity`, connectivity
-fields on `BuddyResult`, and the `validateDetailed` split.
+Two targets, run as separate loops: `lib/src` (the ringweave core) and `app/src` (the BuddyGraph app).
 
-| round | confirmed | blocking | themes | quiet lenses | dead lenses |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 10 | 3 | 5 | 0 | 0 |
-| 2 | 3 | 2 | 3 | — | **3** (session limit) |
-| 3 | 14 | 4 | 8 | 2 | 0 |
-| 4 | 5 | 1 | 4 | 2 | 0 |
-| 5 | 13 | 5 | 9 | 1 | 0 |
+**`lib/src`** — after M3 added `shortestPath`/`eccentricity`, connectivity fields on `BuddyResult`,
+and the `validateDetailed` split.
 
-**It is not monotone, and round 4 was a false summit.** After four rounds of decline, round 5 found
-more than round 4 by every measure. Had the loop stopped at round 4's single blocking finding it would
-have stopped one round before its largest blocking count. This is the same shape E1 had, and the same
-shape Calboreanu published (15, 8, 12, 2, 8, 1, 4, 1, 0) — and it is the strongest evidence available
-for the two-consecutive-clean-rounds rule, which neither this loop nor E1's has yet satisfied.
+| round | confirmed | blocking | deferrals | themes | quiet lenses | skipped | dead lenses |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 9 | 3 | 1 | 5 | 1 | 0 | 0 |
+| 2 | 3 | 2 | 1 | 3 | 1 | 0 | **3** (session limit) |
+| 3 | 9 | 4 | 1 | 8 | 2 | 0 | 0 |
+| 4 | 5 | 1 | 1 | 4 | 1 | 0 | 0 |
+| 5 | 12 | 5 | 1 | 9 | 1 | 0 | 0 |
+| 6 | 8 | 2 | 0 | 6 | 1 | 0 | 0 |
+| 7 | 7 | 3 | 0 | 5 | 2 | 0 | 0 |
+| 8 | 6 | **0** | 2 | 4 | 0 | **1** | 0 |
+| 9 | 5 | 2 | 1 | 4 | 1 | 1 | 0 |
+
+**`app/src`** — F7, F8 and F10.
+
+| round | confirmed | blocking | deferrals | themes | quiet lenses | skipped | dead lenses |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 14 | 7 | 0 | 11 | 0 | 0 | 0 |
+| 2 | 9 | 6 | 1 | 9 | 0 | 0 | 0 |
+| 3 | 6 | 1 | 0 | 7 | 1 | 0 | 0 |
+| 4 | 9 | 4 | 0 | 9 | 1 | 0 | 0 |
+| 5 | 9 | 3 | 0 | 9 | 0 | 0 | 0 |
+
+**Neither series is monotone, and each has produced a false summit.** On `lib/src`, round 4's single
+blocking finding was followed by round 5's five — the largest blocking count of the run — so stopping
+at the quiet round would have stopped one round before the peak. `app/src` repeated it exactly one
+target later: round 3 fell to a single blocking finding and round 4 went back up to four. Neither loop
+has yet produced the two consecutive clean rounds the protocol requires, and after fourteen rounds the
+best either has managed is **one round with zero blocking findings** (`lib` round 8), immediately
+followed by a round with two.
+
+This is the same shape E1 had and the same shape Calboreanu published (15, 8, 12, 2, 8, 1, 4, 1, 0).
+Three independent runs now show it. It is the strongest evidence in this experiment for the
+two-consecutive-clean-rounds rule — and, read the other way, the strongest evidence that a
+diminishing-returns stopping heuristic would have fired early on every one of them.
 
 **Full-surface review of a component you just touched finds old bugs.** None of round 1's three
 blocking findings were in M3's new code. They were pre-existing core defects: `penalizedAspl`'s flat
