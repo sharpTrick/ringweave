@@ -32,6 +32,10 @@ before any scoring run.
 > E1's history finds a click-handler accessibility defect that is **byte-identical at the baseline and at
 > the converged head** — twenty-one rounds of five-lens adversarial review renamed its file and never
 > filed it. Lever A1 was sold as a saving; what it demonstrably is, is **more capable** on its own classes.
+>
+> And the harness had the same disease it was built to diagnose: saturation gating never fired in six
+> rounds because nothing ever wrote the state file it reads, and a skip that *fails to happen* logs
+> nothing. The guard watched only the direction its author had in mind.
 
 ### 1. Self-induction, measured: 68% of classifiable findings, 3.37× over chance
 
@@ -413,13 +417,41 @@ recorded so far: **32.2% collapsed**. This is a deduplication figure and nothing
 reporting one theme is not corroboration and carries no severity information — ten agents once
 unanimously endorsed a padding oracle that did not exist, killed by one empirical test.
 
-**A3 — saturation skipping: zero.** No lens reached its gate in any round of either loop, so this lever
-saved nothing. The script prints the zero rather than omitting the component. The mechanism is built,
-tested by the hygiene check that compares critic frontmatter against the runner's gating config, and
-**unexercised** — which is a statement about the code, not about the lever. It also has a cause worth
-recording: gating requires a lens to return `nothingFound` for its full gate length, and across eleven
-rounds no lens has gone quiet twice in a row. In a loop that has not converged, there is nothing for a
-saturation gate to skip.
+**A3 — saturation skipping: zero, and the reason is a defect in the harness rather than a fact about
+the loop.** The first version of this section said no lens ever reached its gate. That was wrong, and
+the way it was wrong is the more interesting result.
+
+`critic-interaction` returned `nothingFound` on `lib/src` in rounds **3, 4, 5 and 6 — four
+consecutive** — against a `saturation_gate` of 2. Its surface is `app/src/**`, so on a `lib/src` round
+no changed path touches it and both halves of the skip condition were satisfied from round 5 onward. It
+was spawned anyway, twice, at a measured mean of ~76 K tokens per agent.
+
+The cause: review workflows cannot touch the filesystem, so the caller owns
+`.claude/review-state.json` and passes the streaks in. **Nothing ever wrote that file.** Every round
+was invoked with no prior state, so every streak restarted at zero, and the `saturation` object each
+round *returned* looked entirely plausible because it was being recomputed from zero each time.
+
+Two mechanisms failed together, and the second is the one worth generalising:
+
+- The runner accepted a JSON-**string** `args` down its plain-target branch, so `changedPaths` and
+  `saturation` silently became empty while `target` became the whole `{"target":…}` blob. It now parses
+  a `{`-leading string and throws on malformed JSON rather than reviewing a directory that cannot exist.
+- **A skip that fails to happen produces no output at all.** The runner was built so that "every skip
+  is logged, so it is a visible decision, never a silent gap" — and that is exactly half a guard. It
+  watched the direction where the loop does less work than expected and left the opposite direction
+  unobserved. The fix is symmetric: every lens now reports `{streak, gate, surfaceTouched, ran, why}`
+  whether it ran or not, and a round with no prior state at all says so in the log.
+
+So A3's honest figure is **zero tokens saved, ~150 K tokens wasted**, and the lever's mechanism is
+**unfalsified rather than unexercised** — it was never given its input. The streaks are now *derived*
+from the round record by [`saturation-state.mjs`](../../../../scripts/review-metrics/saturation-state.mjs)
+rather than maintained by hand, because a number typed into a state file by whoever ran the round is
+precisely the bookkeeping this experiment exists to replace with an oracle.
+
+This is also the cleanest instance in the run of the failure the whole experiment is about. The guard
+was written by the same agent that wrote the thing it guards, it guarded the direction that agent had
+in mind, and it went on reporting success for six rounds. No critic caught it either — all five lenses
+review `lib/src` and `app/src`, and nobody's surface includes the harness.
 
 **What E4's pre-registered criterion says about this.** E4 asked for ≥40% token reduction with zero loss
 of recall. One of its three components is unexercised, one is a dedup count that cannot be converted to

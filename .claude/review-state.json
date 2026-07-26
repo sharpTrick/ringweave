@@ -1,0 +1,46 @@
+{
+  "app/src": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 2
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 2
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 2
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 2
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 2
+    }
+  },
+  "lib/src": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 4,
+      "lastRound": 6
+    }
+  }
+}

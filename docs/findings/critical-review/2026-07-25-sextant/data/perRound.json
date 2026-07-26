@@ -43,6 +43,40 @@
     "toolCalls": 180
   },
   {
+    "round": 2,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 6,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 9,
+    "totalFindings": 11,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/model.ts",
+      "app/src/io/importGraph.ts",
+      "app/src/worker/generate.ts",
+      "app/src/worker/protocol.ts",
+      "app/src/panels/RosterModal.tsx and app/src/worker/generate.ts",
+      "app/src/panels/PersonPanel.tsx"
+    ],
+    "classes": [
+      "stale-state-desync",
+      "wrong-user-facing-claim",
+      "unbounded-work-from-file",
+      "duplicated-validation-diverges-under-promotion",
+      "no-caller-abstraction",
+      "maintainability-hazard-duplication",
+      "inert-cascade-swallows-dialog",
+      "focus-lost-on-panel-removal",
+      "refusal-mapped-to-success"
+    ],
+    "subagentTokens": 507917,
+    "agents": 6,
+    "toolCalls": 208
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -198,5 +232,33 @@
     "subagentTokens": 456875,
     "agents": 6,
     "toolCalls": 119
+  },
+  {
+    "round": 6,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 8,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/index.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/polish.ts"
+    ],
+    "classes": [
+      "gate-mirror-divergence",
+      "nullish-sentinel-conflation",
+      "work-before-the-gate",
+      "expensive-refusal",
+      "conflated-report-signal",
+      "false-comment-wrong-module",
+      "misleading-documentation"
+    ],
+    "subagentTokens": 421533,
+    "agents": 6,
+    "toolCalls": 137
   }
 ]

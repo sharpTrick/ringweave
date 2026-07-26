@@ -23,7 +23,34 @@ export const meta = {
   ],
 }
 
-const input = typeof args === 'string' ? { target: args } : (args ?? {})
+// A string arg may be either calling convention: the original plain target ("app/src"), or the
+// object form that some callers serialize to JSON on the way in. Both have to work, and the
+// difference cannot be guessed from `typeof`.
+//
+// WHY THIS IS NOT DEFENSIVE PROGRAMMING: without the parse, a JSON-string arg took the plain-target
+// branch, so TARGET became the whole `{"target":"lib/src",...}` blob and — far worse — changedPaths
+// and saturation silently became empty. Saturation gating cannot work if its state never arrives,
+// and it fails SILENTLY: a lens that should have been skipped simply runs, and a run that produces
+// no skip produces no log line either. The runner was carefully built so every skip is visible;
+// nothing made a MISSING skip visible. It cost six review rounds of a lens that had gone quiet four
+// rounds running, and the returned saturation state looked plausible the whole time because it was
+// being recomputed from zero each round.
+function parseArgs(raw) {
+  if (raw == null) return {}
+  if (typeof raw !== 'string') return raw
+  const text = raw.trim()
+  if (!text.startsWith('{')) return { target: raw }
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { target: raw }
+  } catch {
+    // A string that starts with `{` but is not JSON is a malformed object arg, not a target named
+    // "{...". Failing loudly beats reviewing a directory that cannot exist.
+    throw new Error(`args looks like an object but is not valid JSON: ${text.slice(0, 120)}`)
+  }
+}
+
+const input = parseArgs(args)
 const TARGET = (input.target ?? '').trim() || 'app/src'
 const changedPaths = input.changedPaths ?? []
 const priorSaturation = input.saturation ?? {}
@@ -190,21 +217,47 @@ function globMatch(path, pattern) {
 
 // A lens is skipped only when it has been quiet for its full gate AND nothing it is responsible for
 // changed. Both halves matter: quiet alone means the LENS saturated, not that the SURFACE is clean.
+// A lens is skipped only when it has been quiet for its full gate AND nothing it is responsible for
+// changed. Both halves matter: quiet alone means the LENS saturated, not that the SURFACE is clean.
+//
+// EVERY lens records its decision, not just the skipped ones. A skip was always logged; a skip that
+// FAILED TO HAPPEN was invisible, which is how a lens quiet for four consecutive rounds kept being
+// spawned without anything in the output looking wrong. Reporting `streak`, `gate` and
+// `surfaceTouched` for all five makes "why did this run" answerable from the round file alone —
+// including the case where the answer is "because its state never arrived".
 const active = []
 const skipped = []
+const saturationDecisions = []
 for (const c of CRITICS) {
   const streak = priorSaturation[c.type]?.nothingFoundStreak ?? 0
-  if (streak < c.saturationGate) {
-    active.push(c)
-    continue
-  }
   const touched = changedPaths.some((p) => c.surface.some((g) => globMatch(p, g)))
-  if (touched) {
+  const ran = streak < c.saturationGate || touched
+  saturationDecisions.push({
+    critic: c.type,
+    streak,
+    gate: c.saturationGate,
+    surfaceTouched: touched,
+    ran,
+    why: ran
+      ? streak < c.saturationGate
+        ? `below gate (${streak}/${c.saturationGate} quiet rounds)`
+        : `at gate (${streak}) but a changed path is on its surface`
+      : `saturated (${streak} quiet rounds), surface untouched`,
+  })
+  if (ran) {
     active.push(c)
   } else {
     skipped.push({ critic: c.type, reason: `saturated (${streak} quiet rounds), surface untouched` })
     log(`skipping ${c.type} — saturated (${streak} quiet rounds), no changed path on its surface`)
   }
+}
+if (Object.keys(priorSaturation).length === 0) {
+  // Not a warning about a missing file — a warning that gating CANNOT fire this round. Distinguishing
+  // "round 1, nothing to carry" from "the state channel is broken" is the caller's job, and it can
+  // only do that if the round says which one it saw.
+  log(
+    `no prior saturation state was passed — every lens runs by default this round, and no skip can occur. If this is not round 1, the state channel is broken.`,
+  )
 }
 
 function prompt(c) {
@@ -342,6 +395,10 @@ return {
     erroredReason: r.erroredReason ?? null,
   })),
   skipped,
+  // The gating decision for EVERY lens, so a round file can be asked "why did this lens run"
+  // without re-deriving the answer from the saturation object it was handed.
+  saturationDecisions,
+  priorSaturationReceived: Object.keys(priorSaturation).length > 0,
   themes,
   gating,
   confirmed,
