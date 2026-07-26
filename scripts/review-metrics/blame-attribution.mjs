@@ -127,6 +127,14 @@ for (const cfg of CONFIGS) {
   let preExisting = 0;
   let unknown = 0;
   const unknownReasons = {};
+  // Split by severity as well as pooled. E1 filed 79 suggestions against 13
+  // blocking findings, so a pooled rate is necessarily suggestion-dominated —
+  // comparing it to another loop's pooled rate can compare a mostly-blocking
+  // number against a mostly-suggestion one. Added when Sextant's own oracle showed
+  // its self-induction was 55.6% among blocking findings and 15.4% among
+  // suggestions; the same cut had to exist on this side for the comparison to mean
+  // anything.
+  const bySeverity = {};
   const perFinding = [];
 
   for (const f of findings) {
@@ -165,8 +173,14 @@ for (const cfg of CONFIGS) {
       continue;
     }
     const isFix = fixShas.has(b.sha);
-    if (isFix) selfInduced++;
-    else preExisting++;
+    const bucket = (bySeverity[f.severity ?? "unknown"] ??= { selfInduced: 0, preExisting: 0 });
+    if (isFix) {
+      selfInduced++;
+      bucket.selfInduced++;
+    } else {
+      preExisting++;
+      bucket.preExisting++;
+    }
     perFinding.push({ round: f.round, class: f.class, file, line: f.line, blamed: b.sha.slice(0, 7), selfInduced: isFix });
   }
 
@@ -183,6 +197,12 @@ for (const cfg of CONFIGS) {
     preExisting,
     unknown,
     unknownReasons,
+    bySeverity: Object.fromEntries(
+      Object.entries(bySeverity).map(([sev, v]) => [
+        sev,
+        { ...v, rate: v.selfInduced + v.preExisting ? v.selfInduced / (v.selfInduced + v.preExisting) : null },
+      ]),
+    ),
     selfInducedRate: Number(rate.toFixed(4)),
     baseRate: Number(base.rate.toFixed(4)),
     lift: base.rate === 0 ? null : Number((rate / base.rate).toFixed(2)),

@@ -292,7 +292,7 @@ prompt asking them to would be another instruction obeyed ~79% of the time. Clos
 instead: git is the oracle, an unstaged file in a test directory is residue, and the check proves
 itself by creating the thing it catches.
 
-### 6. E2 — self-induction fell, but not where it matters most
+### 6. E2 — self-induction fell in the tier that matters least
 
 Measured by [`scripts/review-metrics/self-induction.mjs`](../../../../scripts/review-metrics/self-induction.mjs)
 over the five `lib/src` rounds; data in [`data/sextant-self-induction.json`](./data/sextant-self-induction.json).
@@ -308,9 +308,9 @@ cause.
 | lift over chance | **3.37×** | **1.36×** |
 | unknown bucket | — | 19 of 49 |
 
-**Against the pre-registered criterion — "the injected-defect rate falls by ≥½ versus E1" — this
-passes,** on the raw rate (a 66% fall) and on the lift (a 60% fall). The sensitivity table is flat:
-all four blame configurations give 23.3%, so the number is not an artifact of `-M -C`.
+On the pooled rate this clears the pre-registered bar of "falls by ≥½" — a 66% fall in the rate, 60%
+in the lift — and the sensitivity table is flat, so the number is not an artifact of `-M -C`. Read on
+before treating that as the result.
 
 **And then the severity split, which is the part that matters.**
 
@@ -326,16 +326,40 @@ code in ways that matter and then catching them**. It also confirms mechanically
 showed narratively — four of five rounds' blocking findings named the previous round's fix — so that
 chain is now an oracle result, not a reading.
 
-**Two reasons this comparison flatters Sextant, both of which have to be stated.**
+**The comparison the pooled numbers hide.** E1's rate is now split by the same oracle, and it changes
+the conclusion:
 
-1. **E1's 68% is not split by severity here, and E1 had 13 blocking findings out of 92** — so its
-   pooled figure is necessarily suggestion-dominated. Comparing Sextant's *pooled* 23.3% to E1's
-   *pooled* 68% may be comparing a mostly-blocking number to a mostly-suggestion one. Computing E1's
-   blocking-tier rate with the same oracle is the specific next measurement, and until it exists the
-   honest claim is "the pooled rate fell as pre-registered", not "self-induction was solved".
-2. **Five rounds against twenty-one.** Self-induction is cumulative — every round adds fix code for a
-   later round to trip over — so a short loop's rate is structurally lower than a long one's. Sextant
-   has not converged (§5), so its final rate can only rise.
+| severity | E1 | Sextant | change |
+| --- | --- | --- | --- |
+| **blocking** | **61.5%** (8/13) | **55.6%** (5/9) | −10% relative |
+| suggestion | 68.9% (51/74) | 15.4% (2/13) | −78% relative |
+
+**The pooled improvement is almost entirely in the suggestion tier. Blocking-tier self-induction did
+not meaningfully move.**
+
+That matters because of how E2's criterion was worded: it pre-registered a fall in *"the injected-defect
+rate (not the incomplete-fix rate)"*. Injected defects are the blocking ones. Read against the pooled
+rate, as literally specified, **E2 passes**. Read against what the criterion was *for* — the loop
+breaking its own code — **E2 fails**: 61.5% → 55.6% is nowhere near a halving.
+
+Both readings are reported because the pre-registration is ambiguous between them, and picking the
+flattering one after seeing the data is exactly the failure E1 diagnosed. The stronger statement is
+the pessimistic one.
+
+**And neither sample can carry a claim either way.** Nine classifiable blocking findings against
+thirteen; a Wilson interval on 5/9 spans roughly 27–81% and on 8/13 roughly 36–82%. They overlap almost
+completely. The correct summary is **no detectable change in blocking-tier self-induction**, not a
+small improvement.
+
+**Why the suggestion tier fell so far is the mechanism, and it is the reforms working as designed —
+just not where they were sold.** Lever A1 moved E1's recurring lint-class labels to an actual linter,
+and the `caseOnly` / `deferral` rules stopped preference-judgement findings from gating. Both target
+exactly the volume that made up E1's suggestion tier. They were *justified* by the self-reference tail;
+they *acted* on the nit tail.
+
+**One further reason Sextant's figure can only rise.** Five rounds against twenty-one. Self-induction
+is cumulative — every round adds fix code for a later round to trip over — and §5 shows this loop has
+not converged.
 
 **What is durable regardless.** The `unknown` bucket is 39% of findings, which is the oracle being
 honest rather than a defect: a finding with no line, or one citing a blank/comment/brace-only line, is

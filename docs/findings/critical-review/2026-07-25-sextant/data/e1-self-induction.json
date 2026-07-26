@@ -29,6 +29,18 @@
       "unknownReasons": {
         "uninformative-line": 5
       },
+      "bySeverity": {
+        "blocking": {
+          "selfInduced": 8,
+          "preExisting": 5,
+          "rate": 0.6153846153846154
+        },
+        "suggestion": {
+          "selfInduced": 54,
+          "preExisting": 20,
+          "rate": 0.7297297297297297
+        }
+      },
       "selfInducedRate": 0.7126,
       "baseRate": 0.2143,
       "lift": 3.33
@@ -41,6 +53,18 @@
       "unknown": 5,
       "unknownReasons": {
         "uninformative-line": 5
+      },
+      "bySeverity": {
+        "blocking": {
+          "selfInduced": 8,
+          "preExisting": 5,
+          "rate": 0.6153846153846154
+        },
+        "suggestion": {
+          "selfInduced": 54,
+          "preExisting": 20,
+          "rate": 0.7297297297297297
+        }
       },
       "selfInducedRate": 0.7126,
       "baseRate": 0.2135,
@@ -55,6 +79,18 @@
       "unknownReasons": {
         "uninformative-line": 5
       },
+      "bySeverity": {
+        "blocking": {
+          "selfInduced": 8,
+          "preExisting": 5,
+          "rate": 0.6153846153846154
+        },
+        "suggestion": {
+          "selfInduced": 51,
+          "preExisting": 23,
+          "rate": 0.6891891891891891
+        }
+      },
       "selfInducedRate": 0.6782,
       "baseRate": 0.2013,
       "lift": 3.37
@@ -67,6 +103,18 @@
       "unknown": 5,
       "unknownReasons": {
         "uninformative-line": 5
+      },
+      "bySeverity": {
+        "blocking": {
+          "selfInduced": 8,
+          "preExisting": 5,
+          "rate": 0.6153846153846154
+        },
+        "suggestion": {
+          "selfInduced": 51,
+          "preExisting": 23,
+          "rate": 0.6891891891891891
+        }
       },
       "selfInducedRate": 0.6782,
       "baseRate": 0.2013,
@@ -81,6 +129,18 @@
     "unknown": 5,
     "unknownReasons": {
       "uninformative-line": 5
+    },
+    "bySeverity": {
+      "blocking": {
+        "selfInduced": 8,
+        "preExisting": 5,
+        "rate": 0.6153846153846154
+      },
+      "suggestion": {
+        "selfInduced": 51,
+        "preExisting": 23,
+        "rate": 0.6891891891891891
+      }
     },
     "selfInducedRate": 0.6782,
     "baseRate": 0.2013,
