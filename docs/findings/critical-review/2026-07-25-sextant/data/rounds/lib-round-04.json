@@ -1,0 +1,305 @@
+{
+  "runId": "wf_b6eda5c1-c24",
+  "target": "lib/src",
+  "round": 4,
+  "tokens": {
+    "subagentTokens": 485726,
+    "agents": 6,
+    "toolCalls": 128
+  },
+  "observations": [
+    {
+      "kind": "convergence-trend",
+      "note": "Findings 10 -> 3 (contaminated) -> 9 -> 5; blocking 3 -> 2 -> 4 -> 1; themes 5 -> 3 -> 8 -> 4. critic-interaction returned nothingFound for the second consecutive round and critic-solid for the third, which is what the saturation gate is for."
+    },
+    {
+      "kind": "independent-corroboration",
+      "note": "critic-correctness ran an exhaustive scan of 1,293,327 double-edge swaps on structured disconnected graphs and found none that raises component count while lowering penalizedAspl \u2014 the property polish relies on in place of an explicit guard. A round-2 lens had already found the same over 432,954 swaps. Two independent lenses, two rounds apart, both confirming the round-1 fix."
+    },
+    {
+      "kind": "self-induction",
+      "note": "The one blocking finding is again against the previous round's fix: boundedPolishIterations modelled an iteration as n*m when allPairsSummary is Theta(n*(n+m)), under-charging sparse graphs by the whole n-squared term. Fourth consecutive round. Each fix has been a real improvement on the last, so the chain is converging on the right design rather than churning."
+    }
+  ],
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 5,
+    "blocking": 1,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface pass over lib/src (graph, metrics, greedy, constrainedGreedy, constraints, polish, swap, rng, bounds, index) plus all 9 test files, reproduced with scratch scripts. (1) npm test green, 233 tests. (2) reference-python test_core.py passes and gen_fixtures.py regenerates lib/test/fixtures/reference.json with zero diff. (3) Set/Map iteration-order independence: 300 graphs rebuilt from the same edge set in shuffled insertion order with flipped endpoints \u2014 girth, allPairsSummary, largestComponentFraction, eccentricity, shortestPath, polish (hill+anneal), polishConstrained all identical. (4) girth vs a brute-force edge-removal shortest-cycle oracle over 3000 random graphs: 0 mismatches. (5) shortestPath vs an independent lex-smallest-path oracle over all ordered pairs of 2000 graphs, plus path.length-1 === bfsDistances: 0 mismatches. (6) Hard-constraint fuzz: 600 adversarial constraint shapes (dense prohibited, required star, required clique, priorHard, k in {0,1,2,n-1,n,n+3}, n in [2,14]) through buildConstrainedBuddyGraph \u2014 no prohibited edge present, no required or hard-prior edge missing, no degree over k, no throw where validate() returned [], reported aspl/diameter/connected/satisfied equal to recomputation from the returned edges, rerun byte-identical. (7) 4000 small-n runs (n<=8, k<=5) confirmed constrainedGreedy output is legal-edge-maximal, so forceConnect is provably inert and Set-ordered connectedComponents never reaches output. (8) Oracle parity: 59 random feasible scenarios through reference-python constrained_greedy vs the TS port \u2014 worst relative ASPL delta 0, no connectivity/diameter/degree-cap divergence. (9) Anti-fragmentation: exhaustive scan of 1,293,327 double-edge swaps on structured disconnected graphs found no swap that raises component count while lowering penalizedAspl (the property polish relies on in place of an explicit guard). (10) Cost budgets measured: constrainedGreedy(464,463) at the MAX_CONSTRAINED_WORK corner = 57 s (doc says ~46 s, same order); auto-polish gate boundaries buildBuddyGraph(120,4)=23 s vs (121,4)=31 ms and buildConstrainedBuddyGraph(189,4)=22.6 s vs (190,4)=34 ms \u2014 the documented \"HONEST RESIDUAL\" discontinuity, already a tracked follow-on, not filed. (11) Boundaries traced: n=0/1/2, k=0/1, k>=n, edgeless, priorHard promotion + refusal ordering, mind clamping and NaN, boundedPolishIterations with Infinity/NaN/negative/0, validate-vs-checkWellFormed refusal parity, asplGap non-negativity for irregular graphs.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of `/home/user/ringweave/lib/src/core` (graph.ts, index.ts, constraints.ts, constrainedGreedy.ts, greedy.ts, polish.ts, metrics.ts, swap.ts, bounds.ts, rng.ts) plus `lib/test/*`, read as it stands rather than as a diff, and cross-checked against the app's only consumers (`app/src/worker/generate.ts`, `app/src/io/importGraph.ts`, `app/src/panels/RosterModal.tsx`).\n\nThings I built hostile inputs for and ran (vitest, throwaway files since deleted):\n\n- Numeric edges on every public option: `minSeparation` = NaN / \u00b1Infinity, `seed` = NaN / Infinity, `polishIters` = Infinity / NaN / -1 / 1.5 / -Infinity / 1e15 / 1e9, `priorWeight` = NaN / \u00b1Infinity, `k` = 1e9, n = 0 / 1 / 2 / negative / fractional. Nothing hung; `boundedPolishIterations`'s `Number.isInteger` fallback holds, `-0` degenerates to zero iterations, `RNG` seeds via `>>>0`.\n- Gate-ordering: `validate` on n=200000 with 100k prohibited pairs refuses in 61 ms (the pair scan is linear, the O(n\u00b2) walk is genuinely behind the `MAX_CONSTRAINED_N` refusal). `validate(n=5000, ring of 5000 prohibited pairs)` = 0.11 s, so the connectivity walk is not a lever.\n- The budget boundaries, by running them: `buildBuddyGraph(376,375)` sits at 99.7% of `MAX_GREEDY_WORK` and takes 18.6 s (inside the documented ~60 s worst case); `(300,299)` 7.9 s; `(1000,999)` and `(5000,4)` are refused. `constrainedWork`'s missing k\u00b2 term does not bite because `findPair` saturates degree far below k at the dense corner.\n- Termination of `constrainedGreedy`: the `completionCap = n*k*6` backstop, the `stuck` monotonicity argument, and `forceConnect`'s claimed inertness \u2014 I traced that a stuck vertex can never regain a legal partner (completion only adds edges), so `joinAnyComponents` costs at most one O(n\u00b2) scan, and it does not go cubic. k=0/k=1e9/n=1/n=2 all terminate on step 0.\n- Determinism: `connectedComponents` and `Graph.copy` depend on Set insertion order, but only `.length` and `edgeList()` (sorted) are read from them, and `choosePartner`/`deficientVertices` both tie-break to the index, so I could not manufacture an order-dependent output.\n- `pairKey`/`keyToPair` round-trip under negative, fractional, exponential-notation and NaN endpoints (no delimiter injection is possible \u2014 the keys are built from numbers, and NaN endpoints are caught by `structuralReasons`).\n\nThings I deliberately did NOT file: `Constraints.fromTags`'s ungated `n` and O(n\u00b2) pair materialization \u2014 real, but already recorded as a deferral in `lib/CLAUDE.md` and confirmed callerless (only `lib/test/constrained.test.ts`); `aspl`/`girth` being `Infinity` for n<=1 and `JSON.stringify`ing to `null` \u2014 already a tracked F6 export-boundary item and lib has no export sink; `refusedResult` allocating up to 1e6 empty arrays on a refusal (O(n), ~100 ms, not superlinear). lib has no CSV/clipboard/filename/DOM sink and never sees a name, so the spreadsheet-injection theme has no surface here \u2014 that lives in `app/src`, whose `importGraph` already refuses embedded control characters before names reach the roster.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full surface of lib/src/core as it stands now (graph.ts, bounds.ts, constrainedGreedy.ts, polish.ts, greedy.ts, metrics.ts, swap.ts, rng.ts, constraints.ts, index.ts) plus lib/test/optimizer.props.test.ts, against lib/CLAUDE.md's SOLID scoping and the actually-committed next work in docs/PROJECT_PLAN.md (M3: F7/F8/F10; M4: F9) and lib/CLAUDE.md's 'Known limitations / tracked follow-ons'. Ran `npm test` (233/233 pass) to confirm the round-3 fixes (polish iteration bound moved into polish()/polishConstrained(), finalMinSeparation derived from girth(g)-1, asplGap scored against degreeMax, mooreLowerBounds diameterLb padding-guard) landed correctly and introduced no regression. Re-traced the declared tag-policy seam in constraints.ts (adding a hypothetical second TagPolicy case is still a pure `case` addition touching no caller) and confirmed legalEdge/constrainedMeasure/swapBreaksConstraint remain correctly non-injectable per the documented determinism/hard-constraint rationale, with proposeSwap's `reject` callback (the one real injection point in this area) legitimately used by exactly its two live callers (polish.ts passes none, polishConstrained passes swapBreaksConstraint) rather than being a speculative hook. Confirmed F7/F8/F9/F10's core needs (Constraints/validate/validateDetailed, bfsDistances/shortestPath/eccentricity, priors/priorWeight/priorHard/priorsKeptFraction) are already present and exercised, so no fan-out is introduced by finishing those app-side features from this core. Traced whether the round-3 remediation that moved `boundedPolishIterations` into graph.ts (shared by both polish.ts and constrainedGreedy.ts) introduced any new coupling: it did not \u2014 both callers import the single function, no duplication. While tracing that move I checked graph.ts's own stated rationale for hosting all three pipelines' work-budget constants ('the dependency leaf... so every module can import them without an import cycle') against what each budget function's signature actually needs.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Enumerated lib/src (core/index.ts, core/graph.ts, core/polish.ts, core/constrainedGreedy.ts, core/bounds.ts, plus sibling core/{swap,rng,metrics,greedy,constraints}.ts) and lib/test/*. Confirmed via directory listing that this is a pure TypeScript algorithmic library (graph construction, greedy/constrained optimization, polish/local-search passes, metrics, and their property-based tests) with no JSX, DOM, event handlers, ARIA attributes, focus management, live regions, or CSS/animation. There is no UI component in this round's target for an interaction/accessibility lens to trace keyboard reachability, focus order, announcement timing, or reduced-motion handling against. This lens's scope (keyboard-only walkthrough, screen-reader announcement, focus traps, live regions, prefers-reduced-motion) is inapplicable to a headless computation library with no rendering surface.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "Numeric/index inputs are validated at some entry points but not their siblings, so the ungated ones either half-apply a mutation into a corrupt state or silently no-op an entire stage instead of refusing like their guarded neighbors do",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness",
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "Graph.addEdge writes adj[u] before checking v is in range, so an out-of-range v throws only after the edge is half-applied, leaving asymmetric/corrupt adjacency; bfsDistances similarly takes an unchecked source and throws a raw TypeError, while sibling functions constraints.degreeOf, metrics.checkVertex (used by shortestPath/eccentricity) already guard indices the same way addEdge/bfsDistances should.",
+        "polishConstrained accepts priorWeight with no finiteness check (opts.priorWeight ?? 0), unlike its sibling option iters, which boundedPolishIterations falls back to a default for; a NaN priorWeight poisons the energy comparison so every swap is reverted and the pass silently returns its input unchanged while still reporting polished: true."
+      ],
+      "remediation": "Unify each ungated entry point onto the single guard its own siblings already use, rather than writing new bespoke checks: route addEdge/removeEdge/bfsDistances through the existing metrics.checkVertex used by shortestPath/eccentricity (validate both endpoints before any mutation), and give priorWeight the same Number.isFinite(...) ?? default fallback that iters already receives in boundedPolishIterations. No new validation abstraction \u2014 just make every entry point call the guard that already exists elsewhere in the same module."
+    },
+    {
+      "theme": "The polish work budget's cost model omits the dominant O(n^2) term of the operation it is meant to bound, so the single enforcement point under-charges by a factor of n/m and hands out the full iteration grant on large sparse graphs",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "boundedPolishIterations models one polish iteration's cost as POLISH_ITER_OVERHEAD + n*m, but the real cost (allPairsSummary) is Theta(n*(n+m)); for m << n the divisor is too small by a factor of n/m, so the full 20000-iteration budget is granted on a 4000-vertex, degree-4 graph (~27 minutes of work admitted as if cheap)."
+      ],
+      "remediation": "Replace the under-modeling term rather than adding a second cap: change the divisor in boundedPolishIterations to POLISH_ITER_OVERHEAD + n*(n+m), and polishWork to iters*(POLISH_ITER_OVERHEAD + n*(n+m)), re-deriving MAX_POLISH_WORK to 865_280_000 to keep the pinned boundary unchanged. This single formula fix also removes the k=0 gate hole, since the n^2 term no longer vanishes with m \u2014 no separate gate needed."
+    },
+    {
+      "theme": "graph.ts's own justification for co-locating code (avoiding an import cycle) only actually applies to one of the exports it hosts, so three unrelated subsystems' cost-budget constants have accreted into the Graph data-structure file",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "graph.ts exports the Graph class plus cost-model constants and estimators for three unrelated pipelines (constrained-greedy, unconstrained ringGreedy, and both polish passes) \u2014 none of which are used by the Graph class itself, contradicting the file's own docstring framing of what belongs there."
+      ],
+      "remediation": "Delete the non-Graph-typed budget constants and estimators (MAX_CONSTRAINED_N/WORK, constrainedWork, MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, POLISH_ITER_OVERHEAD, MAX_POLISH_ITERS, boundedPolishIterations, polishWork, DEFAULT_MIN_SEPARATION) from graph.ts and move them out; graph.ts imports back only MAX_ROSTER if still needed. Pure removal from graph.ts, not a new shared module built on top of it."
+    },
+    {
+      "theme": "A comment in polish.ts describes the calibration/main-loop budget relationship inaccurately, claiming a shared charge that the code does not implement",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The comment says calibration is 'charged against the same budget as the loop', but calibration and the main loop are each independently bounded by maxIters, not sharing a single budget \u2014 the comment misdescribes the actual control flow."
+      ],
+      "remediation": "Remove the inaccurate 'charged against the same budget' phrasing and replace it with a statement that calibration is independently bounded by maxIters, matching what the code actually does \u2014 a wording correction, not new documentation scope."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-mutator-index",
+      "theme": "the Graph container's own mutators do not enforce its structural invariants, so a bad vertex index half-applies an edge and leaves a silently corrupt graph instead of refusing",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 201,
+      "summary": "Graph.addEdge writes adj[u] before touching adj[v], so an out-of-range v throws only after the first half of the edge has been added. A caller that catches the error keeps a Graph whose adjacency is asymmetric and contains a non-vertex, and whose own accessors then disagree with each other. The class docstring claims the symmetry invariant 'can only be mutated through addEdge/removeEdge', yet addEdge is the single mutator with no argument check \u2014 while the constructor guards n, constraints.degreeOf guards n, and metrics.checkVertex guards caller-supplied indices for shortestPath/eccentricity for exactly this reason. Same root, second symptom: exported bfsDistances takes an unchecked source and throws a raw TypeError ('Cannot read properties of undefined') where its two siblings refuse with a clear message. No current in-repo caller is unvalidated (app/src/io/importGraph.ts range-checks every edge; app/src/state/useGraph.ts and app/src/worker/generate.ts consume lib output), which is why this is a suggestion rather than blocking.",
+      "failure": "const g = new Graph(3); g.addEdge(0,1); try { g.addEdge(0,5); } catch {}  ->  g.adj[0] is Set{1,5} (5 is not a vertex); g.degrees() === [2,1,0] (degree sum 3, odd, violating the handshake invariant the numEdges() floor comment relies on); g.numEdges() === 1 while g.edgeList().length === 2 and edgeList() returns [0,5]; g.copy() reproduces the asymmetry without error. Separately, bfsDistances(new Graph(3), 5) throws TypeError: Cannot read properties of undefined (reading 'adj[u]' iteration), whereas shortestPath/eccentricity on the same index throw 'source 5 must be an integer in [0, 2]'.",
+      "remediation": "Validate both endpoints at the top of addEdge (Number.isInteger and 0 <= x < this.n) and throw BEFORE any mutation, mirroring the constructor's message style; apply the same guard to removeEdge and hasEdge so the read path cannot report a phantom edge either. Route bfsDistances' source through the existing metrics.checkVertex so all three BFS entry points refuse a bad index identically. Ratchet the invariant into test/paths.props.test.ts or a new graph.props.test.ts as a property over arbitrary call sequences that include throwing calls.",
+      "invariant": "For any Graph reachable through the public API \u2014 after ANY sequence of constructor/addEdge/removeEdge calls, including calls that threw \u2014 for every u in [0, n) and every v in adj[u]: Number.isInteger(v) && 0 <= v < n && adj[v].has(u); and numEdges() === edgeList().length.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-under-models-its-own-cost",
+      "theme": "the polish work budget is computed from a per-iteration cost model that omits the dominant term of the work it is meant to bound, so the single enforcement point grants hundreds of times the budget on a large sparse graph",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 163,
+      "summary": "`boundedPolishIterations` models one polish iteration as `POLISH_ITER_OVERHEAD + n*m`, but the iteration's actual cost is `allPairsSummary`, which is Theta(n*(n+m)) \u2014 it allocates and fills an Int32Array(n) and runs an n-wide accumulation loop per source regardless of m \u2014 so for m << n the divisor is too small by a factor of n/m and the full 20000-iteration grant is handed out.",
+      "failure": "Reproduced. `const g = new Graph(3000); g.addEdge(0,1); g.addEdge(2,3); g.addEdge(4,5); g.addEdge(6,7); polish(g, { mode: \"hill\" })` \u2014 `boundedPolishIterations(3000, 4, undefined, 20000)` returns the full 20000, and 2000 of those iterations took 67.6 s, i.e. the default call runs ~11 minutes. Measured grants vs true cost: n=1000,m=4 -> 20000 iters, modelled 8.1e7 but true 2.0e10 (35x over MAX_POLISH_WORK); n=4000,m=4 -> 20000 iters, true 3.2e11 (555x); n=100000,m=4 -> 1442 iters, true 1.4e13 (24980x); n=1000000,m=4 (still inside MAX_ROSTER) -> 144 iters, true 1.4e14 (249447x). `polishConstrained` is the same defect via the same helper: n=2000,m=4 grants the full default 8000 iterations, extrapolating to ~148 s. This is the exact sibling of the already-fixed small-n case that `POLISH_ITER_OVERHEAD` closed \u2014 that one was n small and m small; this one is n LARGE and m small, one axis over, and `optimizer.props.test.ts`'s \"bounds the exported primitives, not just the wrappers around them\" is the contract it breaks. The same omission is present in the gate `polishWork` (graph.ts:172-175): `polishWork(n, 0, iters)` = `iters*64` for any n, so the k=0 auto-polish gate opens at every roster size, and the live-caller instance `buildConstrainedBuddyGraph(5000, 1, cons, { polish: true })` spends 3.2 s of measured polish against a grant the model priced at 46 iterations (mild, but the same undercount).",
+      "remediation": "Make the divisor the real asymptotic cost by subtraction, not by adding a second cap: in `boundedPolishIterations` use `POLISH_ITER_OVERHEAD + n * (n + m)`, and in `polishWork` use `iters * (POLISH_ITER_OVERHEAD + n * (n + m))` with the same estimated m. `MAX_POLISH_WORK` must be re-derived to 865_280_000 to keep the pinned boundary byte-identical \u2014 I checked the arithmetic: new polishWork(120,4,20000) = 865_280_000 (admitted exactly), new polishWork(121,4,20000) = 879_740_000 (refused), new polishWork(120,12,20000) = 2.017e9 (still refused), and the `afforded >= 20000` assertion at (30,4)/(60,4)/(120,4) still holds. After the fix n=4000,m=4 is granted 54 iterations (~4 s) instead of 20000 (~27 min). Note that `n*(n+m)` also fixes the k=0 gate hole, since the n\u00b2 term no longer vanishes with m.",
+      "invariant": "For every integer n in [0, MAX_ROSTER] and every m in [0, n*(n-1)/2], and for every `requested`/`fallback`, the granted iteration count times the TRUE per-iteration cost stays inside the budget: `boundedPolishIterations(n, m, requested, fallback) * (POLISH_ITER_OVERHEAD + n * (n + m)) <= MAX_POLISH_WORK + (POLISH_ITER_OVERHEAD + n * (n + m))` (one iteration of slack for the floor). Equivalently and more durably: the divisor the bound uses must be >= the asymptotic cost of one iteration, which is the cost of `allPairsSummary`, Theta(n*(n+m)) \u2014 so any future re-model of the objective is held to the same property rather than to these n/m pairs.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "module-boundary-drift",
+      "theme": "graph.ts's own doc comment justifies hosting every generation pipeline's cost-budget logic there by appeal to avoiding an import cycle, but tracing the actual type signatures shows only one of those exports needs that co-location \u2014 the file has organically become the home for three unrelated subsystems' tuning constants rather than the Graph data structure's own concern",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 11,
+      "summary": "graph.ts (line 11-15 doc comment) exports the Graph class plus MAX_ROSTER, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, POLISH_ITER_OVERHEAD, MAX_POLISH_ITERS, boundedPolishIterations, polishWork and DEFAULT_MIN_SEPARATION \u2014 cost-model constants and estimators for the constrained-greedy path, the unconstrained ringGreedy path, and both polish passes, none of which are used by the Graph class itself.",
+      "failure": "Only `MAX_ROSTER` is actually referenced inside graph.ts (Graph's own constructor guard, line 189). Every other budget export \u2014 constrainedWork(n,k), greedyWork(n,k), polishWork(n,k,iters), boundedPolishIterations(n,m,requested,fallback) \u2014 takes only plain numbers and never references the Graph type, so none of them has a type-level reason to live in the same file as Graph. They could sit in a standalone zero-import module (call it budgets.ts, alongside the file already named bounds.ts for a different purpose \u2014 Moore lower bounds) that graph.ts, constraints.ts, greedy.ts, polish.ts and constrainedGreedy.ts would all import from instead, with graph.ts itself importing only MAX_ROSTER from it for its own constructor check. The stated justification ('this module is also home to the cross-cutting roster/work bounds... so every module can import them without an import cycle') is true of the effect (no cycle exists today) but not the cause (co-location with Graph specifically is not what prevents the cycle \u2014 any dependency-free module would do, and one already exists in this same directory under a name, `bounds.ts`, that a reader would reasonably expect to hold exactly this).",
+      "remediation": "Extract the non-Graph-typed budget constants and estimators (MAX_CONSTRAINED_N/WORK, constrainedWork, MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, POLISH_ITER_OVERHEAD, MAX_POLISH_ITERS, boundedPolishIterations, polishWork, DEFAULT_MIN_SEPARATION) into their own zero-import module; leave MAX_ROSTER and the Graph class in graph.ts, with graph.ts importing MAX_ROSTER back if that split is preferred. This is a mechanical move, not a behavior change, and shrinks graph.ts to what its name and its docstring's first sentence claim it is.",
+      "invariant": "For every binding exported from graph.ts other than {Graph, ring, MAX_ROSTER}, its parameter and return types contain no reference to Graph \u2014 true for every current export, meaning none of them requires co-location with the Graph class for type reasons, only for the file-organization reason the comment gives (which a standalone module would satisfy equally well).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Comment describes budget constraint inaccurately, potentially misleading about how iteration budget is shared between calibration and main loop",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 70,
+      "summary": "Comment says calibration is 'charged against the same budget as the loop', but code runs calibration and main loop independently\u2014each bounded by maxIters, not sharing",
+      "failure": "A contributor reading the comment might misunderstand the budget model. With maxIters=20000 and edges.length\u2265100: trials=min(100,edges.length,20000)=100, then main loop runs 20000 iterations independently, for total of 20100 iterations. The 'same budget' phrasing suggests they share (total would be 20000), but they run independently with each capped by maxIters.",
+      "remediation": "Clarify the comment to say the calibration is now 'bounded by the budget' rather than 'charged against the same budget'. Replace line 70 with: '// Bounded by the iteration budget. These are full O(n\u00b7m) energy' and adjust the phrasing to clarify that both calibration and main loop are independently constrained by maxIters, not sharing it.",
+      "invariant": "The calibration iteration count trials must satisfy: trials \u2264 min(100, edges.length, maxIters). If maxIters=0, trials must be 0 (preventing the old 587ms unconditional-calibration issue). The main loop must run exactly maxIters times. A comment claiming they 'share' a budget is false if total work = trials + maxIters can exceed maxIters.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-mutator-index",
+      "theme": "the Graph container's own mutators do not enforce its structural invariants, so a bad vertex index half-applies an edge and leaves a silently corrupt graph instead of refusing",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 201,
+      "summary": "Graph.addEdge writes adj[u] before touching adj[v], so an out-of-range v throws only after the first half of the edge has been added. A caller that catches the error keeps a Graph whose adjacency is asymmetric and contains a non-vertex, and whose own accessors then disagree with each other. The class docstring claims the symmetry invariant 'can only be mutated through addEdge/removeEdge', yet addEdge is the single mutator with no argument check \u2014 while the constructor guards n, constraints.degreeOf guards n, and metrics.checkVertex guards caller-supplied indices for shortestPath/eccentricity for exactly this reason. Same root, second symptom: exported bfsDistances takes an unchecked source and throws a raw TypeError ('Cannot read properties of undefined') where its two siblings refuse with a clear message. No current in-repo caller is unvalidated (app/src/io/importGraph.ts range-checks every edge; app/src/state/useGraph.ts and app/src/worker/generate.ts consume lib output), which is why this is a suggestion rather than blocking.",
+      "failure": "const g = new Graph(3); g.addEdge(0,1); try { g.addEdge(0,5); } catch {}  ->  g.adj[0] is Set{1,5} (5 is not a vertex); g.degrees() === [2,1,0] (degree sum 3, odd, violating the handshake invariant the numEdges() floor comment relies on); g.numEdges() === 1 while g.edgeList().length === 2 and edgeList() returns [0,5]; g.copy() reproduces the asymmetry without error. Separately, bfsDistances(new Graph(3), 5) throws TypeError: Cannot read properties of undefined (reading 'adj[u]' iteration), whereas shortestPath/eccentricity on the same index throw 'source 5 must be an integer in [0, 2]'.",
+      "remediation": "Validate both endpoints at the top of addEdge (Number.isInteger and 0 <= x < this.n) and throw BEFORE any mutation, mirroring the constructor's message style; apply the same guard to removeEdge and hasEdge so the read path cannot report a phantom edge either. Route bfsDistances' source through the existing metrics.checkVertex so all three BFS entry points refuse a bad index identically. Ratchet the invariant into test/paths.props.test.ts or a new graph.props.test.ts as a property over arbitrary call sequences that include throwing calls.",
+      "invariant": "For any Graph reachable through the public API \u2014 after ANY sequence of constructor/addEdge/removeEdge calls, including calls that threw \u2014 for every u in [0, n) and every v in adj[u]: Number.isInteger(v) && 0 <= v < n && adj[v].has(u); and numEdges() === edgeList().length.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-under-models-its-own-cost",
+      "theme": "the polish work budget is computed from a per-iteration cost model that omits the dominant term of the work it is meant to bound, so the single enforcement point grants hundreds of times the budget on a large sparse graph",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 163,
+      "summary": "`boundedPolishIterations` models one polish iteration as `POLISH_ITER_OVERHEAD + n*m`, but the iteration's actual cost is `allPairsSummary`, which is Theta(n*(n+m)) \u2014 it allocates and fills an Int32Array(n) and runs an n-wide accumulation loop per source regardless of m \u2014 so for m << n the divisor is too small by a factor of n/m and the full 20000-iteration grant is handed out.",
+      "failure": "Reproduced. `const g = new Graph(3000); g.addEdge(0,1); g.addEdge(2,3); g.addEdge(4,5); g.addEdge(6,7); polish(g, { mode: \"hill\" })` \u2014 `boundedPolishIterations(3000, 4, undefined, 20000)` returns the full 20000, and 2000 of those iterations took 67.6 s, i.e. the default call runs ~11 minutes. Measured grants vs true cost: n=1000,m=4 -> 20000 iters, modelled 8.1e7 but true 2.0e10 (35x over MAX_POLISH_WORK); n=4000,m=4 -> 20000 iters, true 3.2e11 (555x); n=100000,m=4 -> 1442 iters, true 1.4e13 (24980x); n=1000000,m=4 (still inside MAX_ROSTER) -> 144 iters, true 1.4e14 (249447x). `polishConstrained` is the same defect via the same helper: n=2000,m=4 grants the full default 8000 iterations, extrapolating to ~148 s. This is the exact sibling of the already-fixed small-n case that `POLISH_ITER_OVERHEAD` closed \u2014 that one was n small and m small; this one is n LARGE and m small, one axis over, and `optimizer.props.test.ts`'s \"bounds the exported primitives, not just the wrappers around them\" is the contract it breaks. The same omission is present in the gate `polishWork` (graph.ts:172-175): `polishWork(n, 0, iters)` = `iters*64` for any n, so the k=0 auto-polish gate opens at every roster size, and the live-caller instance `buildConstrainedBuddyGraph(5000, 1, cons, { polish: true })` spends 3.2 s of measured polish against a grant the model priced at 46 iterations (mild, but the same undercount).",
+      "remediation": "Make the divisor the real asymptotic cost by subtraction, not by adding a second cap: in `boundedPolishIterations` use `POLISH_ITER_OVERHEAD + n * (n + m)`, and in `polishWork` use `iters * (POLISH_ITER_OVERHEAD + n * (n + m))` with the same estimated m. `MAX_POLISH_WORK` must be re-derived to 865_280_000 to keep the pinned boundary byte-identical \u2014 I checked the arithmetic: new polishWork(120,4,20000) = 865_280_000 (admitted exactly), new polishWork(121,4,20000) = 879_740_000 (refused), new polishWork(120,12,20000) = 2.017e9 (still refused), and the `afforded >= 20000` assertion at (30,4)/(60,4)/(120,4) still holds. After the fix n=4000,m=4 is granted 54 iterations (~4 s) instead of 20000 (~27 min). Note that `n*(n+m)` also fixes the k=0 gate hole, since the n\u00b2 term no longer vanishes with m.",
+      "invariant": "For every integer n in [0, MAX_ROSTER] and every m in [0, n*(n-1)/2], and for every `requested`/`fallback`, the granted iteration count times the TRUE per-iteration cost stays inside the budget: `boundedPolishIterations(n, m, requested, fallback) * (POLISH_ITER_OVERHEAD + n * (n + m)) <= MAX_POLISH_WORK + (POLISH_ITER_OVERHEAD + n * (n + m))` (one iteration of slack for the floor). Equivalently and more durably: the divisor the bound uses must be >= the asymptotic cost of one iteration, which is the cost of `allPairsSummary`, Theta(n*(n+m)) \u2014 so any future re-model of the objective is held to the same property rather than to these n/m pairs.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-numeric-option-silently-disables-a-stage",
+      "theme": "numeric options arriving from an untrusted settings object are validated on some entry points and taken on faith on others, so a non-finite value silently turns a stage into a no-op while the result still reports that the stage ran",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 150,
+      "summary": "`polishConstrained` accepts `priorWeight` with no finiteness check (`opts.priorWeight ?? 0`), unlike its sibling `iters`, which `boundedPolishIterations` falls back to a default on. A NaN weight poisons `constrainedMeasure`'s energy, so `next.energy < current - 1e-12` is false for every candidate, every swap is reverted, and the pass returns its input unchanged while `buildConstrainedBuddyGraph` still reports `polished: true`.",
+      "failure": "Ran it: `const c = new Constraints(20); c.addPrior(0,1); buildConstrainedBuddyGraph(20, 4, c, { priorWeight: NaN })` returns `polished: true` with edges byte-identical to the unpolished graph \u2014 the optimizer did 8000 iterations of full O(n\u00b7m) re-measurement and accepted nothing. NaN is reachable from a settings object without a NaN literal (`JSON.parse('{\"priorWeight\":null}').priorWeight` is null, but any arithmetic-derived weight, or `Number(x)` on a non-numeric field, yields NaN). Filed as a deferral by the mechanical rule: `priorWeight`, `addPrior` and `priorHard` have no reference anywhere outside `lib/src/core` and `lib/test` (grep over `app/src` is empty), so nothing untrusted reaches it in the current tree \u2014 the priors feature itself is deferred to F9/M4.",
+      "remediation": "Give `priorWeight` the same treatment `iters` already gets: `const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;` in `polishConstrained`, and the same on `ConstrainedBuddyOptions.priorWeight` in `index.ts`. Closing the theme rather than the case means auditing every numeric option on a public entry point for the same fall-back-to-default discipline (`seed` is already safe via `>>>0`; `minSeparation` is already clamped by `Math.min(..., floor(n/2))`).",
+      "invariant": "For every public entry point and every numeric option, a non-finite value produces exactly the result the documented default produces: for all non-finite w, `buildConstrainedBuddyGraph(n, k, cons, { priorWeight: w })` returns the same `edges` as `buildConstrainedBuddyGraph(n, k, cons, {})`, and no non-finite option value ever reaches an energy comparison (equivalently: `measure(g).energy` is finite for every reachable graph whenever `penalizedAspl` is finite).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "module-boundary-drift",
+      "theme": "graph.ts's own doc comment justifies hosting every generation pipeline's cost-budget logic there by appeal to avoiding an import cycle, but tracing the actual type signatures shows only one of those exports needs that co-location \u2014 the file has organically become the home for three unrelated subsystems' tuning constants rather than the Graph data structure's own concern",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 11,
+      "summary": "graph.ts (line 11-15 doc comment) exports the Graph class plus MAX_ROSTER, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, POLISH_ITER_OVERHEAD, MAX_POLISH_ITERS, boundedPolishIterations, polishWork and DEFAULT_MIN_SEPARATION \u2014 cost-model constants and estimators for the constrained-greedy path, the unconstrained ringGreedy path, and both polish passes, none of which are used by the Graph class itself.",
+      "failure": "Only `MAX_ROSTER` is actually referenced inside graph.ts (Graph's own constructor guard, line 189). Every other budget export \u2014 constrainedWork(n,k), greedyWork(n,k), polishWork(n,k,iters), boundedPolishIterations(n,m,requested,fallback) \u2014 takes only plain numbers and never references the Graph type, so none of them has a type-level reason to live in the same file as Graph. They could sit in a standalone zero-import module (call it budgets.ts, alongside the file already named bounds.ts for a different purpose \u2014 Moore lower bounds) that graph.ts, constraints.ts, greedy.ts, polish.ts and constrainedGreedy.ts would all import from instead, with graph.ts itself importing only MAX_ROSTER from it for its own constructor check. The stated justification ('this module is also home to the cross-cutting roster/work bounds... so every module can import them without an import cycle') is true of the effect (no cycle exists today) but not the cause (co-location with Graph specifically is not what prevents the cycle \u2014 any dependency-free module would do, and one already exists in this same directory under a name, `bounds.ts`, that a reader would reasonably expect to hold exactly this).",
+      "remediation": "Extract the non-Graph-typed budget constants and estimators (MAX_CONSTRAINED_N/WORK, constrainedWork, MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, POLISH_ITER_OVERHEAD, MAX_POLISH_ITERS, boundedPolishIterations, polishWork, DEFAULT_MIN_SEPARATION) into their own zero-import module; leave MAX_ROSTER and the Graph class in graph.ts, with graph.ts importing MAX_ROSTER back if that split is preferred. This is a mechanical move, not a behavior change, and shrinks graph.ts to what its name and its docstring's first sentence claim it is.",
+      "invariant": "For every binding exported from graph.ts other than {Graph, ring, MAX_ROSTER}, its parameter and return types contain no reference to Graph \u2014 true for every current export, meaning none of them requires co-location with the Graph class for type reasons, only for the file-organization reason the comment gives (which a standalone module would satisfy equally well).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Comment describes budget constraint inaccurately, potentially misleading about how iteration budget is shared between calibration and main loop",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 70,
+      "summary": "Comment says calibration is 'charged against the same budget as the loop', but code runs calibration and main loop independently\u2014each bounded by maxIters, not sharing",
+      "failure": "A contributor reading the comment might misunderstand the budget model. With maxIters=20000 and edges.length\u2265100: trials=min(100,edges.length,20000)=100, then main loop runs 20000 iterations independently, for total of 20100 iterations. The 'same budget' phrasing suggests they share (total would be 20000), but they run independently with each capped by maxIters.",
+      "remediation": "Clarify the comment to say the calibration is now 'bounded by the budget' rather than 'charged against the same budget'. Replace line 70 with: '// Bounded by the iteration budget. These are full O(n\u00b7m) energy' and adjust the phrasing to clarify that both calibration and main loop are independently constrained by maxIters, not sharing it.",
+      "invariant": "The calibration iteration count trials must satisfy: trials \u2264 min(100, edges.length, maxIters). If maxIters=0, trials must be 0 (preventing the old 587ms unconditional-calibration issue). The main loop must run exactly maxIters times. A comment claiming they 'share' a budget is false if total work = trials + maxIters can exceed maxIters.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-numeric-option-silently-disables-a-stage",
+      "theme": "numeric options arriving from an untrusted settings object are validated on some entry points and taken on faith on others, so a non-finite value silently turns a stage into a no-op while the result still reports that the stage ran",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 150,
+      "summary": "`polishConstrained` accepts `priorWeight` with no finiteness check (`opts.priorWeight ?? 0`), unlike its sibling `iters`, which `boundedPolishIterations` falls back to a default on. A NaN weight poisons `constrainedMeasure`'s energy, so `next.energy < current - 1e-12` is false for every candidate, every swap is reverted, and the pass returns its input unchanged while `buildConstrainedBuddyGraph` still reports `polished: true`.",
+      "failure": "Ran it: `const c = new Constraints(20); c.addPrior(0,1); buildConstrainedBuddyGraph(20, 4, c, { priorWeight: NaN })` returns `polished: true` with edges byte-identical to the unpolished graph \u2014 the optimizer did 8000 iterations of full O(n\u00b7m) re-measurement and accepted nothing. NaN is reachable from a settings object without a NaN literal (`JSON.parse('{\"priorWeight\":null}').priorWeight` is null, but any arithmetic-derived weight, or `Number(x)` on a non-numeric field, yields NaN). Filed as a deferral by the mechanical rule: `priorWeight`, `addPrior` and `priorHard` have no reference anywhere outside `lib/src/core` and `lib/test` (grep over `app/src` is empty), so nothing untrusted reaches it in the current tree \u2014 the priors feature itself is deferred to F9/M4.",
+      "remediation": "Give `priorWeight` the same treatment `iters` already gets: `const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;` in `polishConstrained`, and the same on `ConstrainedBuddyOptions.priorWeight` in `index.ts`. Closing the theme rather than the case means auditing every numeric option on a public entry point for the same fall-back-to-default discipline (`seed` is already safe via `>>>0`; `minSeparation` is already clamped by `Math.min(..., floor(n/2))`).",
+      "invariant": "For every public entry point and every numeric option, a non-finite value produces exactly the result the documented default produces: for all non-finite w, `buildConstrainedBuddyGraph(n, k, cons, { priorWeight: w })` returns the same `edges` as `buildConstrainedBuddyGraph(n, k, cons, {})`, and no non-finite option value ever reaches an energy comparison (equivalently: `measure(g).energy` is finite for every reachable graph whenever `penalizedAspl` is finite).",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "{\"target\":\"lib/src (the ringweave core)\",\"round\":4,\"runId\":\"sextant-m3-lib\",\"changedPaths\":[\"lib/src/core/graph.ts\",\"lib/src/core/polish.ts\",\"lib/src/core/constrainedGreedy.ts\",\"lib/src/core/index.ts\",\"lib/src/core/bounds.ts\",\"lib/test/optimizer.props.test.ts\"],\"saturation\":{\"critic-correctness\":{\"nothingFoundStreak\":0},\"critic-security\":{\"nothingFoundStreak\":0},\"critic-solid\":{\"nothingFoundStreak\":2},\"critic-maintainability\":{\"nothingFoundStreak\":0},\"critic-interaction\":{\"nothingFoundStreak\":2}}}"
+}

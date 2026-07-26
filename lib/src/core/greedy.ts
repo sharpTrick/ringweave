@@ -7,7 +7,8 @@
  * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
  * shortest-path identity is classical (see CONCEPT_LINEAGE).
  */
-import { Graph, ring, DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, greedyWork } from "./graph.js";
+import { Graph, ring } from "./graph.js";
+import { DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, greedyWork } from "./budgets.js";
 import { bfsDistances } from "./metrics.js";
 
 // Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,

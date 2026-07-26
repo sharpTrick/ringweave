@@ -92,5 +92,31 @@
     "subagentTokens": 428827,
     "agents": 6,
     "toolCalls": 113
+  },
+  {
+    "round": 4,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 5,
+    "blocking": 1,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 6,
+    "files": [
+      "lib/src/core/graph.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/polish.ts"
+    ],
+    "classes": [
+      "unvalidated-mutator-index",
+      "work-budget-under-models-its-own-cost",
+      "unvalidated-numeric-option-silently-disables-a-stage",
+      "module-boundary-drift",
+      "misleading-comment"
+    ],
+    "subagentTokens": 485726,
+    "agents": 6,
+    "toolCalls": 128
   }
 ]

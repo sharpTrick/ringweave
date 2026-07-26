@@ -10,12 +10,8 @@
  * possible, and refuse (with a specific reason) only when a graph is genuinely
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
-import {
-  MAX_ROSTER,
-  MAX_CONSTRAINED_N,
-  MAX_CONSTRAINED_WORK,
-  constrainedWork,
-} from "./graph.js";
+import { MAX_ROSTER } from "./graph.js";
+import { MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork } from "./budgets.js";
 
 // Pairs live as normalized "min,max" string keys (JS Set compares by reference).
 // The keys are held privately so every stored pair is guaranteed canonical — an

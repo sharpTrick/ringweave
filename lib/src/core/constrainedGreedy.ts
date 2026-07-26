@@ -20,14 +20,8 @@
  * they throw a clear error on malformed input (out-of-range ids, bad k,
  * required-degree over k) but otherwise assume feasibility.
  */
-import {
-  Graph,
-  DEFAULT_MIN_SEPARATION,
-  MAX_CONSTRAINED_N,
-  MAX_CONSTRAINED_WORK,
-  constrainedWork,
-  boundedPolishIterations,
-} from "./graph.js";
+import { Graph } from "./graph.js";
+import { DEFAULT_MIN_SEPARATION, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork, boundedPolishIterations } from "./budgets.js";
 import {
   bfsDistances,
   allPairsSummary,
@@ -147,7 +141,12 @@ export function polishConstrained(
     opts.iters,
     DEFAULT_CONSTRAINED_POLISH_ITERS,
   );
-  const priorWeight = opts.priorWeight ?? 0;
+  // Finiteness-checked like `iters`, and for the same reason. A NaN weight
+  // poisons every energy comparison — `next.energy < current` is false for all
+  // NaN — so the pass ran its full iteration budget of O(n·m) re-measurements and
+  // returned the input unchanged while reporting `polished: true`. Silent no-ops
+  // are worse than refusals.
+  const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;
   const measure = constrainedMeasure(cons, priorWeight);
   const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);
 

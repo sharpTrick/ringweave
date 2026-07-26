@@ -8,7 +8,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Graph, constrainedWork, MAX_CONSTRAINED_WORK } from "../src/core/graph.js";
+import { Graph } from "../src/core/graph.js";
+import { constrainedWork, MAX_CONSTRAINED_WORK } from "../src/core/budgets.js";
 import { allPairsSummary, isConnected } from "../src/core/metrics.js";
 import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
 import {

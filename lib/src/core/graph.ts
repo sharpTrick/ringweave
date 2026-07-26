@@ -22,162 +22,6 @@
 // Shared by every entry point that validates n. Mirrored in reference-python.
 export const MAX_ROSTER = 1_000_000;
 
-// Upper bound on roster size for the constrained path (constrainedGreedy /
-// buildConstrainedBuddyGraph / validate). Bounds the costs that scale with n
-// alone: generation's O(n²) baseline (one BFS per edge) and validate's O(n²)
-// prohibited-pair connectivity walk. The extra blow-up from dense k is bounded
-// separately by MAX_CONSTRAINED_WORK — this cap alone does not make a large-k
-// roster tractable. Enforced as a refusal in `validate` and a throw in
-// `constrainedGreedy`'s precondition. Its value coincides with MAX_CACHED_N but
-// is unrelated — do not merge them: that one bounds ringGreedy's distance-cache
-// *memory*, this one bounds roster size on the constrained path.
-export const MAX_CONSTRAINED_N = 5000;
-
-// Work budget for constrained generation, bounding the cost that MAX_CONSTRAINED_N
-// misses: dense k. `constrainedGreedy` runs one BFS (~O(n)) per edge added and
-// adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n²·min(k,n-1) — but not at a
-// uniform rate: ~7.5M work-units/s for sparse k, dropping to ~2.2M/s in the
-// near-complete corner (each BFS is deeper as m grows). A dense roster (e.g.
-// n=500,k=499) clears the n-cap but then runs for minutes-to-days; this budget
-// (1e8) refuses it, holding worst-case generation to ~13 s for sparse rosters and
-// ~46 s at the deepest allowed corner (n≈464, k=n-1 — an unrealistic near-complete
-// graph). Enforced in `validate` (refuse) and `checkWellFormed` (throw); mirrored
-// in reference-python. The real fix — an incremental single-source distance scheme
-// — is a tracked follow-on.
-export const MAX_CONSTRAINED_WORK = 100_000_000;
-
-/**
- * Estimated constrained-generation cost, ∝ vertices × edges-added. Monotone in n
- * and k; compared against MAX_CONSTRAINED_WORK to refuse rosters that would hang.
- * `min(k, n-1)` mirrors the effective degree cap (k is silently capped at n-1).
- */
-export function constrainedWork(n: number, k: number): number {
-  return n * n * Math.min(k, Math.max(0, n - 1));
-}
-
-// Work budget for the UNCONSTRAINED generator (ringGreedy). MAX_CACHED_N bounds
-// its MEMORY (the flat n×n distance cache) and says so; nothing bounded its TIME,
-// which is the larger hazard: completion updates the O(n²) cache once per edge
-// added and adds ~n·min(k,n-1)/2 edges, so wall-clock tracks n³·k/2. The n-cap
-// alone let (1000, 999) — which `validate` refuses outright on the constrained
-// path — run for over 22 minutes without returning.
-//
-// Calibrated against measurement on this machine, taking the slowest observed
-// rate (~1.5e8 work-units/s at the dense end; sparse runs are 2-3x faster):
-//   (500, 4)    2.5e8  ->  0.55 s
-//   (1000, 4)   2.0e9  ->  5.4 s
-//   (1000, 12)  6.0e9  ->  38.5 s      <- the app's own ceiling, deliberately still allowed
-//   (1500, 4)   6.8e9  ->  16.8 s
-//   (1000, 999) 5.0e11 ->  refused (was: >22 min)
-//   (5000, 4)   2.5e11 ->  refused (was: tens of minutes)
-// 1e10 is therefore ~60 s worst case. It is NOT tighter than that on purpose: the
-// app advertises rosters up to 1000 at up to 12 buddies, and a budget below 6e9
-// would refuse a configuration that ships today.
-//
-// DELIBERATELY NOT the same budget as MAX_CONSTRAINED_WORK, and the two accept-sets
-// are NOT nested. The paths have different cost models (this one pays O(n²) per
-// edge for the cache update; the constrained one pays O(n) per edge for a BFS), so
-// a single constant would either refuse working configurations here or admit
-// hanging ones there.
-export const MAX_GREEDY_WORK = 10_000_000_000;
-
-/** Estimated ringGreedy cost, ∝ vertices² × edges-added. Monotone in n and k. */
-export function greedyWork(n: number, k: number): number {
-  return n * n * ((n * Math.min(k, Math.max(0, n - 1))) / 2);
-}
-
-// Work budget for the polish pass, expressed in the unit polish actually costs:
-// iterations × (per-iteration edge-list build + full all-pairs re-measure), i.e.
-// iters·n·m. The previous gate was `n <= 120`, which bounds n and nothing else —
-// so the most expensive input on the whole default path sat just below it.
-// Measured with default options before the change:
-//   buildBuddyGraph(120, 12) -> 33.0 s
-//   buildBuddyGraph(121, 12) ->  0.1 s     (one more person, 300x less work)
-// Density never participated, and cost DECREASED with n across the threshold.
-//
-// The value is chosen to reproduce the old threshold exactly at k=4 — the
-// configuration every fixture and the reroll boundary test use — so nothing that
-// is pinned today moves: polishWork(120, 4, 20000) = 20000*(64 + 120*240) =
-// 577,280,000 is admitted exactly, and polishWork(121, 4, 20000) = 586,920,000 is
-// not. (The constant was re-derived when POLISH_ITER_OVERHEAD was added; the
-// boundary it reproduces is unchanged.) Denser rosters, which the n-cap waved
-// through, are now refused: polishWork(120, 12) = 1.73e9.
-//
-// This is the GATE only — whether auto-polish runs at all. What it may then cost
-// is enforced by `boundedPolishIterations` inside the primitives.
-//
-// HONEST RESIDUAL: this bounds the cost and makes the gate k-aware, but any
-// on/off gate still has a discontinuity at its boundary — cost jumps from the
-// budget to ~0 as n crosses it. Removing that entirely means deriving the
-// ITERATION COUNT from the budget rather than switching polish off, which changes
-// every polished output and would have to be mirrored in reference-python first.
-// Recorded as a follow-on in lib/CLAUDE.md rather than done here.
-export const MAX_POLISH_WORK = 577_280_000;
-
-/**
- * Fixed cost of one polish iteration, in the same units as `n·m`.
- *
- * Without it the model says an iteration on a 3-person roster costs 9 units, so
- * the budget affords 64 million of them — and 64 million iterations of anything
- * is not free. MEASURED before this constant existed:
- * `buildBuddyGraph(3, 2, { polishIters: 1e9 })` took 35.7 SECONDS, on a
- * three-vertex graph, without even needing `polish: true`. Every iteration
- * rebuilds and sorts the edge list, allocates a Set in `proposeSwap`, and copies
- * the graph on improvement, none of which scales with n·m.
- */
-const POLISH_ITER_OVERHEAD = 64;
-
-/**
- * Absolute ceiling on polish iterations, independent of the work budget.
- *
- * The work budget alone cannot bound the small-n case: as n·m falls, the
- * affordable iteration count rises without limit, and the fixed per-iteration
- * cost then dominates a number the model thinks is cheap. This ceiling is simply
- * the documented default, which makes `polishIters` an option that can only ask
- * for LESS work than the default — never more. Nothing in this repo asks for
- * more, and a knob that can only reduce cost cannot be turned into a hang.
- */
-const MAX_POLISH_ITERS = 20_000;
-
-/**
- * The iteration count polish may actually run, given the graph it was handed.
- *
- * THE ONE enforcement point, called from inside `polish` and `polishConstrained`
- * rather than from the wrappers above them. Three separate defects came from
- * having it anywhere else: the exported primitives are public API and bypassed a
- * wrapper clamp entirely (`polish(ring(20), { maxIters: Infinity })` never
- * returned); the cost model had no constant term; and the anneal calibration ran
- * before the bound applied.
- *
- * `m` is the ACTUAL edge count, not an estimate from k — the primitives hold the
- * graph, so they can afford to be exact where the pre-generation gate cannot.
- */
-export function boundedPolishIterations(
-  n: number,
-  m: number,
-  requested: number | undefined,
-  fallback: number,
-): number {
-  const asked = Number.isInteger(requested) && (requested as number) >= 0 ? (requested as number) : fallback;
-  // The overhead term also guarantees a positive divisor when m is 0.
-  const perIteration = POLISH_ITER_OVERHEAD + n * m;
-  return Math.min(asked, Math.floor(MAX_POLISH_WORK / perIteration), MAX_POLISH_ITERS);
-}
-
-/**
- * Estimated polish cost: iterations × per-iteration work (an edge-list build plus
- * an all-pairs re-measure, both linear in n·m). `m` is estimated from (n, k) at
- * the gate, where the seed graph does not exist yet.
- */
-export function polishWork(n: number, k: number, iters: number): number {
-  const m = (n * Math.min(k, Math.max(0, n - 1))) / 2;
-  return iters * (POLISH_ITER_OVERHEAD + n * m);
-}
-
-// Default minimum degrees of separation to aim for (the `mind`/`minSeparation`
-// option). Shared so the three generation entry points can't drift apart.
-export const DEFAULT_MIN_SEPARATION = 5;
-
 export class Graph {
   readonly n: number;
   readonly adj: ReadonlyArray<ReadonlySet<number>>;
@@ -198,7 +42,25 @@ export class Graph {
     return this.adj[u] as Set<number>;
   }
 
+  /**
+   * Throw on an endpoint outside 0..n-1, BEFORE any mutation.
+   *
+   * The order matters and was a real defect: `addEdge` wrote `adj[u]` and then
+   * threw on an out-of-range `v`, so a caller that caught the error kept a Graph
+   * whose adjacency was asymmetric and contained a non-vertex — degree sum odd,
+   * `numEdges()` disagreeing with `edgeList()`, and every invariant downstream
+   * quietly false. A guard that runs after half the work is not a guard.
+   */
+  #checkEndpoints(u: number, v: number): void {
+    for (const x of [u, v]) {
+      if (!Number.isInteger(x) || x < 0 || x >= this.n) {
+        throw new Error(`vertex ${x} must be an integer in [0, ${this.n - 1}]`);
+      }
+    }
+  }
+
   addEdge(u: number, v: number): boolean {
+    this.#checkEndpoints(u, v);
     if (u === v) return false;
     if (this.adj[u].has(v)) return false;
     this.#mut(u).add(v);
@@ -207,11 +69,17 @@ export class Graph {
   }
 
   removeEdge(u: number, v: number): void {
+    // Same reason as addEdge: half a removal leaves asymmetric adjacency.
+    this.#checkEndpoints(u, v);
     this.#mut(u).delete(v);
     this.#mut(v).delete(u);
   }
 
   hasEdge(u: number, v: number): boolean {
+    // The read path is guarded too, so it cannot report a phantom edge for a
+    // non-vertex — `this.adj[u]` is `undefined` there and `.has` would throw a
+    // TypeError with no useful message instead of naming the bad index.
+    this.#checkEndpoints(u, v);
     return this.adj[u].has(v);
   }
 

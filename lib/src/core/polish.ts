@@ -12,7 +12,7 @@
  */
 import { Graph } from "./graph.js";
 import { allPairsSummary, penalizedAspl } from "./metrics.js";
-import { boundedPolishIterations } from "./graph.js";
+import { boundedPolishIterations } from "./budgets.js";
 import { RNG } from "./rng.js";
 import { proposeSwap, applySwap, revertSwap } from "./swap.js";
 
@@ -66,11 +66,13 @@ export function polish(
   const alpha = 0.995;
   if (mode === "anneal") {
     const deltas: number[] = [];
-    // Charged against the same budget as the loop. These are full O(n·m) energy
-    // evaluations, and they used to run unconditionally: `polish(g, { mode:
-    // "anneal", maxIters: 0 })` did 100 of them and took 587 ms on a 300-vertex
-    // graph, against 11 ms for the same call in hill mode. A budget that the work
-    // before the loop can ignore is not a budget.
+    // Bounded by the SAME iteration budget the loop is (not sharing one pool with
+    // it — a full-budget run does up to 100 calibration evaluations and then
+    // maxIters loop iterations). These are full energy evaluations, and they used
+    // to run unconditionally: `polish(g, { mode: "anneal", maxIters: 0 })` did 100
+    // of them and took 587 ms on a 300-vertex graph, against 11 ms for the same
+    // call in hill mode. Work before the loop that the budget cannot reach is work
+    // the budget does not bound.
     const trials = Math.min(100, Math.max(10, edges.length), maxIters);
     for (let i = 0; i < trials && edges.length >= 2; i++) {
       const sw = proposeSwap(g, edges, rng);

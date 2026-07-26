@@ -11,7 +11,8 @@
 // re-exported as a user-facing dial for UI preflight; `MAX_CONSTRAINED_WORK` /
 // `constrainedWork` stay unexported on purpose (a replaceable heuristic), so N is
 // deliberately not the only ceiling. Call `validate()` rather than the constant.
-export { Graph, ring, MAX_ROSTER, MAX_CONSTRAINED_N, DEFAULT_MIN_SEPARATION } from "./graph.js";
+export { Graph, ring, MAX_ROSTER } from "./graph.js";
+export { MAX_CONSTRAINED_N, DEFAULT_MIN_SEPARATION } from "./budgets.js";
 export {
   bfsDistances,
   UNREACHABLE,
@@ -53,13 +54,8 @@ export {
   type PolishConstrainedOptions,
 } from "./constrainedGreedy.js";
 
-import {
-  Graph,
-  MAX_ROSTER,
-  DEFAULT_MIN_SEPARATION,
-  MAX_POLISH_WORK,
-  polishWork,
-} from "./graph.js";
+import { Graph, MAX_ROSTER } from "./graph.js";
+import { DEFAULT_MIN_SEPARATION, MAX_POLISH_WORK, polishWork } from "./budgets.js";
 import { ringGreedy } from "./greedy.js";
 import { polish } from "./polish.js";
 import {

@@ -38,7 +38,7 @@ import {
   buildBuddyGraph,
   buildConstrainedBuddyGraph,
 } from "../src/core/index.js";
-import { MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, polishWork } from "../src/core/graph.js";
+import { MAX_GREEDY_WORK, greedyWork, MAX_POLISH_WORK, polishWork } from "../src/core/budgets.js";
 
 function graphOf(n: number, edges: [number, number][]): Graph {
   const g = new Graph(n);
@@ -272,7 +272,9 @@ describe("iteration budgets are validated before becoming loop bounds", () => {
 describe("MAX_POLISH_WORK cannot be stepped around", () => {
   const workOf = (n: number, k: number, iters: number) => polishWork(n, k, iters);
 
-  it("bounds an explicit polish request instead of honouring it unbounded", () => {
+  // Honouring the request means actually running it, and running it costs one
+  // budget — so this needs a wall-clock allowance, like its sibling below.
+  it("bounds an explicit polish request instead of honouring it unbounded", { timeout: 120_000 }, () => {
     // `polish: true` at (120, 12) used to re-open the exact 33 s case the budget
     // was introduced to close: one boolean, and the constant did not apply.
     const r = buildBuddyGraph(120, 12, { polish: true });
@@ -298,6 +300,19 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     const afforded = Math.floor(MAX_POLISH_WORK / polishWork(120, 12, 1));
     expect(afforded).toBeLessThan(20000); // the clamp really does bind here
     expect(buildBuddyGraph(120, 12, { polish: true, polishIters: afforded }).edges).toEqual(huge.edges);
+  });
+
+  it("charges the n² term a sparse graph really costs", () => {
+    // The per-iteration cost is `allPairsSummary`, which is Theta(n*(n+m)): it
+    // allocates and fills an Int32Array(n) and runs an n-wide accumulation per
+    // source no matter how few edges exist. Modelling it as n*m under-charged
+    // sparse graphs by the entire n² term — a 3000-vertex graph with 4 edges was
+    // afforded the full 20,000 iterations, of which 2,000 alone took 67.6 s.
+    const g = new Graph(3000);
+    for (const [a, b] of [[0, 1], [2, 3], [4, 5], [6, 7]]) g.addEdge(a, b);
+    const started = performance.now();
+    polish(g, { mode: "hill" });
+    expect(performance.now() - started).toBeLessThan(20_000);
   });
 
   it("leaves the auto path untouched, because the gate only admits what already fits", () => {
@@ -407,5 +422,47 @@ describe("reported metrics describe the graph actually returned", () => {
         expect(b.diameterLb).toBeLessThanOrEqual(n - 1);
       }
     }
+  });
+});
+
+
+describe("Graph mutators refuse a bad endpoint before touching anything", () => {
+  it("never leaves half an edge behind", () => {
+    // addEdge wrote adj[u] and then threw on an out-of-range v, so a caller that
+    // caught the error kept a Graph containing a non-vertex, with an odd degree
+    // sum and numEdges() disagreeing with edgeList().
+    const g = new Graph(3);
+    g.addEdge(0, 1);
+    expect(() => g.addEdge(0, 5)).toThrow(/vertex 5/);
+    expect(g.adj[0].has(5)).toBe(false);
+    expect(g.degrees().reduce((a, b) => a + b, 0) % 2).toBe(0);
+    expect(g.edgeList()).toEqual([[0, 1]]);
+  });
+
+  it("guards every endpoint-taking entry point, including the read path", () => {
+    const g = new Graph(3);
+    for (const bad of [3, -1, 1.5, NaN]) {
+      // The message names the offending index — a bare TypeError from
+      // `undefined.has` would not, which is half the point of guarding the reads.
+      expect(() => g.addEdge(0, bad)).toThrow(/must be an integer/);
+      expect(() => g.removeEdge(0, bad)).toThrow(/must be an integer/);
+      expect(() => g.hasEdge(0, bad)).toThrow(/must be an integer/);
+    }
+  });
+});
+
+describe("a non-finite priorWeight does not silently disable the pass", () => {
+  it("falls back to no penalty instead of poisoning every comparison", () => {
+    // NaN makes `next.energy < current` false for every candidate, so the pass
+    // burned its whole budget of O(n·m) re-measurements and returned the input
+    // unchanged — while still reporting polished: true.
+    const cons = new Constraints(20).addPrior(0, 1);
+    const withNaN = buildConstrainedBuddyGraph(20, 4, cons, { priorWeight: NaN });
+    const withZero = buildConstrainedBuddyGraph(20, 4, cons, { priorWeight: 0 });
+    expect(withNaN.edges).toEqual(withZero.edges);
+    const unpolished = buildConstrainedBuddyGraph(20, 4, cons, { polish: false });
+    // And it is a real polish, not the input handed back.
+    expect(withNaN.polished).toBe(true);
+    expect(withNaN.aspl).toBeLessThanOrEqual(unpolished.aspl);
   });
 });
