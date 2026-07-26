@@ -27,6 +27,11 @@ before any scoring run.
 > baseline**, the defensible claim is a **3.37× enrichment**, not a raw percentage. And the loop's
 > test ratchet turns out to be far stronger than its reputation: **7 of 9** boundary mutations planted
 > in well-covered files were caught by the suite it built.
+>
+> And the cheapest instrument beat the most expensive one outright. Replaying today's lint rules over
+> E1's history finds a click-handler accessibility defect that is **byte-identical at the baseline and at
+> the converged head** — twenty-one rounds of five-lens adversarial review renamed its file and never
+> filed it. Lever A1 was sold as a saving; what it demonstrably is, is **more capable** on its own classes.
 
 ### 1. Self-induction, measured: 68% of classifiable findings, 3.37× over chance
 
@@ -366,6 +371,62 @@ honest rather than a defect: a finding with no line, or one citing a blank/comme
 not evidence either way, and Quach et al. document blame attribution as sub-optimal for exactly the
 non-functional findings three of five lenses specialise in. E1's version of this figure was a
 hand-label by the agent that authored the fixes; this one is `git`.
+
+### 7. E4 — the strongest cost result is not about cost
+
+Measured by [`scripts/review-metrics/lever-a-savings.mjs`](../../../../scripts/review-metrics/lever-a-savings.mjs);
+data in [`data/leverSavings.json`](./data/leverSavings.json). The three levers are reported separately
+rather than pooled into one saving, because their evidential strength differs by an order of magnitude.
+
+**A1 — lint preemption. This is the result worth keeping, and it is a capability claim, not a cost
+claim.** The lint gate did not exist during E1, so it was replayed *over E1's own history*: today's
+oxlint rule set, run in detached worktrees at E1's baseline and at its converged head.
+
+| ref | sites | rule hits |
+| --- | --- | --- |
+| E1 baseline `24b5dd6` | 2 | 4 |
+| E1 converged head `462360d` | 2 | 4 |
+
+Twenty-one rounds of five-lens adversarial review did not change that count. One site is **byte-identical
+across the entire run**: the SVG click handler at `app/src/graph/GraphView.tsx:144` is flagged at the
+baseline, and is still flagged at the converged head as `app/src/graph/GraphCanvas.tsx:208`. The loop
+renamed the file and never filed the defect. The other head site, `app/src/panels/Notice.tsx:5`, is the
+baseline's `App.tsx:153` notice element extracted into its own component *during* review — a new line
+carrying an equivalent defect, which the script labels `introducedDuringReview` while recording in
+`introducedMeaning` that the bucket asserts the line is new and not that the defect class is.
+
+Both are `jsx-a11y` click-handler defects, which matters because **E1's only late user-visible bug was
+an a11y gap it found by luck** (a missing `aria-pressed`, round 16). The lens that would own these
+existed. It ran twenty-one times. A deterministic rule set finds them in under a second, and the
+comparison needs no model on either side of it.
+
+So the honest framing of Lever A1 inverts the proposal's. A1 was sold as *cheaper* — move the lint
+classes off the critics to save tokens. What it demonstrably is, is **more capable on its own classes**.
+The saving is real but secondary; the capability gap is the finding.
+
+**Scope limit, stated rather than discovered.** Only oxlint can be replayed at those refs — knip needs a
+repo-root install that did not exist, and the custom hygiene checks are coupled to the current tree's
+identifiers. A1 is therefore a **lower bound** on lint preemption.
+
+**A2 — triage theme-collapse.** 59 raw per-critic findings merged into 40 themes across the six rounds
+recorded so far: **32.2% collapsed**. This is a deduplication figure and nothing more. Several critics
+reporting one theme is not corroboration and carries no severity information — ten agents once
+unanimously endorsed a padding oracle that did not exist, killed by one empirical test.
+
+**A3 — saturation skipping: zero.** No lens reached its gate in any round of either loop, so this lever
+saved nothing. The script prints the zero rather than omitting the component. The mechanism is built,
+tested by the hygiene check that compares critic frontmatter against the runner's gating config, and
+**unexercised** — which is a statement about the code, not about the lever. It also has a cause worth
+recording: gating requires a lens to return `nothingFound` for its full gate length, and across eleven
+rounds no lens has gone quiet twice in a row. In a loop that has not converged, there is nothing for a
+saturation gate to skip.
+
+**What E4's pre-registered criterion says about this.** E4 asked for ≥40% token reduction with zero loss
+of recall. One of its three components is unexercised, one is a dedup count that cannot be converted to
+a token figure without assuming what a critic would have spent on the duplicates, and the third is a
+lower bound measured on a different codebase. **E4 is not answerable as worded** on the data this run
+produced, and saying so is more useful than assembling the three into a number that would not survive
+being asked how it was computed.
 
 ## Method & provenance
 
