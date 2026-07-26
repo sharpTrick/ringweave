@@ -436,6 +436,15 @@ Two mechanisms failed together, and the second is the one worth generalising:
 - The runner accepted a JSON-**string** `args` down its plain-target branch, so `changedPaths` and
   `saturation` silently became empty while `target` became the whole `{"target":…}` blob. It now parses
   a `{`-leading string and throws on malformed JSON rather than reviewing a directory that cannot exist.
+- **And then the fix did not deploy, which is the third instance of the same family.** Two more rounds
+  ran after it was committed, and neither used it: `Workflow({name: …})` resolves the runner against a
+  **snapshot taken at session start**, not the file on disk. Confirmed by diffing the script that
+  actually executed (351 lines, no `parseArgs`) against the committed one (408 lines). So gating still
+  could not fire, `critic-interaction` ran on `lib/src` for a fifth consecutive quiet round, and every
+  surface I had to check said the fix was in place: the file was right, the commit was right, the tests
+  were right. Subsequent rounds pass `scriptPath` explicitly. Three failures now share one shape —
+  a mechanism reporting success while doing something else — and none of them were visible from
+  inside the thing that failed.
 - **A skip that fails to happen produces no output at all.** The runner was built so that "every skip
   is logged, so it is a visible decision, never a silent gap" — and that is exactly half a guard. It
   watched the direction where the loop does less work than expected and left the opposite direction
