@@ -1,0 +1,157 @@
+{
+  "note": "E2 on Sextant's own loop. Rounds are blamed against the tree their critics reviewed (the fix commit's first parent), so a fix made IN RESPONSE to a finding cannot be counted as its cause. Only earlier fixes on the SAME target count. Lift over the base rate is the claim; the raw fraction is not.",
+  "fixCommits": [
+    {
+      "round": 1,
+      "target": "lib/src",
+      "sha": "ded3261"
+    },
+    {
+      "round": 2,
+      "target": "lib/src",
+      "sha": "4df15b1"
+    },
+    {
+      "round": 3,
+      "target": "lib/src",
+      "sha": "14de547"
+    },
+    {
+      "round": 4,
+      "target": "lib/src",
+      "sha": "02c0f02"
+    },
+    {
+      "round": 5,
+      "target": "lib/src",
+      "sha": "bb9c4aa"
+    }
+  ],
+  "findings": 49,
+  "primary": {
+    "config": "-w -M -C",
+    "selfInduced": 7,
+    "preexisting": 23,
+    "unknown": 19,
+    "rate": 0.23333333333333334
+  },
+  "baseRate": {
+    "tree": "6ac8879",
+    "total": 2459,
+    "mine": 421,
+    "rate": 0.17120780805205368
+  },
+  "lift": 1.3628661916072842,
+  "bySeverity": {
+    "blocking": {
+      "selfInduced": 5,
+      "preexisting": 4,
+      "rate": 0.5555555555555556
+    },
+    "deferral": {
+      "selfInduced": 0,
+      "preexisting": 8,
+      "rate": 0
+    },
+    "suggestion": {
+      "selfInduced": 2,
+      "preexisting": 11,
+      "rate": 0.15384615384615385
+    }
+  },
+  "sensitivity": [
+    {
+      "config": "bare",
+      "selfInduced": 7,
+      "preexisting": 23,
+      "unknown": 19,
+      "rate": 0.23333333333333334
+    },
+    {
+      "config": "-w",
+      "selfInduced": 7,
+      "preexisting": 23,
+      "unknown": 19,
+      "rate": 0.23333333333333334
+    },
+    {
+      "config": "-w -M -C",
+      "selfInduced": 7,
+      "preexisting": 23,
+      "unknown": 19,
+      "rate": 0.23333333333333334
+    },
+    {
+      "config": "-w -M -CCC",
+      "selfInduced": 7,
+      "preexisting": 23,
+      "unknown": 19,
+      "rate": 0.23333333333333334
+    }
+  ],
+  "attributed": [
+    {
+      "round": 2,
+      "target": "lib/src",
+      "severity": "blocking",
+      "file": "lib/src/core/index.ts",
+      "line": 426,
+      "class": "work-budget-bypassable-by-flag",
+      "blamed": "ded3261"
+    },
+    {
+      "round": 2,
+      "target": "lib/src",
+      "severity": "blocking",
+      "file": "lib/src/core/index.ts",
+      "line": 378,
+      "class": "unbounded-loop-bound-from-untrusted-number",
+      "blamed": "ded3261"
+    },
+    {
+      "round": 3,
+      "target": "lib/src",
+      "severity": "suggestion",
+      "file": "lib/src/core/metrics.ts",
+      "line": 165,
+      "class": "unexplained-constant",
+      "blamed": "ded3261"
+    },
+    {
+      "round": 4,
+      "target": "lib/src",
+      "severity": "blocking",
+      "file": "lib/src/core/graph.ts",
+      "line": 163,
+      "class": "work-budget-under-models-its-own-cost",
+      "blamed": "14de547"
+    },
+    {
+      "round": 5,
+      "target": "lib/src",
+      "severity": "blocking",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 176,
+      "class": "weak-fragmentation-guard",
+      "blamed": "ded3261"
+    },
+    {
+      "round": 5,
+      "target": "lib/src",
+      "severity": "suggestion",
+      "file": "lib/src/core/polish.ts",
+      "line": 58,
+      "class": "unbounded-work-outside-the-budget",
+      "blamed": "14de547"
+    },
+    {
+      "round": 5,
+      "target": "lib/src",
+      "severity": "blocking",
+      "file": "lib/src/core/index.ts",
+      "line": 370,
+      "class": "duplicated-constant-definitions",
+      "blamed": "ded3261"
+    }
+  ]
+}

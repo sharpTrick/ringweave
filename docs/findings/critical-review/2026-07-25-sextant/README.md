@@ -292,6 +292,57 @@ prompt asking them to would be another instruction obeyed ~79% of the time. Clos
 instead: git is the oracle, an unstaged file in a test directory is residue, and the check proves
 itself by creating the thing it catches.
 
+### 6. E2 — self-induction fell, but not where it matters most
+
+Measured by [`scripts/review-metrics/self-induction.mjs`](../../../../scripts/review-metrics/self-induction.mjs)
+over the five `lib/src` rounds; data in [`data/sextant-self-induction.json`](./data/sextant-self-induction.json).
+Same oracle as E1's, pointed at this loop: for each finding, `git blame` the cited line **in the tree
+its critics actually reviewed** — the fix commit's first parent — and ask whether an *earlier* fix on
+the *same target* wrote it. Blaming HEAD would credit the fix made in response to a finding as its
+cause.
+
+| | E1 / Ouroboros | Sextant |
+| --- | --- | --- |
+| self-induced (pooled) | **68%** | **23.3%** (7 of 30 classifiable) |
+| base rate | 20% | 17.1% (421 / 2,459 product lines) |
+| lift over chance | **3.37×** | **1.36×** |
+| unknown bucket | — | 19 of 49 |
+
+**Against the pre-registered criterion — "the injected-defect rate falls by ≥½ versus E1" — this
+passes,** on the raw rate (a 66% fall) and on the lift (a 60% fall). The sensitivity table is flat:
+all four blame configurations give 23.3%, so the number is not an artifact of `-M -C`.
+
+**And then the severity split, which is the part that matters.**
+
+| severity | self-induced | pre-existing | rate |
+| --- | --- | --- | --- |
+| **blocking** | 5 | 4 | **55.6%** |
+| suggestion | 2 | 11 | 15.4% |
+| deferral | 0 | 8 | 0% |
+
+Self-induction is concentrated almost entirely in the blocking tier. That is the *inverse* of the
+comfortable reading: the loop is not mostly tidying up after itself, it is mostly **breaking its own
+code in ways that matter and then catching them**. It also confirms mechanically what §5's round table
+showed narratively — four of five rounds' blocking findings named the previous round's fix — so that
+chain is now an oracle result, not a reading.
+
+**Two reasons this comparison flatters Sextant, both of which have to be stated.**
+
+1. **E1's 68% is not split by severity here, and E1 had 13 blocking findings out of 92** — so its
+   pooled figure is necessarily suggestion-dominated. Comparing Sextant's *pooled* 23.3% to E1's
+   *pooled* 68% may be comparing a mostly-blocking number to a mostly-suggestion one. Computing E1's
+   blocking-tier rate with the same oracle is the specific next measurement, and until it exists the
+   honest claim is "the pooled rate fell as pre-registered", not "self-induction was solved".
+2. **Five rounds against twenty-one.** Self-induction is cumulative — every round adds fix code for a
+   later round to trip over — so a short loop's rate is structurally lower than a long one's. Sextant
+   has not converged (§5), so its final rate can only rise.
+
+**What is durable regardless.** The `unknown` bucket is 39% of findings, which is the oracle being
+honest rather than a defect: a finding with no line, or one citing a blank/comment/brace-only line, is
+not evidence either way, and Quach et al. document blame attribution as sub-optimal for exactly the
+non-functional findings three of five lenses specialise in. E1's version of this figure was a
+hand-label by the agent that authored the fixes; this one is `git`.
+
 ## Method & provenance
 
 **Deterministic, reproducible from `data/`:** the self-induction rates and base rates
