@@ -1,0 +1,368 @@
+{
+  "config": "proposed-model-diverse-medium-effort",
+  "seedCount": 5,
+  "scoredCount": 4,
+  "erroredSeeds": [
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "reason": "1 lens(es) died: critic-maintainability (agent returned null (died on a terminal API error))"
+    }
+  ],
+  "denominatorWarning": "INCOMPLETE: 1 of 5 seed runs were contaminated (a lens died) and are EXCLUDED from the denominator. Recall below is over 4 seeds only and must not be quoted as the corpus recall.",
+  "recall": {
+    "strict": 1,
+    "loose": 1
+  },
+  "matching": {
+    "lineWindow": 10,
+    "note": "strict = same file + line window; loose = strict OR shared class/theme token. Mechanical; no agent judges whether a finding counts."
+  },
+  "byStratum": [
+    {
+      "stratum": "M-mutation",
+      "n": 4,
+      "foundStrict": 4,
+      "foundLoose": 4
+    }
+  ],
+  "leaveOneOut": [
+    {
+      "lens": "critic-correctness",
+      "seedsFound": 4,
+      "soleSourceSeeds": [
+        "sd-05-roster-max-offbyone",
+        "sd-08-dedupe-count-boundary",
+        "sd-13-second-degree-renders-faded"
+      ],
+      "recallWithoutIt": 0.25
+    },
+    {
+      "lens": "critic-security",
+      "seedsFound": 1,
+      "soleSourceSeeds": [],
+      "recallWithoutIt": 1
+    },
+    {
+      "lens": "critic-solid",
+      "seedsFound": 1,
+      "soleSourceSeeds": [],
+      "recallWithoutIt": 1
+    }
+  ],
+  "blindSpots": [],
+  "controls": [
+    {
+      "control": "ctl-01",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    },
+    {
+      "control": "ctl-02",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    },
+    {
+      "control": "ctl-03",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    },
+    {
+      "control": "ctl-04",
+      "errored": false,
+      "findings": 0,
+      "gating": 0,
+      "deadLenses": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid",
+        "critic-maintainability",
+        "critic-interaction"
+      ],
+      "usable": false,
+      "byCritic": [
+        {
+          "critic": "critic-correctness",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-security",
+          "model": "opus",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-solid",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-maintainability",
+          "model": "haiku",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        },
+        {
+          "critic": "critic-interaction",
+          "model": "sonnet",
+          "nothingFound": false,
+          "findings": 0,
+          "checked": "",
+          "errored": true,
+          "erroredReason": "agent returned null (died on a terminal API error)"
+        }
+      ]
+    }
+  ],
+  "perSeed": [
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness"
+      ],
+      "findings": 11,
+      "converged": false
+    },
+    {
+      "id": "sd-08-dedupe-count-boundary",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness"
+      ],
+      "findings": 13,
+      "converged": false
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness",
+        "critic-security",
+        "critic-solid"
+      ],
+      "findings": 17,
+      "converged": false
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "stratum": "M-mutation",
+      "found": {
+        "strict": true,
+        "loose": true
+      },
+      "byLens": [
+        "critic-correctness"
+      ],
+      "findings": 13,
+      "converged": false
+    }
+  ],
+  "caveats": [
+    "Recall is a RELATIVE discriminator between configurations, not an absolute capability estimate. Never state \"the loop finds N% of defects\".",
+    "At n~12 a Wilson 95% CI is roughly +/-25 points; existence and zero-loss claims are supportable, effect-size comparisons are not.",
+    "Strata are reported separately on purpose: hand-authored seeds are harder to detect than real faults, so cross-stratum comparison is invalid.",
+    "Controls measure raw false positives. Whether each is an EFFECTIVE false positive needs adjudication after the run."
+  ],
+  "runId": "wf_28dabccc-9c7",
+  "tokens": {
+    "subagentTokens": 2042752,
+    "agents": 50,
+    "toolCalls": 876
+  },
+  "haltNote": "Session limit reached mid-run (reset 00:40 UTC). 26 of 50 agents died. The harness excluded the contaminated seed from the denominator and marked all four controls unusable, rather than scoring a dead lens as a clean one \u2014 which is the dead-lens fix working as designed. PRECISION IS NOT MEASURED by this run: every control lost all five lenses."
+}

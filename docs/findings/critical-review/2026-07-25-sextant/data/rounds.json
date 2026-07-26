@@ -83,5 +83,90 @@
         "skipped": false
       }
     }
+  },
+  {
+    "file": "lib-round-02.json",
+    "runId": "wf_c519e9f0-47e",
+    "round": 2,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 2,
+      "confirmed": 3,
+      "blocking": 2,
+      "deferrals": 1,
+      "plausible": 0,
+      "themes": 3
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 0,
+        "errored": true,
+        "erroredReason": "agent returned null (died on a terminal API error)"
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 0,
+        "errored": true,
+        "erroredReason": "agent returned null (died on a terminal API error)"
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 0,
+        "errored": true,
+        "erroredReason": "agent returned null (died on a terminal API error)"
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 1,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
   }
 ]

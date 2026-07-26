@@ -84,7 +84,11 @@ export interface BuddyOptions {
   polish?: boolean | "auto";
   /** Seed for the polish pass. Default 12345 (matches the `polish` backend). */
   seed?: number;
-  /** Iteration budget for polish. Default 20000. A non-integer or negative value falls back to it. */
+  /**
+   * Iteration budget for polish. Default 20000. A non-integer or negative value
+   * falls back to that default, and ANY value is clamped to what
+   * `MAX_POLISH_WORK` affords at this (n, k) — the budget is authoritative.
+   */
   polishIters?: number;
 }
 
@@ -154,7 +158,7 @@ export function buildBuddyGraph(
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
   const seed = options.seed ?? 12345;
-  const polishIters = checkedIterations(options.polishIters, DEFAULT_POLISH_ITERS, "polishIters");
+  const polishIters = boundedIterations(options.polishIters, DEFAULT_POLISH_ITERS, n, k);
   const wantPolish = resolveWantPolish(options.polish, n, k, DEFAULT_POLISH_ITERS);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
@@ -199,7 +203,11 @@ export interface ConstrainedBuddyOptions {
   polish?: boolean | "auto";
   /** Seed for the polish pass. Default 0 (matches the `polishConstrained` backend). */
   seed?: number;
-  /** Iteration budget for polish. Default 8000. A non-integer or negative value falls back to it. */
+  /**
+   * Iteration budget for polish. Default 8000. A non-integer or negative value
+   * falls back to that default, and ANY value is clamped to what
+   * `MAX_POLISH_WORK` affords at this (n, k).
+   */
   polishIters?: number;
   /**
    * Soft penalty weight for keeping prior buddies (churn). Ignored when priors
@@ -295,11 +303,7 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
-  const polishIters = checkedIterations(
-    options.polishIters,
-    DEFAULT_CONSTRAINED_POLISH_ITERS,
-    "polishIters",
-  );
+  const polishIters = boundedIterations(options.polishIters, DEFAULT_CONSTRAINED_POLISH_ITERS, n, k);
   if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
     const priorWeight = active.priorHard
@@ -361,29 +365,47 @@ const DEFAULT_POLISH_ITERS = 20000;
 const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
 
 /**
- * Validate a caller-supplied iteration budget, which becomes a LOOP BOUND.
+ * Resolve the iteration count polish will actually run, from a caller-supplied
+ * value that becomes a LOOP BOUND.
  *
- * `n` and `k` are validated everywhere; the options object was taken on faith,
- * and one of its fields is used directly as `for (let i = 0; i < iters; i++)`.
- * `Infinity` is reachable from JSON without an Infinity literal —
+ * Two things go wrong if this is only type-checked, and both were found by
+ * review after a first attempt that did exactly that.
+ *
+ * TYPE. `n` and `k` are validated everywhere; the options object was taken on
+ * faith, and one of its fields is used directly as `for (let i = 0; i < iters;
+ * i++)`. `Infinity` is reachable from JSON without an Infinity literal —
  * `JSON.parse('{"polishIters":1e999}').polishIters === Infinity` — and the only
  * other loop exit is "fewer than two edges", so with a real graph neither polish
- * pass ever returns. That breaks `buildConstrainedBuddyGraph`'s documented
- * "refuses, never throws" contract in the worst possible way: it does neither.
+ * pass ever returned. That broke `buildConstrainedBuddyGraph`'s documented
+ * "refuses, never throws" contract in the worst way: it did neither.
  *
- * Refusing outright would be a new failure mode for existing callers, so a
- * malformed value falls back to the documented default instead — the same
- * treatment the app's import path already gives untrusted settings.
+ * MAGNITUDE. Rejecting `Infinity` and accepting `1e15` is not a budget, it is a
+ * boundary one step to the left of the same defect. So the value is CLAMPED to
+ * what `MAX_POLISH_WORK` affords at this (n, k), which makes the constant
+ * authoritative rather than advisory — including for an explicit `polish: true`,
+ * the path that otherwise let one boolean re-open the 33 s case the budget was
+ * introduced to close.
+ *
+ * The clamp is a NO-OP wherever auto-polish currently runs: `resolveWantPolish`
+ * only admits configurations whose default-iteration work already fits, so the
+ * minimum is the requested value by construction. Nothing pinned moves.
+ *
+ * A malformed value falls back to the documented default rather than throwing —
+ * refusing outright would be a new failure mode for existing callers, and it is
+ * the same treatment the app's import path already gives untrusted settings.
  */
-function checkedIterations(value: number | undefined, fallback: number, label: string): number {
-  if (value === undefined) return fallback;
-  if (!Number.isInteger(value) || value < 0) {
-    // Non-finite, fractional or negative: not a budget. `label` keeps the reason
-    // attributable if this ever needs to be surfaced rather than absorbed.
-    void label;
-    return fallback;
-  }
-  return value;
+function boundedIterations(
+  value: number | undefined,
+  fallback: number,
+  n: number,
+  k: number,
+): number {
+  const requested = Number.isInteger(value) && (value as number) >= 0 ? (value as number) : fallback;
+  const perIteration = polishWork(n, k, 1);
+  // No edges to swap: the loop exits on its own, and dividing by zero here would
+  // produce Infinity — the very value being guarded against.
+  if (perIteration <= 0) return requested;
+  return Math.min(requested, Math.floor(MAX_POLISH_WORK / perIteration));
 }
 
 // Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
@@ -405,9 +427,10 @@ const DEFAULT_PRIOR_WEIGHT = 2;
  * — the configuration the fixtures and the reroll boundary test pin — so nothing
  * currently pinned moves; see the constant for the arithmetic.
  *
- * An EXPLICIT `polish: true` is still honoured. The caller has asked for it, and
- * the app already refuses to dispatch one above its own ceiling; overriding a
- * direct instruction with a heuristic would be worse than the cost.
+ * An EXPLICIT `polish: true` is still honoured — but it is no longer unbounded.
+ * The caller decides WHETHER to polish; `boundedIterations` decides how much work
+ * that may cost. Before, honouring the instruction meant one boolean could
+ * re-open the exact 33 s case this budget was introduced to close.
  *
  * The decision is modelled on the DEFAULT iteration budget, not on whatever the
  * caller passed. "Is this a configuration we auto-polish?" is a property of the

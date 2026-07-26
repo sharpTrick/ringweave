@@ -30,5 +30,28 @@
     "subagentTokens": 424685,
     "agents": 6,
     "toolCalls": 134
+  },
+  {
+    "round": 2,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 3,
+    "totalFindings": 4,
+    "files": [
+      "lib/src/core/index.ts",
+      "lib/src/core/constraints.ts"
+    ],
+    "classes": [
+      "work-budget-bypassable-by-flag",
+      "unbounded-loop-bound-from-untrusted-number",
+      "pre-gate-quadratic-materialization"
+    ],
+    "subagentTokens": 401727,
+    "agents": 6,
+    "toolCalls": 135
   }
 ]
