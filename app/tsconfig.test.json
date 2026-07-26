@@ -1,0 +1,22 @@
+{
+  "//": "Typechecks the SUITE as well as src. app/tsconfig.json includes only `src` and vite.config.ts, so `tsc --noEmit` never looked at app/test \u2014 a type error in a test was invisible until vitest happened to hit that line at runtime. Mirrors lib/tsconfig.test.json. Kept separate from tsconfig.json so `vite build` is not slowed by test files it never bundles. ES2022 for Array.prototype.at, which the tests use and the src target (ES2020) does not include.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "vite/client",
+      "node",
+      "vitest/globals"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "src",
+    "test",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -11,6 +11,10 @@
 
 export type ConstraintKind = "required" | "prohibited";
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled constraint kind: ${String(x)}`);
+}
+
 /** One editable rule. `a`/`b` are roster indices; order within a pair is not significant. */
 export interface ConstraintPair {
   a: number;
@@ -54,7 +58,18 @@ export function splitPairs(pairs: ConstraintPair[]): {
   const required: [number, number][] = [];
   const prohibited: [number, number][] = [];
   for (const p of pairs) {
-    (p.kind === "required" ? required : prohibited).push([p.a, p.b]);
+    switch (p.kind) {
+      case "required":
+        required.push([p.a, p.b]);
+        break;
+      case "prohibited":
+        prohibited.push([p.a, p.b]);
+        break;
+      default:
+        // Exhaustive over ConstraintKind: a new kind fails to COMPILE here rather
+        // than silently landing in the `prohibited` list, which a ternary would do.
+        return assertNever(p.kind);
+    }
   }
   return { required, prohibited };
 }
@@ -70,8 +85,14 @@ export function joinPairs(
   ];
 }
 
-/** Roster lookup keyed the way `parseRoster` de-duplicates: case-insensitively. */
-function indexByName(names: string[]): Map<string, number> {
+/**
+ * Roster lookup keyed the way `parseRoster` de-duplicates: case-insensitively.
+ *
+ * EXPORTED because building it is O(roster) and the editor needs it once per
+ * render, not twice per rule row. At the 1000-person ceiling with the 200-rule cap
+ * the per-row form built 400 thousand-entry Maps per render.
+ */
+export function indexByName(names: string[]): Map<string, number> {
   const map = new Map<string, number>();
   names.forEach((name, i) => {
     const key = name.toLowerCase();
@@ -129,17 +150,35 @@ export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPai
 export function resolveNamedPairs(
   named: NamedPair[],
   names: string[],
-): { pairs: ConstraintPair[]; dropped: number } {
+): { pairs: ConstraintPair[]; unmatched: number; duplicate: number; selfPair: number; dropped: number } {
   const lookup = indexByName(names);
   const resolved: ConstraintPair[] = [];
+  let unmatched = 0;
+  let selfPair = 0;
   for (const p of named) {
     const a = lookup.get(p.a.trim().toLowerCase());
     const b = lookup.get(p.b.trim().toLowerCase());
-    if (a === undefined || b === undefined || a === b) continue;
+    if (a === undefined || b === undefined) {
+      unmatched++;
+      continue;
+    }
+    if (a === b) {
+      selfPair++;
+      continue;
+    }
     resolved.push({ a, b, kind: p.kind });
   }
   const pairs = dedupePairs(resolved);
-  return { pairs, dropped: named.length - pairs.length };
+  // Counted by CAUSE, not as one total. A single "doesn't match anyone" message
+  // covering a duplicate restatement or a self-pairing tells the user to look for a
+  // missing person who is not missing, which is worse than saying nothing.
+  return {
+    pairs,
+    unmatched,
+    duplicate: resolved.length - pairs.length,
+    selfPair,
+    dropped: named.length - pairs.length,
+  };
 }
 
 /**

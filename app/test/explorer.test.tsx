@@ -52,6 +52,7 @@ function renderPanel(
       onSelect={onSelect}
       onBack={onBack}
       onClose={() => {}}
+      onFindPath={() => {}}
     />,
   );
   return { onSelect, onBack };

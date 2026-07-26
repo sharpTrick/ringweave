@@ -1,7 +1,7 @@
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import {
   MAX_CONSTRAINT_PAIRS,
-  resolvePerson,
+  indexByName,
   type ConstraintKind,
   type NamedPair,
 } from "../constraints";
@@ -34,6 +34,13 @@ const KIND_LABEL: Record<ConstraintKind, string> = {
 export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
   const listId = useId();
   const atCap = pairs.length >= MAX_CONSTRAINT_PAIRS;
+  // ONE roster index per render, not one per field. `resolvePerson` builds a fresh
+  // Map over the whole roster on every call, and each row validated two fields — at
+  // the 1000-person ceiling with the 200-rule cap that was 400 thousand-entry Maps
+  // per render, on every keystroke.
+  const lookup = useMemo(() => indexByName(names), [names]);
+  const unknownName = (text: string) =>
+    text.trim() !== "" && !lookup.has(text.trim().toLowerCase());
 
   const update = (i: number, patch: Partial<NamedPair>) => {
     onChange(pairs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
@@ -50,8 +57,8 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
       </datalist>
 
       {pairs.map((p, i) => {
-        const unknownA = p.a.trim() !== "" && resolvePerson(p.a, names) < 0;
-        const unknownB = p.b.trim() !== "" && resolvePerson(p.b, names) < 0;
+        const unknownA = unknownName(p.a);
+        const unknownB = unknownName(p.b);
         return (
           <div className="rule-row" key={i}>
             <input

@@ -29,33 +29,35 @@ export default function PathPanel({ view, from, route, unreachable, onSelect, on
         <button className="chipbtn" onClick={onClear}>Clear</button>
       </div>
 
-      {from !== null && (
-        <p className="rt-body" aria-live="polite">
-          Starting from <strong>{name(from)}</strong> — now pick the other person.
-        </p>
-      )}
+      {/* ONE live region, mounted with the panel and filled conditionally. Three
+          separate `aria-live` paragraphs that only appear WITH their text are never
+          announced: a live region has to be in the accessibility tree before its
+          content changes for the change to be a change. */}
+      <p className="rt-body" aria-live="polite">
+        {from !== null && (
+          <>
+            Starting from <strong>{name(from)}</strong> — now pick the other person.
+          </>
+        )}
 
-      {unreachable && (
-        <p className="rt-body" aria-live="polite">
-          No chain — they're in separate groups.
-        </p>
-      )}
+        {unreachable && <>No chain — they're in separate groups.</>}
 
-      {route !== null && (
-        <p className="rt-body" aria-live="polite">
-          <span className="rt-chain">
-            {route.map((i, at) => (
-              <span key={i}>
-                {at > 0 && <span className="rt-arrow" aria-hidden="true"> → </span>}
-                <button className="personchip" onClick={() => onSelect(i)}>{name(i)}</button>
-              </span>
-            ))}
-          </span>
-          <span className="rt-steps">
-            {route.length - 1} step{route.length - 1 === 1 ? "" : "s"}
-          </span>
-        </p>
-      )}
+        {route !== null && (
+          <>
+            <span className="rt-chain">
+              {route.map((i, at) => (
+                <span key={i}>
+                  {at > 0 && <span className="rt-arrow" aria-hidden="true"> → </span>}
+                  <button className="personchip" onClick={() => onSelect(i)}>{name(i)}</button>
+                </span>
+              ))}
+            </span>
+            <span className="rt-steps">
+              {route.length - 1} step{route.length - 1 === 1 ? "" : "s"}
+            </span>
+          </>
+        )}
+      </p>
     </section>
   );
 }

@@ -107,11 +107,15 @@ export default function PersonSearch({ names, onSelect }: Props) {
               {names[m.index]}
             </button>
           ))}
-          {/* Designed, not incidental: an empty result is the state a user hits when
-              they mistype, and silence there reads as a broken search box. */}
-          {matches.length === 0 && (
-            <div className="search-empty">Nobody matches “{query.trim()}”</div>
-          )}
+        </div>
+      )}
+      {/* OUTSIDE the listbox, and a live region. A message inside `role="listbox"`
+          that is not an `option` is not part of the list for a screen reader, so the
+          zero-match state was visible and silent — the one state where silence is
+          indistinguishable from a broken box. */}
+      {open && matches.length === 0 && (
+        <div className="search-empty" role="status" aria-live="polite">
+          Nobody matches “{query.trim()}”
         </div>
       )}
     </div>

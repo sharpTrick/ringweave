@@ -11,20 +11,29 @@
  * first" is not an order a user can learn.
  */
 
-/** Where each query character landed in the name, or null when it doesn't match. */
-export function fuzzyMatch(query: string, name: string): number[] | null {
-  const q = query.trim().toLowerCase();
-  if (q === "") return null;
+/**
+ * Match an ALREADY-normalized needle. Split from `fuzzyMatch` so `rankMatches` can
+ * normalize the query once instead of once per roster name — at the 1000-person
+ * ceiling the public form did |query| x 1000 characters of redundant lowercasing on
+ * every keystroke.
+ */
+function matchNormalized(needle: string, name: string): number[] | null {
   const haystack = name.toLowerCase();
   const positions: number[] = [];
   let at = 0;
-  for (const ch of q) {
+  for (const ch of needle) {
     const found = haystack.indexOf(ch, at);
     if (found < 0) return null;
     positions.push(found);
     at = found + 1;
   }
   return positions;
+}
+
+/** Where each query character landed in the name, or null when it doesn't match. */
+export function fuzzyMatch(query: string, name: string): number[] | null {
+  const needle = query.trim().toLowerCase();
+  return needle === "" ? null : matchNormalized(needle, name);
 }
 
 export interface Match {
@@ -53,9 +62,11 @@ function spread(positions: number[]): number {
  * between renders.
  */
 export function rankMatches(query: string, names: string[], limit: number): Match[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return [];
   const matches: Match[] = [];
   for (let i = 0; i < names.length; i++) {
-    const positions = fuzzyMatch(query, names[i]);
+    const positions = matchNormalized(needle, names[i]);
     if (positions !== null) matches.push({ index: i, positions });
   }
   matches.sort(

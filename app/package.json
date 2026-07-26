@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "BuddyGraph — the reference app built on the ringweave core. Deployed to GitHub Pages.",
+  "description": "BuddyGraph \u2014 the reference app built on the ringweave core. Deployed to GitHub Pages.",
   "engines": {
     "node": ">=24"
   },
@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
   },
   "dependencies": {

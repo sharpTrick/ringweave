@@ -7,7 +7,10 @@ import { importGraph } from "../src/io/importGraph";
 import BuddyList from "../src/panels/BuddyList";
 
 // Capture what the Copy button writes to the clipboard without touching the real navigator.
-const copyText = vi.hoisted(() => vi.fn(async () => true));
+// Typed by its ARGS. An untyped mock's `mock.calls` is an array of EMPTY tuples, so
+// reading calls[0][0] is a type error whose only escape is a cast asserting a shape
+// nobody checked — and the whole point of typechecking the suite is to stop that.
+const copyText = vi.hoisted(() => vi.fn<(text: string) => Promise<boolean>>(async () => true));
 vi.mock("../src/io/download", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../src/io/download")>();
   return { ...mod, copyText }; // keep neutralizeCell/toCsv real; only intercept the sink
@@ -25,7 +28,9 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));
 
     await waitFor(() => expect(copyText).toHaveBeenCalledTimes(1));
-    const text = copyText.mock.calls[0][0] as string;
+    // `String(...)` rather than a cast: the mock is untyped, and asserting a type we
+    // have not checked is how a test starts lying about what it received.
+    const text = copyText.mock.calls[0]?.[0] ?? "";
     // The line for the hostile person must begin with the apostrophe guard, not a bare '='.
     expect(text.split("\n")[0]).toMatch(/^'=HYPERLINK/);
   });
@@ -38,7 +43,7 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));
 
     await waitFor(() => expect(copyText).toHaveBeenCalledTimes(1));
-    const lines = (copyText.mock.calls[0][0] as string).split("\n");
+    const lines = (copyText.mock.calls[0]?.[0] ?? "").split("\n");
     view.names.forEach((name, i) => {
       expect(lines[i]).toBe(`${name}: ${buddyLabel(view, i)}`); // separator AND empty glyph shared
     });

@@ -14,7 +14,10 @@ const hooks = vi.hoisted(() => {
     error: string | null;
     refusals: never[];
   } = { status: "idle", result: null, error: null, refusals: [] };
-  const generate = vi.fn(() => {
+  // Typed by its ARGS, not inferred from the stub body: an untyped mock's
+  // `mock.calls` is an empty tuple, so reading calls[0][0] is a type error and the
+  // only escape is a cast that asserts a shape nobody checked.
+  const generate = vi.fn<(req: { options: { polish: unknown } }) => void>(() => {
     state.status = "running";
   });
   const reset = vi.fn(() => {
@@ -165,13 +168,13 @@ describe("useBuddyGraph result↔state pairing", () => {
     const { result } = renderHook(() => useBuddyGraph());
     const big = Array.from({ length: POLISH_MAX_N + 50 }, (_, i) => `P${i}`);
     act(() => result.current.generate(big, { buddies: 4, polish: true, seed: 1 }, []));
-    const req = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
+    const req = hooks.generate.mock.calls.at(-1)![0];
     expect(req.options.polish).not.toBe(true); // downgraded to "auto"
 
     hooks.generate.mockClear();
     const small = Array.from({ length: POLISH_MAX_N }, (_, i) => `P${i}`);
     act(() => result.current.generate(small, { buddies: 4, polish: true, seed: 1 }, []));
-    const req2 = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
+    const req2 = hooks.generate.mock.calls.at(-1)![0];
     expect(req2.options.polish).toBe(true); // honored at/below the cap
   });
 });

@@ -166,11 +166,28 @@ export default function RosterModal({
         {feas.messages.map((m, i) => (
           <div className={"note" + (feas.canGenerate ? "" : " blocking")} key={i}>{m}</div>
         ))}
-        {resolved.dropped > 0 && (
+        {/* By CAUSE. One "doesn't match anyone" message covering a duplicate
+            restatement or a self-pairing sends the user looking for a missing person
+            who is not missing. */}
+        {resolved.unmatched > 0 && (
           <div className="note">
-            {resolved.dropped === 1
-              ? "1 buddy rule doesn't match anyone in this roster and won't be used."
-              : `${resolved.dropped} buddy rules don't match anyone in this roster and won't be used.`}
+            {resolved.unmatched === 1
+              ? "1 buddy rule names someone who isn't in this roster and won't be used."
+              : `${resolved.unmatched} buddy rules name someone who isn't in this roster and won't be used.`}
+          </div>
+        )}
+        {resolved.selfPair > 0 && (
+          <div className="note">
+            {resolved.selfPair === 1
+              ? "1 buddy rule pairs someone with themselves and won't be used."
+              : `${resolved.selfPair} buddy rules pair someone with themselves and won't be used.`}
+          </div>
+        )}
+        {resolved.duplicate > 0 && (
+          <div className="note">
+            {resolved.duplicate === 1
+              ? "1 buddy rule repeats another one and will only be applied once."
+              : `${resolved.duplicate} buddy rules repeat others and will only be applied once.`}
           </div>
         )}
         {ruleProblems.map((m, i) => (

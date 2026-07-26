@@ -1,5 +1,90 @@
 [
   {
+    "file": "app-round-01.json",
+    "runId": "wf_4c9a5215-924",
+    "round": 1,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 14,
+      "confirmed": 14,
+      "blocking": 7,
+      "deferrals": 0,
+      "plausible": 1,
+      "themes": 11
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 4,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 6,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": null,
+        "skipped": false
+      }
+    }
+  },
+  {
     "file": "lib-round-01.json",
     "runId": "wf_88887b29-0f5",
     "round": 1,

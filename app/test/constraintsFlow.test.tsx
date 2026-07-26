@@ -22,9 +22,10 @@ const ROSTER = ["Alice", "Ben", "Chloe", "Dev", "Eve", "Fran"];
 function renderModal(overrides: Partial<{
   constraints: ConstraintPair[];
   constraintNames: string[];
-  onGenerate: (n: string[], s: typeof DEFAULT_SETTINGS, c: ConstraintPair[]) => void;
 }> = {}) {
-  const onGenerate = overrides.onGenerate ?? vi.fn();
+  // Always a Mock, never a union with a plain function — otherwise `.mock` is not
+  // reachable on the returned value, which is the only reason callers want it.
+  const onGenerate = vi.fn<(n: string[], s: typeof DEFAULT_SETTINGS, c: ConstraintPair[]) => void>();
   render(
     <RosterModal
       initialText={ROSTER.join("\n")}
@@ -90,7 +91,7 @@ describe("the buddy-rule editor", () => {
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: ROSTER.slice(0, 5).join("\n") },
     });
-    expect(screen.getByText(/1 buddy rule doesn't match anyone in this roster/)).toBeTruthy();
+    expect(screen.getByText(/1 buddy rule names someone who isn't in this roster/)).toBeTruthy();
   });
 
   it("keeps a rule pointing at the same people when the roster is reordered", () => {

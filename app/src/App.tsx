@@ -51,7 +51,15 @@ export default function App() {
   // Selection carries a back stack: in the explorer every name is a link, so
   // "where was I" is part of the model rather than something the user re-derives.
   const explorer = useExplorerHistory();
-  const selected = explorer.current;
+  // Guard the index against the view it will be read with. `resetSelection` runs
+  // BEFORE `bg.generate`, and generation is asynchronous — so a person selected
+  // while "Generating…" was showing survived into the replacement view. If the new
+  // roster is shorter, PersonPanel then hands an out-of-range index to
+  // `eccentricity`, whose own vertex guard throws. Reading through this makes the
+  // pair consistent by construction rather than by ordering luck.
+  const rawSelected = explorer.current;
+  const selected =
+    rawSelected !== null && view !== null && rawSelected < view.names.length ? rawSelected : null;
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
@@ -171,7 +179,11 @@ export default function App() {
 
   return (
     <>
-      <div id="app">
+      {/* `inert` while the dialog is open: RosterModal is a sibling rendered AFTER
+          this subtree, so without it Tab walks straight out of an aria-modal dialog
+          into the graph, the buddy list and the export buttons behind it. One
+          attribute does what a focus trap would, and the browser enforces it. */}
+      <div id="app" inert={modalOpen}>
         <header>
           <div className="brand">
             <div className="mark"><div className="r" /><div className="d d1" /><div className="d d2" /><div className="d d3" /></div>
@@ -253,7 +265,7 @@ export default function App() {
           )}
 
           {bg.status === "running" && (
-            <div className="busy">
+            <div className="busy" role="status" aria-live="polite">
               <div className="busy-inner">
                 <span>Generating…</span>
                 <button className="btn btn-ghost" onClick={cancelGeneration}>Cancel</button>
