@@ -14,7 +14,7 @@
 import { writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -85,26 +85,41 @@ try {
 // checked into the repo is by definition tracked. So it gets its own probe: create the exact thing
 // it exists to catch, require it to be caught, and remove it again. The finally is load-bearing;
 // leaving the probe behind would trip the very check being tested on the next run.
-const PROBE = join(REPO_ROOT, "lib", "test", "__oracle_probe__.test.ts");
-let probeOutput = "";
-writeFileSync(PROBE, "// deliberate untracked file — hygiene oracle probe\n");
-try {
-  execFileSync("node", ["scripts/hygiene/run.mjs"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  probeOutput = ""; // exit 0 means the check did not fire
-} catch (err) {
-  probeOutput = `${err.stdout ?? ""}${err.stderr ?? ""}`;
-} finally {
-  rmSync(PROBE, { force: true });
+//
+// TWO probes, in two places, because the check's first version scanned only `lib/test` and `app/test`
+// and the fourth recurrence of the hazard landed in `app/zz-scratch/` — outside both, so it was never
+// reported. A single in-a-test-directory probe passed happily the whole time. The second probe sits at
+// the repo root, where no test directory can be inferred, so the widened scan is what has to catch it.
+const PROBES = [
+  join(REPO_ROOT, "lib", "test", "__oracle_probe__.test.ts"),
+  join(REPO_ROOT, "__oracle_probe_outside_test_dir__.test.ts"),
+];
+const probeFailures = [];
+for (const probe of PROBES) {
+  let probeOutput = "";
+  writeFileSync(probe, "// deliberate untracked file — hygiene oracle probe\n");
+  try {
+    execFileSync("node", ["scripts/hygiene/run.mjs"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    probeOutput = ""; // exit 0 means the check did not fire
+  } catch (err) {
+    probeOutput = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+  } finally {
+    rmSync(probe, { force: true });
+  }
+  // The check has to name THIS probe, not merely fire. Without the path assertion the second probe
+  // would pass on a report about the first, which is the hole being closed.
+  const named = probeOutput.includes("untracked-test-file") && probeOutput.includes(basename(probe));
+  if (!named) probeFailures.push({ probe, probeOutput });
 }
-if (!probeOutput.includes("untracked-test-file")) {
-  console.error(
-    "hygiene oracle-check FAILED — untracked-test-file did not fire on an untracked test file.\n" +
-      "run.mjs output was:\n" + (probeOutput || "(clean — nothing reported)"),
-  );
+if (probeFailures.length > 0) {
+  console.error("hygiene oracle-check FAILED — untracked-test-file did not fire on:\n");
+  for (const { probe, probeOutput } of probeFailures) {
+    console.error(`  ${relative(REPO_ROOT, probe)}\n      ${probeOutput || "(clean — nothing reported)"}`);
+  }
   process.exit(1);
 }
 

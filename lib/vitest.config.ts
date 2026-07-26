@@ -11,5 +11,15 @@ import { defineConfig } from "vitest/config";
  * that a genuine hang fails rather than hanging CI.
  */
 export default defineConfig({
-  test: { testTimeout: 20000 },
+  test: {
+    // PINNED, not defaulted. Vitest's default include is `**/*.test.*` from the
+    // package root, so a review lens dropping a throwaway probe anywhere under
+    // `lib/` becomes part of `npm test` — and a probe whose expectation is wrong
+    // reports as a regression in the code under review. That happened four times
+    // in one run, in four different directories, which is why the fix is a glob
+    // and not another instruction to tidy up. Every tracked test lives under
+    // `test/`, verified with `git ls-files`, so nothing legitimate is excluded.
+    include: ["test/**/*.test.ts"],
+    testTimeout: 20000,
+  },
 });

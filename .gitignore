@@ -14,9 +14,19 @@ __pycache__/
 # nothing tells an agent to clean up, and a probe left under app/test or lib/test
 # gets picked up by vitest, runs for 90 s, times out, and reads as a FAILING test
 # on the next run. Give them somewhere that is neither a test glob nor tracked.
-# `scripts/hygiene/run.mjs` still fails on an untracked file under */test/, so this
-# is a designated place to work, not a way to hide residue.
+# `scripts/hygiene/run.mjs` fails on an untracked test-shaped file ANYWHERE outside these,
+# so this is a designated place to work, not a way to hide residue.
+#
+# Naming a single blessed directory did not survive contact: the hazard recurred in four
+# different places, and the fourth was a lens inventing `app/zz-scratch/` rather than using
+# the sanctioned path. Instruction-following at ~79% is not a mechanism. So the *-scratch
+# suffix is blessed wherever it appears, which is only safe because both packages now PIN
+# their vitest `include` to `test/**` — a probe in one of these can no longer join `npm test`
+# whatever it is called. The ignore keeps the gate from fighting a lens mid-round; the pinned
+# glob is what makes the residue harmless.
 .review-scratch/
+*-scratch/
+*_scratch/
 
 # tsc --build cache; regenerated on demand and machine-specific.
 *.tsbuildinfo

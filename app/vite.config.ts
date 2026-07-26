@@ -28,8 +28,18 @@ function spa404Fallback() {
 export default defineConfig({
   base: process.env.VITE_BASE ?? '/ringweave/',
   plugins: [react(), spa404Fallback()],
-  // A few tests call the real core (buildBuddyGraph auto-polish can take seconds at n~30-60),
-  // so a per-test compute must not silently ride Vitest's 5s default and flake under load.
-  // Fixtures that don't exercise polish pass polish:false; this is the backstop for those that do.
-  test: { testTimeout: 20000 },
+  test: {
+    // PINNED, not defaulted. Vitest's default include is `**/*.test.*` from the
+    // package root, so a review lens dropping a throwaway probe anywhere under
+    // `app/` becomes part of `npm test` — and a probe whose expectation is wrong
+    // reports as a regression in the code under review. That happened four times
+    // in one run, in four different directories, which is why the fix is a glob
+    // and not another instruction to tidy up. Every tracked test lives under
+    // `test/`, verified with `git ls-files`, so nothing legitimate is excluded.
+    include: ["test/**/*.test.{ts,tsx}"],
+    // A few tests call the real core (buildBuddyGraph auto-polish can take seconds at n~30-60),
+    // so a per-test compute must not silently ride Vitest's 5s default and flake under load.
+    // Fixtures that don't exercise polish pass polish:false; this is the backstop for those that do.
+    testTimeout: 20000,
+  },
 })

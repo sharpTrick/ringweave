@@ -231,9 +231,20 @@ if (agentFiles.length > 0) {
 //
 // git is the oracle here: a file under a test directory that no one has staged is not a test, it is
 // residue. Cheap, and it cannot be argued with.
+//
+// WIDENED, because the first version of this check knew only two directories and the hazard did not.
+// It recurred four times in one run, in four different places: lib/test/zz_frag.test.ts,
+// app/test/tmpbench/, app/test/zz_probe.test.ts, and then app/zz-scratch/ — which was outside the two
+// paths this check scanned and so sailed straight past it. Fixing the case and calling the theme
+// closed is the anti-pattern REVIEW_PROTOCOL.md names, and this check had committed it. So the scan
+// is now the WHOLE TREE for anything test-shaped: directory names are unbounded, `*.test.*` is not.
+//
+// `--exclude-standard` means .gitignore'd paths never appear, so the sanctioned `.review-scratch/`
+// (and any other scratch directory the ignore file blesses) is invisible here by construction — a
+// designated place to work, exactly as intended, with no allowlist to maintain in this file.
 // ---------------------------------------------------------------------------------------------
 {
-  const out = spawnSync("git", ["ls-files", "--others", "--exclude-standard", "lib/test", "app/test"], {
+  const out = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], {
     cwd: ROOT,
     encoding: "utf8",
   });
@@ -241,11 +252,13 @@ if (agentFiles.length > 0) {
   // lint gate for a reason unrelated to the tree's contents.
   if (out.status === 0) {
     for (const line of out.stdout.split("\n").map((x) => x.trim()).filter(Boolean)) {
+      if (!/\.(test|spec)\.[cm]?[jt]sx?$/.test(line)) continue;
       report(
         "untracked-test-file",
         line,
-        "untracked file in a test directory — scratch left behind by a tool or an agent. " +
-          "Delete it or `git add` it; vitest will run it either way.",
+        "untracked test-shaped file — scratch left behind by a tool or an agent. Delete it, " +
+          "`git add` it, or work under .review-scratch/ (gitignored, and outside both packages' " +
+          "vitest include globs).",
       );
     }
   }
