@@ -153,11 +153,34 @@ positive observation does not become false when another reviewer shows up.
   five, so removing solid, maintainability, interaction *or* security cannot reduce 5/5. E4's
   pre-registered "zero loss of recall" criterion is **met** for those four — on this corpus.
 
-**What is NOT durable, and must not be quoted yet:**
-- **Leave-correctness-out is indeterminate.** Four seeds were found *only* by correctness among the
-  lenses that have reported — but security has not reported, and might have found them too. Recall
-  is settled; *attribution* is not.
-- Marginal-recall-per-lens likewise waits on security.
+**Attribution, now settled by a second run.** §4 previously left leave-correctness-out
+*indeterminate*, because `critic-security` had not reported and might have found the same seeds. A
+second scoring run at explicitly-specified medium effort
+([`data/PARTIAL-recall-diverse-medium-effort.json`](./data/PARTIAL-recall-diverse-medium-effort.json))
+answers it. Security ran, and it did not.
+
+| | seeds found | sole source for | recall without it |
+| --- | --- | --- | --- |
+| `critic-correctness` | 4 of 4 | sd-05, sd-08, sd-13 | **0.25** |
+| `critic-security` | 1 of 4 | — | 1.00 |
+| `critic-solid` | 1 of 4 | — | 1.00 |
+
+So on this corpus the ensemble is **one lens plus three passengers**. Retiring security, solid,
+maintainability or interaction costs zero recall; retiring correctness costs three quarters of it.
+That is a sharp result and it cuts directly at Lever A3 — lens retirement should be gated on unique
+recall, and here four of five lenses have none.
+
+Read it narrowly. It is four seeds, all from one stratum, all mutation-style boundary and comparison
+flips — precisely the material a correctness lens is pointed at. It says nothing about whether the
+other lenses earn their place on the defect classes they *are* pointed at, and §4's own caution
+about the corpus applies with full force. The honest claim is about this corpus, not about lenses.
+
+**What is still NOT measured, and must not be quoted:**
+- **Precision is unmeasured.** All four clean controls lost all five lenses to the session limit, so
+  the run has *nothing* to say about false positives. The corpus recall figure is likewise over
+  4 of 5 seeds, and the harness refuses to call that the corpus recall — see the
+  `denominatorWarning` in the data. A rerun is in flight; `sd-15`'s detection in the earlier run is
+  durable regardless, since a positive observation is not undone by a later halt.
 
 **The result that matters most is the negative one.** The first, contaminated run reported `sd-15`
 as a **blind spot**. It is not: correctness and solid both found it, strictly. Had that run been
@@ -172,7 +195,24 @@ the critics is a residue selected for being hard to test, not hard to *see* — 
 boundary or comparison flips in code a reader can check by eye. This says the ensemble reads
 carefully. It does not say it would find a defect class nobody thought to seed.
 
-### 4b. Original plan for this section *(superseded by 4)*
+### 4b. What two session-limit halts taught us about the instrument
+
+Both scoring runs were cut off mid-flight, and that is worth reporting rather than hiding, because
+the machinery built to survive it did.
+
+- The harness **excluded** the contaminated seed from the denominator and marked every control
+  **unusable**, instead of scoring a dead lens as a clean one. Before that fix, a run in which every
+  lens died reported `converged: true`.
+- It emitted an explicit `denominatorWarning` rather than a number, so no downstream reader can
+  quote "recall" without meeting the caveat first.
+- The distinction that makes partial data usable at all: **a detection is durable, an absence is
+  not.** Every claim above is of the first kind; every claim withheld is of the second.
+
+The cost is real — two runs, ~2.4M subagent tokens, and precision still unmeasured. The alternative,
+though, is a number that looks identical whether it came from five working lenses or from five dead
+ones.
+
+### 4c. Original plan for this section *(superseded by 4)*
 
 Corpus construction is complete and the pre-registered allocation is mechanical
 ([`scripts/sextant/allocate.mjs`](../../../../scripts/sextant/allocate.mjs)). The prose-ensemble

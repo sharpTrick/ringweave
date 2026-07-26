@@ -11,6 +11,7 @@
  * If a rule is renamed upstream, removed, or typo'd, this fails loudly instead of quietly opening a
  * gap that neither the linter nor the critics are covering.
  */
+import { writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -66,6 +67,7 @@ if (missing.length > 0) {
 // stale-comment-ref unable to fire, and colour literals parsed as id selectors). Point them at
 // deliberate-violation fixtures and require every check to report.
 const CUSTOM_CHECKS = ["stale-comment-ref", "dead-css-hook", "mirrored-constant"];
+// untracked-test-file is proved separately below — its oracle is git, not a committed fixture.
 
 let selftestOutput = "";
 try {
@@ -79,6 +81,33 @@ try {
   selftestOutput = `${err.stdout ?? ""}${err.stderr ?? ""}`;
 }
 
+// `untracked-test-file` cannot be proved by a committed fixture — its oracle is git, and a fixture
+// checked into the repo is by definition tracked. So it gets its own probe: create the exact thing
+// it exists to catch, require it to be caught, and remove it again. The finally is load-bearing;
+// leaving the probe behind would trip the very check being tested on the next run.
+const PROBE = join(REPO_ROOT, "lib", "test", "__oracle_probe__.test.ts");
+let probeOutput = "";
+writeFileSync(PROBE, "// deliberate untracked file — hygiene oracle probe\n");
+try {
+  execFileSync("node", ["scripts/hygiene/run.mjs"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  probeOutput = ""; // exit 0 means the check did not fire
+} catch (err) {
+  probeOutput = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+} finally {
+  rmSync(PROBE, { force: true });
+}
+if (!probeOutput.includes("untracked-test-file")) {
+  console.error(
+    "hygiene oracle-check FAILED — untracked-test-file did not fire on an untracked test file.\n" +
+      "run.mjs output was:\n" + (probeOutput || "(clean — nothing reported)"),
+  );
+  process.exit(1);
+}
+
 const silent = CUSTOM_CHECKS.filter((check) => !selftestOutput.includes(check));
 if (silent.length > 0) {
   console.error("hygiene oracle-check FAILED — these custom checks did not fire on their fixtures:\n");
@@ -89,5 +118,5 @@ if (silent.length > 0) {
 
 console.log(
   `hygiene oracle-check: ${EXPECTED.length}/${EXPECTED.length} lint rules and ` +
-    `${CUSTOM_CHECKS.length}/${CUSTOM_CHECKS.length} custom checks fire as expected`,
+    `${CUSTOM_CHECKS.length + 1}/${CUSTOM_CHECKS.length + 1} custom checks fire as expected`,
 );

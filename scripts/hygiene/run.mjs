@@ -14,6 +14,7 @@
  * papered over.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative, extname } from "node:path";
 
@@ -214,6 +215,38 @@ if (agentFiles.length > 0) {
   for (const name of runnerLenses.keys()) {
     if (!agentFiles.some((f) => f === `${name}.md`)) {
       report("critic-runner-drift", RUNNER, `runner spawns \`${name}\` but .claude/agents/${name}.md does not exist`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 5. Untracked test files.
+//
+// Review lenses have Bash access on purpose — it is what lets them measure instead of speculate,
+// and one of them examined 432,954 fragmenting graph swaps to check a fix. But nothing tells an
+// agent to clean up, and one left a scratch harness at lib/test/zz_frag.test.ts. Vitest picked it
+// up, it ran 90 s and timed out, and on the next `npm test` it read as two FAILING tests — which
+// looks exactly like a regression in the fix that had just been made. Committed, it would have
+// broken CI.
+//
+// git is the oracle here: a file under a test directory that no one has staged is not a test, it is
+// residue. Cheap, and it cannot be argued with.
+// ---------------------------------------------------------------------------------------------
+{
+  const out = spawnSync("git", ["ls-files", "--others", "--exclude-standard", "lib/test", "app/test"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  // A missing or failing git is not this check's business to diagnose — skip rather than fail the
+  // lint gate for a reason unrelated to the tree's contents.
+  if (out.status === 0) {
+    for (const line of out.stdout.split("\n").map((x) => x.trim()).filter(Boolean)) {
+      report(
+        "untracked-test-file",
+        line,
+        "untracked file in a test directory — scratch left behind by a tool or an agent. " +
+          "Delete it or `git add` it; vitest will run it either way.",
+      );
     }
   }
 }
