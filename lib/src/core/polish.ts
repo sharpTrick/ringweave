@@ -73,6 +73,7 @@ export function polish(
   // temperature calibration for anneal
   let T = 0;
   let TFloor = 0;
+  let calibrationSweeps = 0;
   const alpha = 0.995;
   if (mode === "anneal") {
     const deltas: number[] = [];
@@ -83,7 +84,13 @@ export function polish(
     // of them and took 587 ms on a 300-vertex graph, against 11 ms for the same
     // call in hill mode. Work before the loop that the budget cannot reach is work
     // the budget does not bound.
+    // Charged against the loop, not amortised into a constant. Each trial is a full
+    // `energy()` — one `allPairsSummary`, the same cost as a loop iteration — while
+    // `loopBudget` subtracts a fixed 3 sweeps regardless. When `maxIters <= 100`, which is
+    // exactly the large-n regime the budget exists for, the calibration could be the
+    // MAJORITY of the work and none of it was priced.
     const trials = Math.min(100, Math.max(10, edges.length), maxIters);
+    calibrationSweeps = trials;
     for (let i = 0; i < trials && edges.length >= 2; i++) {
       const sw = proposeSwap(g, edges, rng);
       if (!sw) continue;
@@ -99,12 +106,15 @@ export function polish(
     TFloor = 1e-4 * T0;
   }
 
+  // The loop gets what the calibration did not spend, so the two together stay inside the
+  // one budget `boundedPolishIterations` computed.
+  const loopIters = Math.max(0, maxIters - calibrationSweeps);
   let iters = 0;
   // rejects drives only the "hill" early-stop below; anneal runs the full budget
   // (its temperature schedule, not a reject streak, governs convergence).
   let rejects = 0;
   const rejectCap = 200 * g.n; // empirically-tuned early-stop for "hill" mode
-  while (iters < maxIters) {
+  while (iters < loopIters) {
     iters++;
     edges = g.edgeList();
     if (edges.length < 2) break;

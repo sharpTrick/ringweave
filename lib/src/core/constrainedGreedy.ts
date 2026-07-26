@@ -438,6 +438,23 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
   if (!Number.isInteger(n) || n < 0) {
     throw new Error(`roster size ${n} is not a valid count — call validate() first`);
   }
+  // AFTER the validity check, deliberately: `NaN !== NaN` is true, so checking the
+  // disagreement first reported "roster size NaN does not match the constraints (built for
+  // NaN)" — technically accurate and useless, when the real problem is that NaN is not a
+  // count. Order the messages so the most fundamental fault is the one named.
+  //
+  // The disagreement itself: endpoints were validated against the parameter `n` while the
+  // required-degree vector came from `cons.requiredDegree()`, sized by `cons.n`. With
+  // cons.n < n the vector had holes at exactly the vertices being checked, `undefined > k`
+  // was false, and the documented "required-degree over k" refusal never fired — so this
+  // returned a graph exceeding k, in production, with the dev-mode postcondition compiled
+  // out. `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce the rule; this
+  // primitive was the one public entry point that did not.
+  if (n !== cons.n) {
+    throw new Error(
+      `roster size ${n} does not match the constraints (built for ${cons.n}) — call validate() first`,
+    );
+  }
   // O(n²) generation; refuse an oversized roster before the k-check, mirroring
   // validate's order (rationale on MAX_CONSTRAINED_N in budgets.ts).
   if (n > MAX_CONSTRAINED_N) {

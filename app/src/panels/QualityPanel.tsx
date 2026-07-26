@@ -1,4 +1,6 @@
-import { connectionSummary, constraintSummary, qualityPercent, type GraphView } from "../model";
+import {
+  connectionSummary, constraintSummary, qualityPercent, targetShortfall, type GraphView,
+} from "../model";
 
 interface Props {
   view: GraphView;
@@ -17,6 +19,7 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
   const q = qualityPercent(m); // same rounded value the caption thresholds on
   const rules = constraintSummary(view);
+  const shortfall = targetShortfall(view);
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">
@@ -39,6 +42,14 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         </div>
         <span className="l">{connectionSummary(m)}</span>
       </div>
+      {shortfall && (
+        // Stated plainly, next to the gauge that reads 100. The gauge is not wrong — the graph
+        // IS optimal for the degree it delivered — but "optimal" and "what you asked for" are
+        // different claims, and only one of them was on screen.
+        <div className="rules-line">
+          You asked for {shortfall.asked} buddies each; this roster only allows {shortfall.got}.
+        </div>
+      )}
       {rules && <div className="rules-line">{rules}</div>}
       <div className="m-acts">
         <button className="btn btn-ghost" onClick={onImport}>Import ↑</button>

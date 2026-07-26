@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_SETTINGS, degreeLabel, isOptimal, nextRerollSeed, rerollBlockReason, type GraphView, type Settings } from "./model";
+import {
+  DEFAULT_SETTINGS, degreeLabel, isOptimal, nextRerollSeed, pathStatusText, rerollBlockReason,
+  targetShortfall, type GraphView, type Settings,
+} from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
 import RosterModal from "./panels/RosterModal";
@@ -35,7 +38,10 @@ export default function App() {
   // quality so it never claims "best" over a gauge showing < 100%.
   const bg = useBuddyGraph((kept) =>
     flash(
-      isOptimal(kept.metrics)
+      // `isOptimal` alone said "already optimal" to someone who asked for 4 buddies and got 3
+      // — true of the graph, and not the answer to the question they asked. When the target
+      // was missed, the honest line is the one that points at the settings.
+      isOptimal(kept.metrics) && targetShortfall(kept) === null
         ? "That's already an optimal arrangement — a re-roll can't improve it."
         : "Couldn't find a different arrangement — this is what the current settings produce.",
     ),
@@ -85,9 +91,21 @@ export default function App() {
   // The anchor is resolved lazily at rescue time, not captured: which element is on screen
   // depends on whether a graph exists yet, and the modal's roster field is the only landing
   // spot during a first generation.
-  useFocusRescue(() =>
-    searchRef.current ?? document.querySelector<HTMLElement>('[aria-label="Roster names"]'),
-  );
+  useFocusRescue(() => {
+    // `??` was not enough, and the reason is the OTHER fix from the same round. Opening the
+    // roster editor makes `#app` inert in the same commit, and the search input lives inside
+    // it — so `searchRef.current` is non-null (the input is still mounted) but silently
+    // unfocusable, and `??` never falls through for a non-null value. Focus stayed on <body>
+    // with the dialog open, which is the case the rescue exists for.
+    //
+    // Ask whether the candidate can actually take focus, not whether it exists.
+    const reachable = (el: HTMLElement | null | undefined) =>
+      el && !el.closest("[inert]") ? el : null;
+    return (
+      reachable(searchRef.current) ??
+      reachable(document.querySelector<HTMLElement>('[aria-label="Roster names"]'))
+    );
+  });
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
   // need real core queries and neither may reimplement them.
@@ -324,10 +342,24 @@ export default function App() {
         />
       )}
 
+      {/* The REGION is always mounted; only its contents change. A live region has to exist
+          in the accessibility tree BEFORE its text changes for the change to register as a
+          change — Notice.tsx documents exactly this and keeps its own region permanent, and
+          three regions in this app were still mounting together with their first text. The
+          scrim itself stays conditional: it is a visual element, and an empty one would
+          swallow clicks. */}
+      <div className="busy-live" role="status" aria-live="polite">
+        {bg.status === "running" ? "Generating…" : ""}
+      </div>
+      {/* The path finder's SPOKEN half, mounted for the whole life of a view while the visible
+          panel stays conditional. Same reason as the busy region above. */}
+      <div className="sr-live" role="status" aria-live="polite">
+        {view ? pathStatusText(view, path.from, path.route, path.unreachable) : ""}
+      </div>
       {bg.status === "running" && (
-        <div className="busy" role="status" aria-live="polite">
+        <div className="busy">
           <div className="busy-inner">
-            <span>Generating…</span>
+            <span aria-hidden="true">Generating…</span>
             <button className="btn btn-ghost" onClick={cancelGeneration}>Cancel</button>
           </div>
         </div>

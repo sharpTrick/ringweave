@@ -34,7 +34,20 @@ const TOKEN = /[^\n,]+/g;
 // below. Categories rather than a hand-written C0+DEL range: that range missed the whole C1
 // block and every format character, including the bidi overrides that can visually reverse a
 // name. `importGraph` refuses the same set; this side, being the tolerant one, normalizes.
-const CONTROL_CHARS = /[\p{Cc}\p{Cf}]/gu;
+/**
+ * THE character class both name authorities use — defined once here and imported by
+ * `importGraph`, because two copies of a security-relevant class is how the last gap
+ * happened: the previous version was a hand-written C0+DEL range in both files, and
+ * widening it to \p{Cc}\p{Cf} still missed U+2028 LINE SEPARATOR and U+2029 PARAGRAPH
+ * SEPARATOR — categories Zl and Zp, but both ECMAScript LineTerminators and both mandatory
+ * forced line breaks in CSS, so they break a name across lines in the buddy list and the
+ * printed slips exactly like the characters the guard was written for.
+ *
+ * `parseRoster` normalizes these to spaces (it is the tolerant authority); `importGraph`
+ * refuses them (it refuses everything it cannot round-trip). Same class, opposite policy.
+ */
+export const NAME_HOSTILE_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const CONTROL_CHARS = NAME_HOSTILE_CHARS;
 
 /** THE character-truncation notice — shared so the parser's own warning and the RosterModal UI
     can't drift in wording. (In the app, RosterModal pre-caps to MAX_PARSE_CHARS and shows this

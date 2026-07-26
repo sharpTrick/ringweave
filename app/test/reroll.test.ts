@@ -92,13 +92,17 @@ describe("core reroll behavior (why post-hoc detection is needed)", () => {
     // cap, and at k=3 the core polishes well past it — so the app refused to dispatch a
     // reroll that would have worked.
     expect(autoPolishEnabled(125, 3)).toBe(true);
-    // A reduced iteration count, because the claim is that the seed reaches the RNG at
-    // all — not that a full budget was spent. Two default-budget builds here cost 36 s;
-    // 1000 iterations is 2 s and still diverges. (300 does NOT — the two seeds converge
-    // to the same graph, which is the plateau this file's other tests are about, so the
-    // number is load-bearing rather than arbitrary.)
-    const a = buildBuddyGraph(125, 3, { seed: 1, polishIters: 1000 });
-    const b = buildBuddyGraph(125, 3, { seed: 2, polishIters: 1000 });
+    // A reduced iteration count, because the claim is that the seed reaches the RNG at all —
+    // not that a full budget was spent. Two default-budget builds here cost 36 s; 1500 is 3 s
+    // and still diverges.
+    //
+    // The number is load-bearing and has moved once: at 300 the two seeds converge to the same
+    // graph (the plateau this file's other tests are about), and 1000 stopped diverging when
+    // the anneal calibration started being charged against the loop allowance — up to 100
+    // sweeps that were previously free. That is the budget getting more honest, not a
+    // regression, and the default-budget output is byte-identical either way.
+    const a = buildBuddyGraph(125, 3, { seed: 1, polishIters: 1500 });
+    const b = buildBuddyGraph(125, 3, { seed: 2, polishIters: 1500 });
     expect(a.polished).toBe(true);
     expect(a.edges).not.toEqual(b.edges); // a seed bump DOES vary it
     expect(rerollBlockReason(125, { ...DEFAULT_SETTINGS, buddies: 3 })).toBeNull();

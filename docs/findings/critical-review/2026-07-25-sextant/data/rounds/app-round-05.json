@@ -1,0 +1,533 @@
+{
+  "target": "app/src (the BuddyGraph app)",
+  "round": 5,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 9,
+    "confirmed": 9,
+    "blocking": 3,
+    "deferrals": 0,
+    "plausible": 3,
+    "themes": 9
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full read of every file under app/src (model, constraints, search, neighborhood, io/*, state/*, worker/*, graph/*, panels/*, App.tsx) plus app/test/*. Reproduced with scratch harnesses under /home/user/ringweave/.review-scratch driving the real worker body (runGeneration) and the real model/import seams. Verified: determinism (identical edge arrays across repeat runs; shortestPath is min-tie-broken so Set-iteration-order-free; ring/force layouts RNG-free); export->import round-trip metrics/buddies/edges identity at n=6/12/20; adversarial imports (duplicate edges, self-loops, n=1, edgeless, star with hub degree exactly BUDDY_MAX, disconnected components, buddies:1e9, -0 indices, constraints-as-array) all refused or honestly re-measured, with quality===0 whenever aspl===null holding throughout; synchronous import cost at the cap (302 ms at n=1000/m=6000, matching the documented claim); useGenerationWorker stale-id/terminate/onerror paths; useBuddyGraph identical-graph reuse keeps metrics paired with the edges they were measured from; parseRoster/importGraph cap boundaries (MAX_NAMES break placement, MAX_NAME_CHARS >, round-trip refusal); edgeClass route-adjacency argument. npm test green (260 tests) with no assertion relating settings.buddies to metrics.degreeMax.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of app/src, with hostile inputs constructed and executed under a throwaway vitest config in /home/user/ringweave/.review-scratch/ (gitignored, outside app/test and lib/test globs).\n\nIMPORT PATH (importGraph.ts, readFileText.ts, schema.ts): traced gate ordering — every size/shape gate (people.length <= MAX_IMPORT_N, 2m <= BUDDY_MAX*n density, declaredPairs <= MAX_CONSTRAINT_PAIRS, per-name MAX_NAME_CHARS, joined <= MAX_PARSE_CHARS, per-vertex degreeMax <= BUDDY_MAX) runs BEFORE allPairsSummary/girth. Measured worst legal file (n=1000, m=6000, 120-char names) = 98 ms; path graph = 77 ms; edgeless = 17 ms. Attacks that failed to get through: edge endpoints 1e21 / 2**53 / -0 / non-integer; constraints=null; constraints.required as a string and as {length:1e9}; version as a 7.9M-char string and as a deep object (quote() bounds the INPUT, so no unbounded toast and no RangeError escaping as a non-ImportError); mismatched p.id; duplicate and self edges; settings.buddies=1e9, minSeparation=1e9, seed=1e18, polish=\"true\"; star graph with a degree-999 hub (caught by degreeExtent before the O(n^2) re-measure).\n\nCONSTRAINTS / MAIN-THREAD VALIDATE: RosterModal.ruleProblems runs validateDetailed on every keystroke. Benchmarked the core's O(n^2) prohibited-pair connectivity walk: n=1000 with 200 prohibited pairs = 3.8 ms (prohibitedCount===0 short-circuits the common case). MAX_CONSTRAINED_N=5000 > the app's 1000 ceiling, so the walk does run, but it is cheap. Not a hang.\n\nROSTER PASTE PATH (parseRoster.ts, RosterModal.tsx): capText pre-caps to MAX_PARSE_CHARS before storing. Benchmarked per-keystroke parse at the cap: all-duplicates \"ab,\" x 166k = 77 ms; one 500k-char token = 3 ms; 500k commas = 1 ms; 999 x 120-char names + duplicate flood = 8 ms (warning list bounded at ~122 KB). Laggy at the pathological extreme, bounded — noted, not filed.\n\nSPREADSHEET / CLIPBOARD SINKS (download.ts, BuddyList.tsx, Slips.tsx): toCsv quoting survives embedded double-quotes (verified output \"\\\"\\\"\\\"=1+1\\\"\"); comma, LF, CR and TAB are all blocked upstream (Cc/Cf refused by import, normalized to spaces by parseRoster), so RFC-4180 quoting holds and no embedded delimiter can start a new cell. Leading whitespace of every category (U+0020, U+00A0, U+2000, U+3000) is removed by trim() before neutralizeCell sees the cell, so \" =1+1\" cannot smuggle a formula past the leading-character check. Fullwidth U+FF1D is inert. The clipboard's buddy half is un-neutralized but cannot become the start of a cell without a tab/newline.\n\nEXPORT BOUNDARY (exportGraph.ts, model.ts): traced every Metrics field for non-finite leakage — aspl/diameter null unless Number.isFinite, girth through finiteOrNull, quality 0 on non-finite, largestComponentFraction in [0,1], seed and minSeparation integer-clamped by BOTH producers (SettingsControls and sanitizeSettings). No Infinity/NaN/-0 can reach JSON.stringify.\n\nWORKER (protocol.ts, generate.ts, useGenerationWorker.ts, useBuddyGraph.ts): n comes from names.length (<=1000), k from clamped buddies (2..12), polish downgraded to \"auto\" via the core's own autoPolishEnabled rather than a mirrored cap. No attacker-chosen number crosses postMessage unclamped. onerror/onmessageerror both map to the error transition, so a dead worker cannot leave the inert overlay up forever.\n\nSEARCH / EXPLORER / PATH (search.ts, neighborhood.ts, highlight.ts, usePathFinder.ts, useExplorerHistory.ts, PersonPanel.tsx): rankMatches short-circuits per name, so a 1 MB pasted query is bounded by name length (<=120) x 1000 names; neighborhood is O(k^2) with k capped; history capped at 50; usePathFinder guards a >= graph.n.\n\nRENDER (GraphCanvas.tsx, layout.ts): measured forceLayout (n=120 -> 176 ms, n=500 -> 219 ms, n=1000 -> 299 ms) and full GraphCanvas re-renders in jsdom (n=1000/m=6000 -> 825 ms initial, 346 ms per hover), plus BuddyList+Slips (7012 DOM nodes, ~180 ms per parent re-render in jsdom).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced and IMPLEMENTED (then reverted) the next real committed change for app/src: the CLAUDE.md known-follow-on \"Buddy rules are not re-checked on import\" (importGraph rehydrates edges without regenerating, so GraphView.report stays null even when the file declares constraints). Added `checkConstraints(g, cons, connected)` to lib/src/core/index.ts (thin export wrapping the existing private buildReport), wired it into app/src/io/importGraph.ts behind the existing `constraints.length > 0` gate using the already-exported `toConstraints` from app/src/constraints.ts, ran `npm run typecheck`/`npm run build` in lib, `npm run typecheck` in app, and the full app + lib vitest suites. One existing test (`importExport.roundtrip.test.ts` \"round-trips buddy rules instead of dropping them\") explicitly asserted `view.report === null` for a constrained import and had to be updated (and a violated-rule case added) — after that, 261/261 app tests and 246/246 lib tests pass with no other touch points. Also traced GraphView.report consumption (model.ts's constraintSummary, useBuddyGraph.ts) to confirm no other file special-cased the import path, and spot-checked the app for reimplemented graph math (neighborhood.ts, usePathFinder.ts, GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor seam) — none of these needed touching or raised new issues beyond what lib/CLAUDE.md and app/CLAUDE.md already document as deferred with the no-caller rule correctly applied. All scratch edits were reverted; working tree is clean (git status confirms no diff and no untracked files).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface review of app/src/ (BuddyGraph UI): 43 TypeScript/TSX files reviewed including model, state hooks, panels, worker, IO modules, graph rendering, and constraints handling. Reviewed: architecture, state management, naming consistency, comments for accuracy, public surfaces for misuse potential, duplication patterns, and validation gates. Lint is clean (oxlint, knip, hygiene all passing).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 5,
+      "checked": "Traced the full keyboard/AT path through app/src for the \"mouse broken, screen off\" scenario: cold load -> RosterModal -> Generate -> GraphCanvas/QualityPanel/BuddyList -> PersonSearch -> PersonPanel -> PathPanel -> export -> error recovery (refused/error/import-failure). Read every panel and hook (App.tsx, RosterModal, ConstraintsEditor, SettingsControls, PersonSearch, PersonPanel, PathPanel, BuddyList, QualityPanel, LayoutToggle, Notice, Slips, GraphCanvas, useFocusRescue, useEscape, useNotice, useExplorerHistory, usePathFinder) plus app.css's reduced-motion rule and the existing focus/overlay tests (appErrorRecovery.test.tsx, pathHighlight.test.tsx) to see what is already covered vs. assumed. Verified: inert-based modal containment, the JS rAF animation's prefers-reduced-motion check, Notice's persistent role=status pattern, LayoutToggle's aria-pressed, aria-current on BuddyList rows, the search combobox's roving aria-activedescendant, and Escape's stopPropagation contract in PersonSearch. Grepped for aria-live/role=status/autoFocus/.focus() across app/src to enumerate every live region and every focus-moving call site.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "model.ts's per-person buddy-count text is generated independently in multiple places (isOptimal/quality path vs. connectionSummary vs. the rail's degreeLabel), so the app can simultaneously call a shortfall result \"optimal\" and state two different buddy counts for the same view.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "When delivered degree (metrics.degreeMax) falls short of the requested settings.buddies (routine at small n with default minSeparation), nothing compares the two: the gauge and isOptimal() are scored only against degreeMax, so a shortfall arrangement is announced as \"already an optimal arrangement\" with no shortfall disclosed anywhere in the UI.",
+        "connectionSummary states a per-person buddy count using metrics.degreeMax alone (\"${m.degreeMax} buddies each\"), while the rail one panel away uses degreeLabel(m), a min–max range when the graph isn't regular — so the same view asserts two different per-person counts, and the prose one is true only for the maximum-degree person."
+      ],
+      "remediation": "Delete the independent degreeMax reads in isOptimal()/the optimal-message branch and in connectionSummary's `per` clause; make both call the single degreeLabel(m)/shortfall-comparison path the rail already uses, so there is exactly one function turning metrics into degree text and the contradictory/false claims it currently allows can't be produced."
+    },
+    {
+      "theme": "An aria-live/role=status container is created in the very same render as the text it first announces, instead of pre-existing in the DOM — reproduced independently in three components even though Notice.tsx documents the fix and already applies it.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "App.tsx's busy overlay (`role=\"status\" aria-live=\"polite\"`, text \"Generating…\") is only rendered while bg.status===\"running\", so the region and its first text mount in the same commit — at the same moment #app goes inert and removes every other control, leaving a screen-reader user with no signal anything happened.",
+        "PathPanel and its aria-live <p> are only rendered by App.tsx when path.active is true, and path.start() sets both `from` and `active` in the same action, so the first status text (\"Starting from X…\") is written in the same commit that mounts the region.",
+        "PersonSearch's zero-match `role=\"status\"` div only exists in the DOM when open && matches.length===0, so on the keystroke that first produces zero matches, the region and its text appear together — the same anti-pattern Notice.tsx was built to avoid."
+      ],
+      "remediation": "Remove the three conditional-mount branches (the busy div, PathPanel's whole-panel gate, PersonSearch's empty-state div) and render each region unconditionally like Notice.tsx already does, toggling only their inner text — eliminating the 'mount region + content together' code path everywhere it was reintroduced."
+    },
+    {
+      "theme": "The focus-rescue anchor fallback uses `??`, which only engages on null/undefined, so it never fires when the primary anchor is a real but currently-unfocusable (inert) node — silently stranding keyboard focus.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "useFocusRescue's anchor is `searchRef.current ?? querySelector(...)`. Opening the \"Edit people\" modal makes #app (and the still-mounted PersonSearch input searchRef points at) inert in the same commit, but searchRef.current is a non-null node, so the fallback to the roster textarea never runs; `.focus()` on an inert-subtree element is a spec no-op, so document.activeElement silently stays on <body>, undetected by the existing jsdom-based tests since jsdom doesn't implement inert's focus-blocking."
+      ],
+      "remediation": "Remove the bare `??` null-check and replace it with a focusability check (e.g. reject any candidate inside `[inert]`) before it's accepted as the anchor, tightening the boundary the fallback relies on instead of trusting non-null alone."
+    },
+    {
+      "theme": "A character-class guard meant to strip line breaks is scoped to the wrong Unicode categories, and the two independent copies of that guard (import-time reject vs. roster-parse normalize) are both wrong in the same way because neither is the other's source of truth.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "importGraph's CONTROL_CHARS_TEST and parseRoster's CONTROL_CHARS both match only /[\\p{Cc}\\p{Cf}]/u, missing U+2028/U+2029 (categories Zl/Zp) even though both are ECMAScript LineTerminators/CSS forced line breaks — so a name carrying them passes the guard whose own comment and rejection message promise to catch exactly this, and trim() only strips them at the edges of the roster round-trip check importGraph relies on."
+      ],
+      "remediation": "Delete one of the two duplicate regex definitions and have both files reference the single remaining shared character class, widened to /[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]/u — removing the second copy is what prevents the two from silently diverging again."
+    },
+    {
+      "theme": "The synchronous force-settle has a documented cost budget (FORCE_MAX_N/FORCE_MAX_EDGES/forceIters), but the RAF interpolation that immediately follows and repeatedly re-renders the same data has no size gate at all.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "GraphCanvas's per-frame `step`/setDisplay animation runs ~60 unbounded full re-renders (every node group + every edge line) over 650ms after a layout toggle, gated only by reducedMotion() (a user preference, not a bound) — the opposite of layout.ts's settle path, which is bounded on every roster size by three explicit budgets for exactly this cost reason."
+      ],
+      "remediation": "Extend the existing snap condition at GraphCanvas.tsx:601 to also fire above ANIM_MAX_N/ANIM_MAX_EDGES (exported beside FORCE_MAX_N/FORCE_MAX_EDGES), removing the unbounded animate path above threshold in favor of the snap it already performs for reduced-motion and size-change cases."
+    },
+    {
+      "theme": "largestComponentFraction(g) is computed twice on the constrained-import path because import builds its metrics summary independently of the constraints report, even though the generation path already reuses the report's field instead of recomputing.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "importGraph.ts computes largestComponentFraction(g) explicitly for GraphView.metrics and again inside buildReport (via checkConstraints) for ConstraintReport, duplicating work that app/src/worker/generate.ts's fromConstrained already avoids by reading r.report.largestComponentFraction directly."
+      ],
+      "remediation": "When constraints are present, remove the separate largestComponentFraction(g) call in importGraph.ts and read report.largestComponentFraction instead, mirroring fromConstrained — eliminating the second computation rather than adding a helper."
+    },
+    {
+      "theme": "quality()'s parameter k is an alias for the same value the rest of the file calls degreeMax, so the file carries two names for one concept.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "quality()'s parameter k is semantically the actual measured degree (degreeMax) but is named ambiguously, unlike every other reference to the same quantity in model.ts."
+      ],
+      "remediation": "Remove the separate name `k` and rename the parameter to `degreeMax`, unifying it with the name already used everywhere else in the file for the same value instead of maintaining two names for one quantity."
+    },
+    {
+      "theme": "neighborhood() silently trusts a degree bound (BUDDY_MAX) enforced only at a distant call site, with no local check.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "neighborhood() assumes all adjacency lists have length <= BUDDY_MAX but this precondition is enforced elsewhere and is not documented or checked locally, so a violation would fail silently rather than loudly."
+      ],
+      "remediation": "Tighten the boundary at neighborhood()'s entry with a direct assertion of the bound it currently just assumes, so the implicit trust in the distant enforcement point is replaced by a local check rather than left undocumented."
+    },
+    {
+      "theme": "BuddyList's Copy button relies on its own focused-button label change as the only feedback signal, duplicating a problem SettingsControls already solved elsewhere in the same codebase with a dedicated live region.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "The Copy button's text flips \"Copy\"/\"Copied\" for 1.1s with no aria-live/role=status anywhere nearby, even though SettingsControls already solves the identical problem (a focus-retaining button whose only feedback is a changed label) with a role=\"status\" live-region span and an explicit comment on why the label alone isn't enough."
+      ],
+      "remediation": "Remove BuddyList's isolated label-only feedback approach and unify it with the live-region pattern SettingsControls already established, instead of maintaining two different mechanisms for announcing the same kind of transient state change."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-target-shortfall",
+      "theme": "the buddy count the organizer asked for can be silently not delivered, and the shortfall is presented as an optimal result",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 230,
+      "summary": "When the core delivers fewer buddies per person than the requested k (routine at small n because the default minSeparation=5 forces the demotion floor), nothing in the UI says so — and because quality is scored against the DELIVERED degree, the gauge reads 100, isOptimal() is true, and a re-roll flashes \"That's already an optimal arrangement\". The app holds both numbers (settings.buddies and metrics.degreeMax) and never compares them.",
+      "failure": "Reproduced through the real worker body + viewFromResult: roster of 6 names at the DEFAULT settings (buddies=4, polish auto, seed 12345) yields degreeMin=degreeMax=3. The stepper still reads 4, the rail reads \"6 people · 3 buddies each\", QualityPanel's gauge reads 100 and its caption reads \"everyone's well-linked for 3 buddies each\", and clicking \"Different arrangement\" flashes \"That's already an optimal arrangement — a re-roll can't improve it\" (App.tsx:39, isOptimal===true). Worse at n=8,k=7 -> 3-regular, q=100, opt=true; n=12,k=8 -> 4-regular, q=100, opt=true; n=9,k=5 -> 3–4, q=93. The ask is not impossible: the same n=8,k=7 with minSeparation=2 delivers a 7-regular graph, so a settings change the app never suggests would satisfy the request. No message anywhere states that the target was not met.",
+      "remediation": "Derive the shortfall in the one display seam (model.ts) — e.g. a `targetShortfall(view)` returning non-null exactly when `metrics.degreeMax < settings.buddies` — and (a) render it in QualityPanel/the rail (\"you asked for 4 buddies each; this arrangement gives 3 — try lowering Min separation in Advanced\"), and (b) suppress the unqualified \"already an optimal arrangement\" copy in App.tsx:39 when it is non-null, wording it as optimal *for the buddy count actually delivered*. Do not change the scoring itself; scoring against degreeMax is deliberate and documented.",
+      "invariant": "For every GraphView the app renders, if metrics.degreeMax < settings.buddies then the rendered output must contain a statement of the shortfall, and no unqualified optimality claim (the \"already an optimal arrangement\" copy) may be emitted; equivalently, a pure predicate shortfall(view) !== null must hold if and only if metrics.degreeMax < settings.buddies, and every optimality-claiming string must be gated on shortfall(view) === null.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "display-vs-actual",
+      "theme": "a per-person buddy count stated in prose is taken from the maximum degree, so it is false for most people on a non-regular graph",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 206,
+      "summary": "connectionSummary names the yardstick using metrics.degreeMax alone (`${m.degreeMax} buddies each`), while the rail one panel away renders degreeLabel(m), which is a min–max range when the graph is not regular. The same view therefore states two different per-person buddy counts, and the prose one is the count only the maximum-degree person actually has.",
+      "failure": "Reproduced: n=9, k=5 at default settings gives degreeMin=3, degreeMax=4. The rail renders \"9 people · 3–4 buddies each\" while QualityPanel renders \"everyone's well-linked for 4 buddies each\" — 8 of the 9 people have 3. Same at n=5/k=3 and n=13/k=3 (\"for 3 buddies each\" with degrees 2–3), which is the ordinary odd-n·k case the feasibility panel itself warns about, so it is not an edge case.",
+      "remediation": "Have connectionSummary build its `per` clause from the same degreeLabel(m) the rail uses (e.g. \"well-linked for 3–4 buddies each\"), so one function owns the per-person buddy-count phrasing and the two panels cannot state different counts for one view.",
+      "invariant": "For every Metrics value, the buddy-count token embedded in connectionSummary(m) must be exactly degreeLabel(m) — i.e. connectionSummary(m).includes(degreeLabel(m)) whenever it names a per-person buddy count — so no rendered surface states a per-person count that differs from the one the rail shows.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "line-separator-bypasses-name-guard",
+      "theme": "untrusted names reach the render and spreadsheet sinks still carrying line-break characters, because the guard that claims to strip \"line breaks\" is keyed on the wrong Unicode categories",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 24,
+      "summary": "Both name guards — importGraph's CONTROL_CHARS_TEST (importGraph.ts:24) and parseRoster's CONTROL_CHARS (parseRoster.ts:37) — match /[\\p{Cc}\\p{Cf}]/u. U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are categories Zl and Zp, so neither guard sees them, yet both are ECMAScript LineTerminators and CSS mandatory forced line breaks. The comment on importGraph.ts:18-23 says the class was widened from a hand-written C0+DEL range to Unicode CATEGORIES precisely so nothing named 'line break' could slip through; the two characters actually named 'line separator' and 'paragraph separator' still do, while the rejection message promises to refuse 'a tab, line break, or other control character'. The same characters also survive the parseRoster round-trip check that importGraph relies on as its authority, because trim() only removes them when they are leading or trailing.",
+      "failure": "A JSON file containing {\"version\":1,\"people\":[{\"id\":0,\"name\":\"Alice =cmd|'/c calc'!A1\"},{\"id\":1,\"name\":\"Zed\"}],\"edges\":[[0,1]],...} is ACCEPTED by importGraph verbatim (reproduced: import returns names[0] === \"Alice =cmd|'/c calc'!A1\"). parseRoster(\"Alice =cmd|'/c calc'!A1\") likewise returns the string unchanged, so the round-trip guard agrees. The name then reaches both spreadsheet-bound sinks intact: toCsv emits the cell \"Alice =cmd|'/c calc'!A1\" and BuddyList.copyAll emits the clipboard line \"Alice =cmd|'/c calc'!A1: Zed\". U+0085 NEL, U+000B and U+001C in the same position are all correctly refused — only the Zl/Zp pair gets through. Downstream, CSS Text treats U+2028 as a forced break in all white-space values, so one imported name renders as two lines in the buddy list row, the person panel heading and the printed slip.",
+      "remediation": "Widen the shared character class in both authorities to include the separator categories that are line breaks: /[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]/u. Better, define the class ONCE and have both files import it — the two copies are already stated to be deliberate mirrors (refuse vs. normalize), and this defect is exactly a divergence that a single source would have made impossible to introduce in one place only. Add a case to the existing parseRoster/importGraph guard tests asserting the property below over the category set rather than over a list of characters.",
+      "invariant": "For every string s: if importGraph accepts a file containing s as a name, or parseRoster returns s in names, then /[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]/u.test(s) === false. Equivalently: the character class used by importGraph's refusal and by parseRoster's normalization must be the same expression, and that expression must match every Unicode code point for which the character is a mandatory line break or a control/format character.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-after-a-bounded-gate",
+      "theme": "a cost budget bounds the cheap half of an operation and nothing bounds the expensive half that immediately follows it",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 605,
+      "summary": "layout.ts guards the synchronous force settle with three separate budgets — FORCE_MAX_N, FORCE_MAX_EDGES, and forceIters(n), whose whole documented purpose (layout.ts:396-414) is to hold the main-thread cost to a few hundred ms at the roster ceiling. The RAF interpolation in GraphCanvas that immediately consumes that settle has no size gate of any kind: on a layout toggle at a stable size with motion allowed, `step` calls setDisplay(to.map(...)) once per frame for 650 ms, and each setDisplay re-renders every one of the n node groups (4 SVG elements each) and every one of the m <line> elements. So a 300 ms bounded settle is followed by roughly 60 unbounded full re-renders of the same data. reducedMotion() is the only escape, and it is a user preference, not a bound. The cheap-vs-expensive asymmetry is the defect: the gate was placed on the half that was already the smaller cost.",
+      "failure": "Import a file with 1000 people and 6000 edges (a 12-regular circulant — it passes the density gate at exactly 2m = BUDDY_MAX*n and the per-vertex degree gate at exactly 12), then press the ring/force layout toggle. Measured with @testing-library/react under jsdom: one full GraphCanvas render at n=1000/m=6000 costs 346 ms and produces 10 001 SVG elements; App re-renders the unmemoized BuddyList and Slips alongside it for a further ~180 ms over 7 012 more DOM nodes. The animation requests ~60 such frames inside a 650 ms window. forceLayout itself, by contrast, measured 299 ms once. jsdom overstates absolute DOM cost relative to a browser, so the per-frame wall clock in Chrome will be lower — the structural claim (per-frame work scales with n and m, with no threshold above which the animation is skipped) is traced directly in the code at GraphCanvas.tsx:601-617 and does not depend on the measurement.",
+      "remediation": "Give the animation the same kind of gate the settle already has. Add the size test to the existing snap condition at GraphCanvas.tsx:601, e.g. `if (sizeChanged || !layoutChanged || reducedMotion() || from.length !== to.length || n > ANIM_MAX_N || edges.length > ANIM_MAX_EDGES) { setDisplay(to); return; }`, with ANIM_MAX_N/ANIM_MAX_EDGES exported from layout.ts beside FORCE_MAX_N/FORCE_MAX_EDGES so the two budgets are stated together and the existing cost-budget test can assert both. Above the threshold the toggle snaps, which is exactly what it already does for a reduced-motion user and for a size change.",
+      "invariant": "For every (n, edges) GraphCanvas can be mounted with, the number of times setDisplay is called in response to a single layout toggle is 1 whenever n or edges.length exceeds the declared animation budget — i.e. no requestAnimationFrame is scheduled above the threshold. Machine-checkable: with fake timers and a spy on requestAnimationFrame, render at a size above the budget, change `layout`, and assert requestAnimationFrame was never called; below the budget assert it was.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "redundant-computation",
+      "theme": "the import re-check path computes a value the metrics path already computed, instead of sharing it",
+      "file": "app/src/io/importGraph.ts",
+      "line": 277,
+      "summary": "Implementing the constraints re-check follow-on the way the core's existing report-building function is shaped naturally leads to computing largestComponentFraction(g) twice per constrained import: once explicitly for GraphView.metrics.largestComponentFraction (importGraph.ts, final return), and again inside the core's buildReport (invoked via the new checkConstraints wrapper) because ConstraintReport carries its own largestComponentFraction field. The generation path (app/src/worker/generate.ts fromConstrained) already avoids this exact duplication by reading `r.report.largestComponentFraction` straight into GraphResult instead of recomputing it — so the pattern to avoid it already exists in the codebase, just not reachable from the import path since import computes its own summary independently of any report.",
+      "failure": "For a large, dense, constrained import near the MAX_IMPORT_N=1000 / density-cap ceiling, largestComponentFraction's O(n+m) connected-components walk runs twice on the identical graph where the generate.ts path runs it once — cheap in absolute terms (bounded by the same caps that already bound the rest of import), but it is duplicated work with no caller-visible benefit, and the two results could in principle be read as independently-sourced when they are guaranteed-identical by construction.",
+      "remediation": "When constraints are present, take metrics.largestComponentFraction from report.largestComponentFraction (mirroring generate.ts's fromConstrained) instead of calling largestComponentFraction(g) a second time; when constraints are absent there is only one call already.",
+      "invariant": "for a given import call, largestComponentFraction(g) is invoked at most once for a given Graph g",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/App.tsx",
+      "line": 327,
+      "summary": "The busy overlay (`Generating…`) is only rendered while `bg.status === \"running\"`, so its `role=\"status\" aria-live=\"polite\"` container and its text `Generating…` are both inserted into the DOM in the same commit. Notice.tsx's own doc comment identifies exactly this pattern as unreliable and keeps its region permanently mounted for that reason (`app/src/panels/Notice.tsx:9-11`), but App.tsx's busy overlay was not built the same way. At the same moment the region (dis)appears, `#app` also goes `inert`, removing every other control from the tree — so a screen-reader user who doesn't hear the freshly-mounted announcement has no signal that anything happened, and the controls they were just on have gone silent.",
+      "failure": "Generate a graph, press \"Different arrangement\" (or trigger any generation) with a screen reader running: because the `.busy` node with `role=\"status\"` is created at the same instant its text content is set, many AT/browser combinations (e.g. JAWS+Chrome) do not announce \"Generating…\" reliably — unlike a message written into an already-mounted region (Notice), which is designed to announce reliably.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text; the container's own mount and the arrival of its first text must not be the same commit.",
+      "remediation": "Render the busy region unconditionally (like Notice) and toggle only its text content between `null`/empty and \"Generating…\", instead of conditionally mounting the whole `<div className=\"busy\">...` on `bg.status === \"running\"`."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/panels/PathPanel.tsx",
+      "line": 36,
+      "summary": "PathPanel itself (and its `<p className=\"rt-body\" aria-live=\"polite\">`) is only rendered by App.tsx when `path.active` is true (`app/src/App.tsx:293-302`), and `path.start()` sets `from` to a non-null value in the same action that flips `active` to true — so the very first text the region ever holds (\"Starting from X — now pick the other person\") is written in the same commit that mounts the region. The comment above the `<p>` explains why a live region must pre-exist its content, but only within the panel; the panel's own conditional mount reproduces the problem one level up.",
+      "failure": "Select a person, press \"Find a path from here\": a screen-reader user may not hear \"Starting from X — now pick the other person\" because the region was created with that text already inside it rather than updated after it existed.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text.",
+      "remediation": "Keep a persistent path-status live region mounted whenever a graph view exists (mirroring Notice's always-mounted toast region), or mount PathPanel eagerly with an empty body and only populate `from`/`route` a tick later."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 136,
+      "summary": "The zero-match message (`Nobody matches \"…\"`) is wrapped in a `role=\"status\" aria-live=\"polite\"` div that only exists in the DOM when `open && matches.length === 0` — so on the exact keystroke that first produces zero matches (e.g. typing a name nobody has), the region and its text appear in the same commit, the same anti-pattern Notice.tsx was built to avoid.",
+      "failure": "Type a query that matches nobody on the very first character that empties the result set: the announcement of \"Nobody matches…\" is not guaranteed to be spoken because the live region did not exist a render earlier.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text.",
+      "remediation": "Render the `search-empty` status div unconditionally alongside the input (empty string when there are matches or the query is empty) instead of gating its mount on `open && matches.length === 0`."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-fallback-defeated-by-inert",
+      "theme": "the focus rescue's `??` anchor fallback never engages when the primary anchor is present-but-unfocusable, so a reopened dialog can leave keyboard focus silently stranded",
+      "file": "app/src/App.tsx",
+      "line": 88,
+      "summary": "`useFocusRescue`'s anchor is `searchRef.current ?? document.querySelector('[aria-label=\"Roster names\"]')`. Clicking \"Edit people\" while a graph is on screen sets `modalOpen = true`, which makes `#app` (and therefore the still-mounted `PersonSearch` input `searchRef` points at) `inert` in the same commit. `??` only falls through when the left side is `null`/`undefined` — but `searchRef.current` is a real, non-null DOM node, just one that is now inside an inert subtree, so the fallback to the roster textarea is never tried. Per spec, calling `.focus()` on an element inside an `inert` subtree is a no-op, so `useFocusRescue`'s `target.focus()` call silently fails, `document.activeElement` stays `<body>`, and `hadFocus.current` is left `true` waiting for a commit that (in this flow) never comes. This contradicts the hook's own documented guarantee (\"Put focus back somewhere usable whenever a render destroys the focused element\") and is invisible to the existing test suite, which explicitly notes jsdom does not implement inert's focus-blocking behaviour (`app/test/appErrorRecovery.test.tsx:183`), so a jsdom-based assertion of `document.activeElement` after this flow would pass even though real browsers fail it.",
+      "failure": "With a graph on screen, Tab to \"Edit people\" and press Enter: in a real browser, focus is dropped to `<body>` instead of being rescued into the reopened RosterModal's textarea. The user recovers only by pressing Tab once more (relying on `#app`'s inertness removing its contents from the tab order) rather than via the rescue mechanism that exists specifically to avoid making them do that.",
+      "invariant": "`useFocusRescue`'s anchor resolution must never treat a present-but-currently-unfocusable element (e.g. one inside an `inert` subtree) as a successful target; if the primary candidate cannot actually receive focus, resolution must continue to the next candidate rather than stopping on it.",
+      "remediation": "Have the anchor function check focusability (e.g. `el.closest('[inert]') === null`) before returning `searchRef.current`, or have `useFocusRescue` itself verify `document.activeElement === target` after calling `.focus()` and retry the anchor chain (not just the same anchor) on failure."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-target-shortfall",
+      "theme": "the buddy count the organizer asked for can be silently not delivered, and the shortfall is presented as an optimal result",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 230,
+      "summary": "When the core delivers fewer buddies per person than the requested k (routine at small n because the default minSeparation=5 forces the demotion floor), nothing in the UI says so — and because quality is scored against the DELIVERED degree, the gauge reads 100, isOptimal() is true, and a re-roll flashes \"That's already an optimal arrangement\". The app holds both numbers (settings.buddies and metrics.degreeMax) and never compares them.",
+      "failure": "Reproduced through the real worker body + viewFromResult: roster of 6 names at the DEFAULT settings (buddies=4, polish auto, seed 12345) yields degreeMin=degreeMax=3. The stepper still reads 4, the rail reads \"6 people · 3 buddies each\", QualityPanel's gauge reads 100 and its caption reads \"everyone's well-linked for 3 buddies each\", and clicking \"Different arrangement\" flashes \"That's already an optimal arrangement — a re-roll can't improve it\" (App.tsx:39, isOptimal===true). Worse at n=8,k=7 -> 3-regular, q=100, opt=true; n=12,k=8 -> 4-regular, q=100, opt=true; n=9,k=5 -> 3–4, q=93. The ask is not impossible: the same n=8,k=7 with minSeparation=2 delivers a 7-regular graph, so a settings change the app never suggests would satisfy the request. No message anywhere states that the target was not met.",
+      "remediation": "Derive the shortfall in the one display seam (model.ts) — e.g. a `targetShortfall(view)` returning non-null exactly when `metrics.degreeMax < settings.buddies` — and (a) render it in QualityPanel/the rail (\"you asked for 4 buddies each; this arrangement gives 3 — try lowering Min separation in Advanced\"), and (b) suppress the unqualified \"already an optimal arrangement\" copy in App.tsx:39 when it is non-null, wording it as optimal *for the buddy count actually delivered*. Do not change the scoring itself; scoring against degreeMax is deliberate and documented.",
+      "invariant": "For every GraphView the app renders, if metrics.degreeMax < settings.buddies then the rendered output must contain a statement of the shortfall, and no unqualified optimality claim (the \"already an optimal arrangement\" copy) may be emitted; equivalently, a pure predicate shortfall(view) !== null must hold if and only if metrics.degreeMax < settings.buddies, and every optimality-claiming string must be gated on shortfall(view) === null.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "display-vs-actual",
+      "theme": "a per-person buddy count stated in prose is taken from the maximum degree, so it is false for most people on a non-regular graph",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 206,
+      "summary": "connectionSummary names the yardstick using metrics.degreeMax alone (`${m.degreeMax} buddies each`), while the rail one panel away renders degreeLabel(m), which is a min–max range when the graph is not regular. The same view therefore states two different per-person buddy counts, and the prose one is the count only the maximum-degree person actually has.",
+      "failure": "Reproduced: n=9, k=5 at default settings gives degreeMin=3, degreeMax=4. The rail renders \"9 people · 3–4 buddies each\" while QualityPanel renders \"everyone's well-linked for 4 buddies each\" — 8 of the 9 people have 3. Same at n=5/k=3 and n=13/k=3 (\"for 3 buddies each\" with degrees 2–3), which is the ordinary odd-n·k case the feasibility panel itself warns about, so it is not an edge case.",
+      "remediation": "Have connectionSummary build its `per` clause from the same degreeLabel(m) the rail uses (e.g. \"well-linked for 3–4 buddies each\"), so one function owns the per-person buddy-count phrasing and the two panels cannot state different counts for one view.",
+      "invariant": "For every Metrics value, the buddy-count token embedded in connectionSummary(m) must be exactly degreeLabel(m) — i.e. connectionSummary(m).includes(degreeLabel(m)) whenever it names a per-person buddy count — so no rendered surface states a per-person count that differs from the one the rail shows.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "line-separator-bypasses-name-guard",
+      "theme": "untrusted names reach the render and spreadsheet sinks still carrying line-break characters, because the guard that claims to strip \"line breaks\" is keyed on the wrong Unicode categories",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 24,
+      "summary": "Both name guards — importGraph's CONTROL_CHARS_TEST (importGraph.ts:24) and parseRoster's CONTROL_CHARS (parseRoster.ts:37) — match /[\\p{Cc}\\p{Cf}]/u. U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are categories Zl and Zp, so neither guard sees them, yet both are ECMAScript LineTerminators and CSS mandatory forced line breaks. The comment on importGraph.ts:18-23 says the class was widened from a hand-written C0+DEL range to Unicode CATEGORIES precisely so nothing named 'line break' could slip through; the two characters actually named 'line separator' and 'paragraph separator' still do, while the rejection message promises to refuse 'a tab, line break, or other control character'. The same characters also survive the parseRoster round-trip check that importGraph relies on as its authority, because trim() only removes them when they are leading or trailing.",
+      "failure": "A JSON file containing {\"version\":1,\"people\":[{\"id\":0,\"name\":\"Alice =cmd|'/c calc'!A1\"},{\"id\":1,\"name\":\"Zed\"}],\"edges\":[[0,1]],...} is ACCEPTED by importGraph verbatim (reproduced: import returns names[0] === \"Alice =cmd|'/c calc'!A1\"). parseRoster(\"Alice =cmd|'/c calc'!A1\") likewise returns the string unchanged, so the round-trip guard agrees. The name then reaches both spreadsheet-bound sinks intact: toCsv emits the cell \"Alice =cmd|'/c calc'!A1\" and BuddyList.copyAll emits the clipboard line \"Alice =cmd|'/c calc'!A1: Zed\". U+0085 NEL, U+000B and U+001C in the same position are all correctly refused — only the Zl/Zp pair gets through. Downstream, CSS Text treats U+2028 as a forced break in all white-space values, so one imported name renders as two lines in the buddy list row, the person panel heading and the printed slip.",
+      "remediation": "Widen the shared character class in both authorities to include the separator categories that are line breaks: /[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]/u. Better, define the class ONCE and have both files import it — the two copies are already stated to be deliberate mirrors (refuse vs. normalize), and this defect is exactly a divergence that a single source would have made impossible to introduce in one place only. Add a case to the existing parseRoster/importGraph guard tests asserting the property below over the category set rather than over a list of characters.",
+      "invariant": "For every string s: if importGraph accepts a file containing s as a name, or parseRoster returns s in names, then /[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]/u.test(s) === false. Equivalently: the character class used by importGraph's refusal and by parseRoster's normalization must be the same expression, and that expression must match every Unicode code point for which the character is a mandatory line break or a control/format character.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-after-a-bounded-gate",
+      "theme": "a cost budget bounds the cheap half of an operation and nothing bounds the expensive half that immediately follows it",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 605,
+      "summary": "layout.ts guards the synchronous force settle with three separate budgets — FORCE_MAX_N, FORCE_MAX_EDGES, and forceIters(n), whose whole documented purpose (layout.ts:396-414) is to hold the main-thread cost to a few hundred ms at the roster ceiling. The RAF interpolation in GraphCanvas that immediately consumes that settle has no size gate of any kind: on a layout toggle at a stable size with motion allowed, `step` calls setDisplay(to.map(...)) once per frame for 650 ms, and each setDisplay re-renders every one of the n node groups (4 SVG elements each) and every one of the m <line> elements. So a 300 ms bounded settle is followed by roughly 60 unbounded full re-renders of the same data. reducedMotion() is the only escape, and it is a user preference, not a bound. The cheap-vs-expensive asymmetry is the defect: the gate was placed on the half that was already the smaller cost.",
+      "failure": "Import a file with 1000 people and 6000 edges (a 12-regular circulant — it passes the density gate at exactly 2m = BUDDY_MAX*n and the per-vertex degree gate at exactly 12), then press the ring/force layout toggle. Measured with @testing-library/react under jsdom: one full GraphCanvas render at n=1000/m=6000 costs 346 ms and produces 10 001 SVG elements; App re-renders the unmemoized BuddyList and Slips alongside it for a further ~180 ms over 7 012 more DOM nodes. The animation requests ~60 such frames inside a 650 ms window. forceLayout itself, by contrast, measured 299 ms once. jsdom overstates absolute DOM cost relative to a browser, so the per-frame wall clock in Chrome will be lower — the structural claim (per-frame work scales with n and m, with no threshold above which the animation is skipped) is traced directly in the code at GraphCanvas.tsx:601-617 and does not depend on the measurement.",
+      "remediation": "Give the animation the same kind of gate the settle already has. Add the size test to the existing snap condition at GraphCanvas.tsx:601, e.g. `if (sizeChanged || !layoutChanged || reducedMotion() || from.length !== to.length || n > ANIM_MAX_N || edges.length > ANIM_MAX_EDGES) { setDisplay(to); return; }`, with ANIM_MAX_N/ANIM_MAX_EDGES exported from layout.ts beside FORCE_MAX_N/FORCE_MAX_EDGES so the two budgets are stated together and the existing cost-budget test can assert both. Above the threshold the toggle snaps, which is exactly what it already does for a reduced-motion user and for a size change.",
+      "invariant": "For every (n, edges) GraphCanvas can be mounted with, the number of times setDisplay is called in response to a single layout toggle is 1 whenever n or edges.length exceeds the declared animation budget — i.e. no requestAnimationFrame is scheduled above the threshold. Machine-checkable: with fake timers and a spy on requestAnimationFrame, render at a size above the budget, change `layout`, and assert requestAnimationFrame was never called; below the budget assert it was.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "redundant-computation",
+      "theme": "the import re-check path computes a value the metrics path already computed, instead of sharing it",
+      "file": "app/src/io/importGraph.ts",
+      "line": 277,
+      "summary": "Implementing the constraints re-check follow-on the way the core's existing report-building function is shaped naturally leads to computing largestComponentFraction(g) twice per constrained import: once explicitly for GraphView.metrics.largestComponentFraction (importGraph.ts, final return), and again inside the core's buildReport (invoked via the new checkConstraints wrapper) because ConstraintReport carries its own largestComponentFraction field. The generation path (app/src/worker/generate.ts fromConstrained) already avoids this exact duplication by reading `r.report.largestComponentFraction` straight into GraphResult instead of recomputing it — so the pattern to avoid it already exists in the codebase, just not reachable from the import path since import computes its own summary independently of any report.",
+      "failure": "For a large, dense, constrained import near the MAX_IMPORT_N=1000 / density-cap ceiling, largestComponentFraction's O(n+m) connected-components walk runs twice on the identical graph where the generate.ts path runs it once — cheap in absolute terms (bounded by the same caps that already bound the rest of import), but it is duplicated work with no caller-visible benefit, and the two results could in principle be read as independently-sourced when they are guaranteed-identical by construction.",
+      "remediation": "When constraints are present, take metrics.largestComponentFraction from report.largestComponentFraction (mirroring generate.ts's fromConstrained) instead of calling largestComponentFraction(g) a second time; when constraints are absent there is only one call already.",
+      "invariant": "for a given import call, largestComponentFraction(g) is invoked at most once for a given Graph g",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/App.tsx",
+      "line": 327,
+      "summary": "The busy overlay (`Generating…`) is only rendered while `bg.status === \"running\"`, so its `role=\"status\" aria-live=\"polite\"` container and its text `Generating…` are both inserted into the DOM in the same commit. Notice.tsx's own doc comment identifies exactly this pattern as unreliable and keeps its region permanently mounted for that reason (`app/src/panels/Notice.tsx:9-11`), but App.tsx's busy overlay was not built the same way. At the same moment the region (dis)appears, `#app` also goes `inert`, removing every other control from the tree — so a screen-reader user who doesn't hear the freshly-mounted announcement has no signal that anything happened, and the controls they were just on have gone silent.",
+      "failure": "Generate a graph, press \"Different arrangement\" (or trigger any generation) with a screen reader running: because the `.busy` node with `role=\"status\"` is created at the same instant its text content is set, many AT/browser combinations (e.g. JAWS+Chrome) do not announce \"Generating…\" reliably — unlike a message written into an already-mounted region (Notice), which is designed to announce reliably.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text; the container's own mount and the arrival of its first text must not be the same commit.",
+      "remediation": "Render the busy region unconditionally (like Notice) and toggle only its text content between `null`/empty and \"Generating…\", instead of conditionally mounting the whole `<div className=\"busy\">...` on `bg.status === \"running\"`."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/panels/PathPanel.tsx",
+      "line": 36,
+      "summary": "PathPanel itself (and its `<p className=\"rt-body\" aria-live=\"polite\">`) is only rendered by App.tsx when `path.active` is true (`app/src/App.tsx:293-302`), and `path.start()` sets `from` to a non-null value in the same action that flips `active` to true — so the very first text the region ever holds (\"Starting from X — now pick the other person\") is written in the same commit that mounts the region. The comment above the `<p>` explains why a live region must pre-exist its content, but only within the panel; the panel's own conditional mount reproduces the problem one level up.",
+      "failure": "Select a person, press \"Find a path from here\": a screen-reader user may not hear \"Starting from X — now pick the other person\" because the region was created with that text already inside it rather than updated after it existed.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text.",
+      "remediation": "Keep a persistent path-status live region mounted whenever a graph view exists (mirroring Notice's always-mounted toast region), or mount PathPanel eagerly with an empty body and only populate `from`/`route` a tick later."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "live-region-mount-timing",
+      "theme": "an aria-live/role=status container is created in the very same render as the text it first announces, instead of already existing in the DOM before the content changes",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 136,
+      "summary": "The zero-match message (`Nobody matches \"…\"`) is wrapped in a `role=\"status\" aria-live=\"polite\"` div that only exists in the DOM when `open && matches.length === 0` — so on the exact keystroke that first produces zero matches (e.g. typing a name nobody has), the region and its text appear in the same commit, the same anti-pattern Notice.tsx was built to avoid.",
+      "failure": "Type a query that matches nobody on the very first character that empties the result set: the announcement of \"Nobody matches…\" is not guaranteed to be spoken because the live region did not exist a render earlier.",
+      "invariant": "Every element carrying `aria-live`/`role=\"status\"` must already exist in a DOM commit prior to the render that first supplies its non-empty announced text.",
+      "remediation": "Render the `search-empty` status div unconditionally alongside the input (empty string when there are matches or the query is empty) instead of gating its mount on `open && matches.length === 0`."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-fallback-defeated-by-inert",
+      "theme": "the focus rescue's `??` anchor fallback never engages when the primary anchor is present-but-unfocusable, so a reopened dialog can leave keyboard focus silently stranded",
+      "file": "app/src/App.tsx",
+      "line": 88,
+      "summary": "`useFocusRescue`'s anchor is `searchRef.current ?? document.querySelector('[aria-label=\"Roster names\"]')`. Clicking \"Edit people\" while a graph is on screen sets `modalOpen = true`, which makes `#app` (and therefore the still-mounted `PersonSearch` input `searchRef` points at) `inert` in the same commit. `??` only falls through when the left side is `null`/`undefined` — but `searchRef.current` is a real, non-null DOM node, just one that is now inside an inert subtree, so the fallback to the roster textarea is never tried. Per spec, calling `.focus()` on an element inside an `inert` subtree is a no-op, so `useFocusRescue`'s `target.focus()` call silently fails, `document.activeElement` stays `<body>`, and `hadFocus.current` is left `true` waiting for a commit that (in this flow) never comes. This contradicts the hook's own documented guarantee (\"Put focus back somewhere usable whenever a render destroys the focused element\") and is invisible to the existing test suite, which explicitly notes jsdom does not implement inert's focus-blocking behaviour (`app/test/appErrorRecovery.test.tsx:183`), so a jsdom-based assertion of `document.activeElement` after this flow would pass even though real browsers fail it.",
+      "failure": "With a graph on screen, Tab to \"Edit people\" and press Enter: in a real browser, focus is dropped to `<body>` instead of being rescued into the reopened RosterModal's textarea. The user recovers only by pressing Tab once more (relying on `#app`'s inertness removing its contents from the tab order) rather than via the rescue mechanism that exists specifically to avoid making them do that.",
+      "invariant": "`useFocusRescue`'s anchor resolution must never treat a present-but-currently-unfocusable element (e.g. one inside an `inert` subtree) as a successful target; if the primary candidate cannot actually receive focus, resolution must continue to the next candidate rather than stopping on it.",
+      "remediation": "Have the anchor function check focusability (e.g. `el.closest('[inert]') === null`) before returning `searchRef.current`, or have `useFocusRescue` itself verify `document.activeElement === target` after calling `.focus()` and retry the anchor chain (not just the same anchor) on failure."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "misleading-parameter-name",
+      "theme": "Function parameter name describes how (degree in general) rather than what (actual vs. target)",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 119,
+      "summary": "quality() function parameter k is semantically actual degree but named ambiguously",
+      "failure": "A maintainer unfamiliar with the Moore bound context might call quality(aspl, n, settings.buddies) intending to score against target k, when it requires actual degreeMax. The single call site is correct (line 236), but the definition is unclear for new callers.",
+      "remediation": "Rename parameter from `k` to `actualDegree` or `degreeMax`, or add to the docstring: 'k: the actual measured degree of this graph (degreeMax), used to compute Moore bound score'.",
+      "invariant": "quality(aspl, n, d) is called only when d is the measured maximum degree of the graph, never a target k or average degree. Equivalently: d == raw.degreeMax when called from assembleMetrics, and never d == settings.buddies or d == n.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "implicit-precondition-not-documented",
+      "theme": "Function relies on implicit invariant (bound on degree) enforced elsewhere, not documented as contract",
+      "file": "/home/user/ringweave/app/src/neighborhood.ts",
+      "line": 24,
+      "summary": "neighborhood() assumes all degrees <= BUDDY_MAX but this is not documented as a precondition",
+      "failure": "The function comment on line 10 mentions the bound as justification for algorithm choice (O(k²) instead of BFS), not as a contract. If a future code path creates graphs from an untrusted source without the importGraph checks, this assumption could be violated and neighborhood() would silently compute wrong results. The O(k²) loop assumes degree[focus] and degree[buddies] are each at most 12; violating this makes the span up to n² without comment.",
+      "remediation": "Add explicit precondition to neighborhood() docstring: 'Requires: all adjacency lists have length <= BUDDY_MAX (12). Used only after graph creation ensures this bound.' Alternatively, add an assertion in the function body to make violations fail loudly rather than silently.",
+      "invariant": "For any adjacency list passed to neighborhood(), all vertices have degree <= BUDDY_MAX. This is currently enforced by importGraph.ts line 262-265 (rejects degreeMax > BUDDY_MAX) and generation (k capped to BUDDY_MAX), but not formalized as a documented requirement.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "state-change-not-announced",
+      "theme": "a focused button's visible label is used as the only signal of a transient state change, with no accompanying live region, unlike the identical pattern elsewhere in the same codebase",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 43,
+      "summary": "The Copy button's own text flips between \"Copy\" and \"Copied\" for 1.1s after activation, with no `aria-live`/`role=\"status\"` anywhere near it. `SettingsControls.tsx` solves the structurally identical problem (a button that keeps focus after a press, whose only visible feedback is a value that changed) by wrapping the changed value in a separate `role=\"status\" aria-live=\"polite\"` span, with a comment explaining that relying on the focused control's own label change is not enough (\"the buttons keep focus, so without it a screen-reader user pressing '+' hears nothing at all\"). BuddyList's Copy button does not follow that established fix.",
+      "failure": "Activate Copy from the keyboard: whether \"Copied\" is announced depends on the AT/browser combination re-announcing a focused button's changed accessible name, which `SettingsControls`'s own comment treats as not reliable enough to depend on for the same UI shape.",
+      "invariant": "Every control whose only feedback is a change to its own accessible name while it keeps focus must expose that change via an adjacent `aria-live`/`role=\"status\"` element (as `SettingsControls`'s stepper already does), not rely on re-announcement of the focused element's label alone.",
+      "remediation": "Add a small `role=\"status\" aria-live=\"polite\"` sibling (visually hidden if desired) next to the Copy button that announces \"Copied\" on success, mirroring `SettingsControls`'s stepper pattern."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 5,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 5,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 5,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 5,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 5,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 582565,
+    "agents": 6,
+    "toolCalls": 205
+  }
+}

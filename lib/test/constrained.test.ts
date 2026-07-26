@@ -481,5 +481,13 @@ describe("constrainedGreedy precondition (always-on)", () => {
     expect(() => constrainedGreedy(5, 3, selfPair)).toThrow(/themselves/);
     const badN = new Constraints(Number.NaN);
     expect(() => constrainedGreedy(Number.NaN, 2, badN)).toThrow(/valid count/);
+    // A roster/constraints size disagreement, which the primitive alone did not refuse.
+    // Endpoints were checked against `n` while the required-degree vector was sized by
+    // `cons.n`, so with cons.n < n the vector had holes at exactly the vertices under test:
+    // `undefined > k` is false, the required-degree refusal never fired, and the graph came
+    // back exceeding k with the dev-mode postcondition compiled out in production.
+    const small = new Constraints(3);
+    small.require(0, 1).require(0, 2);
+    expect(() => constrainedGreedy(8, 2, small)).toThrow(/does not match the constraints/);
   });
 });

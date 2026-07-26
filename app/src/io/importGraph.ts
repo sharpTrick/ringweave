@@ -4,7 +4,7 @@ import {
   BUDDY_MAX, BUDDY_MIN, DEFAULT_SEED, MAX_ROSTER_N, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN,
   type GraphView, type Settings,
 } from "../model";
-import { MAX_NAME_CHARS, MAX_PARSE_CHARS, parseRoster } from "./parseRoster";
+import { MAX_NAME_CHARS, MAX_PARSE_CHARS, NAME_HOSTILE_CHARS, parseRoster } from "./parseRoster";
 import {
   MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
   type ConstraintPair,
@@ -15,13 +15,10 @@ import type { BuddyGraphFile } from "./schema";
 export class ImportError extends Error {}
 
 /** C0 control chars + DEL — illegal inside a name (non-global so .test() is stateless). */
-// Unicode CATEGORIES, not a hand-written range. The previous class covered C0 and DEL and
-// missed the entire C1 block (U+0080-U+009F, including NEL U+0085, which some tools treat as
-// a line break) and every format character — the soft hyphen, the zero-width spaces, and the
-// bidi overrides U+202A-U+202E, which can visually reverse a name in a buddy list or a
-// printed slip. None of them are removed by trim() either, so they survived into the CSV and
-// the clipboard exactly like the characters this guard was written to stop.
-const CONTROL_CHARS_TEST = /[\p{Cc}\p{Cf}]/u;
+// The shared class, from parseRoster — see NAME_HOSTILE_CHARS for why it is defined once.
+// A fresh RegExp because the shared one carries the `g` flag, and `test` on a global regex
+// advances lastIndex between calls, so every other name in a roster would be skipped.
+const CONTROL_CHARS_TEST = new RegExp(NAME_HOSTILE_CHARS.source, "u");
 
 /**
  * Import bounds. The core's pure metric functions (`allPairsSummary`/`girth`) are UNCAPPED

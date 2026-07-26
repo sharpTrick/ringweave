@@ -2,6 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { forceLayout, ringLayout, type Pt } from "./layout";
+
+/**
+ * Above this roster size a layout change SNAPS rather than tweening.
+ *
+ * Not a rendering-quality choice: the tween re-renders every node and every edge on each of
+ * ~40 frames, so its cost is the whole-scene render times the frame count, which is far more
+ * than the one-off settle the layout budgets already bound. 400 is comfortably above any
+ * roster where the motion reads as motion rather than as a smear, and comfortably below the
+ * 1000-person ceiling where it costs the most and helps the least.
+ */
+const ANIM_MAX_N = 400;
 import { buildHighlight, edgeClass, nodeClass } from "./highlight";
 
 export type LayoutMode = "ring" | "force";
@@ -144,7 +155,19 @@ export default function GraphCanvas({
     prevSize.current = sizeKey;
     prevLayout.current = layout;
     const from = displayRef.current;
-    if (sizeChanged || !layoutChanged || reducedMotion() || from.length !== to.length) {
+    // `n > ANIM_MAX_N` snaps instead of animating. The force SETTLE is gated three ways
+    // (FORCE_MAX_N, FORCE_MAX_EDGES, and the tick scaling whose documented purpose is to hold
+    // the main-thread cost to a few hundred ms at the ceiling) — and then this interpolation,
+    // which consumes it, had no size gate at all: a layout toggle at the roster ceiling
+    // re-renders every node and edge on every frame for 650 ms. Gating the settle and not the
+    // animation that follows it bounds the cheaper half.
+    if (
+      sizeChanged ||
+      !layoutChanged ||
+      reducedMotion() ||
+      from.length !== to.length ||
+      to.length > ANIM_MAX_N
+    ) {
       setDisplay(to);
       return;
     }

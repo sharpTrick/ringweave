@@ -132,11 +132,12 @@ export default function PersonSearch({ names, onSelect, inputRef }: Props) {
           that is not an `option` is not part of the list for a screen reader, so the
           zero-match state was visible and silent — the one state where silence is
           indistinguishable from a broken box. */}
-      {open && matches.length === 0 && (
-        <div className="search-empty" role="status" aria-live="polite">
-          Nobody matches “{query.trim()}”
-        </div>
-      )}
+      {/* Mounted unconditionally; only the TEXT is conditional. Appearing together with its
+          first message is the pattern that makes a live region silent, which is the one state
+          where silence is indistinguishable from a broken box. */}
+      <div className="search-empty" role="status" aria-live="polite">
+        {open && matches.length === 0 ? `Nobody matches “${query.trim()}”` : ""}
+      </div>
     </div>
   );
 }

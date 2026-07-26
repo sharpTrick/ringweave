@@ -409,6 +409,19 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(boundedPolishIterations(20, 40, 20_000, 20_000)).toBe(20_000);
   });
 
+  it("keeps the work model non-zero, so the guard built on it is a guard", () => {
+    // The correction that made greedyWork shape-correct introduced `edgesAdded = n·k/2 − n`,
+    // which is exactly 0 for every k <= 2 at every n. `repairDegrees`'s budget check is
+    // `greedyWork(n,k) > MAX_GREEDY_WORK`, so it became `0 > 1.5e10` — no check at all, for a
+    // roster of any size up to MAX_ROSTER. A fix for one unbounded path opened another.
+    expect(greedyWork(1_000_000, 2)).toBeGreaterThan(MAX_GREEDY_WORK);
+    expect(greedyWork(1_000_000, 1)).toBeGreaterThan(MAX_GREEDY_WORK);
+    expect(() => repairDegrees(ring(200_000), 2)).toThrow(/too large to repair/);
+    // And the floor must not have moved the shipping accept-set.
+    expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
+    expect(greedyWork(1000, 2)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
+  });
+
   it("bounds the exported repair pass, which had neither guard", () => {
     // repairDegrees is public API and was the one generator with no k validation and no work
     // budget: repairDegrees(ring(400), 1e9) ran to completion (5.6 s, ~n^3.4) while

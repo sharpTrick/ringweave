@@ -29,11 +29,12 @@ export default function PathPanel({ view, from, route, unreachable, onSelect, on
         <button className="chipbtn" onClick={onClear}>Clear</button>
       </div>
 
-      {/* ONE live region, mounted with the panel and filled conditionally. Three
-          separate `aria-live` paragraphs that only appear WITH their text are never
-          announced: a live region has to be in the accessibility tree before its
-          content changes for the change to be a change. */}
-      <p className="rt-body" aria-live="polite">
+      {/* NOT a live region. This whole panel is mounted by the same action that writes its
+          first sentence, so an `aria-live` here was never announced — the region and its
+          content arrived in one commit. The spoken version is `pathStatusText`, rendered into
+          a region App keeps mounted for the life of the view; this is the visible, clickable
+          rendering of the same state. */}
+      <p className="rt-body">
         {from !== null && (
           <>
             Starting from <strong>{name(from)}</strong> — now pick the other person.

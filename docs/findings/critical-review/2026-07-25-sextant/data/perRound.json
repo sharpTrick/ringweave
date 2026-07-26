@@ -112,6 +112,80 @@
     "toolCalls": 251
   },
   {
+    "round": 4,
+    "target": "app/src (the BuddyGraph app)",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 4,
+    "deferrals": 0,
+    "plausible": 2,
+    "themes": 9,
+    "totalFindings": 11,
+    "files": [
+      "app/src/model.ts",
+      "app/src/state/usePathFinder.ts",
+      "app/src/state/useGenerationWorker.ts",
+      "app/src/io/importGraph.ts",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/panels/Notice.tsx",
+      "app/src/panels/PersonSearch.tsx",
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/io/download.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "degree-relative-score-shown-as-absolute-claim",
+      "displayed-route-contradicts-stated-start",
+      "unhandled-worker-failure-channel",
+      "incomplete-character-class-guard",
+      "style-inconsistency",
+      "comment-clarity",
+      "unrescued-focus-on-unmount",
+      "missing-live-value-announcement",
+      "naming-scope",
+      "unrescued-focus-on-inert"
+    ],
+    "subagentTokens": 613813,
+    "agents": 6,
+    "toolCalls": 239
+  },
+  {
+    "round": 5,
+    "target": "app/src (the BuddyGraph app)",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 3,
+    "deferrals": 0,
+    "plausible": 3,
+    "themes": 9,
+    "totalFindings": 12,
+    "files": [
+      "app/src/model.ts",
+      "app/src/io/importGraph.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/App.tsx",
+      "app/src/panels/PathPanel.tsx",
+      "app/src/panels/PersonSearch.tsx",
+      "app/src/neighborhood.ts",
+      "app/src/panels/BuddyList.tsx"
+    ],
+    "classes": [
+      "silent-target-shortfall",
+      "display-vs-actual",
+      "line-separator-bypasses-name-guard",
+      "unbounded-work-after-a-bounded-gate",
+      "redundant-computation",
+      "live-region-mount-timing",
+      "focus-rescue-fallback-defeated-by-inert",
+      "misleading-parameter-name",
+      "implicit-precondition-not-documented",
+      "state-change-not-announced"
+    ],
+    "subagentTokens": 582565,
+    "agents": 6,
+    "toolCalls": 205
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -325,5 +399,62 @@
     "subagentTokens": 461606,
     "agents": 6,
     "toolCalls": 122
+  },
+  {
+    "round": 8,
+    "target": "lib/src (the ringweave core)",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 0,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/greedy.ts",
+      "lib/src/core/budgets.ts",
+      "lib/src/core/metrics.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/index.ts, lib/src/core/polish.ts"
+    ],
+    "classes": [
+      "unbounded-work-in-exported-generator",
+      "work-budget-not-an-upper-bound",
+      "unguarded-index-on-exported-entry-point",
+      "o-n-squared-materialization-before-any-gate",
+      "missing-abstraction",
+      "type-impl-mismatch"
+    ],
+    "subagentTokens": 501772,
+    "agents": 5,
+    "toolCalls": 178
+  },
+  {
+    "round": 9,
+    "target": "lib/src (the ringweave core)",
+    "converged": false,
+    "confirmed": 5,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 6,
+    "files": [
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/polish.ts",
+      "lib/src/core/constraints.ts",
+      "lib/CLAUDE.md"
+    ],
+    "classes": [
+      "precondition-reads-wrong-roster-size",
+      "work-budget-evaluates-to-zero",
+      "work-outside-the-bounded-loop",
+      "unvalidated-n-before-quadratic-materialization",
+      "incomplete-ocp-sync-list"
+    ],
+    "subagentTokens": 490611,
+    "agents": 5,
+    "toolCalls": 159
   }
 ]

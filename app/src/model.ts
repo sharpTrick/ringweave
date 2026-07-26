@@ -203,7 +203,11 @@ export function connectionSummary(m: Metrics): string {
   // rosters with different buddy counts then sit next to different hop counts with captions
   // that do not explain why. Saying what the score is relative to costs one clause and makes
   // the sentence true as written.
-  const per = `${m.degreeMax} ${m.degreeMax === 1 ? "buddy" : "buddies"} each`;
+  // Built from `degreeLabel`, the same function the rail uses one panel away. Naming the
+  // yardstick with `degreeMax` alone meant the two panels stated different per-person buddy
+  // counts for one graph whenever it was not regular — and the prose one was the count only
+  // the best-connected person actually had.
+  const per = `${degreeLabel(m)} ${m.degreeMax === 1 && m.regular ? "buddy" : "buddies"} each`;
   if (qualityPercent(m) < WELL_LINKED_PCT) return `everyone's connected, but loosely linked for ${per}`;
   return `everyone's well-linked for ${per}`;
 }
@@ -272,6 +276,47 @@ export function rerollBlockReason(
     return "Turn on Polish (Advanced) to see a different arrangement.";
   }
   return null; // reroll may vary — a post-generation identical-edges check handles the plateau
+}
+
+/**
+ * How far short of the requested buddy count the delivered graph fell, or null when it met it.
+ *
+ * The app holds both numbers and never compared them. Quality is scored against the DELIVERED
+ * degree — right, since a 3-regular graph can be exactly optimal for 3 buddies — but the
+ * consequence is that asking for 4 and receiving 3 shows a gauge of 100, `isOptimal` true, and
+ * a re-roll that answers "That's already an optimal arrangement". Every one of those statements
+ * is true about the graph that was built and none of them tells the user they did not get what
+ * they asked for. It is routine at small n, where the default minimum separation forces the
+ * demotion floor.
+ */
+export function targetShortfall(view: GraphView): { asked: number; got: number } | null {
+  const got = view.metrics.degreeMax;
+  const asked = view.settings.buddies;
+  return got < asked ? { asked, got } : null;
+}
+
+/**
+ * The path finder's announcement, as plain text.
+ *
+ * Exists so the SPOKEN version can live in a region that is always mounted while the visible
+ * panel stays conditional. A live region has to be in the accessibility tree before its
+ * content changes for the change to count as a change, and `PathPanel` — region and all — is
+ * mounted by the same action that writes its first sentence, so nothing was ever announced.
+ * One function so the two renderings cannot drift.
+ */
+export function pathStatusText(
+  view: GraphView,
+  from: number | null,
+  route: number[] | null,
+  unreachable: boolean,
+): string {
+  if (from !== null) return `Starting from ${view.names[from]} — now pick the other person.`;
+  if (unreachable) return "No chain — they're in separate groups.";
+  if (route !== null) {
+    const steps = route.length - 1;
+    return `${route.map((i) => view.names[i]).join(" → ")} — ${steps} step${steps === 1 ? "" : "s"}`;
+  }
+  return "";
 }
 
 /** Person i's buddies as display names — the raw list that `buddyLabel` joins. Module-local:

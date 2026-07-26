@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
 import { generateResult } from "./helpers";
-import { connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
+import {
+  connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS,
+  targetShortfall, type Metrics, type GraphView,
+} from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `P${i}`);
@@ -84,5 +87,41 @@ describe("connectionSummary caption never contradicts the gauge", () => {
       expect(isOptimal(m)).toBe(false); // ...but it is NOT claimed optimal
     }
     expect(isOptimal(metrics({ quality: 0.5 }))).toBe(false);
+  });
+});
+
+describe("the delivered graph vs the graph that was asked for", () => {
+  // Quality is scored against the DELIVERED degree, which is right — a 3-regular graph can be
+  // exactly optimal for 3 buddies. The consequence nobody had stated is that asking for 4 and
+  // getting 3 shows a gauge of 100, isOptimal true, and a re-roll answering "already optimal".
+  // All true of the graph that was built; none of them the answer to the question asked.
+  const viewWith = (asked: number, got: number) =>
+    ({
+      names: ["a", "b", "c"],
+      edges: [] as [number, number][],
+      buddies: [] as number[][],
+      settings: { ...DEFAULT_SETTINGS, buddies: asked },
+      constraints: [],
+      report: null,
+      metrics: {
+        aspl: 1, diameter: 1, girth: 3, quality: 1, connected: true,
+        largestComponentFraction: 1, regular: true, degreeMin: got, degreeMax: got,
+      },
+    }) as unknown as GraphView;
+
+  it("reports the shortfall when the roster cannot give what was asked", () => {
+    expect(targetShortfall(viewWith(4, 3))).toEqual({ asked: 4, got: 3 });
+  });
+
+  it("stays silent when the target was met or beaten", () => {
+    expect(targetShortfall(viewWith(4, 4))).toBeNull();
+    expect(targetShortfall(viewWith(3, 4))).toBeNull();
+  });
+
+  it("can be optimal AND short of target at the same time", () => {
+    // The exact combination that produced the misleading copy: both are true together.
+    const v = viewWith(4, 3);
+    expect(isOptimal(v.metrics)).toBe(true);
+    expect(targetShortfall(v)).not.toBeNull();
   });
 });

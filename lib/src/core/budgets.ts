@@ -94,7 +94,16 @@ export const MAX_GREEDY_WORK = 15_000_000_000;
  */
 export function greedyWork(n: number, k: number): number {
   const edgesAdded = Math.max(0, (n * Math.min(k, Math.max(0, n - 1))) / 2 - n);
-  return 3 * n * n * edgesAdded;
+  // `Math.max(edgesAdded, 1)` — the O(n²) baseline is unavoidable even when NO edges are
+  // added, and without this floor the estimator returned exactly 0 for every k <= 2 at every
+  // n (at k=2, n·k/2 − n = 0). That turned `repairDegrees`'s new budget check into no check
+  // at all: `0 > MAX_GREEDY_WORK` is false for a roster of any size up to MAX_ROSTER. The
+  // floor was missing from the correction that introduced `edgesAdded`, so the fix for one
+  // unbounded path opened another.
+  //
+  // It cannot move ringGreedy's accept-set: for k >= 3 and n >= 2, edgesAdded is already >= 1,
+  // and ringGreedy refuses k < 2 outright before reaching any budget.
+  return 3 * n * n * Math.max(edgesAdded, 1);
 }
 
 // Work budget for the polish pass, expressed in the unit polish actually costs:
