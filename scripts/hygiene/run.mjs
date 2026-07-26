@@ -82,11 +82,25 @@ const HAYSTACK_EXTRA = [join(ROOT, "mock")].filter((d) => {
 const allCode = [...codeFiles, ...HAYSTACK_EXTRA.flatMap(walk).filter((f) => /\.(js|html|css)$/.test(f))]
   .map((f) => read(f).replace(COMMENT, " "))
   .join("\n");
+// Language and platform globals are real identifiers that are correctly never DECLARED in
+// this repo, so "does the source contain it" is the wrong question for them. Without this the
+// check fires on a comment saying a NaN weight poisons a comparison — which is exactly the
+// kind of comment it should be encouraging. Kept to genuine globals: anything a repo symbol
+// could plausibly shadow stays checkable.
+const PLATFORM_GLOBALS = new Set([
+  "NaN", "Infinity", "undefined", "null", "globalThis",
+  "Math", "JSON", "Number", "String", "Boolean", "Object", "Array", "Set", "Map",
+  "Promise", "Symbol", "BigInt", "Error", "TypeError", "RangeError", "RegExp", "Date",
+  "Int32Array", "Uint8Array", "Float64Array", "ArrayBuffer",
+  "Worker", "MessageEvent", "Blob", "File", "FileReader", "URL", "TextEncoder",
+]);
+
 for (const file of codeFiles) {
   for (const comment of read(file).match(COMMENT) ?? []) {
     for (const [, token] of comment.matchAll(BACKTICKED)) {
       const name = token.replace(/\(\)$/, "").trim();
       if (!LOOKS_LIKE_SYMBOL.test(name)) continue;
+      if (PLATFORM_GLOBALS.has(name)) continue;
       if (new RegExp(`\\b${name}\\b`).test(allCode)) continue;
       report("stale-comment-ref", file, `comment references \`${name}\`, which no longer exists`);
     }

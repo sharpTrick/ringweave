@@ -8,6 +8,12 @@ export const UNREACHABLE = -1;
 
 /** Distance vector from s; unreachable = UNREACHABLE (-1). */
 export function bfsDistances(g: Graph, s: number): Int32Array {
+  // `checkVertex` exists in this module precisely because the index-taking entry points are
+  // fed caller (ultimately user) selections — and this one, which is exported from the
+  // package index and is the primitive the others are built on, was the only one skipping
+  // it. A bad index produced `TypeError: g.adj[u] is not iterable` instead of the module's
+  // own message. O(1), against a function that already allocates an Int32Array(n).
+  checkVertex(g, s, "source");
   const dist = new Int32Array(g.n).fill(UNREACHABLE);
   dist[s] = 0;
   const q: number[] = [s];

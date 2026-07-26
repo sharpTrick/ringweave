@@ -70,11 +70,31 @@ export function constrainedWork(n: number, k: number): number {
 // edge for the cache update; the constrained one pays O(n) per edge for a BFS), so
 // a single constant would either refuse working configurations here or admit
 // hanging ones there.
-export const MAX_GREEDY_WORK = 10_000_000_000;
+// RECALIBRATED with the corrected estimator above; the accept-set is what changed, not just
+// the number. It is set to the tightest value that still admits (1000, 12) — the app's own
+// advertised ceiling, which ships — and that configuration now sits exactly at the cap:
+//   (1000, 4)  3.0e9  -> admitted    (measured 6.9 s)
+//   (1000, 12) 1.5e10 -> admitted exactly, the calibration point
+//   (1000, 20) 2.7e10 -> refused     (was admitted; measured 137 s)
+//   (800, 39)  2.8e10 -> refused     (was admitted; measured 221 s)
+// The two newly-refused shapes are exactly the ones that broke the documented promise.
+export const MAX_GREEDY_WORK = 15_000_000_000;
 
-/** Estimated ringGreedy cost, ∝ vertices² × edges-added. Monotone in n and k. */
+/**
+ * Estimated ringGreedy cost. Monotone in n and k.
+ *
+ * SHAPE-CORRECTED. The first version charged `n²` per edge in a k-regular graph, which is
+ * wrong twice: the ring seed already supplies n of those edges for free, and the per-edge
+ * work is a cache update plus a `findPair` scan rather than a cache update alone. Measured
+ * against an instrumented operation counter, the old model's error grew with k — ratios of
+ * 1.06 at (1000,4) but 2.19 at (1000,20) and 2.34 at (800,39) — so it was not an upper
+ * bound at all, and `buildBuddyGraph(800, 39)` ran for 221 s under a constant documented as
+ * "~60 s worst case". Charging the edges ACTUALLY added, at 3 units of scan per edge, holds
+ * the ratio between 0.71 and 0.82 across the same 5x spread of shapes.
+ */
 export function greedyWork(n: number, k: number): number {
-  return n * n * ((n * Math.min(k, Math.max(0, n - 1))) / 2);
+  const edgesAdded = Math.max(0, (n * Math.min(k, Math.max(0, n - 1))) / 2 - n);
+  return 3 * n * n * edgesAdded;
 }
 
 // Work budget for the polish pass, expressed in the unit polish actually costs:

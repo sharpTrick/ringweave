@@ -201,7 +201,23 @@ function lexLess(a: number[], b: number[]): boolean {
  * degree gaps. Deterministic; mirrors Python `_repair_degrees` including its
  * stable ordering and first-max selection.
  */
+/**
+ * NOT a private helper — this is exported public API, and it was the one generator with
+ * neither guard. A caller-supplied `k` of 1e9 built toward a near-complete graph one BFS
+ * scan at a time (544 ms at n=200, 5.6 s at n=400, hours at sizes `MAX_ROSTER` admits),
+ * while `ringGreedy` refuses the identical (n, k) outright. `NaN`/`Infinity` were accepted
+ * silently too, making `degree(v) < k` false everywhere — a silent no-op, the same failure
+ * mode already closed for `mind` here and `priorWeight` in the constrained polish.
+ */
 export function repairDegrees(g: Graph, k: number, minDist = 3): void {
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`buddy count ${k} must be a non-negative integer`);
+  }
+  if (greedyWork(g.n, k) > MAX_GREEDY_WORK) {
+    throw new Error(
+      `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
+    );
+  }
   let changed = true;
   while (changed) {
     changed = false;

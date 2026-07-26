@@ -30,6 +30,8 @@ import {
   largestComponentFraction,
 } from "../src/core/metrics.js";
 import { polish } from "../src/core/polish.js";
+import { repairDegrees } from "../src/core/greedy.js";
+import { bfsDistances } from "../src/core/metrics.js";
 import { ring } from "../src/core/graph.js";
 import { mooreLowerBounds } from "../src/core/bounds.js";
 import {
@@ -405,6 +407,48 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     }
     // And a small roster is untouched — the fix must not quietly shrink normal budgets.
     expect(boundedPolishIterations(20, 40, 20_000, 20_000)).toBe(20_000);
+  });
+
+  it("bounds the exported repair pass, which had neither guard", () => {
+    // repairDegrees is public API and was the one generator with no k validation and no work
+    // budget: repairDegrees(ring(400), 1e9) ran to completion (5.6 s, ~n^3.4) while
+    // ringGreedy(400, 1e9) refuses the identical pair. NaN was accepted silently too, making
+    // `degree(v) < k` false everywhere — a no-op reported as success.
+    expect(() => repairDegrees(ring(400), 1e9)).toThrow(/too large to repair/);
+    expect(() => repairDegrees(ring(20), NaN)).toThrow(/must be a non-negative integer/);
+    expect(() => repairDegrees(ring(20), Infinity)).toThrow(/must be a non-negative integer/);
+    expect(() => repairDegrees(ring(20), 4)).not.toThrow();
+  });
+
+  it("keeps the greedy work model an UPPER bound as k grows", () => {
+    // The old model charged n² per edge of a k-regular graph, ignoring that the ring seed
+    // supplies n edges free and that findPair scans per edge. Its error grew with k, so it
+    // stopped being an upper bound exactly where cost matters: (800,39) was ADMITTED and ran
+    // 221 s under a constant documented as ~60 s worst case.
+    //
+    // Asserted as the accept-set, which is the part users feel — and pinned in both
+    // directions so a future recalibration cannot quietly drop the shipping ceiling.
+    expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK); // ships, must stay
+    expect(greedyWork(1000, 4)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
+    expect(greedyWork(1000, 20)).toBeGreaterThan(MAX_GREEDY_WORK); // measured 137 s
+    expect(greedyWork(800, 39)).toBeGreaterThan(MAX_GREEDY_WORK); // measured 221 s
+    // Monotone in both arguments, or the gate could be stepped around by asking for more.
+    for (const n of [100, 500, 1000]) {
+      for (let k = 2; k < 12; k++) {
+        expect(greedyWork(n, k + 1)).toBeGreaterThanOrEqual(greedyWork(n, k));
+        expect(greedyWork(n + 1, k)).toBeGreaterThanOrEqual(greedyWork(n, k));
+      }
+    }
+  });
+
+  it("names a bad vertex on the primitive every other query is built on", () => {
+    // bfsDistances is exported from the package index and was the only index-taking export
+    // skipping checkVertex, so a user-chosen index produced
+    // `TypeError: g.adj[u] is not iterable` instead of this module's own message.
+    for (const bad of [-1, 10, 2.5, NaN, 1e9]) {
+      expect(() => bfsDistances(ring(10), bad)).toThrow(/source .* must be an integer/);
+    }
+    expect(() => bfsDistances(ring(10), 0)).not.toThrow();
   });
 
   it("refuses a NaN separation target instead of silently building a different graph", () => {
