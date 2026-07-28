@@ -356,7 +356,15 @@ export function buildConstrainedBuddyGraph(
     // that field's contract says must be null. Resolving once means the optimizer and the
     // report cannot disagree about what was actually optimized.
     const requested = options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0);
-    priorWeight = active.priorHard || !Number.isFinite(requested) ? 0 : requested;
+    // The SAME predicate `polishConstrained` enforces, so this wrapper can never hand its callee
+    // a value the callee throws on. Only finiteness was normalized here, so a NEGATIVE weight
+    // passed straight through and `polishConstrained`'s new sign check threw out of the one entry
+    // point whose documented contract is that it REFUSES rather than throws — and only at the
+    // roster sizes where auto-polish happens to run, so the contract broke as a function of n.
+    // Normalising to 0 rather than refusing matches how every other bad option value is treated
+    // here (a non-finite polishIters, a NaN minSeparation): the option is ignored, not fatal.
+    priorWeight =
+      active.priorHard || !(Number.isFinite(requested) && requested >= 0) ? 0 : requested;
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
     g = polishConstrained(g, active, {
@@ -414,13 +422,7 @@ function summarize(g: Graph): {
 
 
 
-/*
- * The iteration clamp that used to live here is GONE, not moved twice.
- * `boundedPolishIterations` (budgets.ts) now runs inside `polish` and
- * `polishConstrained` — the only place it can actually bind, since both are
- * exported public API and a clamp in this wrapper left a direct caller
- * unbounded.
- */
+
 
 // Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
 // step function — any weight >= ~0.5 saturates it (98% kept at n=30, 86% at n=60, 64% at
@@ -451,6 +453,11 @@ const DEFAULT_PRIOR_WEIGHT = 2;
  * roster (n, k). Letting a small `polishIters` flip the gate on would tie a stable
  * contract to a tuning knob.
  */
+// NOTE for anyone tempted to clamp iterations here: don't. `boundedPolishIterations` lives
+// inside `polish` / `polishConstrained` because both are exported public API, so a clamp in this
+// wrapper would not apply to a direct caller — which is exactly how `polish(ring(20), { maxIters:
+// Infinity })` used to never return. This comment sits next to the gate it is about; it spent a
+// round floating between two unrelated functions, describing code that is not there.
 function resolveWantPolish(
   option: boolean | "auto" | undefined,
   n: number,

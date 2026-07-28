@@ -47,6 +47,8 @@ import {
   polishWork,
   checkPolishSize,
   boundedPolishIterations,
+  MAX_REPAIR_WORK,
+  repairWork,
 } from "../src/core/budgets.js";
 
 function graphOf(n: number, edges: [number, number][]): Graph {
@@ -416,10 +418,25 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // roster of any size up to MAX_ROSTER. A fix for one unbounded path opened another.
     expect(greedyWork(1_000_000, 2)).toBeGreaterThan(MAX_GREEDY_WORK);
     expect(greedyWork(1_000_000, 1)).toBeGreaterThan(MAX_GREEDY_WORK);
-    expect(() => repairDegrees(ring(200_000), 2)).toThrow(/too large to repair/);
     // And the floor must not have moved the shipping accept-set.
     expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
     expect(greedyWork(1000, 2)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
+  });
+
+  it("bounds repair by ITS cost, refusing the slow shapes and admitting the fast ones", () => {
+    // Three attempts, and the first two failed in opposite directions — which is the point of
+    // asserting the accept-set from BOTH sides. `greedyWork` is built from edges ADDED; repair's
+    // cost is driven by the degree DEFICIT it closes, so expressing one in the other's units was
+    // wrong however it was scaled. Measured: n=3000/k=4 is 0.25 s, n=20000/k=2 is 10.7 s, and
+    // n=70000/k=2 runs past two minutes.
+    const deficitOf = (n: number, k: number) => n * k; // edgeless: every vertex is k short
+    expect(repairWork(70_000, 2, deficitOf(70_000, 2))).toBeGreaterThan(MAX_REPAIR_WORK);
+    expect(repairWork(3000, 4, deficitOf(3000, 4))).toBeLessThanOrEqual(MAX_REPAIR_WORK);
+    expect(repairWork(20_000, 2, deficitOf(20_000, 2))).toBeLessThanOrEqual(MAX_REPAIR_WORK);
+    expect(() => repairDegrees(new Graph(70_000), 2)).toThrow(/too large to repair/);
+    // A graph with NO deficit costs one scan however large it is — the previous model refused
+    // this, which is the same defect as admitting a hang, pointing the other way.
+    expect(() => repairDegrees(ring(200_000), 2)).not.toThrow();
   });
 
   it("bounds the exported repair pass, which had neither guard", () => {

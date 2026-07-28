@@ -8,7 +8,9 @@
  * shortest-path identity is classical (see CONCEPT_LINEAGE).
  */
 import { Graph, ring } from "./graph.js";
-import { DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, greedyWork } from "./budgets.js";
+import {
+  DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, MAX_REPAIR_WORK, greedyWork, repairWork,
+} from "./budgets.js";
 import { bfsDistances } from "./metrics.js";
 
 // Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
@@ -197,27 +199,15 @@ function lexLess(a: number[], b: number[]): boolean {
 }
 
 /**
- * Greedily connect lowest-degree vertices at least `minDist` apart to close
- * degree gaps. Deterministic; mirrors Python `_repair_degrees` including its
- * stable ordering and first-max selection.
- */
-/**
- * NOT a private helper — this is exported public API, and it was the one generator with
- * neither guard. A caller-supplied `k` of 1e9 built toward a near-complete graph one BFS
- * scan at a time (544 ms at n=200, 5.6 s at n=400, hours at sizes `MAX_ROSTER` admits),
- * while `ringGreedy` refuses the identical (n, k) outright. `NaN`/`Infinity` were accepted
- * silently too, making `degree(v) < k` false everywhere — a silent no-op, the same failure
- * mode already closed for `mind` here and `priorWeight` in the constrained polish.
- */
-/**
- * How much more a `repairDegrees` unit costs than a `ringGreedy` unit.
+ * Greedily connect lowest-degree vertices at least `minDist` apart to close degree gaps.
+ * Deterministic; mirrors Python `_repair_degrees` including its stable ordering and
+ * first-max selection.
  *
- * Both are charged by `greedyWork`, but they do different work per unit: ringGreedy updates a
- * distance cache, repair runs a full `bfsDistances` per vertex. Measured at ~4x. Kept here
- * rather than folded into the estimator, because the estimator has two callers and bending it
- * to fit one is how it stopped being an upper bound for the other.
+ * EXPORTED public API, and it was the one generator with neither an argument guard nor a work
+ * budget: `repairDegrees(ring(400), 1e9)` ran to completion while `ringGreedy` refuses the
+ * identical (n, k), and `NaN`/`Infinity` were accepted silently, making `degree(v) < k` false
+ * everywhere — a no-op reported as success.
  */
-const REPAIR_SWEEP_FACTOR = 4;
 
 export function repairDegrees(g: Graph, k: number, minDist = 3): void {
   if (!Number.isInteger(k) || k < 0) {
@@ -229,11 +219,24 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
     // than ignoring an option.
     throw new Error(`minimum separation ${minDist} must be a non-negative integer`);
   }
-  // Charged as repair's OWN cost, not ringGreedy's. `greedyWork`'s floor prices one baseline
-  // sweep in cache-update units, but repair's sweep is n `bfsDistances` calls, roughly 4x more
-  // expensive per unit — so the shared budget admitted a 114-second synchronous call. Repair
-  // pays its own multiplier instead of the estimator being bent to fit two callers.
-  if (REPAIR_SWEEP_FACTOR * greedyWork(g.n, k) > MAX_GREEDY_WORK) {
+  // Priced on what repair ACTUALLY spends, computed in O(n) before the loop. The previous two
+  // attempts both reused `greedyWork`, which is built from EDGES ADDED — a quantity unrelated to
+  // this function's cost. Repair's real work is (passes) x (under-degree vertices scanned) x one
+  // full `bfsDistances` sweep each, and a pass ends as soon as one vertex succeeds, so a roster
+  // that adds few edges can still scan many vertices many times. Scaling a wrong model by 4 made
+  // it wrong by a different factor; these two quantities bound the real thing:
+  //   underCount — vertices below k, i.e. the most any single pass can scan
+  //   addable    — total degree deficit / 2, i.e. the most passes that can make progress
+  const degrees = g.degrees();
+  let deficit = 0;
+  for (let v = 0; v < g.n; v++) if (degrees[v] < k) deficit += k - degrees[v];
+  // Repair's OWN budget, in repair's own units — see MAX_REPAIR_WORK. Two earlier attempts
+  // expressed this in ringGreedy's units (reusing `greedyWork`, then scaling it by 4) and both
+  // failed, because `greedyWork` is built from edges ADDED while repair's cost is driven by the
+  // degree DEFICIT. The intermediate version over-charged so badly it refused an edgeless n=1200
+  // repair costing ~35 ms — refusing working configurations is the other half of the failure this
+  // module's header warns about, and the half nobody notices until they hit it.
+  if (repairWork(g.n, k, deficit) > MAX_REPAIR_WORK) {
     throw new Error(
       `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
     );

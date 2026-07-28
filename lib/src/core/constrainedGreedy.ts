@@ -461,6 +461,20 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
   // returned a graph exceeding k, in production, with the dev-mode postcondition compiled
   // out. `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce the rule; this
   // primitive was the one public entry point that did not.
+  // The required/prohibited OVERLAP, checked here rather than only by the dev-mode
+  // postcondition. `legalEdge` refuses prohibited pairs, but required edges are laid down
+  // BEFORE it runs, so a pair that is both goes straight into the graph — and the only thing
+  // that caught it was `assertHardConstraints`, which is compiled out when NODE_ENV is
+  // "production". The library's headline guarantee ("prohibited edges never are") was therefore
+  // enforced only in development. `validate` refuses this input; the primitive now throws for
+  // the same reason, which is the split the module header already documents.
+  for (const [a, b] of cons.requiredPairs()) {
+    if (cons.isProhibited(a, b)) {
+      throw new Error(
+        `pair ${a}-${b} is both required and prohibited — call validate() first`,
+      );
+    }
+  }
   if (n !== cons.n) {
     throw new Error(
       `roster size ${n} does not match the constraints (built for ${cons.n}) — call validate() first`,

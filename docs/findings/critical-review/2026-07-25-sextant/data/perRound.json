@@ -224,6 +224,64 @@
     "toolCalls": 268
   },
   {
+    "round": 7,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6,
+    "totalFindings": 6,
+    "files": [
+      "app/src/panels/QualityPanel.tsx",
+      "app/src/App.tsx",
+      "app/src/model.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/panels/ConstraintsEditor.tsx"
+    ],
+    "classes": [
+      "wrong-displayed-number",
+      "state-committed-before-success",
+      "unbounded-untrusted-text-sink",
+      "drifting-terminology",
+      "tab-order-visual-order-mismatch",
+      "missing-live-region"
+    ],
+    "subagentTokens": 31288,
+    "agents": 6,
+    "toolCalls": 1
+  },
+  {
+    "round": 8,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6,
+    "totalFindings": 6,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/io/parseRoster.ts",
+      "app/src/io/importGraph.ts",
+      "docs/PROJECT_PLAN.md",
+      "app/src/graph/GraphCanvas.tsx"
+    ],
+    "classes": [
+      "stale-settings-displayed",
+      "wrong-displayed-count",
+      "untrusted-shape-guard-fails-open",
+      "false-premise-seam",
+      "naming-inconsistency",
+      "focus-trap-leak"
+    ],
+    "subagentTokens": 622575,
+    "agents": 6,
+    "toolCalls": 192
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -526,5 +584,33 @@
     "subagentTokens": 549959,
     "agents": 5,
     "toolCalls": 194
+  },
+  {
+    "round": 11,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 6,
+    "totalFindings": 7,
+    "files": [
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/index.ts",
+      "lib/src/core/greedy.ts"
+    ],
+    "classes": [
+      "hard-constraint-guarantee-compiled-out",
+      "refuse-contract-violated-by-option-value",
+      "work-budget-does-not-bound-the-work",
+      "refusing-entry-point-throws",
+      "orphaned-comment",
+      "orphaned-docstring",
+      "accepted-but-ignored-option"
+    ],
+    "subagentTokens": 444077,
+    "agents": 5,
+    "toolCalls": 143
   }
 ]

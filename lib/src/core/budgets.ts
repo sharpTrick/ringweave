@@ -81,6 +81,31 @@ export function constrainedWork(n: number, k: number): number {
 export const MAX_GREEDY_WORK = 15_000_000_000;
 
 /**
+ * Work budget for `repairDegrees`, which is NOT ringGreedy's.
+ *
+ * Repair's unit is one `bfsDistances` sweep per pass; ringGreedy's is a distance-cache update.
+ * Two attempts tried to express repair in ringGreedy's units — once by reusing `greedyWork`
+ * directly, once by scaling it by a constant — and both failed, because the quantities are
+ * unrelated: `greedyWork` is built from EDGES ADDED, and repair's cost is driven by the DEGREE
+ * DEFICIT it closes. Same reasoning the module header gives for keeping the greedy and
+ * constrained budgets separate, one level down.
+ *
+ * Calibrated against measurement on this machine (~1.1e8 units/s):
+ *   edgeless n=3000,  k=4  ->  9.0e7   ->   0.25 s   admitted
+ *   edgeless n=20000, k=2  ->  1.2e9   ->  10.7 s    admitted
+ *   edgeless n=70000, k=2  ->  1.5e10  ->  >120 s    REFUSED
+ * 6.6e9 is ~60 s worst case, the same ceiling MAX_GREEDY_WORK documents for its own path.
+ * `ringGreedy`'s internal repair call is unaffected: it runs after completion, when the deficit
+ * is nearly closed, so its work sits orders of magnitude below this.
+ */
+export const MAX_REPAIR_WORK = 6_600_000_000;
+
+/** Estimated `repairDegrees` cost: passes to close the deficit x one sweep each. */
+export function repairWork(n: number, k: number, deficit: number): number {
+  return Math.max(1, Math.floor(deficit / 2)) * (n + n * Math.max(0, k));
+}
+
+/**
  * Estimated ringGreedy cost. Monotone in n and k.
  *
  * SHAPE-CORRECTED. The first version charged `n²` per edge in a k-regular graph, which is
