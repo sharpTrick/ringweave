@@ -1,0 +1,26 @@
+{
+  "observation": "Three session-limit halts across the run; two different recovery outcomes",
+  "halts": [
+    {
+      "when": "lib round 2",
+      "effect": "three lenses died mid-round",
+      "recovery": "none available — the round was recorded WITH its dead lenses, and round-log.mjs still warns about it on every run",
+      "cost": "one contaminated round in the dataset, permanently flagged"
+    },
+    {
+      "when": "lib round 10 / app round 6, first attempt",
+      "effect": "every lens died; zero agents completed",
+      "recovery": "re-run from scratch",
+      "cost": "one full round of tokens, no data lost (there was none to lose)"
+    },
+    {
+      "when": "lib round 11 / app round 7, first attempt",
+      "effect": "partial — lib kept 2 of 4 lens results, app kept 5 of 6",
+      "recovery": "resumeFromRunId replayed the completed agents from cache; only the killed lenses re-ran",
+      "cost": "roughly one-third of a round instead of two full rounds"
+    }
+  ],
+  "what_made_the_difference": "Nothing about the halts changed — the third one was recovered because the runner persists per-agent results to a journal keyed by (prompt, opts), so an identical re-invocation replays them. The first halt predates that being used. The lesson is not 'halts are survivable' but 'a long-running agent loop needs its unit of work to be resumable at the AGENT level, not the round level'; a round is too coarse a retry unit when a round is six agents and forty minutes.",
+  "guard_that_held": "In every halt the runner reported errored: true per lens and converged: false. No halt was ever able to produce a false convergence, because an errored lens blocks the rule regardless of how few findings the surviving lenses returned. That guard was written before any halt occurred and is the reason the halts cost tokens rather than validity.",
+  "recordedAtRound": 16
+}
