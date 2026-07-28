@@ -95,8 +95,10 @@ export function parseRoster(raw: string): ParsedRoster {
     // authorities differ deliberately, and the round-trip check in importGraph is what
     // keeps them from disagreeing about any name that gets through.
     const token = raw.length > MAX_NAME_CHARS ? raw.slice(0, MAX_NAME_CHARS) : raw;
-    if (token !== raw) longNames++;
-    const key = token.toLowerCase();
+    // Keyed on the PRE-truncation name. Keying on the truncated one merges two genuinely
+    // different people whose first 120 characters happen to match — silently dropping one and
+    // reporting it as a duplicate.
+    const key = raw.toLowerCase();
     if (keptByKey.has(key)) {
       // A duplicate isn't lost either. Count it toward the de-dupe warning only while we're
       // still keeping names; a duplicate seen AFTER the cap is simply ignored (nothing dropped).
@@ -114,6 +116,10 @@ export function parseRoster(raw: string): ParsedRoster {
     }
     keptByKey.set(key, token);
     names.push(token);
+    // Counted only for a name actually KEPT, and only once per person. Counting inside the scan
+    // charged every duplicate copy and even names the MAX_NAMES cap then dropped, so the warning
+    // could claim to have shortened more names than the roster contains.
+    if (token !== raw) longNames++;
   }
 
   if (capped) {

@@ -310,3 +310,27 @@ describe("focus survives a panel closing itself", () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 });
+
+describe("the dialog contains focus, including the toast", () => {
+  it("puts the toast inside an inert subtree while the dialog is open", () => {
+    // The toast lives OUTSIDE #app — it has to, since #app is the thing that gets inert — and it
+    // contains a real button, so it was the one focusable element Tab could reach from inside an
+    // aria-modal dialog. The containment leaked through the one element it could not cover.
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "prohibited-splits-group", person: 0 }];
+      rerender(<App />);
+    });
+    const toast = document.querySelector(".toast");
+    expect(toast).not.toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy(); // the refusal reopened it
+    // Every focusable thing outside the dialog is inside an inert subtree.
+    const inertAncestor = (el: Element | null) => !!el?.closest("[inert]");
+    expect(inertAncestor(toast)).toBe(true);
+    expect(inertAncestor(document.querySelector("#app"))).toBe(true);
+    // ...and the dialog itself is NOT, which is the half that must not regress.
+    expect(inertAncestor(screen.getByRole("dialog"))).toBe(false);
+  });
+});

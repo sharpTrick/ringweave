@@ -1,0 +1,384 @@
+{
+  "target": "app/src",
+  "round": 8,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 6,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface read of app/src (App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, all of io/, state/, worker/, graph/, panels/) plus app/test. Reproduced findings with probes under gitignored app/.review-scratch/ (outside the pinned `test/**` vitest include); `npm test` in app/ stays 266/266 green. Verified and could NOT break: shortestPath is order-free (min-index forward walk over a bfsDistances(t) vector), so routes are stable across export/import despite differing edge-insertion order; no Math.random/Date.now anywhere in app/src; d3-force 3.0.0 seeds a per-simulation LCG so forceLayout is deterministic run-to-run; no Set/Map iteration order reaches an output (neighborhood sets sorted at every sink, highlight uses membership only, core buddies are sorted on both generate and import paths, dedupePairs/readConstraints use sets for membership only); assembleMetrics gates aspl/diameter/quality on connected AND Number.isFinite(aspl), and I probed every corner that could read \"optimal\" for a split graph (n=1 import -> allPairsSummary returns Infinity -> quality 0; edgeless n>=2 -> connected:false; max-degree-1 -> mooreLowerBounds k=1/n>2 guard returns asplLb 0 which quality() maps to 0 only via the finite check, verified reachability is nil); edgeClass's \"node membership implies consecutive on a shortest path\" argument is sound (dist(path[i])=i and adjacency implies |i-j|<=1); importGraph's gates are ordered so each precedes the work it bounds (n cap, density, per-vertex degree, per-name length, control chars, pair count, id/position, parseRoster round-trip, then the O(n^2) metric sweep); qualityPercent/isOptimal/connectionSummary/degreeLabel all derive from one rounded value; useGenerationWorker id/stale-drop and worker swap logic; useBuddyGraph identical-graph adoption of settings/constraints/report.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Whole of app/src, traced and executed. (1) importGraph gate ORDER verified line by line: version -> people-count (MAX_IMPORT_N=1000) -> edges-is-array -> density 2m<=BUDDY_MAX*n -> declared-pair count (MAX_CONSTRAINT_PAIRS=200) -> per-name length (120) -> control chars -> joined length + parseRoster round-trip -> Graph build -> per-vertex degreeMax -> readConstraints -> allPairsSummary/girth/largestComponentFraction. Every cap precedes the work it bounds; readConstraints and the O(n^2) metric sweep are both behind the pair-count and node-count caps. (2) MEASURED worst admissible imports at n=1000: path 78ms, cycle 72ms, 6-circulant at the 6000-edge density ceiling 72ms, full realistic file JSON.parse 2ms + import 103ms, 3MB junk-key object parse 136ms then refused in 0ms. No hang. (3) Attacker-chosen numbers executed through sanitizeSettings: buddies 1e9->12, minSeparation 1e9->12, seed 2**60->2147483647, -0->BUDDY_MIN, null->SEPARATION_DEFAULT, polish coerced to true|false|\"auto\"; edge indices 1e21 and 2**53 are Number.isInteger-true and correctly refused by the >=n bound; 201 declared pairs refused before any per-pair work; star import (hub degree 999) refused by the per-vertex degree gate so neighborhood.ts's \"degree capped at 12\" claim holds; 1001 people refused; name of 8M chars refused without interpolating the name. (4) Main-thread superlinear steps measured: forceLayout 217ms at n=1000/m=6000 (forceIters 40, all coords finite), 152ms at the n=120 knee; RosterModal's per-keystroke validateDetailed (which reaches the core's O(n^2) prohibited-pair connectivity walk) ~4ms at n=1000 with 200 prohibited pairs, both scattered and hub-shaped; parseRoster at the 500k-char cap 2.5ms/19ms/30ms across single-giant-token, 250k-names and all-duplicates shapes; rankMatches is O(sum of name lengths) because the search cursor advances monotonically, so no per-keystroke blowup and no ReDoS. (5) Spreadsheet/clipboard sinks exercised with real hostile names (=HYPERLINK(...), +1+1, -2+3, @SUM(1), and a name containing an embedded double-quote and semicolon): toCsv neutralizes PER CELL then RFC-4180 quotes, so an embedded delimiter never opens a new cell even under a semicolon-locale parser, and a leading quote is doubled and stays text; the clipboard builder emits `name: buddies` lines joined by \\n and names cannot contain tab/CR/LF (NAME_HOSTILE_CHARS covers \\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}, refused by import, normalized by parseRoster), so every pasted line is a single cell whose leading character is the neutralized name. I could not construct a name reaching a formula position. (6) __proto__ in the file does not pollute (JSON.parse defines an own property; verified ({}).polluted === undefined). No Infinity/NaN reaches JSON.stringify at the export boundary (assembleMetrics gates on Number.isFinite). quote() bounds its INPUT so an 8M-char version yields an 81-char toast, and useNotice re-clamps at the sink. (7) Also read for hostile reachability: useBuddyGraph, useGenerationWorker (worker terminate/swap on supersede and cancel), usePathFinder, useGraph, useExplorerHistory, useFocusRescue, useEscape, highlight.ts, GraphCanvas, PersonSearch, PersonPanel, PathPanel, Slips, ConstraintsEditor, SettingsControls, QualityPanel, Notice, feasibility, clamp, download, readFileText, main.tsx, sample.ts. Harness left in /home/user/ringweave/.review-scratch/ (gitignored, outside every vitest include glob).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read the whole app/src tree (App.tsx, GraphCanvas.tsx, layout.ts, model.ts, all state/ hooks, io/, panels/, worker/) plus the core files it depends on (lib/src/core/graph.ts, greedy.ts, index.ts, polish.ts, metrics.ts, constraints.ts) and both CLAUDE.md files plus PROJECT_PLAN.md. Confirmed against the file listing that F7 (ConstraintsEditor), F8 (PersonSearch/PersonPanel/useExplorerHistory), and F10 (PathPanel/usePathFinder) are already built and wired into App.tsx, contradicting app/CLAUDE.md's \"Scope\" section (stale — says these are \"deferred to M3/M4 and intentionally absent,\" a lint-owned staleness I did not file). Treated the actually-next committed items as M4: F9 (recalc), F11 (replay), F12 (what-if), F13 (share links). F9's fan-out is already exhaustively documented in app/CLAUDE.md's Known follow-ons with the exact hazard, so re-filing it would add nothing; I instead attempted F11 (construction replay), the one PROJECT_PLAN.md explicitly claims is unlocked (\"Core already exposes deterministic edge order; replay is a UI concern only\") and that has zero entry in either CLAUDE.md's follow-on list, then traced whether the core actually backs that claim. Also re-examined the two named seams (constraints.ts tag policy, GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor) but found their hazards already filed in prior rounds (tag policy: no-caller deferral already recorded in lib/CLAUDE.md; focus/ego layout: 8 findings across 6 rounds already recorded in app/CLAUDE.md) so did not re-file.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full keyboard/announcement surface for the scenario (cold load -> roster entry -> generate -> read quality -> find a person -> buddies -> export -> error recovery): App.tsx's inert/overlay wiring, RosterModal.tsx, PersonSearch.tsx (combobox + Escape semantics), PersonPanel.tsx, BuddyList.tsx, PathPanel.tsx, QualityPanel.tsx, LayoutToggle.tsx, ConstraintsEditor.tsx, SettingsControls.tsx, Notice.tsx, Slips.tsx, GraphCanvas.tsx (reduced-motion gating of the JS tween, ANIM_MAX_N snap), and the state hooks useNotice/useEscape/useFocusRescue/useExplorerHistory/usePathFinder/useBuddyGraph/useGenerationWorker. Verified the live-region-always-mounted pattern is applied consistently (RosterModal note stack, ConstraintsEditor cap note, PersonSearch empty-result region, App's busy-live/sr-live, Notice's toast-region), that aria-pressed/aria-current track real state (LayoutToggle, BuddyList), that Escape is correctly gated off behind the dialog and correctly stops propagation only when the search box has text, that focus-rescue anchors resolve lazily and check inert-reachability, and that the CSS reduced-motion media query blankets all transitions/animations while GraphCanvas's JS tween has its own reducedMotion() check. Reproduced the one finding below with an actual render (App mounted with a mocked worker hook, driving status: \"refused\") rather than by inspection alone, confirming via DOM queries that the toast sits outside the dialog and outside any [inert] ancestor and follows the dialog's last control in document order; test run in .review-scratch/app-test scratch copy and removed afterward, not left in app/test.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "App.tsx keeps two separate copies of the generation settings (a dispatch-time `settings` state and the last-adopted `view.settings`) and the roster editor renders whichever one happens to be picked, so a user's freshly-typed settings vanish from the reopened dialog whenever the attempt that used them didn't produce a new successful graph.",
+      "severity": "blocking",
+      "findingSummaries": [
+        "RosterModal is rendered with `view?.settings ?? settings`, so once any graph exists the App-level `settings` committed at dispatch time is write-only and the reopened editor shows the previous successful graph's settings, contradicting the roster text and rule rows beside it (which ARE dispatch-time) and contradicting the refusal message that just told the user to change that very setting."
+      ],
+      "remediation": "Delete the redundant App-level `settings` state as the render source for RosterModal: remove the `?? settings` fallback and the second copy it depends on, and render the editor solely from `view.settings` (falling back only to the app's initial default when no view has ever been adopted). One settings value, one place it can go stale — not two.",
+      "critics": [
+        "critic-correctness"
+      ]
+    },
+    {
+      "theme": "parseRoster computes its truncation and duplicate counts from raw scanned tokens instead of the final kept names, so the reported counts (and the dedupe itself) don't correspond to the people actually kept — because it truncates before deduplicating instead of after.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`longNames` is incremented per truncated TOKEN (including duplicate copies, and including the token that is then dropped by the MAX_NAMES cap), and the case-insensitive dedupe key is computed from the TRUNCATED token, so the shortening count overstates reality, can describe a name that was dropped rather than shortened, and two different people can collapse into one kept name reported as \"Removed 1 duplicate entry ... Each person appears once.\""
+      ],
+      "remediation": "Remove the per-token counters from the scan loop entirely and drop the truncate-then-dedupe ordering: dedupe on the untruncated trimmed token first, truncate only what survives, and derive the shortened/duplicate counts by diffing the final `names` array against the pre-truncation input — deleting the separate, drift-prone tally instead of maintaining it alongside the real result.",
+      "critics": [
+        "critic-correctness"
+      ]
+    },
+    {
+      "theme": "importGraph's shape guard for the untrusted `constraints` block accepts any non-null object, so a JSON array passes the check, both `required`/`prohibited` reads silently resolve to empty, and the import succeeds having discarded every buddy rule with nothing on screen saying so — the one shape import is supposed to refuse.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`readConstraints` rejects a malformed `constraints` block with `if (typeof block !== \"object\" || block === null)`. A JSON array satisfies `typeof === \"object\"` and is not null, so it passes. `block.required` and `block.prohibited` are then both `undefined` on an array, each `read()` returns `[]`, and the import SUCCEEDS with zero rules — the exact silent-partial-failure outcome the function's own doc comment forbids, while every other malformed constraint shape in the same function throws."
+      ],
+      "remediation": "Tighten the boundary check so the guard covers the case it was meant to exclude: `if (typeof block !== \"object\" || block === null || Array.isArray(block))` throw the existing ImportError. No new handling path — just close the gap in the existing one.",
+      "critics": [
+        "critic-security"
+      ]
+    },
+    {
+      "theme": "PROJECT_PLAN.md asserts, for the next committed feature (F11 construction replay), that the core already exposes deterministic edge-insertion order — but `Graph.edgeList()` returns a canonical final-state sort, no code records the ring/greedy/repair/polish insertion sequence, and `metrics.ts` documents insertion-order independence as a deliberate design principle elsewhere in the core, so the plan's UI-only estimate rests on a seam that doesn't exist.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "PROJECT_PLAN.md states for F11: \"Core already exposes deterministic edge order; replay is a UI concern only.\" This is false against the current core — `edgeList()` is sorted ascending by [u,v], not by insertion; `ringGreedy` discards each pair after `addEdge`; `polish` snapshots only the winning graph's final adjacency, never the swap sequence; and `metrics.ts` explicitly rejects insertion-order dependence as an anti-pattern for `shortestPath`. The seam F11 needs does not exist."
+      ],
+      "remediation": "Remove the false claim from PROJECT_PLAN.md (\"Core already exposes deterministic edge order; replay is a UI concern only.\") rather than leaving it to mislead whoever picks up F11; note plainly that no ordered trace exists yet so the estimate isn't UI-only. Nothing to build today — just delete the incorrect premise from the plan.",
+      "critics": [
+        "critic-solid"
+      ]
+    },
+    {
+      "theme": "GraphCanvas.tsx's own stated naming invariant (one canonical term for the mode) is violated two lines later by an inline comment that reintroduces the retired synonym.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "Comment at line 44 uses 'selection-keyed mode' when line 33 explicitly states the term should be 'selection-dependent mode' everywhere. This breaks the stated naming invariant."
+      ],
+      "remediation": "Delete the reintroduced synonym: change 'selection-keyed mode (a selection-dependent mode)' at line 44 to just 'selection-dependent mode', leaving exactly one term in the file as line 33 already requires.",
+      "critics": [
+        "critic-maintainability"
+      ]
+    },
+    {
+      "theme": "App.tsx's roster dialog relies solely on `inert` over `#app` to enforce its `aria-modal=\"true\"` claim, but the refusal/error path renders an interactive toast as a sibling of both `#app` and `#modal` at the same time the dialog opens, so `inert` — which cannot cover that sibling — leaves a live, unguarded exit from the 'trapped' dialog.",
+      "severity": "blocking",
+      "findingSummaries": [
+        "When `bg.status` becomes \"refused\" (or \"error\" with no existing view), App's effect calls both `show(...)` (mounts a Notice toast with a real `<button>`) and `setModalOpen(true)` in the same commit. RosterModal claims `aria-modal=\"true\"` but implements no focus trap of its own and depends entirely on `inert` on `#app`; the toast is a sibling of `#app`/`#modal`, is never wrapped in `inert`, and sits above the modal in z-index, so a keyboard user can Tab out of the dialog into the floating toast's dismiss button."
+      ],
+      "remediation": "Stop firing the toast on this path: remove the `show(...)` call from the refusal/first-error branch of the effect that also opens the modal, so the dialog's own text is the single place that carries the message and no second interactive surface exists outside the `inert` boundary while the modal is open.",
+      "critics": [
+        "critic-interaction"
+      ]
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-settings-displayed",
+      "theme": "the app keeps two copies of the generation settings and renders the one belonging to the last SUCCESSFUL graph, so settings the user just typed are silently discarded whenever an attempt produces no new view",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 349,
+      "summary": "RosterModal is rendered with `view?.settings ?? settings`, so once any graph exists the App-level `settings` committed at dispatch time is write-only and the reopened editor shows the previous successful graph's settings, contradicting the roster text and rule rows beside it (which ARE dispatch-time) and contradicting the refusal message that just told the user to change that very setting.",
+      "failure": "Generate 10 people at buddies=4 -> success. Reopen \"Edit people\", press \"+\" twice (buddies=6), Generate; the worker answers `refused` (or the user presses Cancel). The effect reopens the modal and the stepper reads 4, not 6 — while the toast says \"...raise buddies-per-person or remove one\". Reproduced twice (refused path and cancelled path) in app/.review-scratch/settings.test.tsx: `expected '4' to be '6'`.",
+      "remediation": "Keep ONE copy of the settings in App: adopt `view.settings` into the `settings` state when a new GraphView is adopted (an effect keyed on the view identity — this is what the reroll's seed bump needs and the only reason `view?.settings` was read here), and render RosterModal from that single `settings` state. That closes the theme for all three dispatch-time values (names, rules, settings) rather than only the reported one.",
+      "invariant": "After any generation attempt that does not produce a new GraphView (refused, error, or cancelled), the settings object RosterModal renders is identical to the settings that attempt was dispatched with; after an attempt that does produce a GraphView, it is identical to that view's settings.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "wrong-displayed-count",
+      "theme": "parseRoster truncates each raw token before de-duplicating, so its warnings count tokens scanned rather than people kept — and two distinct people whose names share a 120-character prefix are silently merged into one and reported as a duplicate",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 97,
+      "summary": "`longNames` is incremented per truncated TOKEN (including duplicate copies, and including the token that is then dropped by the MAX_NAMES cap), and the case-insensitive dedupe key is computed from the TRUNCATED token, so the shortening count overstates reality, can describe a name that was dropped rather than shortened, and two different people can collapse into one kept name reported as \"Removed 1 duplicate entry ... Each person appears once.\"",
+      "failure": "(a) parseRoster([long,long,long,'Ben']) with one 130-char name -> \"Shortened 3 very long names to 120 characters.\" for a single long name. (b) 1000 distinct short names followed by one 125-char name -> that name is dropped by the cap, yet the warning still says \"Shortened 1 very long name\". (c) parseRoster(['X'.repeat(120)+'Alice', 'X'.repeat(120)+'Bob']) -> names.length === 1; two distinct people merged, reported as a duplicate. All three reproduced in app/.review-scratch/parse.test.ts and merge.test.ts.",
+      "remediation": "De-duplicate on the PRE-truncation name (key off the untruncated trimmed token) and derive every warning count from the kept `names` array rather than from the scan loop: count shortened names as the number of entries in `names` that were truncated, and count duplicates only for tokens equal before truncation. Two names that differ must never become one person.",
+      "invariant": "For every input, parseRoster never merges two tokens that differ (case-insensitively) before truncation into one entry of `names`; and the count in every emitted warning equals a count over the returned `names` (the shortened-count equals |{i : names[i] was produced by truncation}|, and is absent when that set is empty), never a count of tokens scanned.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untrusted-shape-guard-fails-open",
+      "theme": "an untrusted file's buddy rules can be silently discarded instead of refused, because the shape guard accepts a JSON array as an object",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 84,
+      "summary": "`readConstraints` rejects a malformed `constraints` block with `if (typeof block !== \"object\" || block === null)`. A JSON array satisfies `typeof === \"object\"` and is not null, so it passes. `block.required` and `block.prohibited` are then both `undefined` on an array, each `read()` returns `[]`, and the import SUCCEEDS with zero rules. The declared-pair pre-gate does not catch it either: `f.constraints?.required?.length ?? 0` is also 0 for an array. This is the exact outcome the function's own doc comment forbids — \"it would silently change the rules a user gets back from the rules they saved, which is the same silent-partial failure the constraints feature exists to avoid\" — and every other malformed constraint shape in the same function throws. Downstream, `App.applyImported` seeds `constraintRows` from the empty list and a subsequent reroll regenerates the graph with no rules at all, with nothing on screen having said so (`constraintSummary` returns null for zero constraints, so not even the \"not re-checked on import\" line appears).",
+      "failure": "importGraph({version:1, people:[{id:0,name:\"P0\"},...9 more], edges:[], constraints:[[0,1],[2,3]], settings:{buddies:4,polish:\"auto\",seed:1}}) returns a GraphView with constraints.length === 0 and throws nothing. Reproduced by direct execution: harness line printed `OK   constraints as array (0.9ms) n=10 degMax=0 k=4 ... pairs=0`. The same file with constraints:{required:[[0,1]]} correctly yields pairs=1, and with constraints:\"x\" or constraints:null it correctly throws ImportError.",
+      "remediation": "Tighten the shape guard to reject arrays as well as non-objects, e.g. `if (typeof block !== \"object\" || block === null || Array.isArray(block))` throw the existing \"That file's buddy rules aren't in the expected shape.\" ImportError. Optionally also refuse a `constraints` object carrying keys other than `required`/`prohibited`, for the same reason: import refuses everything it cannot round-trip, and a silently-ignored key is a rule the user saved and did not get back.",
+      "invariant": "For every input `f`: if `f.constraints !== undefined` and `f.constraints` is not a non-null, non-array object, `importGraph(f)` throws `ImportError`. And for every `f` that `importGraph` accepts, the returned view satisfies `view.constraints.length === (f.constraints?.required?.length ?? 0) + (f.constraints?.prohibited?.length ?? 0)` — an accepted import never yields fewer rules than the file declares.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-premise-seam",
+      "theme": "the plan assumes the core already exposes a fact (construction order) that the core's data model actively discards, so the UI-only estimate for the next committed feature understates its own fan-out",
+      "file": "docs/PROJECT_PLAN.md",
+      "line": 126,
+      "summary": "PROJECT_PLAN.md states for F11 (construction replay, named in the M3/M4 'next' list): \"Core already exposes deterministic edge order; replay is a UI concern only.\" This is false against the current core. `Graph.edgeList()` (lib/src/core/graph.ts:101-110) returns edges sorted ascending by [u,v] — a canonical FINAL-state ordering, not the sequence in which `ringGreedy` (lib/src/core/greedy.ts:169-183) actually added them. `ringGreedy`'s loop calls `g.addEdge(u, v)` and immediately discards the pair; nothing records an ordered trace. `repairDegrees` (greedy.ts:222-273) and `polish` (lib/src/core/polish.ts, thousands of `proposeSwap`/`applySwap`/`revertSwap` cycles) further add and remove edges after the ring/greedy phase, so even the notional order in which edges first entered the adjacency Sets is not recoverable from the returned `edges`/`buddies` arrays — `polish` snapshots only the winning graph's final adjacency (`best = g.copy()`), never the swap sequence. `lib/src/core/metrics.ts:50-57` independently documents, as a design principle for `shortestPath`, that depending on \"edge-insertion history\" is exactly the failure mode the core avoids (it explicitly rejects a parent-pointer BFS for that reason). So the one seam F11 needs — an ordered edge/step trace — does not exist, and the code elsewhere treats insertion-order dependence as an anti-pattern to avoid, not an available seam to lean on.",
+      "failure": "Attempt to build F11 (\"press 'watch it build': ring forms, chords stitch far sides together, names seat last, metrics tick down live\") using only what `BuddyResult`/`GraphView` currently expose: `view.edges` is sorted [u,v] ascending, so a naive replay animating edges in that order would show a fixed lexicographic sweep unrelated to ring-then-chords construction, misrepresenting the algorithm it claims to visualize — and there is no way to distinguish 'ring seed edge' from 'greedy chord' from 'repair/polish edge' from the returned data at all.",
+      "remediation": "This is real, not-yet-started work, so there is nothing to fix today — but it should be recorded as a known follow-on (the way F9's hazards already are in app/CLAUDE.md) so whoever picks up F11 does not discover the false premise mid-implementation. When it is built, lib-first: add an opt-in trace (e.g. `{step: number, kind: 'ring'|'greedy'|'repair'|'polish-add'|'polish-remove', u, v}[]`) recorded inside `ringGreedy`/`repairDegrees`/`polish`, threaded onto `BuddyResult`/`GreedyResult`/`PolishResult`, then through `app/src/worker/protocol.ts`, `worker/generate.ts`, `model.ts` (`GraphView`/`viewFromResult`), and a new replay-consuming panel/`GraphCanvas` mode — i.e. the fan-out crosses lib and app, which is expected for a lib-first feature, but should be planned as such rather than assumed to be UI-only.",
+      "invariant": "for any BuddyResult r produced by buildBuddyGraph, there exists no field or combination of r.edges/r.buddies from which the construction-time order of edge additions (ring seed vs. greedy chord vs. repair vs. polish swap) can be reconstructed — i.e. two different insertion sequences producing the same final edge set are indistinguishable from r alone. Building F11 without violating 'the UI never reimplements math' requires this invariant to become false via a lib-side change, not an app-side workaround."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "naming-inconsistency",
+      "theme": "deferred-feature term violated by inline comment — stated invariant contradicted",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 44,
+      "summary": "Comment at line 44 uses 'selection-keyed mode' when line 33 explicitly states the term should be 'selection-dependent mode' everywhere. This breaks the stated naming invariant.",
+      "failure": "The comment reads: 'a future selection-keyed mode (a selection-dependent mode) added to LAYOUT_MODES...' but line 33 says 'the term is \"selection-dependent mode\" everywhere.' The unnecessary parenthetical (a selection-dependent mode) is present, but introduces a second term 'selection-keyed' that contradicts the invariant.",
+      "remediation": "Line 44 should use only 'selection-dependent mode'. Change 'selection-keyed mode (a selection-dependent mode)' to 'selection-dependent mode'. This enforces the stated rule at line 33 that the term must be 'selection-dependent mode' everywhere.",
+      "invariant": "Every reference to the deferred focus/ego layout feature must use only the term 'selection-dependent mode' (or the full phrase 'selection-dependent mode') and never introduce 'selection-keyed mode' or other synonyms. The invariant is explicit at line 33: 'the term is \"selection-dependent mode\" everywhere.'"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-trap-leak",
+      "theme": "the roster-setup dialog claims aria-modal=\"true\" and relies entirely on `inert` on `#app` to enforce it, but the error/refusal notice toast is rendered as a sibling of both `#app` and `#modal` and is never covered by `inert` — so on exactly the two paths that reopen the dialog together with a toast (a worker refusal, or a first-generation error), a keyboard user can Tab straight out of the 'trapped' dialog into a floating, unrelated interactive control",
+      "file": "app/src/App.tsx",
+      "line": 346,
+      "summary": "When `bg.status` becomes \"refused\" (or \"error\" with no existing view), App's effect (App.tsx:138-154) calls both `show(...)` (mounts a Notice toast with a real `<button>`) and `setModalOpen(true)` in the same commit. RosterModal is rendered with `role=\"dialog\" aria-modal=\"true\"`, and the app's ONLY focus-containment mechanism is `inert` on `#app` (App.tsx:266) — RosterModal itself implements no focus trap (no keydown Tab interception; grep across app/src found no Tab-cycling/trap logic anywhere). `<Notice>` (App.tsx:394) is rendered as a sibling AFTER both `#app` and the conditional `#modal`, and is not wrapped in `inert` under any condition. `.toast { position: fixed; z-index: 40 }` in app.css sits visually above `#modal`'s `z-index: 20`, so it is on-screen and interactive, not merely present in the DOM.",
+      "failure": "Reproduced with a real render (App.tsx driven through a mocked `useGenerationWorker`, same harness pattern as app/test/appErrorRecovery.test.tsx): dispatch a generate, then set `status: \"refused\"` with a refusal reason. Querying the DOM afterward shows: the toast button (`.toast-region .toast`, text = the exact refusal sentence, e.g. \"B has 5 must-be-buddies rules but each person only gets 4 buddies…\") is NOT a descendant of the `role=\"dialog\"` element (`dialog.contains(toast) === false`), is NOT covered by any ancestor carrying the `inert` attribute (`coveredByInert === false`), and DOM-orders immediately after the dialog's last control (`Generate buddy graph` button) per `compareDocumentPosition`. Concretely: a screen-reader/keyboard user, having just heard the refusal reason via the live region and reached the last field in the reopened setup dialog, presses Tab expecting to stay inside the dialog (as `aria-modal=\"true\"` promises) or wrap to the first field — instead lands on a floating dismiss button outside the dialog whose activation removes the very message that explained why the dialog reopened, with no ARIA relationship back to the dialog it escaped.",
+      "remediation": "Give the open dialog a real focus trap (intercept Tab/Shift+Tab and cycle within RosterModal's own focusable elements, the way the search combobox already handles its own Escape) rather than relying solely on `inert` on `#app`, since `inert` cannot cover a sibling that intentionally needs to stay in the accessibility tree for its live-region announcement. Alternatively, render the toast's dismiss control inside `#modal`'s subtree (conditionally reparented) while the dialog is open, so it participates in the same trap and Tab never leaves the dialog.",
+      "invariant": "For every element with aria-modal=\"true\" present in the document, every OTHER focusable element in the document must either be a descendant of that dialog or be covered by an inert (or equivalent) ancestor — i.e. document.querySelectorAll('[aria-modal=\"true\"]') non-empty implies no focusable element exists outside those dialogs and outside [inert]."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-settings-displayed",
+      "theme": "the app keeps two copies of the generation settings and renders the one belonging to the last SUCCESSFUL graph, so settings the user just typed are silently discarded whenever an attempt produces no new view",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 349,
+      "summary": "RosterModal is rendered with `view?.settings ?? settings`, so once any graph exists the App-level `settings` committed at dispatch time is write-only and the reopened editor shows the previous successful graph's settings, contradicting the roster text and rule rows beside it (which ARE dispatch-time) and contradicting the refusal message that just told the user to change that very setting.",
+      "failure": "Generate 10 people at buddies=4 -> success. Reopen \"Edit people\", press \"+\" twice (buddies=6), Generate; the worker answers `refused` (or the user presses Cancel). The effect reopens the modal and the stepper reads 4, not 6 — while the toast says \"...raise buddies-per-person or remove one\". Reproduced twice (refused path and cancelled path) in app/.review-scratch/settings.test.tsx: `expected '4' to be '6'`.",
+      "remediation": "Keep ONE copy of the settings in App: adopt `view.settings` into the `settings` state when a new GraphView is adopted (an effect keyed on the view identity — this is what the reroll's seed bump needs and the only reason `view?.settings` was read here), and render RosterModal from that single `settings` state. That closes the theme for all three dispatch-time values (names, rules, settings) rather than only the reported one.",
+      "invariant": "After any generation attempt that does not produce a new GraphView (refused, error, or cancelled), the settings object RosterModal renders is identical to the settings that attempt was dispatched with; after an attempt that does produce a GraphView, it is identical to that view's settings.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "wrong-displayed-count",
+      "theme": "parseRoster truncates each raw token before de-duplicating, so its warnings count tokens scanned rather than people kept — and two distinct people whose names share a 120-character prefix are silently merged into one and reported as a duplicate",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 97,
+      "summary": "`longNames` is incremented per truncated TOKEN (including duplicate copies, and including the token that is then dropped by the MAX_NAMES cap), and the case-insensitive dedupe key is computed from the TRUNCATED token, so the shortening count overstates reality, can describe a name that was dropped rather than shortened, and two different people can collapse into one kept name reported as \"Removed 1 duplicate entry ... Each person appears once.\"",
+      "failure": "(a) parseRoster([long,long,long,'Ben']) with one 130-char name -> \"Shortened 3 very long names to 120 characters.\" for a single long name. (b) 1000 distinct short names followed by one 125-char name -> that name is dropped by the cap, yet the warning still says \"Shortened 1 very long name\". (c) parseRoster(['X'.repeat(120)+'Alice', 'X'.repeat(120)+'Bob']) -> names.length === 1; two distinct people merged, reported as a duplicate. All three reproduced in app/.review-scratch/parse.test.ts and merge.test.ts.",
+      "remediation": "De-duplicate on the PRE-truncation name (key off the untruncated trimmed token) and derive every warning count from the kept `names` array rather than from the scan loop: count shortened names as the number of entries in `names` that were truncated, and count duplicates only for tokens equal before truncation. Two names that differ must never become one person.",
+      "invariant": "For every input, parseRoster never merges two tokens that differ (case-insensitively) before truncation into one entry of `names`; and the count in every emitted warning equals a count over the returned `names` (the shortened-count equals |{i : names[i] was produced by truncation}|, and is absent when that set is empty), never a count of tokens scanned.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untrusted-shape-guard-fails-open",
+      "theme": "an untrusted file's buddy rules can be silently discarded instead of refused, because the shape guard accepts a JSON array as an object",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 84,
+      "summary": "`readConstraints` rejects a malformed `constraints` block with `if (typeof block !== \"object\" || block === null)`. A JSON array satisfies `typeof === \"object\"` and is not null, so it passes. `block.required` and `block.prohibited` are then both `undefined` on an array, each `read()` returns `[]`, and the import SUCCEEDS with zero rules. The declared-pair pre-gate does not catch it either: `f.constraints?.required?.length ?? 0` is also 0 for an array. This is the exact outcome the function's own doc comment forbids — \"it would silently change the rules a user gets back from the rules they saved, which is the same silent-partial failure the constraints feature exists to avoid\" — and every other malformed constraint shape in the same function throws. Downstream, `App.applyImported` seeds `constraintRows` from the empty list and a subsequent reroll regenerates the graph with no rules at all, with nothing on screen having said so (`constraintSummary` returns null for zero constraints, so not even the \"not re-checked on import\" line appears).",
+      "failure": "importGraph({version:1, people:[{id:0,name:\"P0\"},...9 more], edges:[], constraints:[[0,1],[2,3]], settings:{buddies:4,polish:\"auto\",seed:1}}) returns a GraphView with constraints.length === 0 and throws nothing. Reproduced by direct execution: harness line printed `OK   constraints as array (0.9ms) n=10 degMax=0 k=4 ... pairs=0`. The same file with constraints:{required:[[0,1]]} correctly yields pairs=1, and with constraints:\"x\" or constraints:null it correctly throws ImportError.",
+      "remediation": "Tighten the shape guard to reject arrays as well as non-objects, e.g. `if (typeof block !== \"object\" || block === null || Array.isArray(block))` throw the existing \"That file's buddy rules aren't in the expected shape.\" ImportError. Optionally also refuse a `constraints` object carrying keys other than `required`/`prohibited`, for the same reason: import refuses everything it cannot round-trip, and a silently-ignored key is a rule the user saved and did not get back.",
+      "invariant": "For every input `f`: if `f.constraints !== undefined` and `f.constraints` is not a non-null, non-array object, `importGraph(f)` throws `ImportError`. And for every `f` that `importGraph` accepts, the returned view satisfies `view.constraints.length === (f.constraints?.required?.length ?? 0) + (f.constraints?.prohibited?.length ?? 0)` — an accepted import never yields fewer rules than the file declares.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-premise-seam",
+      "theme": "the plan assumes the core already exposes a fact (construction order) that the core's data model actively discards, so the UI-only estimate for the next committed feature understates its own fan-out",
+      "file": "docs/PROJECT_PLAN.md",
+      "line": 126,
+      "summary": "PROJECT_PLAN.md states for F11 (construction replay, named in the M3/M4 'next' list): \"Core already exposes deterministic edge order; replay is a UI concern only.\" This is false against the current core. `Graph.edgeList()` (lib/src/core/graph.ts:101-110) returns edges sorted ascending by [u,v] — a canonical FINAL-state ordering, not the sequence in which `ringGreedy` (lib/src/core/greedy.ts:169-183) actually added them. `ringGreedy`'s loop calls `g.addEdge(u, v)` and immediately discards the pair; nothing records an ordered trace. `repairDegrees` (greedy.ts:222-273) and `polish` (lib/src/core/polish.ts, thousands of `proposeSwap`/`applySwap`/`revertSwap` cycles) further add and remove edges after the ring/greedy phase, so even the notional order in which edges first entered the adjacency Sets is not recoverable from the returned `edges`/`buddies` arrays — `polish` snapshots only the winning graph's final adjacency (`best = g.copy()`), never the swap sequence. `lib/src/core/metrics.ts:50-57` independently documents, as a design principle for `shortestPath`, that depending on \"edge-insertion history\" is exactly the failure mode the core avoids (it explicitly rejects a parent-pointer BFS for that reason). So the one seam F11 needs — an ordered edge/step trace — does not exist, and the code elsewhere treats insertion-order dependence as an anti-pattern to avoid, not an available seam to lean on.",
+      "failure": "Attempt to build F11 (\"press 'watch it build': ring forms, chords stitch far sides together, names seat last, metrics tick down live\") using only what `BuddyResult`/`GraphView` currently expose: `view.edges` is sorted [u,v] ascending, so a naive replay animating edges in that order would show a fixed lexicographic sweep unrelated to ring-then-chords construction, misrepresenting the algorithm it claims to visualize — and there is no way to distinguish 'ring seed edge' from 'greedy chord' from 'repair/polish edge' from the returned data at all.",
+      "remediation": "This is real, not-yet-started work, so there is nothing to fix today — but it should be recorded as a known follow-on (the way F9's hazards already are in app/CLAUDE.md) so whoever picks up F11 does not discover the false premise mid-implementation. When it is built, lib-first: add an opt-in trace (e.g. `{step: number, kind: 'ring'|'greedy'|'repair'|'polish-add'|'polish-remove', u, v}[]`) recorded inside `ringGreedy`/`repairDegrees`/`polish`, threaded onto `BuddyResult`/`GreedyResult`/`PolishResult`, then through `app/src/worker/protocol.ts`, `worker/generate.ts`, `model.ts` (`GraphView`/`viewFromResult`), and a new replay-consuming panel/`GraphCanvas` mode — i.e. the fan-out crosses lib and app, which is expected for a lib-first feature, but should be planned as such rather than assumed to be UI-only.",
+      "invariant": "for any BuddyResult r produced by buildBuddyGraph, there exists no field or combination of r.edges/r.buddies from which the construction-time order of edge additions (ring seed vs. greedy chord vs. repair vs. polish swap) can be reconstructed — i.e. two different insertion sequences producing the same final edge set are indistinguishable from r alone. Building F11 without violating 'the UI never reimplements math' requires this invariant to become false via a lib-side change, not an app-side workaround."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "naming-inconsistency",
+      "theme": "deferred-feature term violated by inline comment — stated invariant contradicted",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 44,
+      "summary": "Comment at line 44 uses 'selection-keyed mode' when line 33 explicitly states the term should be 'selection-dependent mode' everywhere. This breaks the stated naming invariant.",
+      "failure": "The comment reads: 'a future selection-keyed mode (a selection-dependent mode) added to LAYOUT_MODES...' but line 33 says 'the term is \"selection-dependent mode\" everywhere.' The unnecessary parenthetical (a selection-dependent mode) is present, but introduces a second term 'selection-keyed' that contradicts the invariant.",
+      "remediation": "Line 44 should use only 'selection-dependent mode'. Change 'selection-keyed mode (a selection-dependent mode)' to 'selection-dependent mode'. This enforces the stated rule at line 33 that the term must be 'selection-dependent mode' everywhere.",
+      "invariant": "Every reference to the deferred focus/ego layout feature must use only the term 'selection-dependent mode' (or the full phrase 'selection-dependent mode') and never introduce 'selection-keyed mode' or other synonyms. The invariant is explicit at line 33: 'the term is \"selection-dependent mode\" everywhere.'"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-trap-leak",
+      "theme": "the roster-setup dialog claims aria-modal=\"true\" and relies entirely on `inert` on `#app` to enforce it, but the error/refusal notice toast is rendered as a sibling of both `#app` and `#modal` and is never covered by `inert` — so on exactly the two paths that reopen the dialog together with a toast (a worker refusal, or a first-generation error), a keyboard user can Tab straight out of the 'trapped' dialog into a floating, unrelated interactive control",
+      "file": "app/src/App.tsx",
+      "line": 346,
+      "summary": "When `bg.status` becomes \"refused\" (or \"error\" with no existing view), App's effect (App.tsx:138-154) calls both `show(...)` (mounts a Notice toast with a real `<button>`) and `setModalOpen(true)` in the same commit. RosterModal is rendered with `role=\"dialog\" aria-modal=\"true\"`, and the app's ONLY focus-containment mechanism is `inert` on `#app` (App.tsx:266) — RosterModal itself implements no focus trap (no keydown Tab interception; grep across app/src found no Tab-cycling/trap logic anywhere). `<Notice>` (App.tsx:394) is rendered as a sibling AFTER both `#app` and the conditional `#modal`, and is not wrapped in `inert` under any condition. `.toast { position: fixed; z-index: 40 }` in app.css sits visually above `#modal`'s `z-index: 20`, so it is on-screen and interactive, not merely present in the DOM.",
+      "failure": "Reproduced with a real render (App.tsx driven through a mocked `useGenerationWorker`, same harness pattern as app/test/appErrorRecovery.test.tsx): dispatch a generate, then set `status: \"refused\"` with a refusal reason. Querying the DOM afterward shows: the toast button (`.toast-region .toast`, text = the exact refusal sentence, e.g. \"B has 5 must-be-buddies rules but each person only gets 4 buddies…\") is NOT a descendant of the `role=\"dialog\"` element (`dialog.contains(toast) === false`), is NOT covered by any ancestor carrying the `inert` attribute (`coveredByInert === false`), and DOM-orders immediately after the dialog's last control (`Generate buddy graph` button) per `compareDocumentPosition`. Concretely: a screen-reader/keyboard user, having just heard the refusal reason via the live region and reached the last field in the reopened setup dialog, presses Tab expecting to stay inside the dialog (as `aria-modal=\"true\"` promises) or wrap to the first field — instead lands on a floating dismiss button outside the dialog whose activation removes the very message that explained why the dialog reopened, with no ARIA relationship back to the dialog it escaped.",
+      "remediation": "Give the open dialog a real focus trap (intercept Tab/Shift+Tab and cycle within RosterModal's own focusable elements, the way the search combobox already handles its own Escape) rather than relying solely on `inert` on `#app`, since `inert` cannot cover a sibling that intentionally needs to stay in the accessibility tree for its live-region announcement. Alternatively, render the toast's dismiss control inside `#modal`'s subtree (conditionally reparented) while the dialog is open, so it participates in the same trap and Tab never leaves the dialog.",
+      "invariant": "For every element with aria-modal=\"true\" present in the document, every OTHER focusable element in the document must either be a descendant of that dialog or be covered by an inert (or equivalent) ancestor — i.e. document.querySelectorAll('[aria-modal=\"true\"]') non-empty implies no focusable element exists outside those dialogs and outside [inert]."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 8,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 8,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 8,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 8,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 8,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 622575,
+    "agents": 6,
+    "toolCalls": 192
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "observations": [
+    {
+      "kind": "self-induction",
+      "note": "3 of 6 findings target round 7 fixes: the modal settings source (view?.settings ?? settings), the parseRoster longNames counter, and the GraphCanvas naming rule I stated and then broke in the same file. The settings one is the sharpest — round 7 applied TWO fixes for one bug (remove the pre-emptive setSettings AND change the modal source) and the second was itself the defect, making one modal input view-derived while its two neighbours stayed dispatch-derived."
+    },
+    {
+      "kind": "critic-found-but-did-not-file",
+      "note": "critic-solid noticed app/CLAUDE.md Scope section was stale (claimed F7/F8/F10 were absent when all three are built) and explicitly chose not to file it as a lint-owned class. The lint gate does NOT cover prose staleness in a markdown file — stale-comment-ref only scans code comments — so the exclusion rule swallowed a real defect. Fixed here, and worth noting as a cost of the do-not-file-lint-classes instruction: a critic that self-censors against a gate that does not actually cover the case leaves the defect unowned."
+    }
+  ]
+}

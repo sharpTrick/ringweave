@@ -70,9 +70,11 @@ identically with `exportGraph` and honestly re-measures hand-edited files.
 
 ## Scope
 
-M2 ships F1–F6 (roster import, generate+settings, buddy list+slips, ring/force graph, quality
-panel, JSON export/import). Deferred to M3/M4 and intentionally absent: fuzzy search, node-detail
-explorer, focus/ego layout, construction replay, constraints UI.
+M2 shipped F1–F6 (roster import, generate+settings, buddy list+slips, ring/force graph, quality
+panel, JSON export/import). **M3 adds F7 (constraints UI), F8 (fuzzy search + node explorer) and
+F10 (path finder)** — all three are built and wired into `App.tsx`. Still deferred and
+intentionally absent: the focus/ego layout, construction replay (F11), and the priors toggle (F9);
+each is recorded with its reasons in the follow-ons below.
 
 ## Feature status
 

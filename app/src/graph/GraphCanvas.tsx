@@ -41,7 +41,7 @@ function assertNever(x: never): never {
  * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
  * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
  * `fit`, so those three can never disagree. EXHAUSTIVE over LayoutMode via assertNever: a future
- * selection-keyed mode (a selection-dependent mode) added to LAYOUT_MODES will fail to COMPILE here until it gets a
+ * selection-dependent mode added to LAYOUT_MODES will fail to COMPILE here until it gets a
  * branch — a loud single-seam edit, not a silent ring fallback. (It stays out of FIT_MODES so it
  * can't perturb the fixed frame.)
  */

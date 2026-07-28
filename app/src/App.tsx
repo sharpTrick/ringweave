@@ -343,10 +343,17 @@ export default function App() {
           they cover the viewport rather than only <main>'s box, which additionally
           fixes the narrow-window case where `main { overflow: auto }` let content
           scroll out from under the scrim. */}
+      {/* All three RosterModal inputs are DISPATCH-time: the roster text, the rule rows and the
+          settings are what the user last submitted, which is what an editor should reopen showing.
+          Last round `settings` was switched to `view?.settings ?? settings` to fix a seed drift —
+          but that drift's real cause was a pre-emptive setSettings in handleReroll, removed in the
+          same round. Changing the source as well made one input view-derived while its two
+          neighbours stayed dispatch-derived, so the dialog contradicted itself. Two fixes for one
+          bug, and the second one was the defect. */}
       {modalOpen && (
         <RosterModal
           initialText={names.join("\n")}
-          settings={view?.settings ?? settings}
+          settings={settings}
           rules={constraintRows}
           canCancel={view !== null}
           onGenerate={handleGenerate}
@@ -391,7 +398,15 @@ export default function App() {
         }}
       />
 
-      <Notice message={notice} onDismiss={clear} />
+      {/* Inert while the dialog is open. The toast lives OUTSIDE #app (it has to — #app is what
+          gets inert), and it contains a real button, so it was the one focusable thing Tab could
+          reach from inside an aria-modal dialog. That is precisely the containment `inert` was
+          added to provide, leaking through the one element the containment could not cover.
+          Nothing is lost: the message is announced by its own role="status" and the dialog that
+          reopened with it is the actionable surface. */}
+      <div inert={modalOpen}>
+        <Notice message={notice} onDismiss={clear} />
+      </div>
     </>
   );
 }

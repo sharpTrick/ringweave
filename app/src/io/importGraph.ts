@@ -81,7 +81,11 @@ function readConstraints(
   n: number,
 ): ConstraintPair[] {
   if (block === undefined) return [];
-  if (typeof block !== "object" || block === null) {
+  // `Array.isArray` as well: an array satisfies `typeof === "object"` and is not null, so a
+  // `"constraints": [...]` block passed the guard, both `.required` and `.prohibited` read as
+  // undefined, and the file imported with its rules SILENTLY DROPPED instead of refused. A shape
+  // guard that accepts the wrong shape and then finds nothing in it fails open.
+  if (typeof block !== "object" || block === null || Array.isArray(block)) {
     throw new ImportError("That file's buddy rules aren't in the expected shape.");
   }
   const read = (value: unknown, label: string): [number, number][] => {
