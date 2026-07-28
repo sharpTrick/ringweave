@@ -1,4 +1,5 @@
 import { MAX_ROSTER_N } from "../model";
+import { clampList } from "./clamp";
 
 export interface ParsedRoster {
   names: string[];
@@ -131,11 +132,7 @@ export function parseRoster(raw: string): ParsedRoster {
     // MAX_NAME_CHARS, so enumerating all of them produced a ~122 KB warning string that
     // RosterModal renders as a single DOM text node inside the dialog. Same shape as the
     // "+N more" the person panel already uses for its chips.
-    const kept = [...extras.keys()].map((k) => keptByKey.get(k)!);
-    const shown = kept.slice(0, WARNING_NAME_LIMIT).join(", ");
-    const list = kept.length > WARNING_NAME_LIMIT
-      ? `${shown}, and ${kept.length - WARNING_NAME_LIMIT} more`
-      : shown;
+    const list = clampList([...extras.keys()].map((k) => keptByKey.get(k)!), WARNING_NAME_LIMIT);
     warnings.push(
       `Removed ${dropped} duplicate ${dropped === 1 ? "entry" : "entries"} (${list}). Each person appears once.`,
     );

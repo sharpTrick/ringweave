@@ -1,5 +1,6 @@
 import {
-  connectionSummary, constraintSummary, qualityPercent, targetShortfall, type GraphView,
+  connectionSummary, constraintSummary, degreeLabel, qualityPercent, targetShortfall,
+  type GraphView,
 } from "../model";
 
 interface Props {
@@ -52,7 +53,14 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
               ever built was being blamed on "this roster" — a limit that came from the file.
               Describing what is true of the graph in front of the user is accurate on both
               paths, and needed no provenance flag to get there. */}
-          Each person has {shortfall.got} buddies, not the {shortfall.asked} in Settings.
+          {/* `degreeLabel`, not `degreeMax` — the SAME seam the rail and the connection caption
+              use. Wording this off degreeMax asserted a count at least one person does not have
+              whenever the graph is not regular, and disagreed with the two panels beside it. The
+              caption had exactly this defect fixed one round earlier; this line was added in that
+              same commit and reintroduced it. */}
+          Each person has {degreeLabel(view.metrics)}{" "}
+          {view.metrics.regular && view.metrics.degreeMax === 1 ? "buddy" : "buddies"}, not the{" "}
+          {shortfall.asked} in Settings.
         </div>
       )}
       {rules && <div className="rules-line">{rules}</div>}

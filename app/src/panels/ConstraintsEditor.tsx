@@ -108,7 +108,15 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
         >
           + Add a buddy rule
         </button>
-        {atCap && <span className="rule-note">That's the limit of {MAX_CONSTRAINT_PAIRS} rules.</span>}
+        {/* Permanently mounted, text conditional — the same pattern RosterModal's note stack
+            uses, and for the same reason: a region that appears together with its first message
+            is never announced. This one gates a control (the Add button disables at the cap), so
+            a keyboard-and-screen-reader user hitting the limit would otherwise find Add dead with
+            no explanation. Fifth instance of this class; see io/clamp.ts for the sibling case
+            where four repeats became one helper. */}
+        <span className="rule-note" role="status" aria-live="polite">
+          {atCap ? `That's the limit of ${MAX_CONSTRAINT_PAIRS} rules.` : ""}
+        </span>
       </div>
     </div>
   );

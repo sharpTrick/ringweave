@@ -6,6 +6,7 @@ import {
 } from "ringweave";
 import type { ConstraintPair } from "./constraints";
 import type { GraphResult } from "./worker/protocol";
+import { clampList } from "./io/clamp";
 
 /** Generation settings surfaced in the UI (mirrors the core's BuddyOptions + k). */
 export interface Settings {
@@ -295,6 +296,9 @@ export function targetShortfall(view: GraphView): { asked: number; got: number }
   return got < asked ? { asked, got } : null;
 }
 
+/** How many people a spoken route names before it counts the rest. */
+const ROUTE_NAMES_MAX = 12;
+
 /**
  * The path finder's announcement, as plain text.
  *
@@ -314,7 +318,11 @@ export function pathStatusText(
   if (unreachable) return "No chain — they're in separate groups.";
   if (route !== null) {
     const steps = route.length - 1;
-    return `${route.map((i) => view.names[i]).join(" → ")} — ${steps} step${steps === 1 ? "" : "s"}`;
+    // Clamped: a route's length is the graph's diameter, which an imported file controls, and
+    // this string goes straight into a permanently-mounted live region. The FOURTH sink of this
+    // shape — see io/clamp.ts for why they are now one helper rather than four.
+    const chain = clampList(route.map((i) => view.names[i]), ROUTE_NAMES_MAX, " → ");
+    return `${chain} — ${steps} step${steps === 1 ? "" : "s"}`;
   }
   return "";
 }

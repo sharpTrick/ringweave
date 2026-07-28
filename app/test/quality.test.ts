@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
 import { generateResult } from "./helpers";
 import {
-  connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS,
+  connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
   targetShortfall, type Metrics, type GraphView,
 } from "../src/model";
 
@@ -123,5 +123,26 @@ describe("the delivered graph vs the graph that was asked for", () => {
     const v = viewWith(4, 3);
     expect(isOptimal(v.metrics)).toBe(true);
     expect(targetShortfall(v)).not.toBeNull();
+  });
+});
+
+describe("every displayed buddy count comes from one seam", () => {
+  // Three panels state a per-person buddy count: the rail, the connection caption, and the
+  // shortfall line. The caption had `degreeMax` replaced with `degreeLabel` in one round and the
+  // shortfall line — added in that same commit — reintroduced `degreeMax` immediately. The
+  // invariant is not "this string is right" but "no displayed count contradicts degreeLabel".
+  it("a non-regular graph never has two panels claiming different counts", () => {
+    const m: Metrics = {
+      aspl: 2, diameter: 3, girth: 4, quality: 0.9, connected: true,
+      largestComponentFraction: 1, regular: false, degreeMin: 3, degreeMax: 4,
+    };
+    const label = degreeLabel(m);
+    expect(label).toBe("3–4");
+    // The count phrase in the caption must BE the label, not merely contain it — "3–4 buddies
+    // each" contains "4 buddies each" as a substring, so a negative match here is meaningless
+    // (my first attempt at this assertion failed on exactly that).
+    const stated = /for (.+?) buddies each/.exec(connectionSummary(m))?.[1];
+    expect(stated).toBe(label);
+    expect(stated).not.toBe(String(m.degreeMax));
   });
 });

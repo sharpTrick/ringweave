@@ -200,10 +200,15 @@ export default function App() {
       flash(reason);
       return;
     }
-    setSettings(s);
     resetSelection();
-    // Intent: an identical result surfaces a notice.
-    bg.generate(view.names, s, view.constraints, { reroll: true });
+    // NO pre-emptive setSettings. The seed is committed by whoever adopts the result —
+    // `useBuddyGraph` sets `view.settings` on both success branches — so writing it here as well
+    // left App's copy one seed ahead of the graph after a cancelled or failed reroll, and the
+    // roster modal then opened showing a seed that never produced anything. Same class as the
+    // reroll desync fixed in round 2: state committed at DISPATCH that only means something on
+    // SUCCESS. The modal reads the view's settings for the same reason.
+    bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
+
   };
 
   const cancelGeneration = () => {
@@ -294,10 +299,14 @@ export default function App() {
                 </div>
               </div>
 
+              {/* DOM ORDER FOLLOWS THE VISUAL LAYOUT, deliberately. Every panel here is
+                  absolutely positioned by app.css, so JSX order and reading order are
+                  independent — and they had diverged: Tab went rail -> toggle -> search
+                  (bottom-left) -> person (top-right) -> route (bottom-left, ABOVE search)
+                  -> buddies (top-right), jumping the viewport four times. Sighted keyboard
+                  users track focus spatially, so the order below is top row left-to-right,
+                  then the bottom-left stack downward, then the metrics band. */}
               <LayoutToggle layout={layout} onChange={setLayout} />
-              <div className="hint">Hover a person to light their buddies</div>
-              <PersonSearch names={view.names} onSelect={setSelected} inputRef={searchRef} />
-
               {selected !== null && (
                 <PersonPanel
                   view={view}
@@ -310,7 +319,7 @@ export default function App() {
                   onFindPath={() => path.start(selected)}
                 />
               )}
-
+              <BuddyList view={view} selected={selected} onSelect={setSelected} />
               {path.active && (
                 <PathPanel
                   view={view}
@@ -321,8 +330,8 @@ export default function App() {
                   onClear={path.clear}
                 />
               )}
-
-              <BuddyList view={view} selected={selected} onSelect={setSelected} />
+              <PersonSearch names={view.names} onSelect={setSelected} inputRef={searchRef} />
+              <div className="hint">Hover a person to light their buddies</div>
               <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />
             </>
           )}
@@ -337,7 +346,7 @@ export default function App() {
       {modalOpen && (
         <RosterModal
           initialText={names.join("\n")}
-          settings={settings}
+          settings={view?.settings ?? settings}
           rules={constraintRows}
           canCancel={view !== null}
           onGenerate={handleGenerate}

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { clampText } from "../io/clamp";
 
 const AUTO_CLEAR_MS = 4000;
 
@@ -17,9 +18,7 @@ const AUTO_CLEAR_MS = 4000;
 const MAX_NOTICE_CHARS = 300;
 
 /** Bound and keep it readable: a hard slice mid-word beats a multi-megabyte text node. */
-function clampNotice(message: string): string {
-  return message.length > MAX_NOTICE_CHARS ? `${message.slice(0, MAX_NOTICE_CHARS)}…` : message;
-}
+const clampNotice = (message: string) => clampText(message, MAX_NOTICE_CHARS);
 
 /**
  * Transient user notices (import errors, gate refusals, worker errors). `flash` shows a

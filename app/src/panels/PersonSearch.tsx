@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { rankMatches } from "../search";
+import { clampText } from "../io/clamp";
 
 interface Props {
   names: string[];
@@ -23,7 +24,7 @@ interface Props {
 const ECHO_MAX = 60;
 /** Hard cap on the input itself, so nothing downstream has to cope with a pasted megabyte. */
 const MAX_QUERY_CHARS = 200;
-const clampEcho = (text: string) => (text.length > ECHO_MAX ? `${text.slice(0, ECHO_MAX)}…` : text);
+const clampEcho = (text: string) => clampText(text, ECHO_MAX);
 
 /** How many results the list shows. Enough to find someone, short enough to scan. */
 const RESULT_LIMIT = 8;

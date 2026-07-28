@@ -24,11 +24,14 @@ export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly Layout
 /**
  * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
  * points depend only on the graph, not on the current selection. A future SELECTION-DEPENDENT
- * mode (a future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3), whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
+ * mode (a selection-dependent mode, whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
  * but deliberately NOT here: folding its per-selection points into the frame would rescale the
  * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
  */
-export const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
+export /* A selection-dependent layout (the focus/ego mode) is DEFERRED PAST M3 — see app/CLAUDE.md
+   for why, and for the four unresolved problems it carries. It is named here only because this
+   is the seam it would extend; the term is "selection-dependent mode" everywhere. */
+const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
 function assertNever(x: never): never {
   throw new Error(`Unhandled layout mode: ${String(x)}`);
@@ -38,7 +41,7 @@ function assertNever(x: never): never {
  * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
  * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
  * `fit`, so those three can never disagree. EXHAUSTIVE over LayoutMode via assertNever: a future
- * selection-keyed mode (a future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3)) added to LAYOUT_MODES will fail to COMPILE here until it gets a
+ * selection-keyed mode (a selection-dependent mode) added to LAYOUT_MODES will fail to COMPILE here until it gets a
  * branch — a loud single-seam edit, not a silent ring fallback. (It stays out of FIT_MODES so it
  * can't perturb the fixed frame.)
  */

@@ -9,6 +9,7 @@ import {
   MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
   type ConstraintPair,
 } from "../constraints";
+import { clampText } from "./clamp";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -147,9 +148,7 @@ function quote(value: unknown, max = 80): string {
   // full JSON.stringify of the untrusted value to produce 80 characters — and on a deeply
   // nested value it throws a RangeError that escapes importGraph as something other than
   // an ImportError, so the caller's "Couldn't import that file" path never runs.
-  if (typeof value === "string") {
-    return JSON.stringify(value.length > max ? `${value.slice(0, max)}…` : value);
-  }
+  if (typeof value === "string") return JSON.stringify(clampText(value, max));
   if (value === null || typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
