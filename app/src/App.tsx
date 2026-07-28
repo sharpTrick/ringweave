@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_SETTINGS, degreeLabel, isOptimal, nextRerollSeed, pathStatusText, rerollBlockReason,
-  targetShortfall, type GraphView, type Settings,
+  selectionStatusText, targetShortfall, type GraphView, type Settings,
 } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
@@ -109,6 +109,18 @@ export default function App() {
       reachable(document.querySelector<HTMLElement>(".busy button"))
     );
   });
+
+  // Re-sync the editor's settings from the graph that is actually on screen, whenever a new one
+  // is adopted. Three consecutive rounds argued about this one line and each answer was half
+  // right: reading `view.settings` directly (r7) made ONE dialog input view-derived while its
+  // neighbours stayed dispatch-derived; reverting to `settings` (r8) made them consistent but
+  // left the Advanced → Seed field showing a seed that does not produce the displayed graph,
+  // because a reroll advances the seed on the view only. Adopting into the single `settings`
+  // state is the answer both critics actually recommended: one copy, consistent with the roster
+  // text and rule rows beside it, and never stale.
+  useEffect(() => {
+    if (view) setSettings(view.settings);
+  }, [view]);
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
   // need real core queries and neither may reimplement them.
@@ -374,6 +386,14 @@ export default function App() {
           panel stays conditional. Same reason as the busy region above. */}
       <div className="sr-live" role="status" aria-live="polite">
         {view ? pathStatusText(view, path.from, path.route, path.unreachable) : ""}
+      </div>
+      {/* And the same for SELECTION. Choosing a person from the buddy list or a search result is
+          the app's headline task and announced nothing: the panel it opens precedes both controls
+          in DOM order — deliberately, so the DOM follows the visual layout — so Tab had already
+          gone past it, and reaching it meant Shift+Tab through several stops with nothing on
+          screen saying so. Announcing the outcome resolves that without re-litigating the order. */}
+      <div className="sr-live" role="status" aria-live="polite">
+        {view ? selectionStatusText(view, selected) : ""}
       </div>
       {bg.status === "running" && (
         <div className="busy">

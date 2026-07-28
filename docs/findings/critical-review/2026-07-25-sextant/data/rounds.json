@@ -680,6 +680,91 @@
     }
   },
   {
+    "file": "app-round-09.json",
+    "runId": null,
+    "round": 9,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 7,
+      "confirmed": 8,
+      "blocking": 4,
+      "deferrals": 1,
+      "plausible": 1,
+      "themes": 7
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 9,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 1,
+        "lastRound": 9,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 9,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 9,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 9,
+        "skipped": false
+      }
+    }
+  },
+  {
     "file": "lib-round-01.json",
     "runId": "wf_88887b29-0f5",
     "round": 1,

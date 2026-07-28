@@ -45,8 +45,16 @@ green at the end of every round.
 ## Architecture (respect)
 
 - **The UI never reimplements math.** Every metric and every edge comes from `ringweave`
-  (`buildBuddyGraph`, `allPairsSummary`, `girth`, `asplGap`, `Graph`). No BFS/ASPL/Moore code
-  in `app/`. If a number is missing, add it to the core (lib-first), not here.
+  (`buildBuddyGraph`, `allPairsSummary`, `girth`, `asplGap`, `Graph`). No shortest-path, ASPL or
+  Moore-bound computation in `app/`. If a number is missing, add it to the core (lib-first), not
+  here — `usePathFinder` uses the core's `shortestPath`, `PersonPanel` its `eccentricity`.
+  **One stated exception:** `neighborhood.ts` derives the 1st/2nd-degree buckets with a local
+  bounded-degree adjacency walk rather than a core BFS. It computes no metric, and the reason is
+  measured: degree is capped at `BUDDY_MAX = 12`, so the walk is at most 144 set operations while
+  `bfsDistances` is O(n+m) ≈ 7,000 at the roster ceiling — and the canvas runs it on every hover.
+  The rule previously read as an absolute ("no BFS/ASPL/Moore code"), which this does not violate
+  literally and does violate in spirit; stating the exception is more honest than either leaving
+  the rule false or moving a hover-path optimisation into the core to satisfy its wording.
 - **Names are positional.** The core works on vertex indices `0..n-1`; `names[i]` labels vertex
   `i` ("seated last"). The core never sees names.
 - **Generation runs in a Web Worker** (`src/worker/generate.worker.ts`) — a thin shell around

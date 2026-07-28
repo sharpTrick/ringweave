@@ -41,6 +41,12 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
         <h2>Buddy list</h2>
         <div className="bp-acts">
           <button className="chipbtn" onClick={copyAll}>{copied ? "Copied" : "Copy"}</button>
+          {/* The label swap is the ONLY confirmation that the copy worked, and a label change on
+              the focused control is not reliably announced. Every other transient feedback in the
+              app has a live region; this one did not. Mounted always, filled conditionally. */}
+          <span className="sr-live" role="status" aria-live="polite">
+            {copied ? "Buddy list copied to the clipboard." : ""}
+          </span>
           <button className="chipbtn" onClick={exportCsv}>CSV</button>
         </div>
       </div>

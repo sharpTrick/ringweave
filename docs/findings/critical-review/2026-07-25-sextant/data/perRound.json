@@ -282,6 +282,40 @@
     "toolCalls": 192
   },
   {
+    "round": 9,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 8,
+    "blocking": 4,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 7,
+    "totalFindings": 10,
+    "files": [
+      "app/src/io/parseRoster.ts",
+      "app/src/state/useFocusRescue.ts",
+      "app/src/App.tsx",
+      "app/src/neighborhood.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/panels/BuddyList.tsx",
+      "app/src/io/importGraph.ts"
+    ],
+    "classes": [
+      "roster-truncation-breaks-name-contract",
+      "focus-rescue-self-disarms",
+      "displayed-seed-disagrees-with-graph",
+      "responsibility-leak",
+      "unbuilt-seam",
+      "comment-placement",
+      "unreachable-consequence-of-action",
+      "unannounced-state-change",
+      "hidden-fan-out"
+    ],
+    "subagentTokens": 606482,
+    "agents": 6,
+    "toolCalls": 211
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,

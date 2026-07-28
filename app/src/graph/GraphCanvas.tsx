@@ -28,10 +28,10 @@ export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly Layout
  * but deliberately NOT here: folding its per-selection points into the frame would rescale the
  * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
  */
-export /* A selection-dependent layout (the focus/ego mode) is DEFERRED PAST M3 — see app/CLAUDE.md
-   for why, and for the four unresolved problems it carries. It is named here only because this
-   is the seam it would extend; the term is "selection-dependent mode" everywhere. */
-const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
+/* A selection-dependent layout (the focus/ego mode) is DEFERRED PAST M3 — see app/CLAUDE.md for
+   why, and for the four unresolved problems it carries. Named here only because this is the seam
+   it would extend; the term is "selection-dependent mode" everywhere. */
+export const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
 function assertNever(x: never): never {
   throw new Error(`Unhandled layout mode: ${String(x)}`);

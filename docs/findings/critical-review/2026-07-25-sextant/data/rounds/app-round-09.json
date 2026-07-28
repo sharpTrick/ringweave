@@ -1,0 +1,475 @@
+{
+  "target": "app/src",
+  "round": 9,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 8,
+    "blocking": 4,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Read every file under /home/user/ringweave/app/src (model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, App.tsx, io/*, state/*, graph/*, panels/*, worker/*) plus the whole app/test suite and the core surfaces the app calls (Graph, bounds, constraints, index summarize). Ran `npm test` in app/ (267 pass) as a baseline. Built four throwaway probes under app/.review-scratch/ and ran them with the existing scratch vitest config: (1) export→import metric/edge/buddy/settings parity across 42 (n,k) generated graphs — clean, no oracle drift; (2) an App-level jsdom probe of the reroll→export→editor seed; (3) parseRoster truncation/idempotence/uniqueness and app-file re-import; (4) an App-level jsdom probe of focus across the busy overlay. Also traced (and found nothing wrong in): Set/Map iteration order (core sorts `buddies`/`edgeList`; app sorts every Set before display; highlight uses membership only), quality/`assembleMetrics` gating for disconnected and n<=1 graphs, `mooreLowerBounds` degenerate returns reaching `quality`, path canonicalisation/orientation in usePathFinder, `edgeClass` route-membership argument, worker refusal/error channels and stale-id correlation, importGraph's density/degree/name/constraint gates, notice clamping, feasibility vs the core's gates, force-layout determinism gating, and useGenerationWorker's worker-swap lifecycle.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial DoS/injection pass over app/src, with hostile inputs constructed and RUN (probes in /home/user/ringweave/app/.review-scratch/, gitignored and outside the pinned test/** glob).\n\nGate ordering in /home/user/ringweave/app/src/io/importGraph.ts traced line by line and verified by measurement: version -> people.length>0 -> people.length<=MAX_IMPORT_N -> edges is array -> O(1) density (2m<=BUDDY_MAX*n) -> O(1) declaredPairs<=MAX_CONSTRAINT_PAIRS -> per-name MAX_NAME_CHARS -> control-char refusal -> collective MAX_PARSE_CHARS -> parseRoster round-trip -> edge loop -> per-vertex degreeExtent -> readConstraints -> allPairsSummary. Every size/shape gate precedes the work it bounds. Measured refusals: 1,000,000-entry edges array refused in 0.17ms; 300,000 declared prohibited pairs refused in 0.24ms (before any Set construction or the O(n^2) validate walk); star hub with degree 999 refused in 6ms before allPairsSummary.\n\nAccepted worst cases measured: max legal density n=1000/m=6000 synchronous main-thread re-measure = 90ms; force settle at the same ceiling = 225ms (FORCE_MAX_EDGES == the import density ceiling exactly); 8MB JSON.parse = 66ms; 200,000-deep nested JSON parses iteratively and quote() never stringifies it.\n\n20,000-case structured fuzz of importGraph over NaN/Infinity/-0/2^53/0.5/wrong-typed fields in every slot: no non-ImportError escaped; settings.buddies in [2,12], minSeparation in [2,12] or undefined, seed integer in [0,2^31-1], and quality===0 whenever aspl===null held on every accepted view; worst single import 1.26ms.\n\nparseRoster at the 500,000-char cap across seven pathological shapes (giant single token, all-duplicates, 100k distinct, all-commas, all-spaces, 500k zero-width Cf chars, near-duplicate 200-char prefixes): worst 43ms; scan stops at MAX_NAMES; truncation keys on the pre-truncation string.\n\nMain-thread superlinear hunt: the only place the core's O(n^2) prohibited-pair connectivity walk runs off-worker is RosterModal's per-keystroke validateDetailed pre-flight. Measured 3.7ms at n=1000 with prohibited pairs present (MAX_ROSTER_N caps n at 1000). Not a hang.\n\nSpreadsheet/clipboard sink traced end to end in io/download.ts + panels/BuddyList.tsx: neutralizeCell is leading-character-only, but toCsv quotes every field and neutralizes BEFORE quote-doubling so an embedded delimiter cannot open a second cell; the clipboard line can only be split by a tab, and NAME_HOSTILE_CHARS (\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}, one exported regex shared by both name authorities) is refused by importGraph and normalized by parseRoster; a leading-whitespace name (the one string neutralizeCell would miss) is unreachable because importGraph demands round-trip equality through parseRoster, which trims. Confirmed view.names has exactly two producers, both normalizers.\n\nExport boundary: assembleMetrics routes every metric through finiteOrNull/measurable and sanitizeSettings/SettingsControls reject non-integers, so JSON.stringify has no Infinity/NaN to silently null out.\n\nConstraints.fromTags (named in the brief) has no caller in app/src — grepped; it is lib/ API, out of scope for this component, not filed as a deferral.\n\nBaseline confirmed green before reporting: npx vitest run in app/ = 29 files, 267 tests passing.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Traced the next real committed changes for app/src against docs/PROJECT_PLAN.md M4 items and app/CLAUDE.md's \"Known follow-ons\" (which are the project's own concrete backlog). Concretely attempted: (1) the follow-on \"buddy rules are not re-checked on import\" — traced from app/src/io/importGraph.ts through app/src/constraints.ts (toConstraints already exists) to lib/src/core/index.ts to find a report-building entry point; (2) re-verified the declared GraphCanvas extension seam (LAYOUT_MODES/FIT_MODES/positionsFor) against the deferred focus/ego layout, per the CLAUDE.md's own no-caller record; (3) checked every multi-hop/graph-traversal computation in app/src (neighborhood.ts, usePathFinder.ts, PersonPanel.tsx, useGraph.ts, importGraph.ts's metrics) against the stated invariant 'the UI never reimplements math / no BFS/ASPL/Moore code in app/'; (4) read App.tsx's composition root and GraphCanvas.tsx in full for state/effect and responsibility-leak issues beyond what's already documented.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under app/src (App.tsx, all panels, all state hooks, GraphCanvas, styles/app.css motion rules) and the existing test suite (buddyListCopy, explorer/PersonPanel/PersonSearch, appErrorRecovery, hygiene, layoutToggle, useNotice) to see which interaction classes prior rounds had already hardened (focus rescue on unmount, permanently-mounted live regions for Notice/busy/path/search-empty/rule-note/roster-note, inert-based dialog containment, reduced-motion gating of the JS tween, Escape precedence, file-input keyboard equivalents, aria-pressed/aria-current on toggles). Traced the three real surfaces that set `selected` (GraphCanvas click — mouse only by design, BuddyList row, PersonSearch result) end to end against App.tsx's actual JSX order, and mechanically verified two claims with a throwaway React Testing Library render of the full `App` (worker mocked via the same vi.mock pattern `appErrorRecovery.test.tsx` uses; script written under app/test/ temporarily and deleted immediately after — nothing left in the repo, `git status --short test/` clean) rather than asserting from reading alone: (1) `#person` (PersonPanel) precedes `#buddies` (BuddyList) in DOM order — `compareDocumentPosition` returned PRECEDING, confirming the claim; (2) `#buddies` contains zero `[aria-live]`/`[role=\\\"status\\\"]` descendants, confirming the Copy button's success-state re-label has no live-region companion. Also checked usePathFinder/PathPanel's already-fixed sr-live pattern as the direct contrast case, useFocusRescue's anchor chain, useEscape's modal-suppression, RosterModal's drag/drop + file-input keyboard fallback, ConstraintsEditor's cap notice, SettingsControls' stepper announcement, and clipboard failure handling in io/download.ts.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "parseRoster's post-dedupe truncation produces names the parser's own contract (trimmed, unique) doesn't guarantee, breaking downstream consumers that assume parseRoster output is stable under re-parsing",
+      "severity": "blocking",
+      "findingSummaries": [
+        "`raw.slice(0, MAX_NAME_CHARS)` runs after trimming and after the de-dupe key is taken, so a truncated name can end in whitespace and two different people can end up with byte-identical display names — output importGraph refuses and parseRoster itself wouldn't reproduce."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the separate post-dedupe slice step. Fold truncation into the existing single normalization pass (slice before the trim/dedupe-key extraction already performed) instead of running a second, out-of-order pass that re-introduces untrimmed, possibly-colliding output after the contract-preserving steps have already run."
+    },
+    {
+      "theme": "the commit-boundary focus rescue overwrites its own correct state on success, undoing the one signal (the focusin listener) that already tracks focus validity properly",
+      "severity": "blocking",
+      "findingSummaries": [
+        "`hadFocus.current = document.activeElement === document.body;` clears the flag on a successful rescue, so focus placed by the rescue is left unprotected on the very next commit if that element gets removed."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the line. The focusin listener already sets hadFocus correctly in both outcomes (true on a successful target.focus(), unchanged/true on a refused focus into an inert subtree) — the extra assignment only clobbers that correct value."
+    },
+    {
+      "theme": "App keeps two independent copies of the seed/settings that produced the on-screen graph, and only one of them is advanced on reroll, so the editor and the export can disagree about what's displayed",
+      "severity": "blocking",
+      "findingSummaries": [
+        "A reroll advances the seed on `view.settings` only; App's own `settings` state is never re-synced, so the reopened editor's Advanced → Seed field shows a seed that doesn't produce the displayed graph, while the export (reading view.settings) shows the correct one."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Remove App's independently-maintained `settings` state and have the editor read/write through the single copy `useBuddyGraph` already keeps current on both success branches (view.settings), rather than adding a new sync callback to keep two copies aligned."
+    },
+    {
+      "theme": "app/CLAUDE.md's statements about the lib/app boundary don't match what the code actually requires — one claims an absolute rule the code doesn't fully honor, the other frames a fix as app-only when it actually needs a new lib export",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "CLAUDE.md states 'No BFS/ASPL/Moore code in app/' in absolute terms, but neighborhood.ts is a deliberate hand-rolled depth-2 traversal that the stated rule carves no exception for, even though every other multi-hop query in the app does go through the core.",
+        "CLAUDE.md frames 'buddy rules not re-checked on import' as a pure app-side follow-on, but the core function needed to build a ConstraintReport (buildReport in lib/src/core/index.ts:514) is private/unexported, so closing the follow-on actually requires a new lib export first."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "Delete the overreaching absolute claim in CLAUDE.md and the incomplete app-only framing of the follow-on; don't add new exception clauses or caveats, just cut the two inaccurate statements down to what's actually true of the current code so there is one accurate description of the boundary instead of two conflicting ones."
+    },
+    {
+      "theme": "the app has one working live-region pattern for transient/AT-relevant state changes (used by the stepper, rule-count cap, roster notes, and path finder) that two other user-triggered updates — selecting a person and copying buddies — don't route through, leaving both invisible to screen-reader users",
+      "severity": "blocking",
+      "findingSummaries": [
+        "PersonPanel renders before BuddyList/PersonSearch in DOM order and selecting a person via either control neither moves focus into it nor announces it via a live region, so a screen-reader user gets zero feedback that selection succeeded and Tab doesn't lead there.",
+        "The Copy button's Copy/Copied label swap has no aria-live/role=status companion (unlike every other transient-feedback control in the app), and copyText silently returns false on failure with no fallback at all, so the action is silently a no-op for every user on failure."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Remove the two divergent no-announcement code paths (PersonPanel's silent selection update and the Copy button's label-only feedback) and route both through the single sr-live/role=status live-region mechanism the stepper/rule-cap/roster-notes/path-finder already use, instead of building new bespoke announcement logic for each."
+    },
+    {
+      "theme": "a block comment sits between `export` and the declaration it documents, splitting a construct that reads as one token and duplicating context already given by the JSDoc above it",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`export /* A selection-dependent layout... */ const FIT_MODES = ...` breaks the visual flow between export and const and is easy to overlook in that position."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Delete the inline comment from between `export` and `const`; its content is redundant with the JSDoc already present a few lines above, so removing the misplaced copy (rather than relocating and keeping two comments) resolves it."
+    },
+    {
+      "theme": "the GraphCanvas layout-mode seam (LAYOUT_MODES/FIT_MODES/positionsFor) is generalized for a second variant that has no caller anywhere in the tree",
+      "severity": "deferral",
+      "findingSummaries": [
+        "positionsFor is exhaustive over LayoutMode via assertNever and LAYOUT_MODES/FIT_MODES both currently contain exactly {ring, force}; the seam's second-variant promise (selection-dependent focus/ego mode) has no caller, confirmed by grep, though CLAUDE.md documents it already paid off once for F10's highlight reuse."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "No action; correctly left unbuilt until a real second caller exists. Do not add the ego/focus layout mode speculatively."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "roster-truncation-breaks-name-contract",
+      "theme": "parseRoster's per-name truncation silently violates the roster contract every downstream consumer (import, the rule editor, the buddy list) assumes: names are trimmed and case-insensitively unique",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 133,
+      "summary": "`raw.slice(0, MAX_NAME_CHARS)` is applied AFTER trimming and AFTER the de-dupe key is taken, so a truncated name can end in whitespace and two different people can end up with byte-identical display names — output the parser itself will not reproduce and `importGraph` refuses.",
+      "failure": "Reproduced in app/.review-scratch/probe3.test.ts. (a) Trailing space: roster line `\"A\".repeat(119) + \" \" + \"B\".repeat(30)` → parseRoster keeps `\"A\"x119 + \" \"` (length 120, trailing space). parseRoster is then not idempotent (re-parsing its own output trims it), and generating a graph from that roster and calling exportGraph → importGraph throws ImportError \"Every name must be non-empty, unique (case-insensitively), and free of commas or line breaks.\" — the app produces a file it refuses to load, with a message naming none of the actual causes. (b) Duplicate display names: rosters `\"X\".repeat(120)+\"aaa\"` and `\"X\".repeat(120)+\"bbb\"` are kept as two people (the key is pre-truncation, deliberately) but both render as the same 120-char string: for a 5-name roster, `indexByName(names).size === 4`. A rule naming those two people then resolves both to index 0 and `resolveNamedPairs` reports `selfPair: 1`, i.e. \"1 buddy rule pairs someone with themselves and won't be used\" for a rule between two distinct humans — the silent-partial class F7 exists to prevent. The only warning shown is \"Shortened 2 very long names to 120 characters.\" No existing test exercises per-name truncation output at all (test/parseRoster.test.ts covers only the char cap and the MAX_NAMES cap), so the whole class passes the suite.",
+      "remediation": "Make truncation preserve the parser's own output contract rather than only its length: re-trim after slicing, and resolve a post-truncation display collision explicitly (keep both people but disambiguate the display name, or drop-and-warn) instead of emitting two identical names. Keep the pre-truncation de-dupe key — that part is right. Close the theme, not the case: the binding property is that `parseRoster` output is always something `parseRoster` and `importGraph` both accept unchanged.",
+      "invariant": "For every input string s, let names = parseRoster(s).names. Then (i) parseRoster(names.join(\"\\n\")).names deep-equals names (idempotence), (ii) every name equals its own trim() and has length <= MAX_NAME_CHARS, and (iii) the set of lowercased names has the same size as names (case-insensitive uniqueness). Equivalently: importGraph never throws on a file whose people are a parseRoster output.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-self-disarms",
+      "theme": "the one commit-boundary focus rescue disarms itself after a successful rescue, so focus placed by the rescue is unprotected on the very next commit",
+      "file": "/home/user/ringweave/app/src/state/useFocusRescue.ts",
+      "line": 54,
+      "summary": "`hadFocus.current = document.activeElement === document.body;` clears the flag whenever the rescue SUCCEEDS, so if the element the rescue focused is itself removed by the next commit, focus is left stranded on <body>.",
+      "failure": "Reproduced in app/.review-scratch/probe4.test.tsx against the real App. First generation: focus is on \"Generate buddy graph\", the modal unmounts and #app goes inert, the rescue correctly falls through to its third candidate and focuses the busy overlay's Cancel button — then sets hadFocus=false. When the worker result arrives the busy overlay unmounts, taking the focused Cancel button with it; the effect runs, returns early on `!hadFocus.current`, and `document.activeElement === document.body`. A keyboard user who has just generated their first graph is dropped to the top of the document — exactly the stranding the third candidate was added to fix, one commit later. Deleting that single line makes the probe pass (focus lands on the search box). The existing suite (test/appErrorRecovery.test.tsx) only ever exercises ONE rescue, never a rescue followed by removal of the rescued element, so it does not catch this.",
+      "remediation": "Delete the line. The `focusin` listener already maintains the flag correctly in both outcomes: a successful `target.focus()` fires focusin and sets hadFocus=true (which is the truth — focus is somewhere real again), and a refused focus (inert subtree) fires nothing, leaving the flag set so the next commit retries. The assignment clobbers the listener's correct value with the wrong one.",
+      "invariant": "For any sequence of commits: if focus was on a real element before a commit and that element is removed by the commit, then after the commit `document.activeElement !== document.body` whenever a reachable (non-inert) anchor exists — and this must hold for the SECOND consecutive such commit, not only the first.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "displayed-seed-disagrees-with-graph",
+      "theme": "two app surfaces show different values of the seed that produced the graph on screen, so the determinism dial does not reproduce what the user is looking at",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 352,
+      "summary": "A reroll advances the seed on `view.settings` only; App's `settings` state is never re-synced, so the reopened editor's Advanced → Seed field shows a seed that does not produce the displayed graph, while the exported file (correctly) shows a different one.",
+      "failure": "Reproduced in app/.review-scratch/probe2.test.tsx driving the real App with a stand-in worker: generate 7 people (seed 12345) → click \"↻ Different arrangement\" (dispatched seed 12346, adopted onto view) → Export writes `settings.seed = 12346` → \"Edit people\" → Advanced shows Seed = 12345. Two numbers for one graph, in one UI. Pressing Generate in that dialog with nothing edited dispatches 12345 and silently replaces the arrangement with the pre-reroll one. Note this is the sibling the round-8 revert left open, not the reverted fix itself: making the modal read `view.settings` made one dialog input view-derived while its neighbours stayed dispatch-derived; syncing App's `settings` when a view is ADOPTED keeps all three inputs dispatch-consistent AND makes the seed true.",
+      "remediation": "Commit the adopted settings back to App state in the one place a view is adopted (the same seam `useBuddyGraph` uses to set `view.settings` on both success branches — e.g. an `onAdopted(view)` callback App uses to `setSettings(view.settings)`), so there is one copy of the seed behind both the editor and the export instead of two that drift on every reroll.",
+      "invariant": "Whenever a graph is displayed and no later generation has been dispatched, the seed rendered by SettingsControls in the reopened editor equals `exportGraph(view).settings.seed` — i.e. the seed the UI shows always reproduces the graph the UI shows.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "responsibility-leak",
+      "theme": "graph traversal logic lives in the app despite the stated 'no BFS/ASPL/Moore code in app/' rule",
+      "file": "app/src/neighborhood.ts",
+      "line": 24,
+      "summary": "app/CLAUDE.md states the invariant in absolute terms: 'The UI never reimplements math... No BFS/ASPL/Moore code in app/. If a number is missing, add it to the core (lib-first), not here.' `neighborhood.ts` is nonetheless a hand-rolled depth-2 graph traversal (first/second-order adjacency walk) that duplicates what the core's `bfsDistances` (lib/src/core/metrics.ts) already computes generally. The file's own comment acknowledges and defends this as a deliberate performance trade-off (bounded-degree adjacency walk vs. an O(n+m) BFS on every hover), which is a reasonable engineering call — but it is a call the stated architecture rule does not carve an exception for, and every other multi-hop query in the app (usePathFinder.ts's shortestPath, PersonPanel.tsx's eccentricity) correctly goes through the core instead. This is the one place that pattern breaks.",
+      "failure": "Any future change to how 'distance <= 2' is defined (e.g. if the core's notion of adjacency or a future weighted-edge model changes) has to be updated in two places — lib/src/core/metrics.ts and app/src/neighborhood.ts — because the app computes its own version instead of calling the core's. Today they happen to agree only because both walk the same plain adjacency lists.",
+      "remediation": "Either (a) narrow the CLAUDE.md invariant to say what is actually true — 'no shortest-path/ASPL/Moore-bound computation in app/, but bounded-degree neighbor derivation may stay local for perf, see neighborhood.ts' — so the stated rule matches the code, or (b) if this is considered a genuine boundary leak, move the depth-2 derivation into the core as an exported `neighborsWithin(g, v, radius)` (which would also close the door to it silently growing into a general traversal reimplementation later).",
+      "invariant": "For every function in app/src that computes reachability/adjacency-composition beyond a single direct lookup, there exists a corresponding exported function in lib/src/core that it calls — i.e. grep for adjacency[...][...] nested loops in app/src should return nothing outside test files.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "comment-placement",
+      "theme": "comment in unexpected location breaks visual flow and makes it easy to overlook",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 31,
+      "summary": "Block comment placed between export keyword and const declaration, visually confusing",
+      "failure": "Lines 31-33: block comment inserted between `export` and `const FIT_MODES`, breaking the visual continuity of the declaration. A developer reading the code sees the comment appearing to interrupt the export statement rather than preceding it.",
+      "remediation": "Move the comment to its own line(s) before the export keyword, or incorporate it into the JSDoc above (lines 24-30). Preferred: place before export. Current code structure:\n```\nexport /* A selection-dependent layout... */\nconst FIT_MODES = ...\n```\nShould be:\n```\n/* A selection-dependent layout... */\nexport const FIT_MODES = ...\n```\nOr fold into the JSDoc above.",
+      "caseOnly": false,
+      "invariant": "no block comment should appear between an export keyword and its declaration; export statements must be visually contiguous with their target declaration"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unreachable-consequence-of-action",
+      "theme": "content that appears as the direct result of an assistive-tech action is not perceivable by that same user immediately or via forward navigation",
+      "file": "app/src/App.tsx",
+      "line": 302,
+      "summary": "PersonPanel (`#person`) is rendered BEFORE BuddyList (`#buddies`) and PersonSearch (`#search`) in DOM order, even though selecting a person via a BuddyList row or a PersonSearch result is what makes PersonPanel appear/update, and neither selection path moves focus into it or announces its content via a live region. A screen-reader user who does the app's own headline task — 'find one specific person, discover who their buddies are' — via PersonSearch (App.tsx:333, the documented keyboard-accessible discovery mechanism) or via a BuddyList row (App.tsx:322) gets zero immediate feedback that the selection succeeded, and pressing Tab forward from either control does NOT lead into PersonPanel (it precedes both in DOM order, so it was already passed). The only way to reach it is Shift+Tab backward through several stops, which nothing on screen indicates is necessary.",
+      "failure": "Mechanically reproduced: render the full App with `try example names` -> `Generate buddy graph`, click a `button.brow` row inside `#buddies`. `document.getElementById('buddies').compareDocumentPosition(document.getElementById('person'))` returns `DOCUMENT_POSITION_PRECEDING` (2), i.e. `#person` is BEFORE `#buddies` in the DOM. The same holds for `#search`, which sits even later than `#buddies` in the JSX (App.tsx: LayoutToggle, PersonPanel, BuddyList, PathPanel?, PersonSearch, hint, QualityPanel). Compare with PathPanel/`usePathFinder`, which got an explicit permanently-mounted `sr-live` region (App.tsx:375-377) specifically because 'the region and its content arrived in one commit' for a mounted-on-action panel — the identical failure mode was diagnosed and fixed for the path finder but the same class was left unfixed for person selection.",
+      "remediation": "Either (a) give PersonPanel a permanently-mounted spoken twin analogous to `sr-live`/`busy-live` (a region that already exists before selection changes, updated with the person's name + buddy summary on every selection), following the exact pattern already used for the path finder, or (b) move focus into PersonPanel's heading on selection from BuddyList/PersonSearch (with an explicit return-focus affordance), or (c) reorder the DOM so `#person` follows `#buddies` and `#search` — but note the existing comment at App.tsx:302-308 explains DOM order was deliberately reordered in a prior round to match sighted keyboard users' spatial reading order, so a pure reorder would need to be reconciled with that constraint (e.g. via a live-region echo instead, which doesn't require moving `#person`).",
+      "invariant": "For every control C whose activation sets `selected` to a non-null index (a BuddyList row, a PersonSearch result), either C's element precedes PersonPanel in document order (so forward Tab from C reaches it), or the selection is echoed into a live region that already exists in the DOM before the selection changes."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unannounced-state-change",
+      "theme": "a transient success/failure state expressed only as a change to a focused control's own visible label, with no live region and no fallback on failure",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 43,
+      "summary": "The Copy button's `Copy` -> `Copied` label swap (driven by `copied` state, App: BuddyList.tsx:14,27-29) has no `aria-live`/`role=\"status\"` companion anywhere in `#buddies`, unlike every other transient-feedback control in the app (the buddies-count stepper explicitly documents why a focused button's own label change is not enough and pairs it with a `role=\"status\"` span at SettingsControls.tsx:44; the rule-count cap note at ConstraintsEditor.tsx:117; the roster note stack at RosterModal.tsx:178). A screen-reader user pressing Copy has no way to know the copy succeeded. Separately, `copyText` (io/download.ts:26-36) silently returns `false` on any failure (no `navigator.clipboard`, a rejected permission, a non-secure context) and `copyAll` has no `else` branch — on failure there is no state change, no toast, and no live region at all, so the action fails completely silently for every user, not just screen-reader users.",
+      "failure": "Mechanically confirmed: render the full App, generate a graph, and query `document.getElementById('buddies').querySelectorAll('[aria-live], [role=\"status\"]')` — returns an empty NodeList. Reading `copyAll`: `const ok = await copyText(text); if (ok) { setCopied(true); ... }` — there is no `else`, so a failed clipboard write produces no observable change in the DOM at all.",
+      "remediation": "Add a `role=\"status\" aria-live=\"polite\"` sibling (permanently mounted, text conditional, matching the pattern used everywhere else in this codebase) that announces 'Copied to clipboard' on success, and add a visible+announced failure message ('Couldn't copy — try Export instead' or similar) on the `copyText` false branch so the action is never silently a no-op.",
+      "invariant": "Every control whose press can succeed or fail without a page navigation or DOM-visible consequence outside itself must expose that success/failure through a pre-mounted live region, and no async action handler may terminate without producing an observable outcome on every code path (success and failure)."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "roster-truncation-breaks-name-contract",
+      "theme": "parseRoster's per-name truncation silently violates the roster contract every downstream consumer (import, the rule editor, the buddy list) assumes: names are trimmed and case-insensitively unique",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 133,
+      "summary": "`raw.slice(0, MAX_NAME_CHARS)` is applied AFTER trimming and AFTER the de-dupe key is taken, so a truncated name can end in whitespace and two different people can end up with byte-identical display names — output the parser itself will not reproduce and `importGraph` refuses.",
+      "failure": "Reproduced in app/.review-scratch/probe3.test.ts. (a) Trailing space: roster line `\"A\".repeat(119) + \" \" + \"B\".repeat(30)` → parseRoster keeps `\"A\"x119 + \" \"` (length 120, trailing space). parseRoster is then not idempotent (re-parsing its own output trims it), and generating a graph from that roster and calling exportGraph → importGraph throws ImportError \"Every name must be non-empty, unique (case-insensitively), and free of commas or line breaks.\" — the app produces a file it refuses to load, with a message naming none of the actual causes. (b) Duplicate display names: rosters `\"X\".repeat(120)+\"aaa\"` and `\"X\".repeat(120)+\"bbb\"` are kept as two people (the key is pre-truncation, deliberately) but both render as the same 120-char string: for a 5-name roster, `indexByName(names).size === 4`. A rule naming those two people then resolves both to index 0 and `resolveNamedPairs` reports `selfPair: 1`, i.e. \"1 buddy rule pairs someone with themselves and won't be used\" for a rule between two distinct humans — the silent-partial class F7 exists to prevent. The only warning shown is \"Shortened 2 very long names to 120 characters.\" No existing test exercises per-name truncation output at all (test/parseRoster.test.ts covers only the char cap and the MAX_NAMES cap), so the whole class passes the suite.",
+      "remediation": "Make truncation preserve the parser's own output contract rather than only its length: re-trim after slicing, and resolve a post-truncation display collision explicitly (keep both people but disambiguate the display name, or drop-and-warn) instead of emitting two identical names. Keep the pre-truncation de-dupe key — that part is right. Close the theme, not the case: the binding property is that `parseRoster` output is always something `parseRoster` and `importGraph` both accept unchanged.",
+      "invariant": "For every input string s, let names = parseRoster(s).names. Then (i) parseRoster(names.join(\"\\n\")).names deep-equals names (idempotence), (ii) every name equals its own trim() and has length <= MAX_NAME_CHARS, and (iii) the set of lowercased names has the same size as names (case-insensitive uniqueness). Equivalently: importGraph never throws on a file whose people are a parseRoster output.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-self-disarms",
+      "theme": "the one commit-boundary focus rescue disarms itself after a successful rescue, so focus placed by the rescue is unprotected on the very next commit",
+      "file": "/home/user/ringweave/app/src/state/useFocusRescue.ts",
+      "line": 54,
+      "summary": "`hadFocus.current = document.activeElement === document.body;` clears the flag whenever the rescue SUCCEEDS, so if the element the rescue focused is itself removed by the next commit, focus is left stranded on <body>.",
+      "failure": "Reproduced in app/.review-scratch/probe4.test.tsx against the real App. First generation: focus is on \"Generate buddy graph\", the modal unmounts and #app goes inert, the rescue correctly falls through to its third candidate and focuses the busy overlay's Cancel button — then sets hadFocus=false. When the worker result arrives the busy overlay unmounts, taking the focused Cancel button with it; the effect runs, returns early on `!hadFocus.current`, and `document.activeElement === document.body`. A keyboard user who has just generated their first graph is dropped to the top of the document — exactly the stranding the third candidate was added to fix, one commit later. Deleting that single line makes the probe pass (focus lands on the search box). The existing suite (test/appErrorRecovery.test.tsx) only ever exercises ONE rescue, never a rescue followed by removal of the rescued element, so it does not catch this.",
+      "remediation": "Delete the line. The `focusin` listener already maintains the flag correctly in both outcomes: a successful `target.focus()` fires focusin and sets hadFocus=true (which is the truth — focus is somewhere real again), and a refused focus (inert subtree) fires nothing, leaving the flag set so the next commit retries. The assignment clobbers the listener's correct value with the wrong one.",
+      "invariant": "For any sequence of commits: if focus was on a real element before a commit and that element is removed by the commit, then after the commit `document.activeElement !== document.body` whenever a reachable (non-inert) anchor exists — and this must hold for the SECOND consecutive such commit, not only the first.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "displayed-seed-disagrees-with-graph",
+      "theme": "two app surfaces show different values of the seed that produced the graph on screen, so the determinism dial does not reproduce what the user is looking at",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 352,
+      "summary": "A reroll advances the seed on `view.settings` only; App's `settings` state is never re-synced, so the reopened editor's Advanced → Seed field shows a seed that does not produce the displayed graph, while the exported file (correctly) shows a different one.",
+      "failure": "Reproduced in app/.review-scratch/probe2.test.tsx driving the real App with a stand-in worker: generate 7 people (seed 12345) → click \"↻ Different arrangement\" (dispatched seed 12346, adopted onto view) → Export writes `settings.seed = 12346` → \"Edit people\" → Advanced shows Seed = 12345. Two numbers for one graph, in one UI. Pressing Generate in that dialog with nothing edited dispatches 12345 and silently replaces the arrangement with the pre-reroll one. Note this is the sibling the round-8 revert left open, not the reverted fix itself: making the modal read `view.settings` made one dialog input view-derived while its neighbours stayed dispatch-derived; syncing App's `settings` when a view is ADOPTED keeps all three inputs dispatch-consistent AND makes the seed true.",
+      "remediation": "Commit the adopted settings back to App state in the one place a view is adopted (the same seam `useBuddyGraph` uses to set `view.settings` on both success branches — e.g. an `onAdopted(view)` callback App uses to `setSettings(view.settings)`), so there is one copy of the seed behind both the editor and the export instead of two that drift on every reroll.",
+      "invariant": "Whenever a graph is displayed and no later generation has been dispatched, the seed rendered by SettingsControls in the reopened editor equals `exportGraph(view).settings.seed` — i.e. the seed the UI shows always reproduces the graph the UI shows.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "responsibility-leak",
+      "theme": "graph traversal logic lives in the app despite the stated 'no BFS/ASPL/Moore code in app/' rule",
+      "file": "app/src/neighborhood.ts",
+      "line": 24,
+      "summary": "app/CLAUDE.md states the invariant in absolute terms: 'The UI never reimplements math... No BFS/ASPL/Moore code in app/. If a number is missing, add it to the core (lib-first), not here.' `neighborhood.ts` is nonetheless a hand-rolled depth-2 graph traversal (first/second-order adjacency walk) that duplicates what the core's `bfsDistances` (lib/src/core/metrics.ts) already computes generally. The file's own comment acknowledges and defends this as a deliberate performance trade-off (bounded-degree adjacency walk vs. an O(n+m) BFS on every hover), which is a reasonable engineering call — but it is a call the stated architecture rule does not carve an exception for, and every other multi-hop query in the app (usePathFinder.ts's shortestPath, PersonPanel.tsx's eccentricity) correctly goes through the core instead. This is the one place that pattern breaks.",
+      "failure": "Any future change to how 'distance <= 2' is defined (e.g. if the core's notion of adjacency or a future weighted-edge model changes) has to be updated in two places — lib/src/core/metrics.ts and app/src/neighborhood.ts — because the app computes its own version instead of calling the core's. Today they happen to agree only because both walk the same plain adjacency lists.",
+      "remediation": "Either (a) narrow the CLAUDE.md invariant to say what is actually true — 'no shortest-path/ASPL/Moore-bound computation in app/, but bounded-degree neighbor derivation may stay local for perf, see neighborhood.ts' — so the stated rule matches the code, or (b) if this is considered a genuine boundary leak, move the depth-2 derivation into the core as an exported `neighborsWithin(g, v, radius)` (which would also close the door to it silently growing into a general traversal reimplementation later).",
+      "invariant": "For every function in app/src that computes reachability/adjacency-composition beyond a single direct lookup, there exists a corresponding exported function in lib/src/core that it calls — i.e. grep for adjacency[...][...] nested loops in app/src should return nothing outside test files.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-seam",
+      "theme": "the GraphCanvas layout-mode seam (LAYOUT_MODES/FIT_MODES/positionsFor) has no second caller of its full generality in the current tree",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 48,
+      "summary": "positionsFor is exhaustive over LayoutMode via assertNever, and LAYOUT_MODES/FIT_MODES currently both contain exactly {ring, force} — one real variant pair, with the seam's second-variant promise (a selection-dependent focus/ego mode) explicitly deferred with no caller anywhere in app/src (confirmed by grep: no reference to a third LayoutMode or a selection-dependent branch exists outside comments). Per the no-caller rule this is filed as a deferral only. Recording it here (rather than skipping) because app/CLAUDE.md itself documents that the seam DID pay off in its one real test — F10's route highlighting reused `buildHighlight`/`positionsFor`'s discipline without needing a new mode — so the seam is not dead weight, it's simply not yet exercised for a third mode.",
+      "failure": "n/a (deferral; no live caller to break)",
+      "remediation": "No action; correctly left unbuilt until the focus/ego layout (or another selection-dependent mode) is actually committed. app/CLAUDE.md already records the four concrete problems (snap-not-animate, clipping radii, undefined empty-selection focus, positionsFor signature change) that would need resolving first.",
+      "invariant": "adding a third LayoutMode to LAYOUT_MODES fails to compile in positionsFor until a case is added — verified structurally via the assertNever exhaustiveness check, not executed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "comment-placement",
+      "theme": "comment in unexpected location breaks visual flow and makes it easy to overlook",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 31,
+      "summary": "Block comment placed between export keyword and const declaration, visually confusing",
+      "failure": "Lines 31-33: block comment inserted between `export` and `const FIT_MODES`, breaking the visual continuity of the declaration. A developer reading the code sees the comment appearing to interrupt the export statement rather than preceding it.",
+      "remediation": "Move the comment to its own line(s) before the export keyword, or incorporate it into the JSDoc above (lines 24-30). Preferred: place before export. Current code structure:\n```\nexport /* A selection-dependent layout... */\nconst FIT_MODES = ...\n```\nShould be:\n```\n/* A selection-dependent layout... */\nexport const FIT_MODES = ...\n```\nOr fold into the JSDoc above.",
+      "caseOnly": false,
+      "invariant": "no block comment should appear between an export keyword and its declaration; export statements must be visually contiguous with their target declaration"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unreachable-consequence-of-action",
+      "theme": "content that appears as the direct result of an assistive-tech action is not perceivable by that same user immediately or via forward navigation",
+      "file": "app/src/App.tsx",
+      "line": 302,
+      "summary": "PersonPanel (`#person`) is rendered BEFORE BuddyList (`#buddies`) and PersonSearch (`#search`) in DOM order, even though selecting a person via a BuddyList row or a PersonSearch result is what makes PersonPanel appear/update, and neither selection path moves focus into it or announces its content via a live region. A screen-reader user who does the app's own headline task — 'find one specific person, discover who their buddies are' — via PersonSearch (App.tsx:333, the documented keyboard-accessible discovery mechanism) or via a BuddyList row (App.tsx:322) gets zero immediate feedback that the selection succeeded, and pressing Tab forward from either control does NOT lead into PersonPanel (it precedes both in DOM order, so it was already passed). The only way to reach it is Shift+Tab backward through several stops, which nothing on screen indicates is necessary.",
+      "failure": "Mechanically reproduced: render the full App with `try example names` -> `Generate buddy graph`, click a `button.brow` row inside `#buddies`. `document.getElementById('buddies').compareDocumentPosition(document.getElementById('person'))` returns `DOCUMENT_POSITION_PRECEDING` (2), i.e. `#person` is BEFORE `#buddies` in the DOM. The same holds for `#search`, which sits even later than `#buddies` in the JSX (App.tsx: LayoutToggle, PersonPanel, BuddyList, PathPanel?, PersonSearch, hint, QualityPanel). Compare with PathPanel/`usePathFinder`, which got an explicit permanently-mounted `sr-live` region (App.tsx:375-377) specifically because 'the region and its content arrived in one commit' for a mounted-on-action panel — the identical failure mode was diagnosed and fixed for the path finder but the same class was left unfixed for person selection.",
+      "remediation": "Either (a) give PersonPanel a permanently-mounted spoken twin analogous to `sr-live`/`busy-live` (a region that already exists before selection changes, updated with the person's name + buddy summary on every selection), following the exact pattern already used for the path finder, or (b) move focus into PersonPanel's heading on selection from BuddyList/PersonSearch (with an explicit return-focus affordance), or (c) reorder the DOM so `#person` follows `#buddies` and `#search` — but note the existing comment at App.tsx:302-308 explains DOM order was deliberately reordered in a prior round to match sighted keyboard users' spatial reading order, so a pure reorder would need to be reconciled with that constraint (e.g. via a live-region echo instead, which doesn't require moving `#person`).",
+      "invariant": "For every control C whose activation sets `selected` to a non-null index (a BuddyList row, a PersonSearch result), either C's element precedes PersonPanel in document order (so forward Tab from C reaches it), or the selection is echoed into a live region that already exists in the DOM before the selection changes."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unannounced-state-change",
+      "theme": "a transient success/failure state expressed only as a change to a focused control's own visible label, with no live region and no fallback on failure",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 43,
+      "summary": "The Copy button's `Copy` -> `Copied` label swap (driven by `copied` state, App: BuddyList.tsx:14,27-29) has no `aria-live`/`role=\"status\"` companion anywhere in `#buddies`, unlike every other transient-feedback control in the app (the buddies-count stepper explicitly documents why a focused button's own label change is not enough and pairs it with a `role=\"status\"` span at SettingsControls.tsx:44; the rule-count cap note at ConstraintsEditor.tsx:117; the roster note stack at RosterModal.tsx:178). A screen-reader user pressing Copy has no way to know the copy succeeded. Separately, `copyText` (io/download.ts:26-36) silently returns `false` on any failure (no `navigator.clipboard`, a rejected permission, a non-secure context) and `copyAll` has no `else` branch — on failure there is no state change, no toast, and no live region at all, so the action fails completely silently for every user, not just screen-reader users.",
+      "failure": "Mechanically confirmed: render the full App, generate a graph, and query `document.getElementById('buddies').querySelectorAll('[aria-live], [role=\"status\"]')` — returns an empty NodeList. Reading `copyAll`: `const ok = await copyText(text); if (ok) { setCopied(true); ... }` — there is no `else`, so a failed clipboard write produces no observable change in the DOM at all.",
+      "remediation": "Add a `role=\"status\" aria-live=\"polite\"` sibling (permanently mounted, text conditional, matching the pattern used everywhere else in this codebase) that announces 'Copied to clipboard' on success, and add a visible+announced failure message ('Couldn't copy — try Export instead' or similar) on the `copyText` false branch so the action is never silently a no-op.",
+      "invariant": "Every control whose press can succeed or fail without a page navigation or DOM-visible consequence outside itself must expose that success/failure through a pre-mounted live region, and no async action handler may terminate without producing an observable outcome on every code path (success and failure)."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-seam",
+      "theme": "the GraphCanvas layout-mode seam (LAYOUT_MODES/FIT_MODES/positionsFor) has no second caller of its full generality in the current tree",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 48,
+      "summary": "positionsFor is exhaustive over LayoutMode via assertNever, and LAYOUT_MODES/FIT_MODES currently both contain exactly {ring, force} — one real variant pair, with the seam's second-variant promise (a selection-dependent focus/ego mode) explicitly deferred with no caller anywhere in app/src (confirmed by grep: no reference to a third LayoutMode or a selection-dependent branch exists outside comments). Per the no-caller rule this is filed as a deferral only. Recording it here (rather than skipping) because app/CLAUDE.md itself documents that the seam DID pay off in its one real test — F10's route highlighting reused `buildHighlight`/`positionsFor`'s discipline without needing a new mode — so the seam is not dead weight, it's simply not yet exercised for a third mode.",
+      "failure": "n/a (deferral; no live caller to break)",
+      "remediation": "No action; correctly left unbuilt until the focus/ego layout (or another selection-dependent mode) is actually committed. app/CLAUDE.md already records the four concrete problems (snap-not-animate, clipping radii, undefined empty-selection focus, positionsFor signature change) that would need resolving first.",
+      "invariant": "adding a third LayoutMode to LAYOUT_MODES fails to compile in positionsFor until a case is added — verified structurally via the assertNever exhaustiveness check, not executed.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "hidden-fan-out",
+      "theme": "closing a documented, seemingly app-local follow-on actually requires a new core export, not just an app-side computation",
+      "file": "app/src/io/importGraph.ts",
+      "line": 283,
+      "summary": "app/CLAUDE.md's follow-on list frames 'buddy rules are not re-checked on import' as purely an app-side fix: 'verifying the rules against the imported edge set... is a real (cheap) computation and a clean follow-on.' Tracing the actual edit: app/src/constraints.ts already has `toConstraints(n, pairs)` to build a core `Constraints` from the app's `ConstraintPair[]`, so the app-side half is indeed ready. But the function that turns a `(Graph, Constraints)` pair into a `ConstraintReport` — `buildReport` in lib/src/core/index.ts:514 — is a private, unexported module function; it is not among the names re-exported at the top of that file (lib/src/core/index.ts:14-52), and lib's package `main`/`types` point at `dist/core/index.js`/`.d.ts`, so nothing outside that file can call it. Closing this follow-on therefore fans out into `lib/`: a new export must be added (or `buildReport` promoted to public) before `importGraph.ts` can call it. This is the correct place for that logic per the architecture (constraint-violation counting is exactly the kind of math the core is supposed to own), so it is not a violation — but the CLAUDE.md wording undersells the fan-out, and a contributor picking this up expecting an app-only change would discover the core boundary mid-task.",
+      "failure": "A contributor scoping this follow-on from app/CLAUDE.md's wording alone ('a real (cheap) computation') would plan an app-only PR, then hit a private lib function and have to reopen the core's own review process (lib/CLAUDE.md's adversarial review) mid-task rather than having scoped that in from the start.",
+      "remediation": "Update the follow-on note to say explicitly that closing it requires exporting a report-builder from lib/src/core/index.ts (e.g. exporting `buildReport` or a new `checkConstraints(g, cons): ConstraintReport`), consistent with the lib-first rule already stated elsewhere in the same file.",
+      "invariant": "n/a — this is a documentation/scoping-accuracy finding about a specific follow-on's fan-out, not a property over inputs.",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 1,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 606482,
+    "agents": 6,
+    "toolCalls": 211
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "observations": [
+    {
+      "kind": "three-round-oscillation",
+      "note": "The modal settings source was changed in r7 (to view-derived), reverted in r8 (as inconsistent), and found stale in r9 (seed does not match the displayed graph). Three rounds on one line. Both r8 and r9 critics recommended the same thing — adopt view.settings INTO the single settings state — and I chose the cheaper revert in r8 instead. The oscillation is mine, not the critics: they were consistent and I was not."
+    },
+    {
+      "kind": "critics-avoided-thrash",
+      "note": "Both risky findings this round came with the thrash explicitly anticipated. critic-interaction noted the r7 comment saying DOM order was deliberately set to visual order and recommended a live-region echo INSTEAD of another reorder; critic-solid offered narrowing the doc as an alternative to moving code. Neither forced a change that would fight a previous round. That is the triage/theme discipline working on the critic side."
+    },
+    {
+      "kind": "first-security-quiet-on-app",
+      "note": "critic-security returned nothingFound for the first time on app/src, after eight rounds, having measured rather than reasoned: gate ordering timed, 20000-case structured fuzz, spreadsheet sinks driven end to end. app/src now has two lenses at streak>=1."
+    }
+  ]
+}

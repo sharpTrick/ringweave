@@ -48,9 +48,10 @@ export function useFocusRescue(anchor: () => HTMLElement | null | undefined): vo
     const target = anchor();
     if (!target) return;
     target.focus();
-    // Only if the focus actually took. An anchor inside an `inert` subtree silently
-    // refuses focus, and leaving the flag set means the next commit tries again — which is
-    // what should happen, since focus is still stranded.
-    hadFocus.current = document.activeElement === document.body;
+    // The flag stays TRUE once focus has been somewhere real, and is never cleared here. It was
+    // being set to `activeElement === document.body`, i.e. cleared whenever the rescue SUCCEEDED
+    // — so if the very element the rescue had just focused was removed by the next commit, the
+    // rescue had disarmed itself and focus was stranded after all. The flag's only job is "has
+    // focus ever been somewhere real", which a successful rescue makes MORE true, not less.
   });
 }

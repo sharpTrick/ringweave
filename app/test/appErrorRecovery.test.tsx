@@ -334,3 +334,26 @@ describe("the dialog contains focus, including the toast", () => {
     expect(inertAncestor(screen.getByRole("dialog"))).toBe(false);
   });
 });
+
+describe("selecting a person is announced, not just rendered", () => {
+  it("puts the selection into a region that was already mounted", () => {
+    // PersonPanel precedes the buddy list and the search box in DOM order — deliberately, so the
+    // DOM follows the visual layout — so Tab has already passed it by the time a selection is
+    // made from either. Announcing the outcome is what makes the headline task usable without a
+    // mouse, and the region must pre-exist the text or the change is not a change.
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    const regions = () => Array.from(document.querySelectorAll(".sr-live"));
+    expect(regions().length).toBeGreaterThan(0); // mounted BEFORE any selection
+    expect(regions().map((r) => r.textContent).join("")).toBe("");
+
+    fireEvent.click(document.querySelectorAll(".brow")[0]);
+    const spoken = regions().map((r) => r.textContent).join(" ");
+    expect(spoken).toMatch(/selected/);
+  });
+});

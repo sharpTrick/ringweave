@@ -94,11 +94,18 @@ export function parseRoster(raw: string): ParsedRoster {
     // the change is never silent. Import REFUSES an over-long name instead; the two
     // authorities differ deliberately, and the round-trip check in importGraph is what
     // keeps them from disagreeing about any name that gets through.
-    const token = raw.length > MAX_NAME_CHARS ? raw.slice(0, MAX_NAME_CHARS) : raw;
-    // Keyed on the PRE-truncation name. Keying on the truncated one merges two genuinely
-    // different people whose first 120 characters happen to match — silently dropping one and
-    // reporting it as a duplicate.
-    const key = raw.toLowerCase();
+    // Trim AGAIN after truncating: slicing mid-string can leave a trailing space, and a name
+    // ending in whitespace is one this parser will not reproduce on a second pass and that
+    // `importGraph` refuses outright — the output would fail its own round-trip contract.
+    const token = raw.length > MAX_NAME_CHARS ? raw.slice(0, MAX_NAME_CHARS).trim() : raw;
+    // Keyed on the EMITTED name, not the pre-truncation one. Last round this was moved to `raw`
+    // to stop two different people merging when their first 120 characters match — a real
+    // concern, and the wrong resolution: `importGraph` requires every emitted name to be unique
+    // case-insensitively, so two rows that truncate to the same display name CANNOT both be
+    // emitted. Keying on `raw` let them, producing a roster this parser's own consumer rejects.
+    // Treating them as duplicates is the only outcome that satisfies the contract, and the
+    // de-dupe warning already names what happened.
+    const key = token.toLowerCase();
     if (keptByKey.has(key)) {
       // A duplicate isn't lost either. Count it toward the de-dupe warning only while we're
       // still keeping names; a duplicate seen AFTER the cap is simply ignored (nothing dropped).

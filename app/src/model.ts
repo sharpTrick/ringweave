@@ -296,6 +296,24 @@ export function targetShortfall(view: GraphView): { asked: number; got: number }
   return got < asked ? { asked, got } : null;
 }
 
+/**
+ * What a screen reader is told when a person is selected.
+ *
+ * Selecting someone from the buddy list or a search result is the app's headline task, and it
+ * produced NO immediate feedback: PersonPanel simply appeared, focus did not move into it, and it
+ * precedes both controls in DOM order (deliberately — the DOM follows the visual layout), so Tab
+ * had already passed it. Announcing the result is the fix that does not fight that ordering.
+ */
+export function selectionStatusText(view: GraphView, index: number | null): string {
+  if (index === null) return "";
+  const buddies = view.buddies[index] ?? [];
+  const names = buddies.map((i) => view.names[i]);
+  if (names.length === 0) return `${view.names[index]} selected — no buddies yet.`;
+  return `${view.names[index]} selected — ${names.length} ${
+    names.length === 1 ? "buddy" : "buddies"
+  }: ${clampList(names, ROUTE_NAMES_MAX)}.`;
+}
+
 /** How many people a spoken route names before it counts the rest. */
 const ROUTE_NAMES_MAX = 12;
 

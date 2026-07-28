@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseRoster, charCapNotice, MAX_NAMES, MAX_PARSE_CHARS } from "../src/io/parseRoster";
+import {
+  parseRoster, charCapNotice, MAX_NAMES, MAX_PARSE_CHARS, MAX_NAME_CHARS,
+} from "../src/io/parseRoster";
 
 const hasControlChar = (s: string): boolean =>
   [...s].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127);
@@ -97,5 +99,30 @@ describe("parseRoster", () => {
   it("the char-cap warning is exactly charCapNotice (single source with the UI)", () => {
     const { warnings } = parseRoster("x".repeat(MAX_PARSE_CHARS + 1));
     expect(warnings).toContain(charCapNotice());
+  });
+});
+
+describe("what the parser emits, it must be able to re-parse", () => {
+  // The round-trip contract is not decorative: importGraph REFUSES any file whose names
+  // parseRoster would not reproduce exactly, and requires them unique case-insensitively. Two
+  // separate fixes broke it in opposite directions — truncating after trim left names ending in
+  // whitespace, and keying the de-dupe on the pre-truncation name let two rows emit the same
+  // display name. Both produced a roster this parser's own consumer rejects.
+  const long = (suffix: string) => "x".repeat(MAX_NAME_CHARS - 1) + " " + suffix;
+
+  it("never emits a name it would itself change on a second pass", () => {
+    const { names } = parseRoster([long("alpha"), long("beta"), "Ada"].join("\n"));
+    for (const n of names) {
+      expect(n).toBe(n.trim());
+      expect(n.length).toBeLessThanOrEqual(MAX_NAME_CHARS);
+    }
+    // Idempotent: re-parsing the output reproduces it exactly.
+    expect(parseRoster(names.join("\n")).names).toEqual(names);
+  });
+
+  it("never emits two names that collide case-insensitively after truncation", () => {
+    const { names } = parseRoster([long("alpha"), long("beta")].join("\n"));
+    const keys = names.map((n) => n.toLowerCase());
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
