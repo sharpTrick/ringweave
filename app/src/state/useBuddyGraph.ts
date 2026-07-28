@@ -15,7 +15,7 @@ function sameEdges(a: [number, number][], b: [number, number][]): boolean {
 
 
 /**
- * Orchestrates generation: sends a job to the worker and maps its BuddyResult back into
+ * Orchestrates generation: sends a job to the worker and maps its GraphResult — the normalized builder outcome — back into
  * a GraphView using the exact roster + settings that produced it (captured in `pending`,
  * so an async result is never paired with a roster that changed underneath it).
  *

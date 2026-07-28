@@ -49,6 +49,9 @@ export default function App() {
   const view = bg.view;
 
   const [modalOpen, setModalOpen] = useState(true);
+  // Cleared whenever the dialog is dismissed or a generation is dispatched, so a stale reason
+  // never outlives the attempt it describes.
+  const [reopenReason, setReopenReason] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [names, setNames] = useState<string[]>([]);
   // The rules the EDITOR is holding, as the user typed them. There is deliberately no sibling
@@ -152,14 +155,23 @@ export default function App() {
       // A refusal is not a failure: the rules simply admit no graph. Reopen the editor
       // so the user is next to the controls that caused it — the reasons name people,
       // and the roster modal is where those people are edited.
-      show(describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.");
+      // Into the DIALOG, not the toast: the toast is inert while the dialog is open, and inert
+      // removes it from the accessibility tree, so a message shown there in the same commit that
+      // opens this was never announced.
+      setReopenReason(describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.");
       setModalOpen(true);
     } else if (bg.status === "error") {
       // Recovery must not hinge on the message being non-empty: a "" error would otherwise skip
       // BOTH the toast and the reopen. Always surface something and, on a first-generation failure
       // (no view, no running overlay), reopen the setup modal so the user is never stranded.
-      show(bg.error || "Generation failed.");
-      if (!view) setModalOpen(true);
+      // Same split: if the dialog is about to open, the message goes INTO it; otherwise there is
+      // no dialog to be contained by and the toast is both visible and announced.
+      if (!view) {
+        setReopenReason(bg.error || "Generation failed.");
+        setModalOpen(true);
+      } else {
+        show(bg.error || "Generation failed.");
+      }
     } else if (bg.status === "running") {
       clear(); // clear a stale error over a new run
     }
@@ -183,6 +195,7 @@ export default function App() {
     setSettings(s);
     setConstraintRows(rows);
     resetSelection();
+    setReopenReason(null);
     bg.generate(roster, s, rules);
     setModalOpen(false);
   };
@@ -367,9 +380,13 @@ export default function App() {
           initialText={names.join("\n")}
           settings={settings}
           rules={constraintRows}
+          reopenReason={reopenReason}
           canCancel={view !== null}
           onGenerate={handleGenerate}
-          onCancel={() => setModalOpen(false)}
+          onCancel={() => {
+            setReopenReason(null);
+            setModalOpen(false);
+          }}
         />
       )}
 

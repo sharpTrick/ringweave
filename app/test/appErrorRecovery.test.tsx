@@ -311,11 +311,13 @@ describe("focus survives a panel closing itself", () => {
   });
 });
 
-describe("the dialog contains focus, including the toast", () => {
-  it("puts the toast inside an inert subtree while the dialog is open", () => {
-    // The toast lives OUTSIDE #app — it has to, since #app is the thing that gets inert — and it
-    // contains a real button, so it was the one focusable element Tab could reach from inside an
-    // aria-modal dialog. The containment leaked through the one element it could not cover.
+describe("a refusal is both contained and announced", () => {
+  it("puts the reason INSIDE the dialog rather than in an inert toast", () => {
+    // These two requirements were in direct conflict and the conflict was invisible. Round 8
+    // wrapped the toast in `inert` so Tab could not escape an aria-modal dialog into it — correct,
+    // and `inert` also removes the element from the ACCESSIBILITY TREE, so a refusal shown there
+    // in the same commit that opened the dialog was never announced at all. The message belongs
+    // to the dialog that is explaining itself.
     const { rerender } = render(<App />);
     dispatchGenerate();
     act(() => {
@@ -323,15 +325,35 @@ describe("the dialog contains focus, including the toast", () => {
       hooks.state.refusals = [{ code: "prohibited-splits-group", person: 0 }];
       rerender(<App />);
     });
+    const dialog = screen.getByRole("dialog");
+    const reason = screen.getByText(/split the group/);
+    expect(dialog.contains(reason)).toBe(true);
+    // ...and it is inside a live region that was already mounted, not one that arrived with it.
+    expect(reason.closest('[aria-live]')).not.toBeNull();
+    // Nothing about the containment regressed: the dialog is not itself inert.
+    expect(dialog.closest("[inert]")).toBeNull();
+    expect(document.querySelector("#app")?.hasAttribute("inert")).toBe(true);
+  });
+
+  it("still uses the toast when no dialog will open to carry the message", () => {
+    // An error WITH a graph on screen does not reopen the editor, so there is no dialog to be
+    // contained by and the toast is both visible and announced.
+    const { rerender } = render(<App />);
+    dispatchGenerate();
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    act(() => {
+      hooks.state.status = "error";
+      hooks.state.error = "Generation failed.";
+      rerender(<App />);
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
     const toast = document.querySelector(".toast");
-    expect(toast).not.toBeNull();
-    expect(screen.getByRole("dialog")).toBeTruthy(); // the refusal reopened it
-    // Every focusable thing outside the dialog is inside an inert subtree.
-    const inertAncestor = (el: Element | null) => !!el?.closest("[inert]");
-    expect(inertAncestor(toast)).toBe(true);
-    expect(inertAncestor(document.querySelector("#app"))).toBe(true);
-    // ...and the dialog itself is NOT, which is the half that must not regress.
-    expect(inertAncestor(screen.getByRole("dialog"))).toBe(false);
+    expect(toast?.textContent).toMatch(/Generation failed/);
+    expect(toast?.closest("[inert]")).toBeNull();
   });
 });
 

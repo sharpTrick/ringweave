@@ -1,0 +1,380 @@
+{
+  "target": "lib/src",
+  "round": 12,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 5,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of lib/src (graph, metrics, bounds, budgets, greedy, polish, swap, rng, constraints, constrainedGreedy, index) plus lib/test and reference-python. Reproduced with scratch harnesses under /home/user/ringweave/.review-scratch/: (a) girth vs brute-force remove-edge oracle on 3000 random graphs — 0 mismatches; (b) girth/shortestPath invariance under edge-insertion-order permutation, 2000 graphs x all vertex pairs — 0 order-dependence, and path length always equals bfsDistances; (c) ringGreedy's updateAfterEdge `if (a<cur) {...continue}` shortcut instrumented — the b<a<cur case is provably impossible by triangle inequality and never fired, and the cache matched ground-truth BFS after every insertion across 14 (n,k) shapes; (d) cross-language byte parity: constrainedGreedy vs reference-python constrained_greedy on 337 random feasible constraint sets (identical edge sets), ringGreedy vs a pure-python port of gen_c_cached on 2496 configs spanning n, k, mind in [0..12], demote, repair (identical edge sets and finalMind), validate vs constraints.validate on 2500 adversarial cases (identical message lists); (e) `python3 test_core.py` + `python3 gen_fixtures.py` regenerated reference.json with no git diff; (f) 4000-case hammer of buildConstrainedBuddyGraph with NODE_ENV=production (dev postconditions compiled out) checking prohibited-absent, required-present, hard-prior-present, degree<=k, reported aspl/diameter/connected/degreeMax/buddies vs recomputed, satisfied-implies-connected, and run-to-run determinism — 0 issues; (g) constraint-insertion-order independence of buildConstrainedBuddyGraph and edge-insertion-order independence of polish/polishConstrained — 0; (h) polish invariants over 600 random graphs x {anneal,hill}: never worse on penalized ASPL, degrees preserved, connected input never disconnected, returned aspl/connected match a recomputed allPairsSummary, and for polishConstrained required/prohibited preserved and largest component never shrunk — 0; (i) boundary sweep n in [0,4] x k in [0,10] for both builders; (j) budget wall-clock: polish(ring(12000),{maxIters:0}) 7.7 s and polishConstrained 3.8 s at the size cap, constrainedGreedy(5000,4) 14.8 s and (464,463) 47.2 s — all matching their documented ceilings. npm test green (248 tests).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full read of every file under /home/user/ringweave/lib/src/core (index, graph, budgets, constraints, constrainedGreedy, greedy, polish, metrics, swap, rng, bounds) plus lib/test, with executable probes in /home/user/ringweave/.review-scratch. Attacked: (1) gate ordering in buildConstrainedBuddyGraph — malformed/oversized n refused before any n-sized allocation, refusedResult clamped to MAX_CONSTRAINED_N; (2) validate's O(n^2) prohibited-pair connectivity walk at n=5000 (measured 0.07 s); (3) constrainedGreedy at degenerate k=0/1/2 with n=5000 (1.37/3.22/4.57 s) — constrainedWork returns 0 at k=0 but real cost is O(n^2) covered by the n-cap, and forceConnect/joinAnyComponents cannot be driven superlinear because completion is legal-edge-maximal and `stuck` is memoized; (4) polish/polishConstrained size cap + work cap pairing, maxIters: Infinity, NaN/negative priorWeight, calibration-sweep subtraction, boundedPolishIterations at non-integer and huge requests; (5) whether a large minSeparation inflates ringGreedy's demotion loop past greedyWork (it does not — extra findPair scans stay inside the estimator's ~3x margin); (6) mooreLowerBounds with non-integer k (denormal shell loop) and huge k (overflow), n up to MAX_ROSTER; (7) Graph endpoint validation before mutation and edgeList/copy symmetry; (8) shortestPath's distance-bounded walk and checkVertex on every index-taking entry point; (9) whether ringGreedy's internal repair call is exploitable (measured ringGreedy(800,12) at 21.69 s repair=false vs 21.79 s repair=true — it is not). lib/src has no CSV, clipboard, filename or DOM sink and no JSON.stringify boundary, so the untrusted-name-to-spreadsheet lens has no target in this component. One confirmed defect found and reproduced.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read every file under lib/src/core (graph.ts, budgets.ts, greedy.ts, constraints.ts, constrainedGreedy.ts, polish.ts, swap.ts, rng.ts, metrics.ts, bounds.ts, index.ts) plus lib/CLAUDE.md and docs/PROJECT_PLAN.md. Adopted the scenario: trace the next change this project has actually committed to. Checked app/src to see what's actually built vs. the plan's stated status, and found M3 (F7 constraints UI, F8 node explorer, F10 path finder) already implemented in app/ (ConstraintsEditor.tsx, PersonPanel.tsx, usePathFinder.ts) even though PROJECT_PLAN's status line still calls M3 \"next\" — meaning those features already consumed core's shortestPath/eccentricity/Constraints API with zero core changes, a real (already-exercised) confirmation the seam pays. The next real uncommitted feature is F9 (\"recalculate with minimal disruption,\" flagship, M4), whose core support (Constraints.addPrior/priorHard, ConstrainedBuddyOptions.priorWeight, ConstraintReport.priorsKeptFraction) was already built in M1/M1b specifically for it. I implemented F9 end-to-end against the compiled lib in .review-scratch/f9-probe.mjs (build → add a person as priors → recalc; then remove a person, remap indices, recalc again) and it worked with *zero* lib/src changes required — buildConstrainedBuddyGraph's existing signature is sufficient for join and leave. Verified determinism (identical seed → byte-identical edges + priorsKeptFraction across two runs). Also exercised the tag-policy switch in constraints.ts (the declared OCP seam) by reading its single `prohibit_same` case; confirmed (per lib/CLAUDE.md's own known-limitations entry, still accurate) that `fromTags` has no caller anywhere in app/src today, so it and any hypothetical second policy stay a documented deferral, not something to re-file. Measured wall-clock for buildBuddyGraph/buildConstrainedBuddyGraph at n=100/300/500 with default (\"auto\") options on this sandbox VM to see whether the budget calibration that F9 recalculation would inherit holds up.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "repairWork's cost formula in budgets.ts prices a quantity (`passes x one bfs sweep`) that repairDegrees does not actually spend — it omits the per-pass rescan of every under-degree vertex (`underCount`) and the under-list rebuild/sort, so the exported repair budget gate admits calls that run far past the wall-clock ceiling it documents",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness",
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`repairWork` charges `passes x one sweep` and omits the per-pass under-list rebuild and O(n log n) sort (and the per-pass scan count), so `MAX_REPAIR_WORK` admits a `repairDegrees` call that runs ~4x past the ~60 s worst case the constant documents.",
+        "`repairWork` prices `repairDegrees` as (passes) x (one bfsDistances sweep), but a pass rescans every under-degree vertex that fails, so the real cost is (passes) x (vertices scanned) x (one sweep). The comment above the check names both bounding quantities (`underCount`, `addable`) but the formula multiplies by `addable` alone; `underCount` never appears. Exploitable via the exported `repairDegrees` entry point with a graph containing a permanently-unrepairable disjoint blob of low-degree vertices (each rescanned in full, with a fresh O(n) bfsDistances, every pass); the in-tree caller (ringGreedy) is not exploitable because completion leaves a tiny underCount."
+      ],
+      "remediation": "Delete the divergent estimate in `repairWork` and replace it with the one quantity the function already computes correctly nearby (`underCount`, the vertices below k found in the same O(n) pre-loop as `deficit`): price repair as max(1, floor(deficit/2)) * underCount * (n + n*k), removing the now-redundant `addable`-only term, then recalibrate MAX_REPAIR_WORK against measurement including a multi-pass ring shape so the formula and the constant describe the same execution the guarded path actually performs."
+    },
+    {
+      "theme": "the TS core has degenerate-case branches in `mooreLowerBounds` that the Python reference oracle and the fixture suite do not cover, so drift between the two implementations is undetectable and `asplGap` can report a 0 bound as 'provably optimal' when no real bound was computed",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`mooreLowerBounds` returns {0,0} for `k===1 && n>2` and for `n > MAX_ROSTER`, while `reference-python/core.py moore_lower_bounds` returns real bounds for both; neither branch is covered by the `moore` fixtures, and `asplGap` turns the 0 bound into gap 0, which its own doc reads as 'provably optimal'."
+      ],
+      "remediation": "Remove the branches' invisibility rather than adding new checking code: mirror the two degenerate branches into `reference-python/core.py` so the oracle can no longer diverge silently, and delete the gap between 'no bound available' and 'gap 0' at the `asplGap` boundary so the zero-bound case can't be read as optimality."
+    },
+    {
+      "theme": "the work-budget constants (MAX_POLISH_WORK / MAX_GREEDY_WORK / MAX_CONSTRAINED_WORK) are calibrated against an unstated single-machine timing baseline with nothing tying that calibration back to the product's stated NFRs, so the auto-polish UX decision rests on an unverifiable number",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "MAX_POLISH_WORK / MAX_GREEDY_WORK / MAX_CONSTRAINED_WORK are all 'calibrated against measurement on this machine' and index.ts's autoPolishEnabled()/resolveWantPolish() expose that calibration as the authoritative answer to whether the UI can deliver promised variation. Nothing in the repo asserts wall-clock against the product NFRs in docs/PROJECT_PLAN.md, and lib/CLAUDE.md's known-limitations list omits this gap."
+      ],
+      "remediation": "Remove the unstated assumption rather than adding documentation scaffolding: replace the fixed, unattributed constants with a single runtime-calibrated budget (one cheap timing probe scales the existing work-unit ceiling), eliminating the separate hidden 'reference machine' the current constants silently assume."
+    },
+    {
+      "theme": "a comment block sits above the wrong function in constrainedGreedy.ts, describing behavior that belongs to a different, nearby function",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment about ID-checking mirroring is placed above checkInputSatisfiesConstraints (which checks graph state) instead of checkConstraintIds (which checks constraint structure)."
+      ],
+      "remediation": "Move the misplaced comment block down to sit above the function it actually describes (checkConstraintIds) rather than leaving a copy or paraphrase behind above checkInputSatisfiesConstraints."
+    },
+    {
+      "theme": "a public API field (minSeparation) is accepted but documented as ignored, with no caller in the tree depending on it doing anything",
+      "severity": "deferral",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The minSeparation field is passed to constrainedGreedy even though it's documented as ignored and has no effect; no caller in the tree relies on this behavior changing."
+      ],
+      "remediation": "At the next API-breaking version, remove the dead minSeparation field from ConstrainedBuddyOptions instead of continuing to pass a value nothing consumes."
+    },
+    {
+      "theme": "the computed field finalMinSeparation is named and commented in a way that invites graph-metric interpretation, but it is a construction-time value (girth - 1), not the graph's actual minimum distance, and the comment doesn't rule out the wrong reading",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "finalMinSeparation is documented via a comment that explains its derivation (girth - 1) but does not explicitly state it is NOT the actual minimum distance in the graph, which could mislead callers expecting graph-metric semantics."
+      ],
+      "remediation": "Cut the ambiguity at its source: shorten the comment to state plainly what the field is not (not the graph's actual minimum distance) rather than only what it is, removing the room for the graph-metric misreading — no new field or abstraction needed."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-undercharges-its-own-path",
+      "theme": "a work budget prices a quantity the guarded path does not actually spend, so the wall-clock ceiling it documents is not the ceiling it enforces",
+      "file": "lib/src/core/budgets.ts",
+      "line": 104,
+      "summary": "`repairWork` charges `passes x one sweep` and omits the per-pass under-list rebuild and O(n log n) sort (and the per-pass scan count), so `MAX_REPAIR_WORK` admits a `repairDegrees` call that runs ~4x past the ~60 s worst case the constant documents.",
+      "failure": "`repairDegrees(ring(36000), 4)`: deficit 72000, `repairWork(36000,4,72000) = 6.48e9 <= MAX_REPAIR_WORK (6.6e9)` so it is admitted, and it ran 239.5 s (measured, /home/user/ringweave/.review-scratch/probe5.mjs). `repairDegrees(ring(20000), 4)` = 2.0e9 units -> 63.8 s. On the same machine the constant's own calibration point reproduces exactly: edgeless n=20000,k=2 = 1.2e9 units -> 11.0 s (documented 10.7 s), i.e. 1.09e8 units/s vs 2.7e7 units/s for the ring shapes. All three calibration points in the comment are EDGELESS graphs, where every vertex is unreachable from every other, so `distv[v] < minDist` rejects every candidate and the loop terminates after ONE pass — the multi-pass regime the `passes` factor is meant to price was never measured. The existing test (`test/optimizer.props.test.ts:426`) uses `deficitOf = (n,k) => n*k`, i.e. the edgeless shape only, so `repairDegrees(ring(36000), 4)` passes the whole suite.",
+      "remediation": "Price repair in the units it actually spends: per pass, the `under` rebuild plus sort (n log n) AND the number of vertices scanned before one succeeds (`underCount`, which the comment above the check already names but the formula omits), times one bfs sweep (n+m) each. Recalibrate MAX_REPAIR_WORK against measurements on at least one MULTI-pass shape (a ring with k>2) as well as the edgeless one, and extend the accept-set test to generate the deficit from a real graph rather than the closed form `n*k` that only describes the edgeless case.",
+      "invariant": "For every graph g and integer k that `repairDegrees` admits (does not throw), the estimator must dominate the real cost: `repairWork(g.n, k, deficit) >= sum over executed passes of (g.n*log2(g.n) + scannedVertices_i * (g.n + m))`, where scannedVertices_i is the number of `under` vertices bfs-swept in pass i. Equivalently, an instrumented operation counter inside `repairDegrees` must never exceed the value `repairWork` returned for that call, for any input shape — not just edgeless ones."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "oracle-divergence-unpinned-by-fixtures",
+      "theme": "the TS core has degenerate-case behaviour the Python oracle does not have, and no fixture covers those cases, so the regression oracle cannot detect the drift and `asplGap` reports 'provably optimal' where it has no bound at all",
+      "file": "lib/src/core/bounds.ts",
+      "line": 18,
+      "summary": "`mooreLowerBounds` returns {0,0} for `k===1 && n>2` and for `n > MAX_ROSTER`, while `reference-python/core.py moore_lower_bounds` returns real bounds for both; neither branch is covered by the `moore` fixtures, and `asplGap` turns the 0 bound into gap 0, which its own doc reads as 'provably optimal'.",
+      "failure": "`mooreLowerBounds(5, 1)` -> `{asplLb: 0, diameterLb: 0}` in TS; `moore_lower_bounds(5, 1)` -> `(1.75, 2)` in Python. Same split at (3,1) [0 vs 1.5], (10,1) [0 vs 1.888…], (2000000,4) [0 vs 12.20] and (1000001,3) [0 vs 17.43]. `test/fixtures/reference.json`'s `moore` array covers only k in {3,4} at n in {10..1000}, so `identity.test.ts` exercises neither branch and the divergence is invisible. Downstream, `asplGap(1, 5, 1) === 0`, i.e. the exported API reports gap 0 — documented as '0 = provably optimal' — for a 1-regular matching on 5 people, which is necessarily split into three pieces.",
+      "remediation": "Mirror the two degenerate branches into `reference-python/core.py` first (the repo's stated rule), regenerate fixtures, and extend the `moore` fixture list to cover every branch of the function: k=1 with n<=2 and n>2, k=2, k>=3, n<=1, and the n-cap. Separately, distinguish 'no bound available' from 'gap 0' at the `asplGap` boundary so a caller cannot read 'provably optimal' off an input for which no Moore bound was computed.",
+      "invariant": "For every (n, k) that both implementations accept, `mooreLowerBounds(n, k)` must equal `reference-python`'s `moore_lower_bounds(n, k)` on both fields, and the fixture set must contain at least one case per branch of the TS function (k=1 with n<=2, k=1 with n>2, k=2, k>=3, n<=1, n>MAX_ROSTER) so that no branch can drift unobserved. Additionally: `asplGap(a, n, k)` must never return 0 when `mooreLowerBounds(n,k).asplLb <= 0`, since 0 there means 'no bound', not 'optimal'."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-undercounts-actual-cost",
+      "theme": "a cost gate prices only part of the work it is meant to bound, so an input it accepts runs orders of magnitude longer than the budget's documented ceiling",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 104,
+      "summary": "`repairWork` prices `repairDegrees` as (passes) x (one bfsDistances sweep), but a pass rescans every under-degree vertex that fails, so the real cost is (passes) x (vertices scanned) x (one sweep). The comment directly above the check in greedy.ts names BOTH bounding quantities — `underCount` (\"the most any single pass can scan\") and `addable` (deficit/2 passes) — and warns that \"a roster that adds few edges can still scan many vertices many times\", but the formula multiplies by `addable` alone; `underCount` never appears. The trigger is any graph whose lowest-degree vertices are permanently unrepairable while higher-degree ones are not: `distv[v] < minDist` skips unreachable candidates too (UNREACHABLE === -1 < 3), so vertices in a small disjoint blob can never find a partner yet are re-scanned in full, each with a fresh O(n) bfsDistances, on every pass. `repairDegrees` is exported from the package index and takes a caller-supplied Graph. The in-tree caller (ringGreedy with repair:true, greedy.ts:187) is NOT exploitable — measured ringGreedy(800,12) at 21.69 s repair=false vs 21.79 s repair=true — because completion leaves a tiny underCount; the exposure is the exported entry point, which is the reason MAX_REPAIR_WORK was added in the first place.",
+      "failure": "Graph of n/2 vertices as disjoint triangles (indices 0..) plus n/2 vertices as one cycle, then `repairDegrees(g, 4)`. Reproduced (.review-scratch/p2.mjs, p5.mjs): n=600 -> 1.50 s, 90,600 bfsDistances sweeps against 600 the budget prices (151x); n=1200 -> 11.66 s, 360,601 sweeps against 1,200 (300x); n=2400 -> 94.77 s. Clean n^3 growth and the sweep overrun scales linearly in n exactly as underCount/2 predicts. repairWork(2400,4,4800) = 2.88e7 against MAX_REPAIR_WORK = 6.6e9 — 229x of headroom still unused at the point it already exceeds the constant's documented \"~60 s worst case\". The budget admits this shape all the way to n=36000 (6.48e9 <= 6.6e9), which extrapolates from the measured n^3 curve to ~3.7 days.",
+      "remediation": "Charge the rescan in the estimator: compute `underCount` (vertices below k) in the same O(n) pre-loop that already computes `deficit` and price repair as max(1, floor(deficit/2)) * underCount * (n + n*k), then recalibrate MAX_REPAIR_WORK against measurement so the documented ~60 s ceiling is restored (the ringGreedy-internal call is unaffected: its post-completion underCount is tiny). If that over-refuses working configurations, bound the rescan instead — but note that a permanent `stuck` memo like constrainedGreedy's is NOT sound here: adding an edge can make a previously unreachable candidate reachable at distance >= minDist, so a vertex that fails one pass can legitimately succeed in a later one.",
+      "invariant": "For every input `repairDegrees` accepts (does not throw on), the number of `bfsDistances` sweeps it performs is at most the number its own budget prices: sweeps <= repairWork(n, k, deficit) / (n + n*k), i.e. sweeps <= max(1, floor(deficit/2)) where deficit is the pre-loop degree deficit. Machine-checkable by instrumenting the sweep count; currently violated by 300x at n=1200.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unverified-cost-calibration",
+      "theme": "The core's auto-polish decision (which F9's recalc will directly inherit) is a UX contract wired to unspecified single-machine timing constants, with no test or mechanism tying it back to the product NFRs it is meant to guarantee.",
+      "file": "lib/src/core/budgets.ts",
+      "line": 161,
+      "summary": "MAX_POLISH_WORK / MAX_GREEDY_WORK / MAX_CONSTRAINED_WORK are all 'calibrated against measurement on this machine' (the comments say so at lines ~56-81, ~93-101, ~108-131, ~140-161), and index.ts's autoPolishEnabled()/resolveWantPolish() expose that calibration as the authoritative answer to 'will this UI promise variation it cannot deliver' (index.ts:478-487). Nothing in the repo asserts wall-clock against the product NFRs stated in docs/PROJECT_PLAN.md ('n=100 generate+render < 1s', 'n=500 usable < 10s') that this gate is implicitly supposed to protect, and lib/CLAUDE.md's known-limitations list — which documents far smaller gaps in detail — does not mention this one.",
+      "failure": "On this machine, buildBuddyGraph(100, 4) with all-default options (which autoPolishEnabled(100,4) reports as auto-polish-eligible) took ~12-14s wall-clock across five repeated runs (.review-scratch/f9-perf-auto.mjs), not the <1s the app's own NFR promises for n=100. buildConstrainedBuddyGraph(100, 4, new Constraints(100)) (the path F9's recalc would use) took ~5.5s. The gate's own comments describe the constants as tuned to 'this machine' with no stated reference hardware, no browser/Node distinction, and no runtime self-measurement — so the same (n,k) can be inside the budget on the tuning machine and outside the promised UX budget elsewhere, silently.",
+      "remediation": "State the reference hardware/environment the constants were calibrated against (or better, calibrate once at runtime with a cheap timing probe and scale the budget), and add a wall-clock-oriented test or note in lib/CLAUDE.md's known-limitations list acknowledging that the auto-polish gate protects a *work-unit* budget, not the stated NFR itself, so a slower device can still exceed it.",
+      "invariant": "for the (n,k) configurations autoPolishEnabled(n,k) reports true, wall-clock time is bounded independent of host CPU — false as measured; no test in the suite checks this at all, i.e. it is currently unfalsifiable from the test suite alone.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misplaced-comment",
+      "theme": "Comment block placed above wrong function, describing different function's behavior entirely",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 399,
+      "summary": "Comment about ID-checking mirroring is placed above checkInputSatisfiesConstraints (which checks graph state) instead of checkConstraintIds (which checks constraint structure)",
+      "failure": "At line 399, a multi-line comment states 'Throw-on-first mirror of constraints.ts `structuralReasons`' and discusses 'the id check' and keeping checks in step with validate's structural validation. This comment is placed 11 lines above checkConstraintIds (line 429) but immediately above checkInputSatisfiesConstraints (line 410). The function checkInputSatisfiesConstraints verifies that required/prohibited edges exist in a graph; it does NOT check constraint IDs or structure. The function checkConstraintIds (line 429) is what mirrors structuralReasons—it validates that endpoint IDs are in range and no self-pairs exist. A maintainer reading 'Throw-on-first mirror of constraints.ts `structuralReasons`' at line 399 and then seeing checkInputSatisfiesConstraints which checks graph edges will be confused about what the code does and why.",
+      "remediation": "Move the multi-line comment block (lines 399-408) from above checkInputSatisfiesConstraints to above checkConstraintIds (inserting it before line 429). The section comment on lines 394-397 can remain where it is as it applies to the entire preconditions section. This way the comment will be adjacent to the function it actually describes."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-undercharges-its-own-path",
+      "theme": "a work budget prices a quantity the guarded path does not actually spend, so the wall-clock ceiling it documents is not the ceiling it enforces",
+      "file": "lib/src/core/budgets.ts",
+      "line": 104,
+      "summary": "`repairWork` charges `passes x one sweep` and omits the per-pass under-list rebuild and O(n log n) sort (and the per-pass scan count), so `MAX_REPAIR_WORK` admits a `repairDegrees` call that runs ~4x past the ~60 s worst case the constant documents.",
+      "failure": "`repairDegrees(ring(36000), 4)`: deficit 72000, `repairWork(36000,4,72000) = 6.48e9 <= MAX_REPAIR_WORK (6.6e9)` so it is admitted, and it ran 239.5 s (measured, /home/user/ringweave/.review-scratch/probe5.mjs). `repairDegrees(ring(20000), 4)` = 2.0e9 units -> 63.8 s. On the same machine the constant's own calibration point reproduces exactly: edgeless n=20000,k=2 = 1.2e9 units -> 11.0 s (documented 10.7 s), i.e. 1.09e8 units/s vs 2.7e7 units/s for the ring shapes. All three calibration points in the comment are EDGELESS graphs, where every vertex is unreachable from every other, so `distv[v] < minDist` rejects every candidate and the loop terminates after ONE pass — the multi-pass regime the `passes` factor is meant to price was never measured. The existing test (`test/optimizer.props.test.ts:426`) uses `deficitOf = (n,k) => n*k`, i.e. the edgeless shape only, so `repairDegrees(ring(36000), 4)` passes the whole suite.",
+      "remediation": "Price repair in the units it actually spends: per pass, the `under` rebuild plus sort (n log n) AND the number of vertices scanned before one succeeds (`underCount`, which the comment above the check already names but the formula omits), times one bfs sweep (n+m) each. Recalibrate MAX_REPAIR_WORK against measurements on at least one MULTI-pass shape (a ring with k>2) as well as the edgeless one, and extend the accept-set test to generate the deficit from a real graph rather than the closed form `n*k` that only describes the edgeless case.",
+      "invariant": "For every graph g and integer k that `repairDegrees` admits (does not throw), the estimator must dominate the real cost: `repairWork(g.n, k, deficit) >= sum over executed passes of (g.n*log2(g.n) + scannedVertices_i * (g.n + m))`, where scannedVertices_i is the number of `under` vertices bfs-swept in pass i. Equivalently, an instrumented operation counter inside `repairDegrees` must never exceed the value `repairWork` returned for that call, for any input shape — not just edgeless ones."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "oracle-divergence-unpinned-by-fixtures",
+      "theme": "the TS core has degenerate-case behaviour the Python oracle does not have, and no fixture covers those cases, so the regression oracle cannot detect the drift and `asplGap` reports 'provably optimal' where it has no bound at all",
+      "file": "lib/src/core/bounds.ts",
+      "line": 18,
+      "summary": "`mooreLowerBounds` returns {0,0} for `k===1 && n>2` and for `n > MAX_ROSTER`, while `reference-python/core.py moore_lower_bounds` returns real bounds for both; neither branch is covered by the `moore` fixtures, and `asplGap` turns the 0 bound into gap 0, which its own doc reads as 'provably optimal'.",
+      "failure": "`mooreLowerBounds(5, 1)` -> `{asplLb: 0, diameterLb: 0}` in TS; `moore_lower_bounds(5, 1)` -> `(1.75, 2)` in Python. Same split at (3,1) [0 vs 1.5], (10,1) [0 vs 1.888…], (2000000,4) [0 vs 12.20] and (1000001,3) [0 vs 17.43]. `test/fixtures/reference.json`'s `moore` array covers only k in {3,4} at n in {10..1000}, so `identity.test.ts` exercises neither branch and the divergence is invisible. Downstream, `asplGap(1, 5, 1) === 0`, i.e. the exported API reports gap 0 — documented as '0 = provably optimal' — for a 1-regular matching on 5 people, which is necessarily split into three pieces.",
+      "remediation": "Mirror the two degenerate branches into `reference-python/core.py` first (the repo's stated rule), regenerate fixtures, and extend the `moore` fixture list to cover every branch of the function: k=1 with n<=2 and n>2, k=2, k>=3, n<=1, and the n-cap. Separately, distinguish 'no bound available' from 'gap 0' at the `asplGap` boundary so a caller cannot read 'provably optimal' off an input for which no Moore bound was computed.",
+      "invariant": "For every (n, k) that both implementations accept, `mooreLowerBounds(n, k)` must equal `reference-python`'s `moore_lower_bounds(n, k)` on both fields, and the fixture set must contain at least one case per branch of the TS function (k=1 with n<=2, k=1 with n>2, k=2, k>=3, n<=1, n>MAX_ROSTER) so that no branch can drift unobserved. Additionally: `asplGap(a, n, k)` must never return 0 when `mooreLowerBounds(n,k).asplLb <= 0`, since 0 there means 'no bound', not 'optimal'."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-undercounts-actual-cost",
+      "theme": "a cost gate prices only part of the work it is meant to bound, so an input it accepts runs orders of magnitude longer than the budget's documented ceiling",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 104,
+      "summary": "`repairWork` prices `repairDegrees` as (passes) x (one bfsDistances sweep), but a pass rescans every under-degree vertex that fails, so the real cost is (passes) x (vertices scanned) x (one sweep). The comment directly above the check in greedy.ts names BOTH bounding quantities — `underCount` (\"the most any single pass can scan\") and `addable` (deficit/2 passes) — and warns that \"a roster that adds few edges can still scan many vertices many times\", but the formula multiplies by `addable` alone; `underCount` never appears. The trigger is any graph whose lowest-degree vertices are permanently unrepairable while higher-degree ones are not: `distv[v] < minDist` skips unreachable candidates too (UNREACHABLE === -1 < 3), so vertices in a small disjoint blob can never find a partner yet are re-scanned in full, each with a fresh O(n) bfsDistances, on every pass. `repairDegrees` is exported from the package index and takes a caller-supplied Graph. The in-tree caller (ringGreedy with repair:true, greedy.ts:187) is NOT exploitable — measured ringGreedy(800,12) at 21.69 s repair=false vs 21.79 s repair=true — because completion leaves a tiny underCount; the exposure is the exported entry point, which is the reason MAX_REPAIR_WORK was added in the first place.",
+      "failure": "Graph of n/2 vertices as disjoint triangles (indices 0..) plus n/2 vertices as one cycle, then `repairDegrees(g, 4)`. Reproduced (.review-scratch/p2.mjs, p5.mjs): n=600 -> 1.50 s, 90,600 bfsDistances sweeps against 600 the budget prices (151x); n=1200 -> 11.66 s, 360,601 sweeps against 1,200 (300x); n=2400 -> 94.77 s. Clean n^3 growth and the sweep overrun scales linearly in n exactly as underCount/2 predicts. repairWork(2400,4,4800) = 2.88e7 against MAX_REPAIR_WORK = 6.6e9 — 229x of headroom still unused at the point it already exceeds the constant's documented \"~60 s worst case\". The budget admits this shape all the way to n=36000 (6.48e9 <= 6.6e9), which extrapolates from the measured n^3 curve to ~3.7 days.",
+      "remediation": "Charge the rescan in the estimator: compute `underCount` (vertices below k) in the same O(n) pre-loop that already computes `deficit` and price repair as max(1, floor(deficit/2)) * underCount * (n + n*k), then recalibrate MAX_REPAIR_WORK against measurement so the documented ~60 s ceiling is restored (the ringGreedy-internal call is unaffected: its post-completion underCount is tiny). If that over-refuses working configurations, bound the rescan instead — but note that a permanent `stuck` memo like constrainedGreedy's is NOT sound here: adding an edge can make a previously unreachable candidate reachable at distance >= minDist, so a vertex that fails one pass can legitimately succeed in a later one.",
+      "invariant": "For every input `repairDegrees` accepts (does not throw on), the number of `bfsDistances` sweeps it performs is at most the number its own budget prices: sweeps <= repairWork(n, k, deficit) / (n + n*k), i.e. sweeps <= max(1, floor(deficit/2)) where deficit is the pre-loop degree deficit. Machine-checkable by instrumenting the sweep count; currently violated by 300x at n=1200.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unverified-cost-calibration",
+      "theme": "The core's auto-polish decision (which F9's recalc will directly inherit) is a UX contract wired to unspecified single-machine timing constants, with no test or mechanism tying it back to the product NFRs it is meant to guarantee.",
+      "file": "lib/src/core/budgets.ts",
+      "line": 161,
+      "summary": "MAX_POLISH_WORK / MAX_GREEDY_WORK / MAX_CONSTRAINED_WORK are all 'calibrated against measurement on this machine' (the comments say so at lines ~56-81, ~93-101, ~108-131, ~140-161), and index.ts's autoPolishEnabled()/resolveWantPolish() expose that calibration as the authoritative answer to 'will this UI promise variation it cannot deliver' (index.ts:478-487). Nothing in the repo asserts wall-clock against the product NFRs stated in docs/PROJECT_PLAN.md ('n=100 generate+render < 1s', 'n=500 usable < 10s') that this gate is implicitly supposed to protect, and lib/CLAUDE.md's known-limitations list — which documents far smaller gaps in detail — does not mention this one.",
+      "failure": "On this machine, buildBuddyGraph(100, 4) with all-default options (which autoPolishEnabled(100,4) reports as auto-polish-eligible) took ~12-14s wall-clock across five repeated runs (.review-scratch/f9-perf-auto.mjs), not the <1s the app's own NFR promises for n=100. buildConstrainedBuddyGraph(100, 4, new Constraints(100)) (the path F9's recalc would use) took ~5.5s. The gate's own comments describe the constants as tuned to 'this machine' with no stated reference hardware, no browser/Node distinction, and no runtime self-measurement — so the same (n,k) can be inside the budget on the tuning machine and outside the promised UX budget elsewhere, silently.",
+      "remediation": "State the reference hardware/environment the constants were calibrated against (or better, calibrate once at runtime with a cheap timing probe and scale the budget), and add a wall-clock-oriented test or note in lib/CLAUDE.md's known-limitations list acknowledging that the auto-polish gate protects a *work-unit* budget, not the stated NFR itself, so a slower device can still exceed it.",
+      "invariant": "for the (n,k) configurations autoPolishEnabled(n,k) reports true, wall-clock time is bounded independent of host CPU — false as measured; no test in the suite checks this at all, i.e. it is currently unfalsifiable from the test suite alone.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misplaced-comment",
+      "theme": "Comment block placed above wrong function, describing different function's behavior entirely",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 399,
+      "summary": "Comment about ID-checking mirroring is placed above checkInputSatisfiesConstraints (which checks graph state) instead of checkConstraintIds (which checks constraint structure)",
+      "failure": "At line 399, a multi-line comment states 'Throw-on-first mirror of constraints.ts `structuralReasons`' and discusses 'the id check' and keeping checks in step with validate's structural validation. This comment is placed 11 lines above checkConstraintIds (line 429) but immediately above checkInputSatisfiesConstraints (line 410). The function checkInputSatisfiesConstraints verifies that required/prohibited edges exist in a graph; it does NOT check constraint IDs or structure. The function checkConstraintIds (line 429) is what mirrors structuralReasons—it validates that endpoint IDs are in range and no self-pairs exist. A maintainer reading 'Throw-on-first mirror of constraints.ts `structuralReasons`' at line 399 and then seeing checkInputSatisfiesConstraints which checks graph edges will be confused about what the code does and why.",
+      "remediation": "Move the multi-line comment block (lines 399-408) from above checkInputSatisfiesConstraints to above checkConstraintIds (inserting it before line 429). The section comment on lines 394-397 can remain where it is as it applies to the entire preconditions section. This way the comment will be adjacent to the function it actually describes."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-with-no-caller",
+      "theme": "Internal field unused by any caller in current tree",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 340,
+      "summary": "The minSeparation field is passed to constrainedGreedy even though it's documented as ignored and has no effect; no caller in the tree relies on this behavior changing",
+      "failure": "At line 340, buildConstrainedBuddyGraph constructs an options object with minSeparation and passes it to constrainedGreedy: `const graph = constrainedGreedy(n, k, active, { minSeparation: options.minSeparation });`. The ConstrainedGreedyOptions interface accepts this parameter but explicitly documents (line 62-66) that it is 'ACCEPTED AND IGNORED' because the algorithm 'maximises separation greedily rather than aiming at a value'. The constrainedGreedy function receives this with parameter name `_opts` (line 102), the leading underscore signaling it as unused per TypeScript linting rules. No test or code path in the tree relies on this field being actioned. This is retained only for public API compatibility.",
+      "remediation": "This is deferred by design—the field is retained for backward compatibility in the public API and the documentation is clear it is ignored. No fix is required. However, when the API can next break (a major version), consider removing minSeparation from ConstrainedBuddyOptions or renaming/moving it to a different field group to avoid future confusion about whether it works."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-with-no-caller",
+      "theme": "Internal field unused by any caller in current tree",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 340,
+      "summary": "The minSeparation field is passed to constrainedGreedy even though it's documented as ignored and has no effect; no caller in the tree relies on this behavior changing",
+      "failure": "At line 340, buildConstrainedBuddyGraph constructs an options object with minSeparation and passes it to constrainedGreedy: `const graph = constrainedGreedy(n, k, active, { minSeparation: options.minSeparation });`. The ConstrainedGreedyOptions interface accepts this parameter but explicitly documents (line 62-66) that it is 'ACCEPTED AND IGNORED' because the algorithm 'maximises separation greedily rather than aiming at a value'. The constrainedGreedy function receives this with parameter name `_opts` (line 102), the leading underscore signaling it as unused per TypeScript linting rules. No test or code path in the tree relies on this field being actioned. This is retained only for public API compatibility.",
+      "remediation": "This is deferred by design—the field is retained for backward compatibility in the public API and the documentation is clear it is ignored. No fix is required. However, when the API can next break (a major version), consider removing minSeparation from ConstrainedBuddyOptions or renaming/moving it to a different field group to avoid future confusion about whether it works."
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "subtle-invariant-unstated",
+      "theme": "A computed field's meaning is not clearly explained; callers might misinterpret what it represents",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 207,
+      "summary": "finalMinSeparation is documented via a comment that explains its derivation (girth - 1) but does not explicitly state it is NOT the actual minimum distance in the graph, which could mislead callers expecting graph-metric semantics",
+      "failure": "At line 207, the code computes `finalMinSeparation: Number.isFinite(gi) ? gi - 1 : finalMind`. The comment (lines 201-206) states 'Linking two people d apart closes a (d+1) cycle, so the achieved separation is girth - 1.' This comment explains the derivation from girth, but its prose ('the achieved separation is girth - 1') reads as a claim that this value represents the minimum distance in the graph. However, in a graph with girth 3 (a triangle), the actual minimum distance is 1, not girth - 1 = 2. The field's name 'finalMinSeparation' suggests it is 'the final minimum separation' (a graph metric), but it is actually 'the separation that was bridged when the shortest cycle was formed' (a construction metric). This semantic mismatch is documented in tests (optimizer.props.test.ts asserts `finalMinSeparation === girth - 1`) and was intentional, but the field name and comment do not make this distinction clear to callers.",
+      "remediation": "Update the comment on lines 201-206 to explicitly state that finalMinSeparation is NOT the actual minimum distance in the returned graph, but rather the distance of the pair that was linked to create the shortest cycle. For example: 'When a cycle closes via connecting two vertices d apart, it forms a (d+1)-cycle. We report girth - 1, which is the minimum distance bridged during construction—not the actual minimum distance in the final graph (which may be smaller due to polish). This metric is useful for understanding how the graph was built, not for describing its distances directly.' Alternatively, consider a different field name that does not suggest a graph-metric interpretation."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 12,
+      "skipped": true
+    }
+  },
+  "tokens": {
+    "subagentTokens": 486182,
+    "agents": 5,
+    "toolCalls": 151
+  },
+  "targetRaw": "lib/src (the ringweave core)"
+}

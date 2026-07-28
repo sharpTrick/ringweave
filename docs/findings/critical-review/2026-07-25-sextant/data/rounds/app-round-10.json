@@ -1,0 +1,312 @@
+{
+  "target": "app/src",
+  "round": 10,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 4,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full surface of app/src (model, constraints, io/{parseRoster,importGraph,exportGraph,clamp,feasibility,download,readFileText,schema,constraintMessages}, worker/{generate,protocol}, state/*, graph/{layout,highlight,GraphCanvas}, search, neighborhood, panels/*, App) plus the lib functions they consume. Reproduced with probes under .review-scratch/critic-correctness-app/: (1) 3000-graph import fuzz asserting aspl-null/quality-0/caption/optimality/buddy-symmetry/degree-extent/export-idempotence invariants — all held; (2) 400 constrained generations checking constraintSummary against the actual edge set and metrics.connected against report.connected — 0 disagreements; (3) 600-graph check that diameter === max eccentricity, that shortest paths have no chords (validating edgeClass's route-membership proof), and that disconnected graphs report null diameter; (4) 4000-case hostile-character fuzz proving parseRoster idempotence and that every roster it emits is accepted by importGraph; (5) seed-pair scans (~600 buildBuddyGraph pairs) looking for set-equal/order-different edge lists to break useBuddyGraph.sameEdges — none, and traced Graph.edgeList() to be canonical+sorted, so the positional comparison is provably a set comparison; (6) traced all four degenerate branches of mooreLowerBounds to confirm the app's quality()/assembleMetrics gates cover every asplGap===0 sentinel; (7) confirmed degreeMax never exceeds k for any generatable (n,k), so a generated graph can never be refused by importGraph's per-vertex degree gate; (8) confirmed d3-force v3 draws jiggle randomness from a per-simulation lcg, so forceLayout is deterministic, and that no Math.random/Date.now exists in app/src. app npm test green (270 passed) before and after.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial DoS/injection pass over app/src (all 30 source files plus app/test), with executable probes under app/.review-scratch/ (gitignored, outside the pinned test/** vitest glob).\n\nGATE ORDERING (traced statically, io/importGraph.ts): every size/shape gate precedes the work it bounds — people.length > MAX_IMPORT_N before people.map; 2m <= BUDDY_MAX*n density gate before the per-edge loop and new Graph; declaredPairs > MAX_CONSTRAINT_PAIRS before any per-pair work and before validate's O(n^2) walk could ever be reached; per-name MAX_NAME_CHARS before any message interpolates a name; per-vertex degreeMax > BUDDY_MAX before the O(n^2) allPairsSummary/girth; joined-length check before the parseRoster round-trip. readFileText's byte gate precedes the read and therefore JSON.parse.\n\nMEASURED main-thread worst cases: maximal legal import (n=1000, 12-regular, 6000 edges) 78 ms through importGraph; long-diameter path-graph variant 64 ms; allPairsSummary 71 ms, girth 4-38 ms. forceLayout(1000,6000) 233 ms, flat across n=120/400/1000 (152/175/233 ms) via forceIters scaling. parseRoster at the 500K char cap across six pathological shapes (all-dupes 1- and 2-char tokens, all-blank, all-over-length, one 500K token, all-distinct) peaks at 44 ms; MAX_NAMES early break and char cap both hold. rankMatches with a 200-char query (the input's maxLength) vs 1000 x 120-char names 5.6 ms. validateDetailed at n=1000 with 200 prohibited pairs (the O(n^2) connectivity walk reachable per keystroke via RosterModal's ruleProblems memo) 3.5 ms.\n\nFUZZ: 40,000 randomized hostile importGraph inputs (atoms incl. -0, 1e308, 2**53, 0.5, tab, 400-char strings, wrong-shaped constraints/settings/people/edges, __proto__ injection) — zero non-ImportError escapes, worst single call 1.84 ms, no prototype pollution.\n\nSPREADSHEET/CLIPBOARD SINK: imported names \"=HYPERLINK(1)\" and \"+b\" (they pass every gate) and followed them to both sinks. toCsv neutralizes per cell before quote-doubling; every character that could act as a CSV field/row delimiter (comma, \\n, \\r, \\t, U+2028/2029) is refused by importGraph's NAME_HOSTILE_CHARS test or the parseRoster round-trip check, and normalized to spaces on the roster path — so no cell can contain an embedded delimiter to split on. BuddyList.copyAll neutralizes only the line-leading name, but the clipboard sink's delimiters are tab and newline, both refused in names, so every line is exactly one cell and the leading-character guard covers the whole surface. The \"; \" and \", \" joins are not delimiters of either sink.\n\nNUMERIC EDGES: -0 seed clamps to 0; 1e999 (Infinity) minSeparation falls back to SEPARATION_DEFAULT; non-integer edge endpoints refused; Set normalizes -0 endpoints; exportGraph writes only finiteOrNull-normalized metrics and clamped settings, so JSON.stringify has no Infinity to convert.\n\nALSO: no innerHTML/eval/new Function/href=/localStorage sinks anywhere in app/src; download filenames are constants; useGenerationWorker registers onerror/onmessageerror so an inert-locked UI cannot hang; useExplorerHistory caps at 50; usePathFinder guards stale indices past graph.n; every attacker-reachable n/k/minSeparation/seed path passes through sanitizeSettings, SettingsControls' clamps, or feasibility before reaching a generator; all untrusted text reaching the DOM passes clampText/clampList plus useNotice's 300-char sink clamp. npm test green (29 files, 270 tests).\n\nNot re-filed as new findings because they are already recorded follow-ons: hover highlight O(n+m) per mouse-move, ~10k-element SVG reconciliation at the ceiling (app/CLAUDE.md), and lib's fromTags O(n^2) hazard, which has no caller in app/src.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of app/src (37 files: App.tsx, model.ts, constraints.ts, all of graph/ [GraphCanvas.tsx, layout.ts, highlight.ts], all of state/ [useBuddyGraph, useGenerationWorker, useGraph, useExplorerHistory, useFocusRescue, useEscape, useNotice, usePathFinder], all of io/ [importGraph, exportGraph, parseRoster, feasibility, constraintMessages, clamp, download, readFileText, schema], all of panels/ [RosterModal, ConstraintsEditor, SettingsControls, BuddyList, Slips, QualityPanel, PersonPanel, PersonSearch, PathPanel, LayoutToggle, Notice], search.ts, neighborhood.ts, sample.ts, worker/protocol.ts + generate.ts + generate.worker.ts) plus docs/PROJECT_PLAN.md, docs/REVIEW_PROTOCOL.md, app/CLAUDE.md, lib/CLAUDE.md. Concretely traced the app's declared open/closed seam (LAYOUT_MODES/FIT_MODES/positionsFor in GraphCanvas.tsx:18-57): positionsFor's switch is exhaustive via assertNever, so adding a LayoutMode fails to compile until handled -- confirmed this is a real, compiler-enforced seam, not decorative. Attempted (against real files) the next PROJECT_PLAN-committed change, F9 'recalculate with minimal disruption' (M4, PROJECT_PLAN.md:109-117): traced the fan-out across worker/protocol.ts (GenerateRequest.constraints, GenerateOptions), constraints.ts (ConstraintPair has no prior concept), model.ts/App.tsx (no toggle host), and the buildConstrainedBuddyGraph promote-before-validate hazard in lib. All of this fan-out is already correctly identified, traced to the same files, and filed as a deferral with an explicit no-live-caller grep check in app/CLAUDE.md's 'Known follow-ons' section (F9 groundwork, tag UI, focus/ego layout, CSV constraint import, import re-check, force-off-main-thread) -- re-filing the same theme would duplicate an already-correct filing, not surface a new finding. Checked for responsibility leaks (graph math in UI): none found -- every ASPL/eccentricity/shortestPath/girth call goes through the ringweave core; the one documented exception (neighborhood.ts's bounded local walk, capped at BUDDY_MAX=12) computes no metric and states its own bound. Checked for a composition-root god component: App.tsx (432 lines) is large but delegates every concern to a single-purpose hook (useBuddyGraph, useGenerationWorker, useExplorerHistory, useGraph, usePathFinder, useFocusRescue, useEscape, useNotice) and holds only orchestration state; no logic duplicated across hooks. Checked for over-engineering: GraphCanvas's layout abstraction has two live, exercised variants (ring/force) with real callers (LayoutToggle, tests) -- not a seam built for a feature that doesn't exist. Checked the deliberate non-seams noted in lib/CLAUDE.md (legalEdge, constrainedMeasure) -- not caller-injectable by design for the determinism/postcondition reasons stated; did not file them as rigidity.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface trace of app/src for the mouse-broken/screen-reader scenario: cold load -> tab order into RosterModal (App.tsx, RosterModal.tsx), roster entry and file drop (RosterModal.tsx, io/readFileText.ts), generation dispatch and busy overlay (useBuddyGraph.ts, useGenerationWorker.ts, worker/generate.ts, worker/generate.worker.ts), the app-wide focus-rescue and Escape mechanisms (useFocusRescue.ts, useEscape.ts), reading quality numbers (QualityPanel.tsx), searching and selecting a person (PersonSearch.tsx, useExplorerHistory.ts), reading buddies (PersonPanel.tsx, BuddyList.tsx, neighborhood.ts), path finding (usePathFinder.ts, PathPanel.tsx), export/import (App.tsx handleExport/applyImported/handleImportFile, io/exportGraph.ts, io/importGraph.ts), constraint editing (ConstraintsEditor.tsx, SettingsControls.tsx), the graph canvas's reduced-motion handling and role=img fallback (graph/GraphCanvas.tsx), all `role=status`/`aria-live` regions app-wide, the `inert` containment scheme wrapping #app/the busy overlay/the toast, and CSS reduced-motion coverage (styles/app.css). Verified via grep that no `cancel` event handler exists on either `<input type=file>`, and via direct reading of App.tsx's bg.status effect and the Notice-wrapping `inert` div that show()/flash() and setModalOpen(true) are dispatched together inside one effect body (single React commit).",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Name truncation splits a UTF-16 surrogate pair, producing an ill-formed string that different serializers (JSON vs UTF-8 CSV) resolve differently, so the displayed name and the exported name silently diverge",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "parseRoster truncates over-long names with String.slice (a UTF-16 code-unit boundary). A name whose MAX_NAME_CHARS-th unit is the high half of a surrogate pair is emitted as an ill-formed string with a trailing lone surrogate. This passes importGraph's control-char gate and its idempotency/round-trip check, then diverges downstream: JSON.stringify escapes the lone surrogate (round-trips fine), but downloadBlob/toCsv's UTF-8 encoding replaces it with U+FFFD — so the organizer's CSV shows a different name than the buddy list on screen."
+      ],
+      "remediation": "Stop truncating by code unit: cut the trailing lone surrogate off the slice result (or slice on an Array.from code-point array) so parseRoster can never emit an ill-formed string in the first place — this removes the divergence at its single source rather than reconciling it at each sink."
+    },
+    {
+      "theme": "Docstrings still name the pre-refactor worker result type, no longer matching the normalized type the code actually receives",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "model.ts docstring refers to BuddyResult but the function parameter is GraphResult.",
+        "useBuddyGraph.ts docstring says the code 'maps its BuddyResult back' but it actually receives GraphResult from the worker protocol."
+      ],
+      "remediation": "Delete the stale BuddyResult references from both comments and state once, in whichever file is canonical for the worker-protocol type, that GraphResult is the normalized outcome of the core's BuddyResult/ConstrainedBuddyResult builders — removing the second, drifted description rather than maintaining two independent explanations of the same type."
+    },
+    {
+      "theme": "A live-region announcement is placed inside an `inert` subtree in the same commit that gives it its text, so assistive tech never hears it — and the code's own comment claims otherwise only because one path happens to duplicate the message elsewhere by coincidence",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "When first-time generation fails at the worker level, the effect calls show(bg.error) and setModalOpen(true) in the same commit; the Notice's role=\"status\" region sits inside a div that goes inert=false→true in that same commit, so it's excluded from the accessibility tree exactly when it receives its only text. The refused-constraints path happens to duplicate the same message inside RosterModal's own non-inert note stack, masking the bug there, but the worker-error path has no such duplicate — leaving a screen-reader user in a silently reopened, unexplained dialog on every retry. The adjacent code comment asserting 'the message is announced by its own role=\"status\"' is false for this path."
+      ],
+      "remediation": "Remove the coupling that makes Notice inert in the same commit it receives text: stop wrapping the Notice in the modalOpen-driven inert container (exclude it from that wrapper, or drop the inert={modalOpen} toggle on it) so the region is never hidden by a same-commit ancestor change, rather than adding a second announcement channel for the missing case."
+    },
+    {
+      "theme": "Focus recovery for hidden file-picker triggers depends on a React commit that a canceled native dialog never produces, stranding focus on <body>",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "Both hidden file inputs (App.tsx's QualityPanel import button, RosterModal's choose-a-file button) are display:none and opened via ref.current?.click(), with no cancel handler anywhere in the app. useFocusRescue is the sole focus-recovery mechanism and only runs after a React commit; selecting a file fires onChange and a commit, so rescue works, but canceling the picker fires nothing, so focus — which browsers commonly leave on <body> when the trigger is unfocusable display:none — is never rescued, and the very next Tab restarts navigation from the top of the document, the exact failure useFocusRescue exists to prevent."
+      ],
+      "remediation": "Remove the display:none hidden-input pattern that makes the trigger unfocusable — switch both file inputs to visually-hidden-but-focusable styling (position:absolute; 1x1px; overflow:hidden; opacity:0) so the browser's own dialog-close focus restoration covers the cancel case, eliminating the need for a change-event-dependent rescue path for this trigger."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "utf16-truncation-splits-surrogate-pair",
+      "theme": "a name is cut mid-character during normalisation, so the name shown on screen is not the name written to the exported file",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 100,
+      "summary": "parseRoster truncates over-long names with String.slice, which counts UTF-16 code units. A name whose MAX_NAME_CHARS-th unit is the high half of a surrogate pair is emitted as an ill-formed UTF-16 string (trailing lone surrogate). It passes every downstream gate — it is not in Cc/Cf/Zl/Zp so importGraph's control-char refusal misses it, and parseRoster is idempotent on it so importGraph's round-trip check accepts it — and then diverges between sinks: JSON.stringify escapes the lone surrogate (so JSON export/import round-trips), but downloadBlob/toCsv encode UTF-8, where a lone surrogate is replaced by U+FFFD. The organizer's CSV therefore contains a different name than the buddy list on screen.",
+      "failure": "parseRoster(\"a\".repeat(119) + \"\\u{1F600}\" + \"tail\") emits a 120-unit name ending in the lone high surrogate 0xD83D; String.prototype.isWellFormed() === false. new TextDecoder().decode(new TextEncoder().encode(toCsv([[name]]))) !== toCsv([[name]]) — the exported CSV cell ends in U+FFFD while BuddyList/Slips render the surrogate. The name is also accepted unchanged by importGraph, so the ill-formed value is durable in the app's own file format. test/parseRoster.test.ts:111 truncates only \"x\".repeat(...), so the existing suite cannot observe this.",
+      "remediation": "Truncate by code point rather than code unit — e.g. `const cut = Array.from(raw); const token = cut.length > MAX_NAME_CHARS ? cut.slice(0, MAX_NAME_CHARS).join(\"\").trim() : raw;` — or, minimally, drop a trailing lone surrogate after slicing. Ratchet with a property test over parseRoster's whole output: every emitted name satisfies isWellFormed(). Consider applying the same well-formedness predicate in importGraph's name gate, since a hand-edited file can supply a lone surrogate directly and reach the same CSV sink.",
+      "invariant": "For every input string s, every name in parseRoster(s).names is well-formed UTF-16 (String.prototype.isWellFormed() === true), i.e. contains no unpaired surrogate — equivalently, new TextDecoder().decode(new TextEncoder().encode(name)) === name for every emitted name.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment-type-name",
+      "theme": "Documentation names a type the function no longer receives; stale after refactoring to normalize worker results",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 389,
+      "summary": "Docstring refers to BuddyResult but function parameter is GraphResult",
+      "failure": "The viewFromResult function (line 397) accepts `r: GraphResult`, not `BuddyResult`. The comment on line 389 states 'Combine a worker BuddyResult' but BuddyResult is the intermediate type in the worker; GraphResult is what crosses the boundary. When a new contributor reads this comment while reading the function signature, the two do not match.",
+      "invariant": "Every docstring that names a specific type must match the actual parameter types: if a docstring names `BuddyResult`, the function signature must have `BuddyResult` in the parameter list, not `GraphResult`",
+      "remediation": "Update line 389 to: 'Combine a worker GraphResult (normalized from BuddyResult or ConstrainedBuddyResult) with the roster + settings into a GraphView.' This reflects that GraphResult is the actual type received, and acknowledges it's normalized from the core's two builder types."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment-type-name",
+      "theme": "Documentation describes flow using a type name that was normalized away; stale after worker protocol refactoring",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 18,
+      "summary": "Docstring says 'maps its BuddyResult back' but receives GraphResult from worker protocol",
+      "failure": "useBuddyGraph receives `gen.result` which is typed as `GraphResult` (from the worker protocol), not `BuddyResult`. The hook's own docstring on line 18 says 'maps its BuddyResult back into a GraphView'. A contributor reading the docstring, then tracing to the worker protocol (protocol.ts), would find `GraphResult` defined there, creating a search-and-trace mismatch that looks like an error.",
+      "invariant": "Documentation describing data flow must match the actual types in the implementation: if a docstring names BuddyResult as input, the implementation must show BuddyResult flowing in, not GraphResult",
+      "remediation": "Update line 18-19 to: 'Orchestrates generation: sends a job to the worker and maps its GraphResult (a normalized builder outcome) back into a GraphView using the exact roster + settings that produced it.' This clarifies that GraphResult is what the worker protocol carries, normalized from the core's actual builder result types."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-hidden-by-inert",
+      "theme": "an aria-live explanation is wrapped in `inert` in the exact same commit that gives it its text, so assistive tech never sees it",
+      "file": "app/src/App.tsx",
+      "line": 150,
+      "summary": "When a first-time generation fails at the worker level (`bg.status === \"error\"`, e.g. the worker script fails to load/parse — the exact case `useGenerationWorker.ts`'s own `onerror`/`onmessageerror` handlers were added to catch), the effect at App.tsx:150-166 calls `show(bg.error || \"Generation failed.\")` and `setModalOpen(true)` together, synchronously, inside one effect body. React 18/19 batches both into a single commit. In that same commit, `<div inert={modalOpen}><Notice message={notice} onDismiss={clear} /></div>` (App.tsx:427-429) goes straight from `(inert=false, message=null)` to `(inert=true, message=text)`. Per spec, an `inert` subtree is excluded from the accessibility tree, so the `role=\"status\"` region inside it is never exposed to assistive technology at the moment it receives its only text — the announcement that explains why the dialog silently reopened. Unlike the constraint-refusal path (`bg.status===\"refused\"`), where `RosterModal`'s own internal note stack happens to recompute the identical blocking message from the same `validateDetailed` predicate and thereby duplicates the toast's content in a non-inert region, the worker-error path has no such duplicate: the modal's own feasibility/rule checks say nothing about \"Generation failed to start\" or \"Generation sent back something unreadable\". A screen-reader user is left in a dialog that looks freshly opened, with an enabled \"Generate buddy graph\" button, zero explanation of what happened, and — because retrying reproduces the same worker failure the same way — a silent loop: each retry regenerates the same unannounced toast. The code comment at App.tsx:421-426 explicitly asserts \"Nothing is lost: the message is announced by its own role=\\\"status\\\"\", which is false for exactly this path; the claim is only true today for the refused-constraints path, and only by coincidence of two independent code paths (worker validateDetailed vs. RosterModal's own validateDetailed) computing the same string, not by the toast itself being reachable.",
+      "failure": "Cold load -> paste a valid roster -> click \"Generate buddy graph\" while the generation worker fails to start (e.g. blocked script, corrupted deploy, a browser extension interfering with module workers) -> bg.status becomes \"error\" -> show(bg.error) + setModalOpen(true) fire in one commit -> the toast's role=status region is rendered already-inert with its first (and only) text -> a screen-reader user hears nothing, sees the roster dialog reopened with no stated reason, and gets no accessible signal to explain or work around the failure.",
+      "remediation": "Never pair `show()`/`flash()` with `setModalOpen(true)` in the same commit. Either (a) defer setting `modalOpen` by one tick/render (e.g. via a second effect keyed on `notice`) so the toast is announced in a non-inert state before its ancestor becomes inert, or (b) duplicate the message inside RosterModal's own always-mounted, non-inert `role=\"status\"` note stack (the way the refused-constraints path already does by accident) — pass the reopening reason in as a prop and render it there unconditionally, not only for the constraint-refusal subset.",
+      "invariant": "For any two states S0 -> S1 committed together where S0 had `notice === null` and S1 has both `notice !== null` and `modalOpen === true` (making the toast's wrapper `inert`), the same text must also be reachable through some `role=\"status\"`/`aria-live` region that is NOT a descendant of an `inert` element in S1. Equivalently: no `aria-live` region's first-ever appearance of a given message may occur inside a subtree whose `inert` attribute is `true` in that same render."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "utf16-truncation-splits-surrogate-pair",
+      "theme": "a name is cut mid-character during normalisation, so the name shown on screen is not the name written to the exported file",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 100,
+      "summary": "parseRoster truncates over-long names with String.slice, which counts UTF-16 code units. A name whose MAX_NAME_CHARS-th unit is the high half of a surrogate pair is emitted as an ill-formed UTF-16 string (trailing lone surrogate). It passes every downstream gate — it is not in Cc/Cf/Zl/Zp so importGraph's control-char refusal misses it, and parseRoster is idempotent on it so importGraph's round-trip check accepts it — and then diverges between sinks: JSON.stringify escapes the lone surrogate (so JSON export/import round-trips), but downloadBlob/toCsv encode UTF-8, where a lone surrogate is replaced by U+FFFD. The organizer's CSV therefore contains a different name than the buddy list on screen.",
+      "failure": "parseRoster(\"a\".repeat(119) + \"\\u{1F600}\" + \"tail\") emits a 120-unit name ending in the lone high surrogate 0xD83D; String.prototype.isWellFormed() === false. new TextDecoder().decode(new TextEncoder().encode(toCsv([[name]]))) !== toCsv([[name]]) — the exported CSV cell ends in U+FFFD while BuddyList/Slips render the surrogate. The name is also accepted unchanged by importGraph, so the ill-formed value is durable in the app's own file format. test/parseRoster.test.ts:111 truncates only \"x\".repeat(...), so the existing suite cannot observe this.",
+      "remediation": "Truncate by code point rather than code unit — e.g. `const cut = Array.from(raw); const token = cut.length > MAX_NAME_CHARS ? cut.slice(0, MAX_NAME_CHARS).join(\"\").trim() : raw;` — or, minimally, drop a trailing lone surrogate after slicing. Ratchet with a property test over parseRoster's whole output: every emitted name satisfies isWellFormed(). Consider applying the same well-formedness predicate in importGraph's name gate, since a hand-edited file can supply a lone surrogate directly and reach the same CSV sink.",
+      "invariant": "For every input string s, every name in parseRoster(s).names is well-formed UTF-16 (String.prototype.isWellFormed() === true), i.e. contains no unpaired surrogate — equivalently, new TextDecoder().decode(new TextEncoder().encode(name)) === name for every emitted name.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment-type-name",
+      "theme": "Documentation names a type the function no longer receives; stale after refactoring to normalize worker results",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 389,
+      "summary": "Docstring refers to BuddyResult but function parameter is GraphResult",
+      "failure": "The viewFromResult function (line 397) accepts `r: GraphResult`, not `BuddyResult`. The comment on line 389 states 'Combine a worker BuddyResult' but BuddyResult is the intermediate type in the worker; GraphResult is what crosses the boundary. When a new contributor reads this comment while reading the function signature, the two do not match.",
+      "invariant": "Every docstring that names a specific type must match the actual parameter types: if a docstring names `BuddyResult`, the function signature must have `BuddyResult` in the parameter list, not `GraphResult`",
+      "remediation": "Update line 389 to: 'Combine a worker GraphResult (normalized from BuddyResult or ConstrainedBuddyResult) with the roster + settings into a GraphView.' This reflects that GraphResult is the actual type received, and acknowledges it's normalized from the core's two builder types."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment-type-name",
+      "theme": "Documentation describes flow using a type name that was normalized away; stale after worker protocol refactoring",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 18,
+      "summary": "Docstring says 'maps its BuddyResult back' but receives GraphResult from worker protocol",
+      "failure": "useBuddyGraph receives `gen.result` which is typed as `GraphResult` (from the worker protocol), not `BuddyResult`. The hook's own docstring on line 18 says 'maps its BuddyResult back into a GraphView'. A contributor reading the docstring, then tracing to the worker protocol (protocol.ts), would find `GraphResult` defined there, creating a search-and-trace mismatch that looks like an error.",
+      "invariant": "Documentation describing data flow must match the actual types in the implementation: if a docstring names BuddyResult as input, the implementation must show BuddyResult flowing in, not GraphResult",
+      "remediation": "Update line 18-19 to: 'Orchestrates generation: sends a job to the worker and maps its GraphResult (a normalized builder outcome) back into a GraphView using the exact roster + settings that produced it.' This clarifies that GraphResult is what the worker protocol carries, normalized from the core's actual builder result types."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-hidden-by-inert",
+      "theme": "an aria-live explanation is wrapped in `inert` in the exact same commit that gives it its text, so assistive tech never sees it",
+      "file": "app/src/App.tsx",
+      "line": 150,
+      "summary": "When a first-time generation fails at the worker level (`bg.status === \"error\"`, e.g. the worker script fails to load/parse — the exact case `useGenerationWorker.ts`'s own `onerror`/`onmessageerror` handlers were added to catch), the effect at App.tsx:150-166 calls `show(bg.error || \"Generation failed.\")` and `setModalOpen(true)` together, synchronously, inside one effect body. React 18/19 batches both into a single commit. In that same commit, `<div inert={modalOpen}><Notice message={notice} onDismiss={clear} /></div>` (App.tsx:427-429) goes straight from `(inert=false, message=null)` to `(inert=true, message=text)`. Per spec, an `inert` subtree is excluded from the accessibility tree, so the `role=\"status\"` region inside it is never exposed to assistive technology at the moment it receives its only text — the announcement that explains why the dialog silently reopened. Unlike the constraint-refusal path (`bg.status===\"refused\"`), where `RosterModal`'s own internal note stack happens to recompute the identical blocking message from the same `validateDetailed` predicate and thereby duplicates the toast's content in a non-inert region, the worker-error path has no such duplicate: the modal's own feasibility/rule checks say nothing about \"Generation failed to start\" or \"Generation sent back something unreadable\". A screen-reader user is left in a dialog that looks freshly opened, with an enabled \"Generate buddy graph\" button, zero explanation of what happened, and — because retrying reproduces the same worker failure the same way — a silent loop: each retry regenerates the same unannounced toast. The code comment at App.tsx:421-426 explicitly asserts \"Nothing is lost: the message is announced by its own role=\\\"status\\\"\", which is false for exactly this path; the claim is only true today for the refused-constraints path, and only by coincidence of two independent code paths (worker validateDetailed vs. RosterModal's own validateDetailed) computing the same string, not by the toast itself being reachable.",
+      "failure": "Cold load -> paste a valid roster -> click \"Generate buddy graph\" while the generation worker fails to start (e.g. blocked script, corrupted deploy, a browser extension interfering with module workers) -> bg.status becomes \"error\" -> show(bg.error) + setModalOpen(true) fire in one commit -> the toast's role=status region is rendered already-inert with its first (and only) text -> a screen-reader user hears nothing, sees the roster dialog reopened with no stated reason, and gets no accessible signal to explain or work around the failure.",
+      "remediation": "Never pair `show()`/`flash()` with `setModalOpen(true)` in the same commit. Either (a) defer setting `modalOpen` by one tick/render (e.g. via a second effect keyed on `notice`) so the toast is announced in a non-inert state before its ancestor becomes inert, or (b) duplicate the message inside RosterModal's own always-mounted, non-inert `role=\"status\"` note stack (the way the refused-constraints path already does by accident) — pass the reopening reason in as a prop and render it there unconditionally, not only for the constraint-refusal subset.",
+      "invariant": "For any two states S0 -> S1 committed together where S0 had `notice === null` and S1 has both `notice !== null` and `modalOpen === true` (making the toast's wrapper `inert`), the same text must also be reachable through some `role=\"status\"`/`aria-live` region that is NOT a descendant of an `inert` element in S1. Equivalently: no `aria-live` region's first-ever appearance of a given message may occur inside a subtree whose `inert` attribute is `true` in that same render."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "PLAUSIBLE",
+      "class": "focus-lost-no-commit",
+      "theme": "focus recovery after a removed/blurred element relies on a React commit that a canceled native file-picker never produces",
+      "file": "app/src/App.tsx",
+      "line": 409,
+      "summary": "Both file-import affordances (`app/src/App.tsx:409-419`'s hidden `<input type=\"file\">` behind QualityPanel's \"Import ↑\" button, and `app/src/panels/RosterModal.tsx:133-143`'s hidden input behind \"choose a file\") are `display:none` and are opened via `ref.current?.click()`. Neither has an `onCancel` handler, and a repo-wide grep confirms no `cancel` event listener exists anywhere in `app/src`. `useFocusRescue` (app/src/state/useFocusRescue.ts) is the app's ONLY mechanism for recovering focus that lands on `<body>`, and by its own design it runs its rescue effect \"after EVERY commit\" — i.e. it depends on a React re-render happening at all. Selecting a file fires `onChange`, which drives a state update (`setRoster`/`handleImportFile`) that produces a commit, so the rescue engages correctly on that path (traced and consistent with the surrounding code's extensive, well-documented handling of the analogous \"unmount removes focus\" cases). But dismissing the native file-picker WITHOUT choosing a file fires no `change` event and therefore no React commit at all — so even if `hadFocus.current` is `true`, the rescue effect never re-runs to catch it. `display:none` elements are unfocusable per spec, so the hidden input itself cannot become `document.activeElement`; browsers commonly leave `document.activeElement` on `<body>` in this scenario once the native dialog closes over an unfocusable trigger (a widely-documented pattern, which is exactly why other apps use visually-hidden-but-focusable inputs instead of `display:none` for this). With `#app` not inert at this point (a graph exists, the modal is closed), a body-stranded focus means the very next Tab press restarts navigation from the top of the entire document — precisely the failure `useFocusRescue`'s own doc comment says the mechanism exists to prevent (\"the next Tab restarts at the top of the document\").",
+      "failure": "Cold load -> enter a roster -> generate -> read the quality panel -> press Tab/Enter on QualityPanel's \"Import ↑\" button -> the native file-open dialog appears -> press Escape/Cancel in the OS dialog without selecting a file -> no `change` event fires, no React state updates, `useFocusRescue`'s post-commit effect never re-runs -> focus is left on `document.body` -> the next Tab press jumps to the very first focusable element in the document (LayoutToggle) instead of returning to \"Import ↑\" or anywhere near the QualityPanel the user was just in, with zero announcement of what happened.",
+      "remediation": "Register a `cancel` listener on both file inputs (supported in Chromium-based browsers; treat it as best-effort) AND, more robustly, don't rely on the `change` event at all: `focus()` (or otherwise track) the triggering visible button explicitly right after calling `ref.current?.click()`, or switch the hidden inputs from `display:none` to a visually-hidden-but-focusable pattern (`position:absolute; width:1px; height:1px; overflow:hidden; opacity:0`) so the browser itself can restore focus to it (or its trigger) after any dialog outcome, success or cancel.",
+      "invariant": "After any interaction that opens a native file-picker triggered from a page button, document.activeElement must never remain `document.body` once the picker closes, regardless of whether a file was chosen — i.e. `document.activeElement !== document.body` must hold on every reachable post-picker state, not only the state reached via a successful `change` event."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 667738,
+    "agents": 6,
+    "toolCalls": 253
+  },
+  "targetRaw": "app/src (the BuddyGraph app)"
+}

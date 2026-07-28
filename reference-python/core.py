@@ -239,6 +239,12 @@ def moore_lower_bounds(n, k):
             or not isinstance(k, int) or isinstance(k, bool)
             or k <= 0 or n <= 1):
         return 0.0, 0
+    # No CONNECTED graph with max degree <= 1 exists above n=2 — a matching is the best
+    # possible and it is disconnected — so the Moore-tree bound for k=1 describes a graph
+    # that cannot be built, and asplGap then reports a NEGATIVE gap ("better than provably
+    # optimal"). A lower bound no realisable graph attains is not a lower bound.
+    if k == 1 and n > 2:
+        return 0.0, 0
     remaining = n - 1
     total = 0
     shell = k

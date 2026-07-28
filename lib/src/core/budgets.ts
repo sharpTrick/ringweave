@@ -81,29 +81,31 @@ export function constrainedWork(n: number, k: number): number {
 export const MAX_GREEDY_WORK = 15_000_000_000;
 
 /**
- * Work budget for `repairDegrees`, which is NOT ringGreedy's.
+ * Work budget for `repairDegrees`, COUNTED at runtime rather than predicted.
  *
- * Repair's unit is one `bfsDistances` sweep per pass; ringGreedy's is a distance-cache update.
- * Two attempts tried to express repair in ringGreedy's units — once by reusing `greedyWork`
- * directly, once by scaling it by a constant — and both failed, because the quantities are
- * unrelated: `greedyWork` is built from EDGES ADDED, and repair's cost is driven by the DEGREE
- * DEFICIT it closes. Same reasoning the module header gives for keeping the greedy and
- * constrained budgets separate, one level down.
+ * Four predictive models of this function's cost failed in four different ways (the list is in
+ * `greedy.ts`, next to the counter). The cost depends on graph STRUCTURE — how many under-degree
+ * vertices a pass scans before one succeeds — which no function of (n, k, deficit) captures, so
+ * `repairDegrees` now accumulates the work it actually does and stops when it exceeds this.
  *
- * Calibrated against measurement on this machine (~1.1e8 units/s):
- *   edgeless n=3000,  k=4  ->  9.0e7   ->   0.25 s   admitted
- *   edgeless n=20000, k=2  ->  1.2e9   ->  10.7 s    admitted
- *   edgeless n=70000, k=2  ->  1.5e10  ->  >120 s    REFUSED
- * 6.6e9 is ~60 s worst case, the same ceiling MAX_GREEDY_WORK documents for its own path.
- * `ringGreedy`'s internal repair call is unaffected: it runs after completion, when the deficit
- * is nearly closed, so its work sits orders of magnitude below this.
+ * Units are real: one all-pairs sweep costs n + n·k, and each pass additionally costs its
+ * under-list rebuild (n) and sort (n log n). Both centres are charged; charging only the sweeps
+ * still admitted a 239 s call, because at 36,000 passes the sort dominates.
+ *
+ * Calibrated against measurement on this machine (~9.2e7 units/s), against shapes that exercise
+ * the MULTI-PASS regime — which is the mistake that sank the last model, whose three calibration
+ * points were all edgeless graphs that exit after one pass:
+ *   ring(4000, 4)        ->  admitted,  2.0 s
+ *   ring(8000, 4)        ->  admitted,  8.3 s
+ *   tri+cycle(600, 4)    ->  admitted,  1.6 s
+ *   tri+cycle(1200, 4)   ->  refused after 6.3 s   (12 s if allowed to finish)
+ *   edgeless(20000, 2)   ->  refused after 9.2 s   (13 s if allowed to finish)
+ *   tri+cycle(2400, 4)   ->  refused after 6.3 s   (review measured 94.8 s)
+ *   ring(36000, 4)       ->  refused after 8.0 s   (review measured 239.5 s)
+ * Every refusal is reached in under 10 s, which is the property a runtime counter buys and a
+ * predicted budget cannot: the ceiling applies to the work done BEFORE the refusal too.
  */
-export const MAX_REPAIR_WORK = 6_600_000_000;
-
-/** Estimated `repairDegrees` cost: passes to close the deficit x one sweep each. */
-export function repairWork(n: number, k: number, deficit: number): number {
-  return Math.max(1, Math.floor(deficit / 2)) * (n + n * Math.max(0, k));
-}
+export const MAX_REPAIR_WORK = 1_000_000_000;
 
 /**
  * Estimated ringGreedy cost. Monotone in n and k.

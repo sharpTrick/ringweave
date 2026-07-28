@@ -406,7 +406,13 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 // diagnosis depending on which entry point is asked. Both diagnoses are true and
 // both refuse; only the ordering differs, and it is stated here rather than left
 // for a reader to infer from the word "mirror".
-/** The hard constraints must already hold on the graph handed to a swap-only pass. */
+/**
+ * The hard constraints must already hold on the graph handed to a swap-only pass.
+ *
+ * (The mirroring note that used to sit here belongs to `checkConstraintIds` below, which checks
+ * constraint STRUCTURE against the Python reference; this one checks graph STATE and has no
+ * Python counterpart, because the Python port has no equivalent precondition.)
+ */
 function checkInputSatisfiesConstraints(g: Graph, cons: Constraints): void {
   for (const [a, b] of cons.requiredPairs()) {
     if (!g.hasEdge(a, b)) {

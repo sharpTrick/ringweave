@@ -9,7 +9,7 @@
  */
 import { Graph, ring } from "./graph.js";
 import {
-  DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, MAX_REPAIR_WORK, greedyWork, repairWork,
+  DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, MAX_REPAIR_WORK, greedyWork,
 } from "./budgets.js";
 import { bfsDistances } from "./metrics.js";
 
@@ -219,28 +219,34 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
     // than ignoring an option.
     throw new Error(`minimum separation ${minDist} must be a non-negative integer`);
   }
-  // Priced on what repair ACTUALLY spends, computed in O(n) before the loop. The previous two
-  // attempts both reused `greedyWork`, which is built from EDGES ADDED — a quantity unrelated to
-  // this function's cost. Repair's real work is (passes) x (under-degree vertices scanned) x one
-  // full `bfsDistances` sweep each, and a pass ends as soon as one vertex succeeds, so a roster
-  // that adds few edges can still scan many vertices many times. Scaling a wrong model by 4 made
-  // it wrong by a different factor; these two quantities bound the real thing:
-  //   underCount — vertices below k, i.e. the most any single pass can scan
-  //   addable    — total degree deficit / 2, i.e. the most passes that can make progress
-  const degrees = g.degrees();
-  let deficit = 0;
-  for (let v = 0; v < g.n; v++) if (degrees[v] < k) deficit += k - degrees[v];
-  // Repair's OWN budget, in repair's own units — see MAX_REPAIR_WORK. Two earlier attempts
-  // expressed this in ringGreedy's units (reusing `greedyWork`, then scaling it by 4) and both
-  // failed, because `greedyWork` is built from edges ADDED while repair's cost is driven by the
-  // degree DEFICIT. The intermediate version over-charged so badly it refused an edgeless n=1200
-  // repair costing ~35 ms — refusing working configurations is the other half of the failure this
-  // module's header warns about, and the half nobody notices until they hit it.
-  if (repairWork(g.n, k, deficit) > MAX_REPAIR_WORK) {
-    throw new Error(
-      `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
-    );
-  }
+  // COUNTED, NOT PREDICTED. Four successive models of this function's cost were wrong, each in a
+  // different direction, and the reason is that repair's cost depends on graph STRUCTURE in a way
+  // no function of (n, k, deficit) captures: a pass ends when one vertex is successfully paired,
+  // so the number of `bfsDistances` sweeps per pass is anywhere from 1 to the number of
+  // under-degree vertices, depending on which of them happen to be far enough apart.
+  //
+  // The models, and how each failed:
+  //   1. reuse `greedyWork`            — prices EDGES ADDED, a quantity repair does not spend
+  //   2. scale `greedyWork` by 4       — same wrong quantity, scaled
+  //   3. under-count x passes x sweep   — true worst case, so loose it REFUSED a 35 ms call
+  //   4. passes x sweep                — tracked my three measurements and admitted a 239 s call
+  //
+  // Model 4's failure is the instructive one: all three points I calibrated it against were
+  // EDGELESS graphs, where every candidate is unreachable, so `distv[v] < minDist` rejects
+  // everything and the loop exits after ONE pass. I fitted a multi-pass model to single-pass data
+  // and my guard test used the same shape, so it could not catch it. Review did:
+  // `repairDegrees(ring(36000), 4)` was admitted at 6.48e9 of a 6.6e9 budget and ran 239.5 s.
+  //
+  // A counter cannot be wrong about the shape. It charges the work actually done, so the budget
+  // means what it says whatever the graph looks like, and no future structure can evade it.
+  // BOTH cost centres, because the first version of this counter charged only the sweeps and
+  // still admitted `ring(36000, 4)`: every pass also rebuilds the under-degree list (O(n)) and
+  // sorts it (O(n log n)), and at 36,000 passes that dominates. Counting one of two centres is
+  // the same class of error as modelling the wrong quantity — just harder to notice, because the
+  // number it produces looks like a measurement.
+  let work = 0;
+  const sweepCost = g.n + g.n * k;
+
   let changed = true;
   while (changed) {
     changed = false;
@@ -249,9 +255,23 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
     for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
     if (under.length < 2) break;
     under.sort((x, y) => g.degree(x) - g.degree(y)); // stable in ES2019+
+    // The rebuild scan and the sort, charged per pass. At 36,000 passes this is the dominant
+    // term, and leaving it uncounted is what let a 239 s call through.
+    work += g.n + under.length * Math.log2(Math.max(2, under.length));
+    if (work > MAX_REPAIR_WORK) {
+      throw new Error(
+        `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
+      );
+    }
 
     for (const va of under) {
       if (g.degree(va) >= k) continue;
+      work += sweepCost;
+      if (work > MAX_REPAIR_WORK) {
+        throw new Error(
+          `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
+        );
+      }
       const distv = bfsDistances(g, va);
       // candidates in `under` order (degree-sorted, stable ascending v)
       let vb = -1;

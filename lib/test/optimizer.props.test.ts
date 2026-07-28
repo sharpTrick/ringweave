@@ -33,7 +33,7 @@ import { polish } from "../src/core/polish.js";
 import { repairDegrees } from "../src/core/greedy.js";
 import { bfsDistances } from "../src/core/metrics.js";
 import { ring } from "../src/core/graph.js";
-import { mooreLowerBounds } from "../src/core/bounds.js";
+import { mooreLowerBounds, asplGap } from "../src/core/bounds.js";
 import {
   Constraints,
   polishConstrained,
@@ -47,8 +47,6 @@ import {
   polishWork,
   checkPolishSize,
   boundedPolishIterations,
-  MAX_REPAIR_WORK,
-  repairWork,
 } from "../src/core/budgets.js";
 
 function graphOf(n: number, edges: [number, number][]): Graph {
@@ -423,19 +421,33 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(greedyWork(1000, 2)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
   });
 
-  it("bounds repair by ITS cost, refusing the slow shapes and admitting the fast ones", () => {
+  it("bounds repair by its MEASURED cost, in both the single-pass and multi-pass regimes", { timeout: 120_000 }, () => {
     // Three attempts, and the first two failed in opposite directions — which is the point of
     // asserting the accept-set from BOTH sides. `greedyWork` is built from edges ADDED; repair's
     // cost is driven by the degree DEFICIT it closes, so expressing one in the other's units was
     // wrong however it was scaled. Measured: n=3000/k=4 is 0.25 s, n=20000/k=2 is 10.7 s, and
     // n=70000/k=2 runs past two minutes.
-    const deficitOf = (n: number, k: number) => n * k; // edgeless: every vertex is k short
-    expect(repairWork(70_000, 2, deficitOf(70_000, 2))).toBeGreaterThan(MAX_REPAIR_WORK);
-    expect(repairWork(3000, 4, deficitOf(3000, 4))).toBeLessThanOrEqual(MAX_REPAIR_WORK);
-    expect(repairWork(20_000, 2, deficitOf(20_000, 2))).toBeLessThanOrEqual(MAX_REPAIR_WORK);
-    expect(() => repairDegrees(new Graph(70_000), 2)).toThrow(/too large to repair/);
-    // A graph with NO deficit costs one scan however large it is — the previous model refused
-    // this, which is the same defect as admitting a hang, pointing the other way.
+    // MULTI-PASS shapes, which is the whole point. The previous version of this test used only
+    // `deficitOf = n*k` — an edgeless graph — and every edgeless graph exits after ONE pass
+    // because nothing is reachable, so it could not see the regime the budget exists to bound.
+    // Review found a 239 s call the test called safe. These shapes make many passes.
+    const triCycle = (n: number) => {
+      const g = new Graph(n);
+      const half = Math.floor(n / 2);
+      for (let i = 0; i + 2 < half; i += 3) {
+        g.addEdge(i, i + 1);
+        g.addEdge(i + 1, i + 2);
+        g.addEdge(i, i + 2);
+      }
+      for (let i = half; i < n; i++) g.addEdge(i, i + 1 < n ? i + 1 : half);
+      return g;
+    };
+    expect(() => repairDegrees(ring(36_000), 4)).toThrow(/too large to repair/);
+    expect(() => repairDegrees(triCycle(2400), 4)).toThrow(/too large to repair/);
+    // ...and the cheap shapes still run, in both regimes.
+    expect(() => repairDegrees(ring(4000), 4)).not.toThrow();
+    expect(() => repairDegrees(triCycle(600), 4)).not.toThrow();
+    // A graph with NO deficit costs one scan however large it is.
     expect(() => repairDegrees(ring(200_000), 2)).not.toThrow();
   });
 
@@ -479,6 +491,30 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
       expect(() => bfsDistances(ring(10), bad)).toThrow(/source .* must be an integer/);
     }
     expect(() => bfsDistances(ring(10), 0)).not.toThrow();
+  });
+
+  it("never reports a graph as better than provably optimal", () => {
+    // `mooreLowerBounds(n, 1)` for n > 2 described a Moore tree no max-degree-1 graph can
+    // realise — a matching is the best possible and it is disconnected — so `asplGap` returned a
+    // NEGATIVE gap. Both TS and reference-python now return no bound there; the fixtures cover
+    // neither branch (regenerating them produces no diff), so the property is pinned here.
+    for (let n = 1; n <= 40; n++) {
+      for (let k = 1; k <= 6; k++) {
+        const { asplLb } = mooreLowerBounds(n, k);
+        expect(asplLb).toBeGreaterThanOrEqual(0);
+        if (k === 1 && n > 2) expect(asplLb).toBe(0);
+      }
+    }
+    // The consequence that reaches a user: a quality score is never above 1.
+    fc.assert(
+      fc.property(scenario, (s) => {
+        const g = graphOf(s.n, s.edges);
+        const summary = allPairsSummary(g);
+        fc.pre(summary.connected);
+        const [, degreeMax] = [0, Math.max(...g.degrees())];
+        expect(asplGap(summary.aspl, g.n, degreeMax)).toBeGreaterThanOrEqual(0);
+      }),
+    );
   });
 
   it("refuses a NaN separation target instead of silently building a different graph", () => {

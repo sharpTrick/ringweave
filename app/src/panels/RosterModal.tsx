@@ -24,6 +24,16 @@ interface Props {
    * contradicting the editor's own contract that an unrecognised row is kept and flagged.
    */
   rules: NamedPair[];
+  /**
+   * Why the dialog was reopened, when it was reopened BY a refusal or a worker error.
+   *
+   * It arrives here rather than in the toast because the toast is `inert` while this dialog is
+   * open — deliberately, so Tab cannot escape an aria-modal dialog into it — and `inert` removes
+   * an element from the accessibility tree entirely, so a message shown there at the same moment
+   * this opened was never announced at all. Containment and announcement were fighting; the
+   * message belongs to the dialog it is explaining.
+   */
+  reopenReason?: string | null;
   canCancel: boolean;
   onGenerate: (
     names: string[],
@@ -38,7 +48,8 @@ interface Props {
 /** F1 + F2: roster entry (paste or .txt/.csv drop, tolerant parse, duplicate warnings)
     and generate settings, with pre-run feasibility notes. */
 export default function RosterModal({
-  initialText, settings: initialSettings, rules: initialRules, canCancel, onGenerate, onCancel,
+  initialText, settings: initialSettings, rules: initialRules, reopenReason, canCancel,
+  onGenerate, onCancel,
 }: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -176,6 +187,7 @@ export default function RosterModal({
             Mounted around the stack rather than on each note, for the reason Notice.tsx documents:
             a region that appears together with its first text is never announced. */}
         <div role="status" aria-live="polite">
+        {reopenReason && <div className="note blocking">{reopenReason}</div>}
         {fileError && <div className="note blocking">{fileError}</div>}
         {inputCapped && <div className="note">{charCapNotice()}</div>}
         {parsed.warnings.map((w, i) => (

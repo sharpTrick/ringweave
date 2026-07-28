@@ -386,7 +386,7 @@ export interface GraphView {
 }
 
 /**
- * Combine a worker BuddyResult with the roster + settings into a GraphView.
+ * Combine a worker GraphResult (normalized from BuddyResult or ConstrainedBuddyResult) with the roster + settings into a GraphView.
  *
  * Connectivity is read from the result rather than assumed. It used to be
  * hardcoded true on the reasoning that the unconstrained builder seeds a ring and
