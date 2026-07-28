@@ -88,24 +88,39 @@ export const MAX_GREEDY_WORK = 15_000_000_000;
  * vertices a pass scans before one succeeds — which no function of (n, k, deficit) captures, so
  * `repairDegrees` now accumulates the work it actually does and stops when it exceeds this.
  *
- * Units are real: one all-pairs sweep costs n + n·k, and each pass additionally costs its
- * under-list rebuild (n) and sort (n log n). Both centres are charged; charging only the sweeps
- * still admitted a 239 s call, because at 36,000 passes the sort dominates.
+ * Units are real, and there are three cost centres, all COUNTED:
+ *   - each `bfsDistances` sweep, at `n + 2m` — the adjacency that EXISTS, not `n + n·k`, which
+ *     prices a k-regular graph. `k` is a target; a caller-supplied graph whose degrees exceed it
+ *     was undercharged without bound (a 2000-clique with 4000 leaves charged 9% of the budget
+ *     while running 32.8 s), so the counter's first version was still a model where it mattered.
+ *   - each sweep's candidate scan, at `under.length`. Exposed by the correction above: per
+ *     element it costs ~10x the BFS (a `hasEdge` Set probe each), and on an edgeless graph it is
+ *     the entire run — 10.9 s against a sweep charge worth 0.33 s.
+ *   - each pass's under-list rebuild (n) and sort (n log n). Charging only the sweeps admitted a
+ *     239 s call, because at 36,000 passes the sort dominates.
+ * Each of the three was found the same way: by a shape whose cost the other two could not see.
  *
- * Calibrated against measurement on this machine (~9.2e7 units/s), against shapes that exercise
- * the MULTI-PASS regime — which is the mistake that sank the last model, whose three calibration
- * points were all edgeless graphs that exit after one pass:
- *   ring(4000, 4)        ->  admitted,  2.0 s
- *   ring(8000, 4)        ->  admitted,  8.3 s
- *   tri+cycle(600, 4)    ->  admitted,  1.6 s
- *   tri+cycle(1200, 4)   ->  refused after 6.3 s   (12 s if allowed to finish)
- *   edgeless(20000, 2)   ->  refused after 9.2 s   (13 s if allowed to finish)
- *   tri+cycle(2400, 4)   ->  refused after 6.3 s   (review measured 94.8 s)
- *   ring(36000, 4)       ->  refused after 8.0 s   (review measured 239.5 s)
+ * Calibrated against measurement on this machine, taking the SLOWEST observed rate (6.8e7
+ * units/s, the edgeless scan-bound shape; the traversal-bound shapes run at 1.2-2.6e8), against
+ * shapes that exercise the MULTI-PASS regime — the mistake that sank the last predictive model,
+ * whose three calibration points were all edgeless graphs that exit after one pass:
+ *   ring(4000, 4)        ->  admitted,  1.9 s   (2.3e8, under half the budget)
+ *   tri+cycle(600, 4)    ->  admitted,  1.5 s   (2.4e8)
+ *   ring(200000, 2)      ->  admitted,  3 ms    (no deficit: one scan, whatever the size)
+ *   ring(8000, 4)        ->  refused after 4.1 s   (9.8e8 if allowed to finish, 8.0 s)
+ *   tri+cycle(1200, 4)   ->  refused after 3.1 s   (11.7 s)
+ *   edgeless(20000, 2)   ->  refused after 7.4 s   (11.8 s)
+ *   ring(400, 1e9)       ->  refused after 2.4 s   (4.5 s)
+ *   clique(1200)+1600    ->  refused after 1.9 s   (4.5 s)
+ *   tri+cycle(2400, 4)   ->  refused              (review measured 94.8 s)
+ *   ring(36000, 4)       ->  refused              (review measured 239.5 s)
  * Every refusal is reached in under 10 s, which is the property a runtime counter buys and a
- * predicted budget cannot: the ceiling applies to the work done BEFORE the refusal too.
+ * predicted budget cannot: the ceiling applies to the work done BEFORE the refusal too. The
+ * budget fell from 1e9 when the two missing centres were charged; `ring(8000, 4)` is the one
+ * shape that flipped from admitted to refused, and it is far outside `MAX_ROSTER`, which is what
+ * the only live caller (`ringGreedy(..., {repair: true})`) is bounded by.
  */
-export const MAX_REPAIR_WORK = 1_000_000_000;
+export const MAX_REPAIR_WORK = 500_000_000;
 
 /**
  * Estimated ringGreedy cost. Monotone in n and k.

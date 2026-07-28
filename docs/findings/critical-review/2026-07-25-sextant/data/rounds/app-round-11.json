@@ -1,0 +1,324 @@
+{
+  "target": "app/src",
+  "round": 11,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 3,
+    "confirmed": 5,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial pass over app/src with executed probes (harness under /home/user/ringweave/.review-scratch/, run via a scratch vitest config; nothing left in app/test).\n\n1. importGraph hostile battery (16 files): 200k people, over-density edges, 999-degree star hub, 1e6 constraint pairs, constraints-as-array, non-integer/negative endpoints, edges:{length:1e9}, 500k-char name, embedded tab and U+2028, deeply-nested version, lone surrogate, formula-leading name. All refused as ImportError (never a bare RangeError/TypeError), each <3ms. Gate ORDER verified to precede the work it bounds: people-count before people.map, density before the addEdge loop, pair-count before readConstraints, per-vertex degree before allPairsSummary (confirmed by the 3ms star-hub refusal).\n2. Cost of the densest LEGAL file (12-regular n=1000, m=6000): importGraph 68ms end to end; allPairsSummary 102ms / girth 2ms / largestComponentFraction 2ms measured standalone. No main-thread hang.\n3. Attacker-chosen numbers: {buddies:1e9, minSeparation:1e9, seed:1e18, polish:true} -> {12,12,2147483647}; negative/garbage -> in-range defaults; polish:true further downgraded to \"auto\" by useBuddyGraph via autoPolishEnabled, so a file cannot drive a long polish run. Reroll re-checks feasibility/rerollBlockReason off the view.\n4. Main-thread superlinear paths: forceLayout at the ceiling (n=1000,m=6000,40 ticks) = 282ms, n=120 full-tick = 125ms, n=400 = 156ms; FORCE_MAX_N/FORCE_MAX_EDGES=6000 exactly meet what import's 2m<=12n admits, and the ANIM_MAX_N=400 tween gate sits downstream. RosterModal per-keystroke: parseRoster on the degenerate 500k all-duplicate paste = 41ms; resolveNamedPairs + toConstraints + validateDetailed's O(n^2) prohibited-connectivity walk at n=1000 with 200 prohibited pairs = 7.7ms.\n5. Spreadsheet/clipboard sink: traced every name producer (parseRoster normalizes Cc/Cf/Zl/Zp and splits on , and \\n; importGraph refuses that class AND enforces a parseRoster round-trip that rejects commas, newlines, edge whitespace and case-insensitive duplicates; SAMPLE_NAMES). No third producer exists, so no delimiter can be embedded in a name; toCsv neutralizes per cell then RFC-4180 quotes (safe even under a semicolon list separator), and BuddyList.copyAll's per-line leading name is neutralized while the rest of the line cannot break out of its cell. Could not construct a name reaching a cell boundary with =,+,-,@ after it.\n6. Numeric edges: round-tripped n=1 edgeless, n=2 edgeless, n=2 one-edge, n=3 path, n=10 edgeless, two-component n=4 and n=1000 through importGraph -> exportGraphJson: no NaN/Infinity in the JSON, aspl/diameter/girth null rather than Infinity, quality===0 whenever aspl===null, largestComponentFraction in (0,1]. -0 ids/endpoints canonicalize harmlessly; sanitizeInt clamps 2**53-class values; nextRerollSeed wraps in [0, SEED_MAX].\n7. Other sinks: readFileText's 8MB gate precedes the read and JSON.parse; V8 JSON SyntaxError snippet measured bounded at 55 chars and re-clamped at useNotice's 300-char sink; all clampText/clampList sinks; global-regex lastIndex statelessness (importGraph rebuilds NAME_HOSTILE_CHARS without /g); no plain-object dictionary keyed by an untrusted name (Map/Set throughout, so no __proto__ sink); no innerHTML/eval/storage/URL sink; MAX_CONSTRAINT_PAIRS holds on every live path (import gate + disabled Add); App re-guards `selected` against view.names.length; usePathFinder guards ends against graph.n; worker error/messageerror channels close the inert-forever hang.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read the full app/src surface (App.tsx, model.ts, constraints.ts, worker/{protocol,generate,generate.worker}.ts, state/{useBuddyGraph,useGraph,useGenerationWorker}.ts, graph/{GraphCanvas,layout,highlight}.ts, neighborhood.ts, panels/{RosterModal,ConstraintsEditor,SettingsControls,PersonPanel,QualityPanel,BuddyList,PathPanel}.tsx, io/{schema,exportGraph,importGraph}.ts) plus app/CLAUDE.md and docs/PROJECT_PLAN.md. Confirmed M3 (F7/F8/F10) is actually wired into App.tsx as claimed. Took the task literally: traced the next milestone's flagship item, F9 \"Preserve current buddies\" (PROJECT_PLAN.md M4/F9), against the real files to find its fan-out, and separately attempted to extend the declared app seam (GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor) by walking through what a selection-dependent (focus/ego) mode would require. For F9 I independently re-derived the fan-out (GenerateRequest/GenerateOptions in worker/protocol.ts have no prior fields; ConstraintPair/ConstraintKind in constraints.ts has no third \"prior\" kind and its assertNever-guarded switches live in constraints.ts, ConstraintsEditor.tsx, worker/generate.ts; App.tsx has no roster-diff/edge-carry-forward path from an old GraphView to a new generate() call) and grepped for any live reference (`priorWeight`, `priorHard`, `addPrior`) — none exists. Verified typecheck is clean and that the seam's exhaustiveness claim is real (positionsFor's `assertNever` on LayoutMode) and its cited test (test/graphCanvasFit.test.ts) exists. Checked PersonPanel/neighborhood.ts against the \"UI never reimplements math\" rule and the app's own documented, measured exception — both hold. Checked App.tsx (449 lines, largely comments) for god-component drift — logic is factored into single-purpose hooks (useBuddyGraph, useGraph, usePathFinder, useExplorerHistory, useFocusRescue, useNotice, useEscape) and App.tsx itself only wires them and holds dispatch callbacks; no responsibility leak found there.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of app/src: state/useBuddyGraph.ts, state/useGenerationWorker.ts, state/useEscape.ts, state/useFocusRescue.ts, state/useExplorerHistory.ts, state/usePathFinder.ts, state/useGraph.ts, App.tsx, model.ts, constraints.ts, graph/GraphCanvas.tsx, graph/highlight.ts (partial), graph/layout.ts (partial), panels/RosterModal.tsx, panels/PersonPanel.tsx, panels/PersonSearch.tsx, panels/ConstraintsEditor.tsx, panels/BuddyList.tsx, panels/QualityPanel.tsx, io/importGraph.ts, io/exportGraph.ts, io/parseRoster.ts, io/clamp.ts, io/feasibility.ts, io/schema.ts, worker/protocol.ts, worker/generate.ts, worker/generate.worker.ts, neighborhood.ts, search.ts, sample.ts (referenced). Traced: generation/reroll/import/export loops; constraint name↔index conversion; metrics null-coalescing; graphics index validation; focus rescue closure safety; accessibility patterns; untrusted data clamping sinks; state dispatch vs view adoption. Verified: all 271 tests pass; linter clean (oxlint, knip, hygiene checks)",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read App.tsx, RosterModal.tsx, ConstraintsEditor.tsx, GraphCanvas.tsx, PersonSearch.tsx, PersonPanel.tsx, BuddyList.tsx, PathPanel.tsx, QualityPanel.tsx, LayoutToggle.tsx, SettingsControls.tsx, Slips.tsx, Notice.tsx, useEscape.ts, useFocusRescue.ts, useNotice.ts, useExplorerHistory.ts, usePathFinder.ts, useBuddyGraph.ts, useGenerationWorker.ts, and app.css's reduced-motion rule. Cross-checked against the existing test suite (appErrorRecovery.test.tsx, layoutToggle.test.tsx, explorer.test.tsx, etc.) to see what interaction/a11y classes were already covered by prior review rounds: modal inert-containment, live-region pre-mounting for busy/path/selection/search-empty/rule-cap/copy-confirmation, aria-pressed on the layout toggle, aria-current on the selected buddy row, Escape scoping (global vs search-box-local), reroll/cancel state desync, refusal routed into the (announced, non-inert) dialog vs. the (inert-while-modal-open) toast. Traced the single app-level `useFocusRescue` mechanism (a no-deps `useEffect` in `App`) against React's actual re-render semantics, and reproduced its behavior with a throwaway RTL harness under `.review-scratch/` (mocking `useGenerationWorker` the same way `appErrorRecovery.test.tsx` does) to check whether it fires when a focused element is removed by a *descendant's own local state*, not by a change visible to `App`.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Text length/truncation is measured in UTF-16 code units in some places and Unicode code points in others, so the same string is judged differently by different parts of the pipeline — breaking round-trip import and corrupting strings at display/DOM sinks",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "parseRoster truncates names by code point while importGraph rejects names using UTF-16 .length, so the app's own exported file can be refused on re-import whenever a name contains astral characters near the 120-unit/point boundary — despite importGraph's docblock claiming exact round-trip with parseRoster as the authority.",
+        "clampText (the shared truncation helper backing all four truncation sinks) slices by UTF-16 code unit, so it can cut a surrogate pair in half and emit an ill-formed string (lone surrogate) into the DOM, CSV, and clipboard — the exact defect parseRoster's own comments document having fixed for names, still present in the shared helper."
+      ],
+      "remediation": "Delete the two divergent length/slice checks and make importGraph.ts and clampText.ts call parseRoster's existing code-point counting logic instead of using .length — one code-point-based measurement/slice used everywhere text is bounded, not a UTF-16 check in one place and a code-point check in another."
+    },
+    {
+      "theme": "ConstraintKind is a closed two-case union with three exhaustive switches built for hard, user-editable, exportable rules; the planned F9 'prior' concept is none of those three things, so it must not become a third case even though it would compile",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "ConstraintKind's exhaustive switches (splitPairs, assertNever, ConstraintsEditor's <select>) are shaped for required/prohibited only; F9 priors are derived from a prior view rather than user-typed, must stay out of the rule editor and export schema, and the core already keeps them in a separate Constraints#priors set — extending the union with a 'prior' case would compile but wrongly surface priors in the editor UI and exported rule list."
+      ],
+      "remediation": "When F9 is built, do not add a third ConstraintKind case — keep priors out of the require/prohibit union entirely and represent them only via the separate field the core already uses (Constraints#priors / GraphView.priors), so the exhaustive switches stay two-case and untouched."
+    },
+    {
+      "theme": "The layout-mode extension seam (LAYOUT_MODES/positionsFor) type-checks cleanly for a new mode via assertNever, but the animation trigger, the shared FIT_MODES radius budget, and positionsFor's fixed signature all encode assumptions that only hold for the existing non-selection-dependent modes",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "Adding a selection-dependent (focus/ego) layout mode surfaces three real blockers on inspection: the animation effect only fires on `layoutChanged`, so hover/selection-driven position changes would snap instead of animate; FIT_MODES deliberately excludes selection-dependent modes from the shared fit frame, so such a mode's radii must fit inside an already-fixed frame; and positionsFor would need a new focus-index parameter threaded through all three of its call sites, not a single-seam change."
+      ],
+      "remediation": "Remove the assumption baked into the animation effect that only `layoutChanged` drives animation — collapse it to trigger on any position-affecting change to the current mode's inputs, rather than adding a second, mode-specific trigger condition alongside it."
+    },
+    {
+      "theme": "The app's one focus-rescue mechanism is wired as a no-dependency-array effect on the root App component, so it only runs when App itself re-renders — a focused element removed by a descendant's own local state update never triggers it, silently stranding focus on <body>",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "useFocusRescue's rescue effect lives in App and only re-runs when App re-renders; React only re-renders the fiber that owns the changed state, so RosterModal removing a focused 'Remove rule' button via its own local `rules` state never triggers App's rescue effect, leaving `document.activeElement` on `<body>` with a reachable, non-inert textarea sitting unfocused — the same failure class three earlier review rounds are documented as having fixed for every other call site."
+      ],
+      "remediation": "Remove the rescue effect's dependency on App's own render cycle: delete the App-local useEffect and detect focused-node removal at a single point that isn't gated by which component's state changed (one observer covering the whole app subtree), rather than duplicating the same effect into each descendant that can remove focused elements."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "round-trip-contract-break",
+      "theme": "user text length is measured in UTF-16 code units by one authority and in code points by another, so the two disagree about the same name",
+      "file": "app/src/io/importGraph.ts",
+      "line": 204,
+      "summary": "parseRoster truncates names by CODE POINT while importGraph refuses names by UTF-16 .length, so the app's own exported file is rejected on re-import whenever a name contains astral characters and exceeds 120 code units. importGraph's docblock claims it \"Round-trips identically with exportGraph\" and treats parseRoster as the authority for what a name may be; it is not enforcing the same rule the parser applies.",
+      "failure": "Roster line = \"\\u{1F600}\".repeat(61) (61 code points, 122 UTF-16 units) plus three ordinary names. parseRoster keeps the name whole (61 <= MAX_NAME_CHARS) and emits no warning. Generate, then Export -> buddygraph.json contains the name verbatim. Import that same file -> ImportError: \"A name is too long (122 characters, the limit is 120).\" Reproduced in /home/user/ringweave/.review-scratch/probe1.test.ts, and a 400-trial fuzz over a mixed BMP/astral alphabet (probe2) hit it on ~3% of rosters. No test in app/test/ uses a non-BMP name, so the existing suite (271 passing) does not cover it.",
+      "remediation": "Measure the name against MAX_NAME_CHARS in the same unit both authorities use. In importGraph.ts, replace `p.name.length > MAX_NAME_CHARS` with a code-point count (e.g. `Array.from(p.name).length > MAX_NAME_CHARS`, or a shared `nameLength()` helper exported from parseRoster.ts so the two sides cannot drift again). Add a test asserting that every name parseRoster emits is accepted by importGraph, driven by astral input.",
+      "invariant": "For every roster text t, every name in parseRoster(t).names satisfies importGraph's per-name length gate — i.e. importGraph never refuses a file whose people are exactly parseRoster(t).names. Equivalently: both authorities measure name length in the same unit, so parseRoster's output is always importable.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "malformed-string-at-display-sink",
+      "theme": "user text length is measured in UTF-16 code units by one authority and in code points by another, so the two disagree about the same name",
+      "file": "app/src/io/clamp.ts",
+      "line": 18,
+      "summary": "clampText slices by UTF-16 code unit, so it can cut between the halves of a surrogate pair and emit an ill-formed string (a lone surrogate) into a DOM text node. This is exactly the defect parseRoster documents having fixed for names (\"By CODE POINT, not code unit... a lone surrogate — an ill-formed string that is not in Cc/Cf/Zl/Zp, so every downstream gate accepts it and it reaches the DOM, the CSV and the clipboard\"), and the shared helper that owns all four truncation sinks still has it.",
+      "failure": "clampText(\"\\u{1F600}\".repeat(40), 61) returns a string ending in an unpaired high surrogate (verified in /home/user/ringweave/.review-scratch/probe4.test.ts). Reachable from the UI: typing/pasting 31+ emoji into the person search box with no match renders `Nobody matches \"...\\uD83D\"` in the role=\"status\" live region (PersonSearch.tsx clampEcho, ECHO_MAX=60), displayed as U+FFFD and announced as garbage. Same for useNotice (300) and importGraph's quote() (80).",
+      "remediation": "Slice by code point in clampText, e.g. `const pts = Array.from(text); return pts.length > max ? pts.slice(0, max).join(\"\") + \"…\" : text;` (keeping the existing fast path when text.length <= max, since UTF-16 length >= code-point length). Add a property test that clampText output is always well-formed UTF-16.",
+      "invariant": "For every string s and every max m, clampText(s, m) contains no unpaired surrogate code unit (every code unit in [0xD800,0xDBFF] is immediately followed by one in [0xDC00,0xDFFF], and vice versa).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-scope-gap",
+      "theme": "the app's single 'rescue focus at the commit boundary' mechanism only fires when the ROOT component (App) itself re-renders; a focused element removed by a descendant's own local state update never triggers it, so focus is silently stranded on <body> in exactly the class of case the mechanism exists to prevent",
+      "file": "app/src/state/useFocusRescue.ts",
+      "line": 45,
+      "summary": "useFocusRescue's rescue effect is a no-dependency-array useEffect declared in App. React only re-runs a component's own effects when THAT component (or an ancestor whose render reaches it) re-renders. State updates in React start rendering at the fiber that owns the state — not necessarily at the root — so when a descendant component removes its own focused element via its OWN local state (not lifted into App), App never re-renders and the rescue effect never runs at all for that removal. Reproduced concretely with RosterModal's `rules` state (owned by RosterModal, rendered through ConstraintsEditor): clicking the focused 'Remove rule 1' button removes it via `setRules` inside RosterModal, which does not cause App to re-render, so `document.activeElement` is left on `<body>` with the (non-inert, reachable) roster textarea sitting right there unfocused — the exact failure mode three earlier review rounds are documented (in App.tsx's and useFocusRescue.ts's own comments) as having fixed for every other call site.",
+      "failure": "Reproduced with a throwaway RTL harness (`.review-scratch/ruleRemoveFocus.test.tsx`, mocking `useGenerationWorker` as `appErrorRecovery.test.tsx` does): render <App/>, type a roster into the (initially open) roster modal, open the 'Buddy rules' <details>, click '+ Add a buddy rule', focus the resulting 'Remove rule 1' button, click it. Result: `document.activeElement === document.body` (confirmed `true`), while `document.querySelector('[aria-label=\"Roster names\"]')` exists and is NOT inert (confirmed `rosterInert === false`) — i.e. a perfectly good rescue anchor was available and simply never consulted, because the rescue effect never ran for this commit.",
+      "remediation": "The mechanism needs to observe removals application-wide rather than depend on which component's render happened to include the change — e.g. a single MutationObserver on document.body (or on #app plus the overlay siblings) that checks 'was the removed subtree the focused element' regardless of which component's state caused it, or explicitly re-derive the rescue as a subscription that isn't gated on App's own render cycle. A per-descendant duplicate of the same useEffect (e.g. also calling it from RosterModal) would restore the exact 'call site amnesia' anti-pattern this hook's own comments say review already rejected once.",
+      "invariant": "for any commit that removes the element that was document.activeElement immediately beforehand (and activeElement was not already document.body), document.activeElement !== document.body after the commit settles — regardless of which component in the tree owns the state that triggered the removal",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "round-trip-contract-break",
+      "theme": "user text length is measured in UTF-16 code units by one authority and in code points by another, so the two disagree about the same name",
+      "file": "app/src/io/importGraph.ts",
+      "line": 204,
+      "summary": "parseRoster truncates names by CODE POINT while importGraph refuses names by UTF-16 .length, so the app's own exported file is rejected on re-import whenever a name contains astral characters and exceeds 120 code units. importGraph's docblock claims it \"Round-trips identically with exportGraph\" and treats parseRoster as the authority for what a name may be; it is not enforcing the same rule the parser applies.",
+      "failure": "Roster line = \"\\u{1F600}\".repeat(61) (61 code points, 122 UTF-16 units) plus three ordinary names. parseRoster keeps the name whole (61 <= MAX_NAME_CHARS) and emits no warning. Generate, then Export -> buddygraph.json contains the name verbatim. Import that same file -> ImportError: \"A name is too long (122 characters, the limit is 120).\" Reproduced in /home/user/ringweave/.review-scratch/probe1.test.ts, and a 400-trial fuzz over a mixed BMP/astral alphabet (probe2) hit it on ~3% of rosters. No test in app/test/ uses a non-BMP name, so the existing suite (271 passing) does not cover it.",
+      "remediation": "Measure the name against MAX_NAME_CHARS in the same unit both authorities use. In importGraph.ts, replace `p.name.length > MAX_NAME_CHARS` with a code-point count (e.g. `Array.from(p.name).length > MAX_NAME_CHARS`, or a shared `nameLength()` helper exported from parseRoster.ts so the two sides cannot drift again). Add a test asserting that every name parseRoster emits is accepted by importGraph, driven by astral input.",
+      "invariant": "For every roster text t, every name in parseRoster(t).names satisfies importGraph's per-name length gate — i.e. importGraph never refuses a file whose people are exactly parseRoster(t).names. Equivalently: both authorities measure name length in the same unit, so parseRoster's output is always importable.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "malformed-string-at-display-sink",
+      "theme": "user text length is measured in UTF-16 code units by one authority and in code points by another, so the two disagree about the same name",
+      "file": "app/src/io/clamp.ts",
+      "line": 18,
+      "summary": "clampText slices by UTF-16 code unit, so it can cut between the halves of a surrogate pair and emit an ill-formed string (a lone surrogate) into a DOM text node. This is exactly the defect parseRoster documents having fixed for names (\"By CODE POINT, not code unit... a lone surrogate — an ill-formed string that is not in Cc/Cf/Zl/Zp, so every downstream gate accepts it and it reaches the DOM, the CSV and the clipboard\"), and the shared helper that owns all four truncation sinks still has it.",
+      "failure": "clampText(\"\\u{1F600}\".repeat(40), 61) returns a string ending in an unpaired high surrogate (verified in /home/user/ringweave/.review-scratch/probe4.test.ts). Reachable from the UI: typing/pasting 31+ emoji into the person search box with no match renders `Nobody matches \"...\\uD83D\"` in the role=\"status\" live region (PersonSearch.tsx clampEcho, ECHO_MAX=60), displayed as U+FFFD and announced as garbage. Same for useNotice (300) and importGraph's quote() (80).",
+      "remediation": "Slice by code point in clampText, e.g. `const pts = Array.from(text); return pts.length > max ? pts.slice(0, max).join(\"\") + \"…\" : text;` (keeping the existing fast path when text.length <= max, since UTF-16 length >= code-point length). Add a property test that clampText output is always well-formed UTF-16.",
+      "invariant": "For every string s and every max m, clampText(s, m) contains no unpaired surrogate code unit (every code unit in [0xD800,0xDBFF] is immediately followed by one in [0xDC00,0xDFFF], and vice versa).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-shape-mismatch",
+      "theme": "the eventual F9 soft-constraint (prior) needs a third rule kind, but ConstraintPair/ConstraintKind was designed for exactly two hard, user-editable, exportable kinds, and priors are none of those three things",
+      "file": "app/src/constraints.ts",
+      "summary": "ConstraintKind is a closed two-case union (required/prohibited) with three exhaustive switches over it (constraints.ts:63 splitPairs, constraints.ts's assertNever, ConstraintsEditor.tsx:82-91's <select>). F9's priors are structurally different from both existing kinds: they are derived from a PREVIOUS view's edges rather than user-typed, they must not appear in the rule editor or the exported/imported rule list (app/CLAUDE.md already notes there's no resolveNamedPairs analogue for edges), and the core keeps them in a genuinely separate Constraints#priors set rather than folding them into require/prohibit. Extending ConstraintKind with a \"prior\" case would be the wrong shape (it would compile through the switches but paint priors into the editor UI and export schema, which is not wanted); the right seam is a parallel field/list next to `constraints` on GraphView, not a third ConstraintKind. No file in the current tree needs this today — confirmed by grep, no caller for priorWeight/priorHard/addPrior in app/src — so this is filed to record the shape mismatch before it gets built, not as work to do now.",
+      "failure": "n/a — no caller yet; the risk is that a future implementer reaches for the seemingly-obvious extension (add \"prior\" to ConstraintKind, since that's the pattern everywhere else in the file) and it doesn't fit: priors would then need per-consumer filtering out of the editor, export and import paths, which is more code than a parallel list would need.",
+      "remediation": "When F9 is actually built, model priors as a distinct field (e.g. GraphView.priors / GenerateRequest.priors: [number,number][], with priorWeight/priorHard as separate GenerateOptions fields) rather than a third ConstraintKind — matching how the core itself keeps Constraints#priors separate from require/prohibit.",
+      "invariant": "caseOnly — this is a design-shape observation about an abstraction with no live instance, not a property checkable against current inputs."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unresolved-extension-preconditions",
+      "theme": "the app's declared UI extension seam (LAYOUT_MODES/FIT_MODES/positionsFor) compiles cleanly for a new mode but the four problems already recorded against the one candidate mode (focus/ego) are real and unresolved, confirmed by independently re-deriving them from the code",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "summary": "Attempted the extension the seam is for: adding a selection-dependent layout mode. positionsFor's assertNever does force a compile error until a new case is added (the seam's core promise holds), but three of the four already-documented blockers are real on inspection: (1) GraphCanvas.tsx:177 area's animation effect only animates on `layoutChanged` (see the useEffect at line ~153-190), so a mode whose positions move on hover/selection with no `layout` transition would snap on every mouse-over rather than animate; (2) FIT_MODES deliberately excludes a selection-dependent mode from the union frame (by design, so the frame doesn't rescale per click) — correct, but it means such a mode's own radii must fit inside whatever FIT_MODES already produced, which is a real constraint the mock's larger outer-band radius (per app/CLAUDE.md) violates; (3) `positionsFor` gaining a parameter (the focus index) changes its signature and therefore every call site (three in GraphCanvas.tsx: target, the animation effect's `to`, and computeFit's flatMap), which is a real multi-site edit, not a single-seam one, for a genuinely selection-DEPENDENT mode.",
+      "failure": "n/a — no caller; if the focus/ego mode is added by literally following the seam's own doc comment (add to LAYOUT_MODES and give positionsFor a branch) without addressing the animation-only-on-layoutChanged gate, hovering a node in that mode would visibly snap positions instead of the design's intended smooth motion.",
+      "remediation": "No action now. If/when the focus/ego mode is built, the animation effect's `layoutChanged` gate needs to also fire on a focus change within the same mode, and positionsFor's new parameter should be threaded through deliberately rather than defaulted, per the four points app/CLAUDE.md already records.",
+      "invariant": "caseOnly — no live second case exists to state a general property against; this documents that the seam's compile-time promise (exhaustiveness) is real but does not cover the run-time preconditions (animation trigger, frame containment) a caller would also need."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-scope-gap",
+      "theme": "the app's single 'rescue focus at the commit boundary' mechanism only fires when the ROOT component (App) itself re-renders; a focused element removed by a descendant's own local state update never triggers it, so focus is silently stranded on <body> in exactly the class of case the mechanism exists to prevent",
+      "file": "app/src/state/useFocusRescue.ts",
+      "line": 45,
+      "summary": "useFocusRescue's rescue effect is a no-dependency-array useEffect declared in App. React only re-runs a component's own effects when THAT component (or an ancestor whose render reaches it) re-renders. State updates in React start rendering at the fiber that owns the state — not necessarily at the root — so when a descendant component removes its own focused element via its OWN local state (not lifted into App), App never re-renders and the rescue effect never runs at all for that removal. Reproduced concretely with RosterModal's `rules` state (owned by RosterModal, rendered through ConstraintsEditor): clicking the focused 'Remove rule 1' button removes it via `setRules` inside RosterModal, which does not cause App to re-render, so `document.activeElement` is left on `<body>` with the (non-inert, reachable) roster textarea sitting right there unfocused — the exact failure mode three earlier review rounds are documented (in App.tsx's and useFocusRescue.ts's own comments) as having fixed for every other call site.",
+      "failure": "Reproduced with a throwaway RTL harness (`.review-scratch/ruleRemoveFocus.test.tsx`, mocking `useGenerationWorker` as `appErrorRecovery.test.tsx` does): render <App/>, type a roster into the (initially open) roster modal, open the 'Buddy rules' <details>, click '+ Add a buddy rule', focus the resulting 'Remove rule 1' button, click it. Result: `document.activeElement === document.body` (confirmed `true`), while `document.querySelector('[aria-label=\"Roster names\"]')` exists and is NOT inert (confirmed `rosterInert === false`) — i.e. a perfectly good rescue anchor was available and simply never consulted, because the rescue effect never ran for this commit.",
+      "remediation": "The mechanism needs to observe removals application-wide rather than depend on which component's render happened to include the change — e.g. a single MutationObserver on document.body (or on #app plus the overlay siblings) that checks 'was the removed subtree the focused element' regardless of which component's state caused it, or explicitly re-derive the rescue as a subscription that isn't gated on App's own render cycle. A per-descendant duplicate of the same useEffect (e.g. also calling it from RosterModal) would restore the exact 'call site amnesia' anti-pattern this hook's own comments say review already rejected once.",
+      "invariant": "for any commit that removes the element that was document.activeElement immediately beforehand (and activeElement was not already document.body), document.activeElement !== document.body after the commit settles — regardless of which component in the tree owns the state that triggered the removal",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-shape-mismatch",
+      "theme": "the eventual F9 soft-constraint (prior) needs a third rule kind, but ConstraintPair/ConstraintKind was designed for exactly two hard, user-editable, exportable kinds, and priors are none of those three things",
+      "file": "app/src/constraints.ts",
+      "summary": "ConstraintKind is a closed two-case union (required/prohibited) with three exhaustive switches over it (constraints.ts:63 splitPairs, constraints.ts's assertNever, ConstraintsEditor.tsx:82-91's <select>). F9's priors are structurally different from both existing kinds: they are derived from a PREVIOUS view's edges rather than user-typed, they must not appear in the rule editor or the exported/imported rule list (app/CLAUDE.md already notes there's no resolveNamedPairs analogue for edges), and the core keeps them in a genuinely separate Constraints#priors set rather than folding them into require/prohibit. Extending ConstraintKind with a \"prior\" case would be the wrong shape (it would compile through the switches but paint priors into the editor UI and export schema, which is not wanted); the right seam is a parallel field/list next to `constraints` on GraphView, not a third ConstraintKind. No file in the current tree needs this today — confirmed by grep, no caller for priorWeight/priorHard/addPrior in app/src — so this is filed to record the shape mismatch before it gets built, not as work to do now.",
+      "failure": "n/a — no caller yet; the risk is that a future implementer reaches for the seemingly-obvious extension (add \"prior\" to ConstraintKind, since that's the pattern everywhere else in the file) and it doesn't fit: priors would then need per-consumer filtering out of the editor, export and import paths, which is more code than a parallel list would need.",
+      "remediation": "When F9 is actually built, model priors as a distinct field (e.g. GraphView.priors / GenerateRequest.priors: [number,number][], with priorWeight/priorHard as separate GenerateOptions fields) rather than a third ConstraintKind — matching how the core itself keeps Constraints#priors separate from require/prohibit.",
+      "invariant": "caseOnly — this is a design-shape observation about an abstraction with no live instance, not a property checkable against current inputs."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unresolved-extension-preconditions",
+      "theme": "the app's declared UI extension seam (LAYOUT_MODES/FIT_MODES/positionsFor) compiles cleanly for a new mode but the four problems already recorded against the one candidate mode (focus/ego) are real and unresolved, confirmed by independently re-deriving them from the code",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "summary": "Attempted the extension the seam is for: adding a selection-dependent layout mode. positionsFor's assertNever does force a compile error until a new case is added (the seam's core promise holds), but three of the four already-documented blockers are real on inspection: (1) GraphCanvas.tsx:177 area's animation effect only animates on `layoutChanged` (see the useEffect at line ~153-190), so a mode whose positions move on hover/selection with no `layout` transition would snap on every mouse-over rather than animate; (2) FIT_MODES deliberately excludes a selection-dependent mode from the union frame (by design, so the frame doesn't rescale per click) — correct, but it means such a mode's own radii must fit inside whatever FIT_MODES already produced, which is a real constraint the mock's larger outer-band radius (per app/CLAUDE.md) violates; (3) `positionsFor` gaining a parameter (the focus index) changes its signature and therefore every call site (three in GraphCanvas.tsx: target, the animation effect's `to`, and computeFit's flatMap), which is a real multi-site edit, not a single-seam one, for a genuinely selection-DEPENDENT mode.",
+      "failure": "n/a — no caller; if the focus/ego mode is added by literally following the seam's own doc comment (add to LAYOUT_MODES and give positionsFor a branch) without addressing the animation-only-on-layoutChanged gate, hovering a node in that mode would visibly snap positions instead of the design's intended smooth motion.",
+      "remediation": "No action now. If/when the focus/ego mode is built, the animation effect's `layoutChanged` gate needs to also fire on a focus change within the same mode, and positionsFor's new parameter should be threaded through deliberately rather than defaulted, per the four points app/CLAUDE.md already records.",
+      "invariant": "caseOnly — no live second case exists to state a general property against; this documents that the seam's compile-time promise (exhaustiveness) is real but does not cover the run-time preconditions (animation trigger, frame containment) a caller would also need."
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 11,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 3,
+      "lastRound": 11,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 11,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 11,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 11,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 627434,
+    "agents": 6,
+    "toolCalls": 201
+  }
+}

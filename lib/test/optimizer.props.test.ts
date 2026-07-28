@@ -442,6 +442,25 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
       for (let i = half; i < n; i++) g.addEdge(i, i + 1 < n ? i + 1 : half);
       return g;
     };
+    // A dense core with a sparse fringe: m is DECOUPLED from n·k, which is the regime the
+    // counter's first unit price could not see. It charged a sweep `n + n·k` — the cost of a
+    // k-regular graph — while `bfsDistances` walks `n + 2m`. Here that is 5600 charged against
+    // 1.44e6 real, a 257x undercharge, and at review's larger n=6000 version the call ran 32.8 s
+    // having spent 9% of its budget. Charging `n + 2m` is what makes this shape reachable by the
+    // budget at all; no size cap is needed alongside it, because the charge now precedes the
+    // sweep it prices.
+    const cliqueWithLeaves = (core: number, leaves: number) => {
+      const g = new Graph(core + leaves);
+      for (let i = 0; i < core; i++) for (let j = i + 1; j < core; j++) g.addEdge(i, j);
+      for (let i = 0; i < leaves; i++) g.addEdge(core + i, i % core);
+      return g;
+    };
+    expect(() => repairDegrees(cliqueWithLeaves(1200, 1600), 2)).toThrow(/too large to repair/);
+    // The scan-bound shape, and the third cost centre. An edgeless graph gives the BFS nothing to
+    // walk, so `n + 2m` prices 20,000 sweeps at 0.33 s — but each sweep still scans all 20,000
+    // candidates with a `hasEdge` probe apiece, and the call takes 11 s. Charging the sweeps'
+    // traversal alone let this one back through after the sweep price was corrected.
+    expect(() => repairDegrees(new Graph(20_000), 2)).toThrow(/too large to repair/);
     expect(() => repairDegrees(ring(36_000), 4)).toThrow(/too large to repair/);
     expect(() => repairDegrees(triCycle(2400), 4)).toThrow(/too large to repair/);
     // ...and the cheap shapes still run, in both regimes.

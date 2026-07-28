@@ -13,9 +13,32 @@
  * readable; bounding at the sink (useNotice) as well is belt and braces, and both are cheap.
  */
 
+/**
+ * `text`'s code points when there are more than `max` of them, otherwise null.
+ *
+ * A CHARACTER is a code point, not a UTF-16 code unit, and the difference is not cosmetic:
+ * `slice`/`length` count units, so cutting or measuring an emoji-bearing name splits a surrogate
+ * pair and emits a lone surrogate — an ill-formed string that is not in Cc/Cf/Zl/Zp, so every
+ * downstream gate accepts it and it reaches the DOM, the CSV and the clipboard.
+ *
+ * `parseRoster` learned that and encoded it inline; the two other places that measure user text
+ * against a character limit did not, so the app disagreed with itself in two directions at once:
+ * `clampText` cut mid-pair, and `importGraph` refused, on UTF-16 length, files this app had just
+ * exported. This is that predicate, once, so the three cannot drift again.
+ *
+ * The `text.length > max` guard is the fast path and it is exact, not an approximation: UTF-16
+ * length is always >= code-point count, so anything that fits in units fits in points.
+ */
+export function codePointsIfOver(text: string, max: number): string[] | null {
+  if (text.length <= max) return null;
+  const points = Array.from(text);
+  return points.length > max ? points : null;
+}
+
 /** Ellipsis-truncate to `max` characters. Returns the input untouched when it already fits. */
 export function clampText(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  const points = codePointsIfOver(text, max);
+  return points ? `${points.slice(0, max).join("")}…` : text;
 }
 
 /**

@@ -4,7 +4,8 @@ import { MAX_CONSTRAINT_PAIRS } from "../src/constraints";
 import { generateResult } from "./helpers";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
 import { importGraph, ImportError, MAX_IMPORT_N } from "../src/io/importGraph";
-import { parseRoster } from "../src/io/parseRoster";
+import { MAX_NAME_CHARS, parseRoster } from "../src/io/parseRoster";
+import { clampText } from "../src/io/clamp";
 import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, MAX_ROSTER_N, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
 
 function names(n: number): string[] {
@@ -289,6 +290,45 @@ describe("import: lossless round-trip and defaults", () => {
     const people = long.map((name, id) => ({ id, name }));
     const edges = long.map((_, i) => [i, (i + 1) % long.length] as [number, number]);
     expect(() => importGraph({ version: 1, people, edges })).toThrow(/too long/i);
+  });
+
+  // Class: the app has two authorities on how long a name may be, and they must count in the
+  // same unit. `parseRoster` truncates by CODE POINT (it says so, and it fixed a lone-surrogate
+  // bug to get there); `importGraph` refused by UTF-16 length. So a roster of emoji-bearing
+  // names passed the parser untouched, exported, and was refused on re-import by the same app
+  // that wrote the file — with the docblock claiming it "round-trips identically".
+  it("never refuses a file whose people are exactly what parseRoster emitted", () => {
+    // Swept across the boundary rather than asserted at one length: the two units differ by a
+    // factor of two for astral characters, so a single case can sit on either side by luck.
+    for (let points = MAX_NAME_CHARS - 3; points <= MAX_NAME_CHARS + 3; points++) {
+      const parsed = parseRoster(["\u{1F600}".repeat(points), "Ana", "Ben", "Chen"].join("\n"));
+      const people = parsed.names.map((name, id) => ({ id, name }));
+      expect(() => importGraph({ version: 1, people, edges: [[0, 1], [1, 2], [2, 3], [3, 0]] }))
+        .not.toThrow();
+      // ...and the gate is live, not vacuous: one code point past the limit is still refused.
+      const over = "\u{1F600}".repeat(MAX_NAME_CHARS + 1);
+      expect(() =>
+        importGraph({ version: 1, people: [{ id: 0, name: over }, ...peopleOf(3).slice(1)], edges: [] }),
+      ).toThrow(/A name is too long/);
+    }
+  });
+
+  it("clamps display text without splitting a surrogate pair", () => {
+    // The same unit confusion at the other end of the pipe. `clampText` owns all four truncation
+    // sinks, and `slice` cut between the halves of a pair — emitting a lone surrogate, which is
+    // ill-formed but is not in Cc/Cf/Zl/Zp, so every downstream gate accepts it and it reaches
+    // the DOM, the CSV and the clipboard as U+FFFD. Reachable by typing 31 emoji into the search
+    // box, whose no-match echo is a live region.
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    for (let max = 1; max <= 12; max++) {
+      for (const text of ["\u{1F600}".repeat(20), `Ana\u{1F600}${"\u{1F1EF}\u{1F1F5}".repeat(8)}`]) {
+        const out = clampText(text, max);
+        expect(out).not.toMatch(lone);
+        // ...and it still truncates: the fix must not have turned the clamp into a pass-through.
+        expect(Array.from(out).length).toBeLessThanOrEqual(max + 1); // + the ellipsis
+      }
+    }
+    expect(clampText("short", 10)).toBe("short");
   });
 
   it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {

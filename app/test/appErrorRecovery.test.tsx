@@ -255,7 +255,7 @@ describe("focus survives a panel closing itself", () => {
   // to remember. These cases are therefore a sample of the class, not an enumeration of it —
   // three earlier rounds each fixed the call sites review had found and each missed the next
   // batch, which is the argument for testing the mechanism rather than the sites.
-  it("rescues focus wherever the removal happened, including places nothing calls a helper", () => {
+  it("rescues focus wherever the removal happened, including places nothing calls a helper", async () => {
     const { rerender } = render(<App />);
     withGraph(rerender);
     fireEvent.click(document.querySelectorAll(".brow")[0]);
@@ -267,7 +267,10 @@ describe("focus survives a panel closing itself", () => {
     expect(document.activeElement).toBe(close);
     // Escape, which goes through useEscape — a path with no rescue helper anywhere on it.
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(document.activeElement).not.toBe(document.body);
+    // Awaited, like every rescue assertion here: the rescue watches the DOM through a
+    // MutationObserver, which delivers on the microtask after the batch rather than inside the
+    // commit. That is the property that makes it independent of which component re-rendered.
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
     expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
   });
 
@@ -283,7 +286,7 @@ describe("focus survives a panel closing itself", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  it("moves focus to the search box when the person panel's Close is used", () => {
+  it("moves focus to the search box when the person panel's Close is used", async () => {
     const { rerender } = render(<App />);
     withGraph(rerender);
     // Open the panel from the buddy list, then close it from inside.
@@ -294,8 +297,34 @@ describe("focus survives a panel closing itself", () => {
     close.focus();
     expect(document.activeElement).toBe(close);
     fireEvent.click(close);
-    expect(document.activeElement).not.toBe(document.body);
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
     expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
+  });
+
+  it("rescues focus when a DESCENDANT's own state removes the focused element", async () => {
+    // The fourth attempt at this hook, and the one that stopped assuming React's tree matched
+    // the DOM's. Attempt three asked its question from a no-dependency `useEffect` in `App`,
+    // which runs after every commit OF APP — and a state update starts rendering at the fiber
+    // that owns the state, not at the root. `RosterModal` owns `rules`; removing a rule never
+    // re-renders `App`, so the one mechanism that was supposed to have closed the class did not
+    // run at all here. The rescue now watches the DOM, which has no opinion about whose state
+    // caused the removal.
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Ana\nBen\nChen\nDee\nEli" },
+    });
+    fireEvent.click(screen.getByText(/Buddy rules/));
+    fireEvent.click(screen.getByText("+ Add a buddy rule"));
+    const remove = screen.getByLabelText("Remove rule 1");
+    remove.focus();
+    expect(document.activeElement).toBe(remove);
+    fireEvent.click(remove);
+    // `await`, not a bare assertion: a MutationObserver delivers on a microtask after the batch,
+    // which is the property that lets it see React's remove-then-insert sequences settled.
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    // ...and to a reachable anchor, not just to anything. The roster field is the landing spot
+    // while the dialog owns the screen.
+    expect(document.activeElement).toBe(screen.getByLabelText("Roster names"));
   });
 
   it("leaves focus alone when Escape is pressed from outside the panel", () => {

@@ -62,6 +62,7 @@ import {
   polishWork,
 } from "./budgets.js";
 import { ringGreedy } from "./greedy.js";
+import { checkSeed, isSeed } from "./rng.js";
 import { polish, DEFAULT_POLISH_ITERS } from "./polish.js";
 import {
   allPairsSummary,
@@ -162,7 +163,12 @@ export function buildBuddyGraph(
 ): BuddyResult {
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
-  const seed = options.seed ?? 12345;
+  // Checked HERE rather than left to the `RNG` constructor, which only runs when polish does.
+  // `resolveWantPolish` is a function of (n, k), so leaving it there made an option's acceptance
+  // depend on roster size — the same shape as the `priorWeight` bug on the constrained path,
+  // where a contract broke as a function of n. This entry point throws on bad input (see the
+  // doc comment above); its constrained sibling refuses, and normalises instead.
+  const seed = checkSeed(options.seed ?? 12345);
   const wantPolish = resolveWantPolish(options.polish, n, k, DEFAULT_POLISH_ITERS);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
@@ -367,8 +373,13 @@ export function buildConstrainedBuddyGraph(
       active.priorHard || !(Number.isFinite(requested) && requested >= 0) ? 0 : requested;
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
+    // Normalised, not thrown, for the same reason `priorWeight` is: this entry point's contract
+    // is to REFUSE (via `report.refusals`), so it must never hand `polishConstrained` a value
+    // its `RNG` throws on. Polish is the only seed-dependent stage here, so unlike the fast
+    // tier there is nothing outside this branch for the seed to affect.
+    const requestedSeed = options.seed ?? 0;
     g = polishConstrained(g, active, {
-      seed: options.seed ?? 0,
+      seed: isSeed(requestedSeed) ? requestedSeed : 0,
       iters: options.polishIters,
       priorWeight,
     });

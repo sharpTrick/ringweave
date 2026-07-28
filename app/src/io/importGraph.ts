@@ -9,7 +9,7 @@ import {
   MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
   type ConstraintPair,
 } from "../constraints";
-import { clampText } from "./clamp";
+import { clampText, codePointsIfOver } from "./clamp";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -201,9 +201,15 @@ export function importGraph(data: unknown): GraphView {
     // BuddyList, Slips and the CSV export each materialize that. A 512 KB file reached 480 MB
     // of DOM text and ~1 GB RSS. Refused rather than truncated because import refuses
     // everything else it cannot round-trip; parseRoster, the tolerant authority, truncates.
-    if (p.name.length > MAX_NAME_CHARS) {
+    // In CODE POINTS, the unit `parseRoster` truncates in. Measuring in UTF-16 units made this
+    // gate stricter than the parser that feeds it, so a roster of 61 emoji-bearing names passed
+    // the parser untouched, exported, and was then refused by this function's own round-trip —
+    // breaking the docblock's "round-trips identically with exportGraph" for a file the app
+    // itself had just written.
+    const points = codePointsIfOver(p.name, MAX_NAME_CHARS);
+    if (points) {
       throw new ImportError(
-        `A name is too long (${p.name.length} characters, the limit is ${MAX_NAME_CHARS}).`,
+        `A name is too long (${points.length} characters, the limit is ${MAX_NAME_CHARS}).`,
       );
     }
     // Edges reference people by position; a present-but-mismatched id would mislabel them.

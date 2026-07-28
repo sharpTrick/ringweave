@@ -4,11 +4,34 @@
  * Python's RNG — cross-language identity is only claimed for the deterministic
  * generators (greedy, repair), which use no randomness.
  */
+
+/** Exclusive upper bound on a seed: mulberry32's state is a uint32. */
+const SEED_MAX = 2 ** 32;
+
+/** Whether `seed` names a distinct RNG stream rather than aliasing onto another one. */
+export function isSeed(seed: number): boolean {
+  return Number.isInteger(seed) && seed >= 0 && seed < SEED_MAX;
+}
+
+/** `seed` if it is a valid seed; throws otherwise. */
+export function checkSeed(seed: number): number {
+  if (!isSeed(seed)) {
+    throw new Error(`seed ${seed} must be an integer in [0, ${SEED_MAX})`);
+  }
+  return seed;
+}
+
 export class RNG {
   private state: number;
 
   constructor(seed: number) {
-    this.state = seed >>> 0;
+    // VALIDATED, NOT COERCED. `seed >>> 0` accepted every number and mapped a great many of
+    // them onto the same stream: `0.9`, `-0`, `NaN` and `2**32` all became 0, and `s` and
+    // `s + 2**32` were indistinguishable. Seed is the app's "give me a different arrangement"
+    // control, so aliasing is a silent refusal of the only request the user made — and it was
+    // the one numeric option in the core still coerced rather than checked, while `k`, `mind`,
+    // `minDist`, `polishIters` and `priorWeight` all throw or fall back explicitly.
+    this.state = checkSeed(seed);
   }
 
   /** Float in [0, 1). */

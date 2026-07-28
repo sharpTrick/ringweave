@@ -244,8 +244,23 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
   // sorts it (O(n log n)), and at 36,000 passes that dominates. Counting one of two centres is
   // the same class of error as modelling the wrong quantity — just harder to notice, because the
   // number it produces looks like a measurement.
+  //
+  // And the unit price is MEASURED too, which is the half the first counter got wrong. It priced
+  // a sweep at `n + n·k` — the cost of a graph that is k-regular, not the cost of the graph in
+  // hand. `k` is a TARGET; `bfsDistances` walks the adjacency that actually exists, at `n + 2m`.
+  // For any graph whose real degrees exceed k the estimate undercharges without bound, so the
+  // budget stopped binding exactly where the graph was most expensive: a 2000-clique with 4000
+  // leaves (n=6000, m=2.0e6) charged 9.3e7 of a 1e9 budget — 9% — while performing 8.0e9 real
+  // traversal steps and running 32.8 s. Counting passes but modelling their price is the same
+  // error as modelling the pass count, one level down.
+  //
+  // THREE cost centres, not two. Correcting the sweep price exposed the third: each sweep also
+  // scans every candidate in `under` (a `hasEdge` Set probe per entry), which is uncharged and,
+  // per element, roughly ten times what the BFS costs. On an edgeless graph the BFS finds nothing
+  // to walk and that scan IS the run — 20,000 sweeps over 20,000 candidates, 10.9 s of a call the
+  // sweep charge alone priced at 0.33 s. `under.length` is the exact scan length (there is no
+  // early exit), so it is counted, not estimated, like the two centres beside it.
   let work = 0;
-  const sweepCost = g.n + g.n * k;
 
   let changed = true;
   while (changed) {
@@ -255,6 +270,10 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
     for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
     if (under.length < 2) break;
     under.sort((x, y) => g.degree(x) - g.degree(y)); // stable in ES2019+
+    // Recomputed per pass, not hoisted: a pass ends the moment it adds an edge, so `m` is
+    // constant WITHIN a pass and grows between them. `numEdges()` is itself O(n), the same order
+    // as the rebuild scan beside it.
+    const sweepCost = g.n + 2 * g.numEdges();
     // The rebuild scan and the sort, charged per pass. At 36,000 passes this is the dominant
     // term, and leaving it uncounted is what let a 239 s call through.
     work += g.n + under.length * Math.log2(Math.max(2, under.length));
@@ -266,7 +285,7 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
 
     for (const va of under) {
       if (g.degree(va) >= k) continue;
-      work += sweepCost;
+      work += sweepCost + under.length;
       if (work > MAX_REPAIR_WORK) {
         throw new Error(
           `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,

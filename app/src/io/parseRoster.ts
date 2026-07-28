@@ -1,5 +1,5 @@
 import { MAX_ROSTER_N } from "../model";
-import { clampList } from "./clamp";
+import { clampList, codePointsIfOver } from "./clamp";
 
 export interface ParsedRoster {
   names: string[];
@@ -97,14 +97,10 @@ export function parseRoster(raw: string): ParsedRoster {
     // Trim AGAIN after truncating: slicing mid-string can leave a trailing space, and a name
     // ending in whitespace is one this parser will not reproduce on a second pass and that
     // `importGraph` refuses outright — the output would fail its own round-trip contract.
-    // By CODE POINT, not code unit. `slice` counts UTF-16 units, so cutting between the halves
-    // of a surrogate pair emits a lone surrogate — an ill-formed string that is not in Cc/Cf/Zl/Zp,
-    // so every downstream gate accepts it and it reaches the DOM, the CSV and the clipboard.
-    const points = raw.length > MAX_NAME_CHARS ? Array.from(raw) : null;
-    const token =
-      points && points.length > MAX_NAME_CHARS
-        ? points.slice(0, MAX_NAME_CHARS).join("").trim()
-        : raw;
+    // By CODE POINT, not code unit — see `codePointsIfOver`, which is this rule extracted after
+    // review found the app's other two character limits still counting UTF-16 units.
+    const points = codePointsIfOver(raw, MAX_NAME_CHARS);
+    const token = points ? points.slice(0, MAX_NAME_CHARS).join("").trim() : raw;
     // Keyed on the EMITTED name, not the pre-truncation one. Last round this was moved to `raw`
     // to stop two different people merging when their first 120 characters match — a real
     // concern, and the wrong resolution: `importGraph` requires every emitted name to be unique
