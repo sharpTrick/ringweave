@@ -160,7 +160,10 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 /* F8 person explorer card. */
 #person { padding: 14px 15px; }
 .pp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Focusable only programmatically (`tabIndex={-1}`) so a hop along a chip can land here — see
+   PersonPanel — which also makes it show a focus ring it would otherwise never show. */
 .pp-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.pp-head h2:focus-visible { outline: 2px solid var(--cool); outline-offset: 3px; border-radius: 4px; }
 .pp-acts { display: flex; gap: 5px; }
 .pp-group { margin-top: 12px; }
 .pp-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 6px; }
@@ -287,10 +290,11 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
   * { transition: none !important; animation: none !important; }
 }
 
-/* Two columns of cards no longer fit beside a centre-anchored toggle: the person column starts at
-   `viewport - 594px` and the toggle reaches `viewport/2 + 76px`, so they cross below ~1360px. Here
-   the two right-hand panels become one flex column instead, and every horizontal offset in it is
-   measured from the viewport edge rather than across a sibling. */
+/* Two columns of cards no longer fit beside a centre-anchored toggle — they cross, and the toggle
+   ends up behind the person card. Here the two right-hand panels become one flex column instead,
+   and every horizontal offset in it is measured from the viewport edge rather than across a
+   sibling. `drive.mjs` measures the crossing at five viewports; the arithmetic that used to be
+   written out here restated widths the rules above already hold, and had already gone stale. */
 @media (max-width: 1360px) {
   #rightcol {
     position: absolute; top: 14px; right: var(--gutter); bottom: 8px; width: var(--col-w);

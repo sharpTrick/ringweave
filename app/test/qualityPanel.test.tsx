@@ -77,6 +77,7 @@ describe("QualityPanel", () => {
     expect(described).toMatch(/quality/i);
     expect(described).toMatch(/%|percent/i);
   });
+
 });
 
 describe("the reroll toast agrees with the panel beside it", () => {
@@ -101,5 +102,36 @@ describe("the reroll toast agrees with the panel beside it", () => {
     expect(isOptimal(witness.metrics)).toBe(true);
     expect(targetShortfall(witness)).toBeNull();
     expect(separationShortfall(witness)).not.toBeNull();
+  });
+
+  it("calls nothing optimal while the panel says the buddy rules were not met", () => {
+    // The panel renders THREE disclosures and the predicate consulted two. On a constrained graph
+    // `separationShortfall` returns null by construction, so the rules line is the only one left
+    // — and a graph whose rules were broken could still be announced as unimprovable.
+    const v = view(12, 4); // optimal, and constraints suppress the separation disclosure
+    // `satisfied` DERIVED from the counts beside it, never written in: a report that says
+    // "satisfied" while carrying violations is a fixture the app can never produce, and pinning
+    // the predicate against one proves nothing about the predicate.
+    const report = (req: number, proh: number) => ({
+      reqViolations: req, prohViolations: proh, satisfied: req + proh === 0,
+      refusals: [], connected: true, largestComponentFraction: 1, priorsKeptFraction: 1,
+    });
+    const broken: GraphView = {
+      ...v,
+      constraints: [{ a: 0, b: 1, kind: "required" }],
+      report: report(1, 0),
+    };
+    expect(constraintSummary(broken), "fixture must actually disclose a break").toMatch(/couldn't be met/);
+    expect(meetsEverySetting(broken)).toBe(false);
+
+    // Not re-checked at all is also not "met": an imported constrained file has no report.
+    const unchecked: GraphView = { ...broken, report: null };
+    expect(constraintSummary(unchecked)).toMatch(/not re-checked/);
+    expect(meetsEverySetting(unchecked)).toBe(false);
+
+    // Non-vacuity: the same graph with its rules satisfied still reads as meeting every setting,
+    // or this passes on a predicate that simply always says no.
+    const kept: GraphView = { ...broken, report: report(0, 0) };
+    expect(meetsEverySetting(kept)).toBe(true);
   });
 });

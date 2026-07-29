@@ -12,19 +12,23 @@ import { readFileSync } from "node:fs";
 
 const APP_CSS = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
 
-/** The `@media (max-width: Npx)` block bodies, plus everything outside any block, in source order. */
+/**
+ * The stylesheet as segments IN SOURCE ORDER — each `@media (max-width: Npx)` block, and each run
+ * of rules between them. Source order is the point: `@media` adds no specificity, so a base rule
+ * written AFTER a media block beats it, and collecting all the base rules into one leading segment
+ * reports the opposite.
+ */
 function tiers(css: string): { width: number; body: string }[] {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const found: { width: number; body: string }[] = [];
-  let rest = "";
   let at = 0;
   while (at < stripped.length) {
     const m = /@media[^{]*\(max-width:\s*(\d+)px\)[^{]*\{/.exec(stripped.slice(at));
     if (!m) {
-      rest += stripped.slice(at);
+      found.push({ width: Infinity, body: stripped.slice(at) });
       break;
     }
-    rest += stripped.slice(at, at + m.index);
+    found.push({ width: Infinity, body: stripped.slice(at, at + m.index) });
     let depth = 1;
     let i = at + m.index + m[0].length;
     const start = i;
@@ -35,7 +39,7 @@ function tiers(css: string): { width: number; body: string }[] {
     found.push({ width: Number(m[1]), body: stripped.slice(start, i - 1) });
     at = i;
   }
-  return [{ width: Infinity, body: rest }, ...found];
+  return found;
 }
 
 /** `{selector: declarations}` for rules whose selector is one plain `#id` or `.class`. */
@@ -71,11 +75,21 @@ function placementAt(all: ReturnType<typeof tiers>, selector: string, width: num
   };
 }
 
-// Present in the accessibility tree and clipped to 1px on purpose — they render nothing, so being
-// off-screen is what they are for.
-const NOT_PANELS = new Set([".sr-live", ".busy-live"]);
+/**
+ * Not panels, each for a stated reason — an allow-list rather than an omission, so adding a
+ * viewport-fixed element is a decision someone writes down here.
+ *
+ * The live regions are clipped to 1px on purpose and render nothing. The rest COVER the viewport
+ * rather than sit at an offset within it: `#app` is the shell every panel is inside, and the three
+ * overlays are meant to follow the viewport at every width — that is what makes them overlays.
+ */
+const NOT_PANELS = new Set([".sr-live", ".busy-live", "#app", "#modal", ".busy", ".toast"]);
 
-/** Selectors the cascade positions absolutely at any tier, including the narrowest one itself. */
+/** `absolute` and `fixed` alike: both place a box against a viewport edge rather than the flow,
+    which is the property this file is about. */
+const VIEWPORT_RELATIVE = new Set(["absolute", "fixed"]);
+
+/** Selectors the cascade places against the viewport at any tier, including the narrowest one. */
 function positionedSelectors(all: ReturnType<typeof tiers>): string[] {
   const names = new Set<string>();
   for (const tier of all) {
@@ -85,7 +99,7 @@ function positionedSelectors(all: ReturnType<typeof tiers>): string[] {
   // produce a different answer.
   const widths = [Number.MAX_SAFE_INTEGER, ...all.map((t) => t.width).filter(Number.isFinite)];
   return [...names]
-    .filter((sel) => widths.some((w) => placementAt(all, sel, w).position === "absolute"))
+    .filter((sel) => widths.some((w) => VIEWPORT_RELATIVE.has(placementAt(all, sel, w).position ?? "")))
     .sort();
 }
 
@@ -139,6 +153,19 @@ describe("the guard itself", () => {
   it("catches a panel that only becomes absolute INSIDE the narrow tier", () => {
     const css = "#rail { color: red }\n@media (max-width: 820px) { #rail { position: absolute; left: 9px } }";
     expect(strandedPanels(css)).toEqual(["#rail is absolute at 820px"]);
+  });
+
+  it("catches a base rule written AFTER the narrow tier, which beats it in source order", () => {
+    // `@media` adds no specificity, so this later rule wins at every width — the browser computes
+    // `absolute; left: 500px` at 390px. Reading the base rules as one leading segment reports the
+    // narrow tier as the last word and calls it flow-placed.
+    const css = `#rail { position: absolute }\n${NARROW}\n#rail { position: absolute; left: 500px }`;
+    expect(strandedPanels(css)).toEqual(["#rail is absolute at 820px"]);
+  });
+
+  it("catches a FIXED panel, which is stranded for exactly the same reason", () => {
+    const css = `#newpanel { position: fixed; top: 14px; left: 700px }\n${NARROW}`;
+    expect(strandedPanels(css)).toEqual(["#newpanel is fixed at 820px"]);
   });
 
   it("accepts an offset the narrow tier withdraws", () => {

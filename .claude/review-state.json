@@ -2,23 +2,23 @@
   "app/src": {
     "critic-correctness": {
       "nothingFoundStreak": 0,
-      "lastRound": 23
+      "lastRound": 24
     },
     "critic-security": {
-      "nothingFoundStreak": 2,
-      "lastRound": 23
+      "nothingFoundStreak": 0,
+      "lastRound": 24
     },
     "critic-solid": {
       "nothingFoundStreak": 0,
-      "lastRound": 23
+      "lastRound": 24
     },
     "critic-maintainability": {
       "nothingFoundStreak": 0,
-      "lastRound": 23
+      "lastRound": 24
     },
     "critic-interaction": {
       "nothingFoundStreak": 0,
-      "lastRound": 23
+      "lastRound": 24
     }
   },
   "lib/src": {

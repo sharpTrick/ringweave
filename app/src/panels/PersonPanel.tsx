@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { eccentricity, type Graph } from "ringweave";
 import { relatedChips } from "../neighborhood";
 import type { GraphView } from "../model";
@@ -30,6 +30,18 @@ export default function PersonPanel({
   );
   const reach = useMemo(() => eccentricity(graph, index), [graph, index]);
 
+  // A hop along a chip keeps this panel mounted but re-keys every chip, so the button that was
+  // focused is unmounted and the app-global rescue takes over — and its contract is "somewhere
+  // reachable", which is <main>, the whole app. Focus moves to the heading naming who is on
+  // screen now. NOT on mount: the panel opening is a rescue case, and stealing focus from the
+  // buddy-list row or the search field that opened it is the astonishing half of this.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const hopped = useRef(false);
+  useEffect(() => {
+    if (hopped.current) heading.current?.focus({ preventScroll: true });
+    hopped.current = true;
+  }, [index]);
+
   const chip = (i: number) => (
     <button className="personchip" key={i} onClick={() => onSelect(i)}>
       {view.names[i]}
@@ -39,7 +51,7 @@ export default function PersonPanel({
   return (
     <section id="person" className="glass" aria-label={`About ${view.names[index]}`}>
       <div className="pp-head">
-        <h2>{view.names[index]}</h2>
+        <h2 ref={heading} tabIndex={-1}>{view.names[index]}</h2>
         <div className="pp-acts">
           {canGoBack && <button className="chipbtn" onClick={onBack}>← Back</button>}
           <button className="chipbtn" onClick={onClose} aria-label="Close person details">Close</button>

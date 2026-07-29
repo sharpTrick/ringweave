@@ -85,13 +85,12 @@ export function runGeneration(req: GenerateRequest): GenerateResponse {
     // the same predicate while the app has no priors to promote, and mapping a refusal to "ok"
     // renders an edgeless graph as "all rules satisfied".
     if (built.report.refusals.length > 0) {
-      return {
-        id,
-        kind: "refused",
-        // The builder reports prose; this channel carries structured reasons, so they are
-        // re-derived from the validator rather than parsed back out of its strings.
-        refusals: validateDetailed(cons, k),
-      };
+      // Reported as an ERROR carrying the builder's own words, not as a `refused` with structured
+      // reasons: reaching here means `validateDetailed(cons, k)` was EMPTY three lines up, so
+      // re-deriving it yields `[]` and the app words that as its generic fallback with the
+      // buddy-rules disclosure shut. A refusal the app's validator cannot predict is not one it
+      // can word, and saying so loudly is the whole point of this branch.
+      return { id, kind: "error", error: built.report.refusals.join(" ") };
     }
     return { id, kind: "ok", result: fromConstrained(n, built) };
   } catch (err) {

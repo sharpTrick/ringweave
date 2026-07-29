@@ -106,6 +106,46 @@ describe("PersonPanel", () => {
   });
 });
 
+describe("a hop along a chip keeps focus in the panel", () => {
+  it("moves focus to the heading naming who is on screen now", () => {
+    // The panel stays mounted across the hop but every chip is re-keyed, so the button that was
+    // focused is unmounted. Without this the app-global rescue takes over, and its contract is
+    // "somewhere reachable" — which is <main>, i.e. the whole app.
+    const { rerender } = render(
+      <PersonPanel
+        view={RING.view} graph={RING.graph} index={0} canGoBack={false}
+        onSelect={vi.fn()} onBack={vi.fn()} onClose={vi.fn()}
+        pathFrom={false} onFindPath={vi.fn()}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: "Ben" });
+    chip.focus();
+    expect(document.activeElement).toBe(chip);
+
+    rerender(
+      <PersonPanel
+        view={RING.view} graph={RING.graph} index={1} canGoBack={true}
+        onSelect={vi.fn()} onBack={vi.fn()} onClose={vi.fn()}
+        pathFrom={false} onFindPath={vi.fn()}
+      />,
+    );
+    const heading = document.querySelector("#person h2") as HTMLElement;
+    expect(heading.textContent).toBe("Ben");
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it("does not steal focus when the panel first opens", () => {
+    // The panel opens FROM a buddy-list row or the search field, and pulling the caret off the
+    // control the user is using is the astonishing half of this.
+    const before = document.createElement("button");
+    document.body.appendChild(before);
+    before.focus();
+    renderPanel(RING, 0);
+    expect(document.activeElement).toBe(before);
+    before.remove();
+  });
+});
+
 describe("relatedChips projection", () => {
   // What PersonPanel renders and what the back-stack rule tests must be one answer, so the
   // projection's structural properties are pinned over every focus rather than one card.

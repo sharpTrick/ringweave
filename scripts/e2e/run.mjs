@@ -13,19 +13,47 @@ const APP = resolve(HERE, "../../app");
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE = `http://127.0.0.1:${PORT}`;
 
+/** Whether anything at all answers on the port right now. */
+async function answering() {
+  try {
+    await fetch(BASE, { signal: AbortSignal.timeout(2000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// REFUSED, not adopted. A server this script did not start is serving a build this script did not
+// make, and driving it reports PASS/FAIL about someone else's tree — which is exactly what a
+// leaked server from a previous run produces.
+if (await answering()) {
+  console.error(`something is already serving ${BASE}. Stop it (or set E2E_PORT) and re-run.`);
+  process.exit(1);
+}
+
+// Vite's own binary, not `npx`: `npx` is a wrapper that does NOT forward SIGTERM to the process it
+// spawned, so killing it left the preview server running — holding the port and serving a stale
+// build to the next run. `detached` puts the server in its own process group so the whole group
+// can be signalled even if vite spawns further children.
 const server = spawn(
-  "npx",
-  ["vite", "preview", "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"],
-  { cwd: APP, stdio: ["ignore", "pipe", "inherit"] },
+  process.execPath,
+  [resolve(APP, "node_modules/vite/bin/vite.js"), "preview",
+    "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"],
+  { cwd: APP, stdio: ["ignore", "pipe", "inherit"], detached: true },
 );
 let serverOut = "";
 server.stdout.on("data", (c) => { serverOut += c; });
 
-// Killed on every exit path, including a throw and a Ctrl-C: a preview server outliving the run
-// holds the port, and the next run fails on `--strictPort` rather than on anything real.
+// Killed on every exit path, including a throw and a Ctrl-C.
 let stopped = false;
 const stop = () => {
-  if (!stopped) { stopped = true; server.kill("SIGTERM"); }
+  if (stopped) return;
+  stopped = true;
+  try {
+    process.kill(-server.pid, "SIGTERM");
+  } catch {
+    server.kill("SIGTERM"); // the group is already gone
+  }
 };
 process.on("exit", stop);
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { stop(); process.exit(130); });

@@ -125,7 +125,20 @@ export function isOptimal(m: Metrics): boolean {
  * "Buddies are 3 steps apart, not the 5 in Settings".
  */
 export function meetsEverySetting(view: GraphView): boolean {
-  return isOptimal(view.metrics) && targetShortfall(view) === null && separationShortfall(view) === null;
+  return isOptimal(view.metrics)
+    && targetShortfall(view) === null
+    && separationShortfall(view) === null
+    && rulesAllMet(view);
+}
+
+/**
+ * Whether the buddy rules are known to hold. A null report with rules present is NOT MEASURED —
+ * `separationShortfall` returns null whenever rules exist, so without this the only disclosure
+ * left standing on a constrained graph is the one nothing consulted.
+ */
+function rulesAllMet(view: GraphView): boolean {
+  if (view.constraints.length === 0) return true;
+  return view.report !== null && view.report.reqViolations + view.report.prohViolations === 0;
 }
 
 /**

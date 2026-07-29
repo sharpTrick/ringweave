@@ -9,7 +9,7 @@
  * Run it with `npm run e2e` from the repo root, which builds both packages, serves the build and
  * tears the server down again. `BASE` overrides the server it drives.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:4173";
@@ -46,9 +46,47 @@ if (!EXEC) {
  * Every panel <main> renders, by the selector the stylesheet places it with. Wrappers are included
  * because a wrapper is what carries the offsets in the middle tier, and a container off-screen
  * takes its contents with it however the contents are styled.
+ *
+ * The cards nested inside `#sidecol` carry no positioning of their own, so the stylesheet cannot
+ * name them; everything that IS positioned is checked against this list below, so the list cannot
+ * silently fall behind app.css.
  */
 const PANELS = ["#rail", "#toggle", "#rightcol", "#sidecol", "#route", "#person", "#buddies",
   "#search", ".hint", "#metrics"];
+
+/**
+ * Positioned, but not panels — each excluded for a stated reason, so "not checked" is a decision
+ * on the record instead of a gap. `#app` is the shell every panel is inside and `#stage` the
+ * surface they are drawn on, so both overlap everything by design and both are `inset: 0`. The
+ * three overlays COVER the viewport rather than sit at an offset in it, which is what makes them
+ * overlays; none is mounted in the state these checks run in.
+ *
+ * `responsiveCss.test.ts` keeps a similar list for a DIFFERENT question — "must rejoin the flow at
+ * phone width" — which is why `#stage` is on this one and not on that one.
+ */
+const NOT_A_PANEL = new Set(["#stage", "#app", "#modal", ".busy", ".toast"]);
+
+/**
+ * Fails when app.css positions a selector that `PANELS` does not name. The list used to be
+ * hand-typed with nothing tying it to the stylesheet, so a new panel would quietly go unmeasured
+ * — and going unmeasured is the entire defect this file exists to catch.
+ */
+function panelListIsComplete() {
+  const css = readFileSync(new URL("../../app/src/styles/app.css", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const missing = [];
+  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/position\s*:\s*(absolute|fixed)/.test(rule[2])) continue;
+    for (const sel of rule[1].split(",")) {
+      const s = sel.trim();
+      if (!/^[#.][\w-]+$/.test(s)) continue;               // compound/descendant selectors are not panels
+      if (s === ".sr-live" || s === ".busy-live") continue; // clipped to 1px on purpose
+      if (NOT_A_PANEL.has(s) || PANELS.includes(s) || missing.includes(s)) continue;
+      missing.push(s);
+    }
+  }
+  return missing;
+}
 
 /**
  * Where every rendered panel actually lands, in one pass, so a caller can assert against the
@@ -177,6 +215,11 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+
+{
+  const missing = panelListIsComplete();
+  check("every positioned selector in app.css is on the checked list", missing.length === 0, missing.join(", "));
+}
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 

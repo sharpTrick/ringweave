@@ -156,6 +156,22 @@ token-swap; M2 ships the mock-faithful dark theme only.
   cut item is cut as a deferral. There is no caller: the roster CSV path parses *names*, and a
   constraints CSV would need its own column contract, which nothing in the app or the file format
   currently defines.
+- **`MAX_PARSE_CHARS` bounds the roster parse's INPUT, not its cost, and the two diverge by ~40x
+  on a hostile paste.** `parseRoster` re-runs synchronously in `RosterModal`'s render on every
+  keystroke, and its per-token `match[0].replace(NAME_HOSTILE_CHARS, " ")` costs one replacement
+  per matching character — so cost tracks the number of *hostile* characters, not the character
+  count the cap bounds. Measured at the cap (500,000 code points, node 24): 5.4 ms/keystroke for
+  ordinary names, **165 ms** for a file of U+200B, **223 ms** for one of U+1F600 — the astral case
+  also re-walking `clampToPoints`, whose UTF-16 fast path can never fire when `text.length` is
+  twice the point count. On a phone that is roughly a second per character. **Deferred, not
+  fixed:** the input is self-inflicted (dropping half a megabyte of zero-width spaces), the cap
+  and its warning already bound the damage, and every behaviour-preserving fix rewrites the inner
+  loop of the most heavily specified pure function in the package — normalizing in one pass first
+  is NOT one of them, since `\n` is itself in the hostile class and doing it before tokenizing
+  destroys the line splits the tokenizer needs. The fix that works is to skip leading
+  hostile-or-blank characters and normalize only the `MAX_NAME_CHARS` that can survive truncation,
+  which changes what a name containing them resolves to and so needs its own change with its own
+  tests.
 - **`neutralizeCell`'s formula-injection guard is narrower than the import refusal beside it.**
   `download.ts` neutralises a leading `= + - @ TAB CR`; it does not cover `\n`, `U+2028`, `U+2029`,
   or a space before a formula character. There is no live path today — `importGraph` refuses those
