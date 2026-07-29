@@ -45,6 +45,17 @@ interface Props {
   onCancel: () => void;
 }
 
+/**
+ * The roster field's accessible name, exported because `App`'s focus rescue queries for it.
+ * The rescue cannot hold a ref (this component is conditionally mounted and the rescue runs
+ * from outside it), so it looks the field up by label — and a silent rename here would just
+ * demote the rescue to its next candidate with nothing failing. One string, one definition.
+ */
+export const ROSTER_FIELD_LABEL = "Roster names";
+
+/** The reopen reason's element id, so the dialog can point `aria-describedby` at it. */
+const REOPEN_REASON_ID = "reopen-reason";
+
 /** F1 + F2: roster entry (paste or .txt/.csv drop, tolerant parse, duplicate warnings)
     and generate settings, with pre-run feasibility notes. */
 export default function RosterModal({
@@ -123,7 +134,28 @@ export default function RosterModal({
   };
 
   return (
-    <div id="modal" role="dialog" aria-modal="true" aria-label="Set up your group">
+    // `aria-describedby`, NOT the live region below, is what announces why this dialog came
+    // back. The note stack is a live region and every other region in this app satisfies the
+    // rule live regions have — exist in the accessibility tree BEFORE the text changes — by
+    // staying mounted. This one cannot: the dialog itself is conditionally mounted, and a
+    // refusal CLOSES it to dispatch and then reopens it, so the region and the one message
+    // explaining the reopen are created in the same commit and nothing is announced.
+    //
+    // Delaying the text by a commit was the first fix and it is not one: it cannot be observed
+    // to have worked (React flushes both commits inside one microtask, so even a MutationObserver
+    // sees a single batch), and a fix whose effect is unprovable is indistinguishable from none.
+    // A dialog's accessible DESCRIPTION is announced when focus enters it — which is exactly what
+    // happens here, since the focus rescue lands in the roster field inside this dialog — and it
+    // needs no ordering to be true. Round 8 moved this text out of an `inert` toast because
+    // `inert` hides it from assistive tech; hoisting it to one of App's permanent regions would
+    // be that mistake again, since they sit outside this `aria-modal` dialog.
+    <div
+      id="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Set up your group"
+      aria-describedby={reopenReason ? REOPEN_REASON_ID : undefined}
+    >
       <div className="sheet glass" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <h2>Who's in your group?</h2>
         <p>
@@ -134,7 +166,7 @@ export default function RosterModal({
           value={text}
           onChange={(e) => setRoster(e.target.value)}
           placeholder={"Alice Nguyen\nBen Carter\nChloe Diaz\n…"}
-          aria-label="Roster names"
+          aria-label={ROSTER_FIELD_LABEL}
         />
         <div className="filedrop">
           <span>{parsed.names.length} {parsed.names.length === 1 ? "person" : "people"}</span>
@@ -187,7 +219,7 @@ export default function RosterModal({
             Mounted around the stack rather than on each note, for the reason Notice.tsx documents:
             a region that appears together with its first text is never announced. */}
         <div role="status" aria-live="polite">
-        {reopenReason && <div className="note blocking">{reopenReason}</div>}
+        {reopenReason && <div id={REOPEN_REASON_ID} className="note blocking">{reopenReason}</div>}
         {fileError && <div className="note blocking">{fileError}</div>}
         {inputCapped && <div className="note">{charCapNotice()}</div>}
         {parsed.warnings.map((w, i) => (

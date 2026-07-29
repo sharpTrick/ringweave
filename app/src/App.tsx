@@ -5,7 +5,7 @@ import {
 } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
-import RosterModal from "./panels/RosterModal";
+import RosterModal, { ROSTER_FIELD_LABEL } from "./panels/RosterModal";
 import LayoutToggle from "./panels/LayoutToggle";
 import BuddyList from "./panels/BuddyList";
 import QualityPanel from "./panels/QualityPanel";
@@ -108,7 +108,7 @@ export default function App() {
     // button is the only focusable thing on screen at that moment, and it is outside #app.
     return (
       reachable(searchRef.current) ??
-      reachable(document.querySelector<HTMLElement>('[aria-label="Roster names"]')) ??
+      reachable(document.querySelector<HTMLElement>(`[aria-label="${ROSTER_FIELD_LABEL}"]`)) ??
       reachable(document.querySelector<HTMLElement>(".busy button"))
     );
   });
@@ -226,14 +226,22 @@ export default function App() {
       return;
     }
     resetSelection();
-    // NO pre-emptive setSettings. The seed is committed by whoever adopts the result —
-    // `useBuddyGraph` sets `view.settings` on both success branches — so writing it here as well
-    // left App's copy one seed ahead of the graph after a cancelled or failed reroll, and the
-    // roster modal then opened showing a seed that never produced anything. Same class as the
-    // reroll desync fixed in round 2: state committed at DISPATCH that only means something on
-    // SUCCESS. The modal reads the view's settings for the same reason.
+    // EVERY DISPATCH COMMITS ITS DISPATCH. These three are App's dispatch-time copies: they are
+    // what the reopened editor shows and what words a refusal, and both of those describe the
+    // generation that was actually SENT. `handleGenerate` committed them and this path did not,
+    // so after a superseded Edit→Generate the two disagreed: the reroll correctly sent the view's
+    // roster while the refusal was worded against the abandoned edit's, naming a person who is in
+    // no graph. There are exactly two dispatch sites, and now both do this — which is what makes
+    // the array that resolves a `Reason.person` the same array that was generated from.
+    //
+    // This is NOT the pre-emptive `setSettings` an earlier round removed. That one wrote a seed
+    // App had not dispatched yet AND that `useBuddyGraph` would adopt again on success, so the
+    // two writers disagreed after a cancelled reroll. `s` here IS the dispatched value, written
+    // in the same commit as the dispatch — the adoption on success sets it to the same thing.
+    setNames(view.names);
+    setSettings(s);
+    setConstraintRows(toNamedPairs(view.constraints, view.names));
     bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
-
   };
 
   const cancelGeneration = () => {
@@ -277,12 +285,15 @@ export default function App() {
           enforces it.
 
           THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS. `inert`
-          cascades to every descendant with no way to opt back in, and the previous
-          version of this comment claimed RosterModal was a sibling while it was
-          actually rendered inside <main> in here. Since `modalOpen` starts `true`,
-          that made the entire first paint — the dialog included — unreachable by
-          keyboard and absent from the accessibility tree. The comment described the
-          design; the JSX did something else; nothing checked.
+          cascades to every descendant with no way to opt back in. They are siblings
+          below, and `appErrorRecovery.test.tsx` asserts the containment.
+
+          (History, since it is why the rule is shouted: an earlier version of this
+          comment claimed the same thing while the JSX rendered RosterModal inside
+          <main> in here. `modalOpen` starts `true`, so the entire first paint — the
+          dialog included — was unreachable by keyboard and absent from the
+          accessibility tree. The comment described the design, the JSX did something
+          else, and nothing checked. That is what the test is for.)
 
           The busy overlay is in the same position for the same reason, and it also
           closes a hole the mouse-blocking scrim never did: while "Generating…" is up,

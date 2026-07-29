@@ -158,6 +158,95 @@ describe("App handles a refusal from the worker", () => {
     expect(screen.getByText(/split the group/)).toBeTruthy();
   });
 
+  it("words the refusal from the roster that was DISPATCHED, not a second copy", async () => {
+    // The invariant: the array that resolves `Reason.person` into a name is the array that was
+    // handed to the `generate()` call which produced that refusal. App kept two copies of
+    // "what was dispatched" and only one dispatch path wrote them, so a reroll — which correctly
+    // sends the ON-SCREEN graph's roster — was explained with the roster of an abandoned edit,
+    // naming a person who is in no graph at all.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Alice\nBob\nCarol\nDan\nEve" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    // A second Edit→Generate that never lands: the roster App committed at dispatch is now Zed's.
+    fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Zed\nYan\nXan\nWan\nVan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "idle"; // cancelled; `view` is still Alice's graph
+      rerender(<App />);
+    });
+    // Reroll dispatches the VIEW's roster, and it is refused.
+    fireEvent.click(screen.getByRole("button", { name: /different arrangement/i }));
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "self-pair", person: 0 }];
+      rerender(<App />);
+    });
+    // Person 0 of the dispatched roster is Alice. Zed is in no graph and has no rules.
+    await waitFor(() =>
+      expect(screen.getByText(/can't be paired with themselves/).textContent).toMatch(/^Alice\b/),
+    );
+    expect(screen.queryByText(/Zed/)).toBeNull();
+    // The sibling, and the reason a partial fix would not have closed this: the dialog the
+    // refusal reopens is seeded from the same dispatch-time state the message is worded from,
+    // so it cannot show one roster while explaining another.
+    expect((screen.getByLabelText("Roster names") as HTMLTextAreaElement).value)
+      .toBe("Alice\nBob\nCarol\nDan\nEve");
+  });
+
+  it("announces WHY the dialog reopened, through the dialog's own description", async () => {
+    // A live region must exist in the accessibility tree before its text changes, or the change
+    // is never announced — the rule this app applies to every region it owns. The note stack was
+    // the exception BY CONSTRUCTION, not by omission: RosterModal is conditionally mounted, so a
+    // refusal that closes the dialog to dispatch and reopens it creates the region and its most
+    // important message in one commit. A user who pressed Generate has focus rescued into the
+    // reopened roster field and is told nothing about why it came back.
+    //
+    // The fix is not to reorder the commits (unprovable — React flushes both in one microtask)
+    // but to stop depending on ordering: a dialog's accessible DESCRIPTION is announced when
+    // focus enters it, and focus does enter it.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), { target: { value: "A\nB\nC\nD\nE" } });
+    // Focused explicitly before clicking: jsdom's click does not move focus the way a browser's
+    // does, and the rescue that carries focus into the reopened dialog keys on focus having been
+    // somewhere real. Standing in for the browser, not working around the mechanism.
+    const submit = screen.getByRole("button", { name: /generate buddy graph/i });
+    submit.focus();
+    fireEvent.click(submit);
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "prohibited-splits-group", person: 0 }];
+      rerender(<App />);
+    });
+    const dialog = screen.getByRole("dialog");
+    const describedBy = dialog.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const description = document.getElementById(describedBy!);
+    // The description resolves, is inside the dialog, and carries the actual reason.
+    expect(description).toBeTruthy();
+    expect(dialog.contains(description)).toBe(true);
+    expect(description!.textContent).toMatch(/split the group/);
+    // And focus lands inside the dialog, which is what makes a description an announcement.
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  });
+
+  it("carries no dangling description when the dialog was not reopened by a refusal", () => {
+    // The other half: `aria-describedby` pointing at an element that does not exist is worse
+    // than none, and the reason element only renders when there is a reason.
+    render(<App />);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("falls back to a plain sentence if the reasons list is somehow empty", () => {
     // Defensive: `refused` with no reasons should still say something actionable
     // rather than showing an empty toast the user cannot interpret.

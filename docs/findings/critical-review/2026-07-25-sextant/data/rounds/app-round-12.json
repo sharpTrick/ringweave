@@ -1,0 +1,413 @@
+{
+  "target": "app/src",
+  "round": 12,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 2,
+    "plausible": 2,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface read of every file under app/src plus app/test. Reproduced/traced with probes under /home/user/ringweave/.review-scratch/ccx/. Verified clean: forceLayout determinism (same input, repeated, and interleaved with a different graph — byte-identical); core shortestPath breaks ties on smallest index so route reconstruction is independent of Set iteration order, and usePathFinder's min(from,to) canonicalisation + orientation is stable across export/import; every Set/Map consumer in app/src is either sorted before display (PersonPanel, importGraph buddies), membership-only (highlight nodeClass/edgeClass), or get-only (indexByName) — parseRoster's `extras` iterates in deterministic insertion order; an 88-cell (n,k in 3..22 x 2..12) sweep through runGeneration -> viewFromResult -> qualityPercent/connectionSummary/degreeLabel/targetShortfall/isOptimal found no disconnected-reads-as-optimal, no degreeMax>k, no connected-but-null-aspl, and confirmed the documented shortfall + rounding cases are all disclosed on screen; export->import round trip preserves edges/buddies/metrics/settings exactly (only JSON key order differs); degenerate imports (edgeless, n=1, n=2 single edge, two disjoint triangles, path, 100-cycle, self-loops only, duplicate edges, constraints:null, constraints absent, buddies:1, buddies:999) all yield honest metrics and only ImportError; boundary arithmetic on MAX_NAMES/MAX_IMPORT_N/MAX_NAME_CHARS/MAX_PARSE_CHARS/MAX_CONSTRAINT_PAIRS/FORCE_MAX_N/FORCE_MAX_EDGES/ANIM_MAX_N/SEED_MAX/MAX_HISTORY/SECOND_LIMIT/clampList is consistent between the tolerant (parseRoster) and refusing (importGraph) authorities; edgeClass's \"two path members that are adjacent must be consecutive\" argument holds for any shortest path; assembleMetrics gates quality on `connected`; useGenerationWorker's id correlation, worker swap and onerror/onmessageerror channels; useBuddyGraph's identical-graph branch preserves edges identity and metrics consistently; no Math.random / Date.now / new Date anywhere in app/src. npm test: 274/274 green before and after.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial pass over app/src, measured rather than reasoned. (1) 20,000-case fuzz of importGraph with NaN/±Infinity/-0/2**53/1e308/non-integers/lone surrogates/U+202E/'=A1'/tab/CRLF/wrong-shape atoms in every slot: zero non-ImportError escapes, worst call 5ms; asserted on each accepted view that buddies∈[2,12], minSeparation undefined or ∈[2,12], seed a non-negative integer, quality finite and ∈[0,1], largestComponentFraction finite, and no name containing , ; \\t \\r \\n. (2) Gate-order trace of importGraph.ts: people-count -> 2m<=BUDDY_MAX*n density -> declaredPairs>MAX_CONSTRAINT_PAIRS (before any per-pair work and before validate's O(n^2) prohibited walk is reachable) -> per-name code-point cap -> control-char class -> total-length cap -> parseRoster round-trip -> O(m) edge validation -> per-vertex degreeMax gate -> only then O(n·m) allPairsSummary/girth. Every gate precedes the work it bounds; worst legal file (n=1000, m=6000, 12-regular) re-measures in 77ms. (3) Main-thread hang hunt: parseRoster at its 500K-char cap with the degenerate all-duplicates shape that defeats the MAX_NAMES early break (250K tokens) = 54ms; forceLayout at FORCE_MAX_N/FORCE_MAX_EDGES = 261ms (m=0) to 315ms (m=6000), gate evaluated before the sim is built, and the n>ANIM_MAX_N snap gates the tween that consumes it; toConstraints+validateDetailed at n=1000 with 200 prohibited pairs (RosterModal's per-keystroke preflight) = 15ms; RosterModal end-to-end keystroke at the ceiling in jsdom ~100ms (linear, at the app's documented ceiling, jsdom overstates DOM several-fold). (4) Spreadsheet sink: built a roster from =cmd|'/C calc'!A0, +1, -1, @SUM, tab/CR-embedded, 'A,B', leading-space '=lead', U+202E and checked the derived invariant (not a case list) that no RFC-4180 cell of toCsv output and no clipboard line of BuddyList.copyAll matches /^[=+\\-@\\t\\r]/ — holds. Leading-char-only neutralization is sufficient because the cell boundary is enforced upstream: NAME_HOSTILE_CHARS (Cc|Cf|Zl|Zp) is refused by importGraph and normalized by parseRoster, and the parseRoster round-trip check refuses commas/newlines, so no name can carry an embedded CSV/TSV delimiter. Checked the residue: Zs (NBSP, U+2000-200A) is outside the class but String.trim strips it at both ends on both authorities, interior NBSP is delimiter-inert, and a whitespace-only name fails the round-trip length check. (5) Export numeric boundary: all Metrics fields finite by construction (aspl/diameter gated on `measurable`, girth via finiteOrNull, quality clamped, largestComponentFraction in (0,1] since n>=1), verified directly at n=1, n=2 m=0, n=2 m=1, and the triangle; asplGap returns 0 not NaN for k in {0,1}; -0 is normalized by Math.max(0,-0), by Set.add, and caught by the a===b self-pair check. JSON.stringify therefore has no Infinity/NaN to convert to null. (6) File-supplied numbers: sanitizeSettings clamps buddies/minSeparation/seed and whitelists polish before any later reroll; useBuddyGraph downgrades an imported polish:true by asking the core's autoPolishEnabled rather than a mirrored cap; feasibility re-gates k>=2 and n<=MAX_ROSTER_N; generation runs in a terminable worker so an unbounded core loop is a cancel, not a freeze. (7) DOM sinks: no innerHTML/dangerouslySetInnerHTML/eval/new Function, no untrusted href/src, constant download filenames, the sole interpolated CSS value (QualityPanel conic-gradient) derives from a quality the fuzz proved finite in [0,1], and every length-unbounded string reaching a text node routes through clampText/clampList with useNotice clamping again at the sink. Two observations deliberately NOT filed: forceLayout measures ~300ms at the ceiling vs a docblock's '~200 ms' (machine variance; the suite deliberately asserts the forceIters(n)·n product instead of wall-clock), and a hover at n=1000 re-renders the whole scene like the tween ANIM_MAX_N gates (linear, reachable from the app's own generation ceiling rather than uniquely from a file, and I have only jsdom numbers). All probes live in app/.review-scratch/ (gitignored, outside every vitest glob); git status is clean.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read the whole app/src tree (App.tsx, model.ts, constraints.ts, worker/{protocol,generate,generate.worker}.ts, state/{useBuddyGraph,useGraph,useGenerationWorker,useExplorerHistory,usePathFinder,useFocusRescue,useEscape,useNotice}.ts, panels/{RosterModal,ConstraintsEditor,QualityPanel,BuddyList,PersonPanel,PathPanel,PersonSearch,LayoutToggle,Slips,Notice,SettingsControls}.tsx, graph/{GraphCanvas,layout,highlight}.ts, io/{exportGraph,importGraph,schema,parseRoster,feasibility,constraintMessages,readFileText,download,clamp}.ts, model.ts, sample.ts, search.ts, neighborhood.ts, main.tsx) plus the relevant slice of lib/src/core (index.ts, constraints.ts, constrainedGreedy.ts) that F9 depends on. Cross-checked docs/PROJECT_PLAN.md M4 scope (F9 recalc/priors, F11 replay, F12 what-if, F13 share links) against app/CLAUDE.md's 'known follow-ons', which already documents F9's worker-protocol groundwork, the priorHard/validate-order hazard, and the RosterModal-doesn't-see-live-edges gap in detail. Attempted two concrete extensions against the real files: (a) F9's 'preserve current buddies' toggle, tracing ConstraintPair -> splitPairs/toConstraints (constraints.ts) -> GenerateRequest (worker/protocol.ts) -> runGeneration's routing branch (worker/generate.ts:89) -> Settings/RosterModal/App.tsx wiring -> ConstraintReport display (model.ts/QualityPanel.tsx); (b) F13's share-link/read-only mode, tracing where a hash-decode-on-mount would land (main.tsx has no router; App.tsx owns modalOpen unconditionally) and what read-only would need to gate (rail buttons, RosterModal reachability). Grepped app/src for any live reference to priorWeight/priorHard/addPrior/preserveBuddies and to location.hash/shareLink/readOnly/compress -- both came back empty, confirming neither F9's nor F13's plumbing exists yet. Also re-exercised GraphCanvas's declared seam (LAYOUT_MODES/FIT_MODES/positionsFor) against a hypothetical third layout mode; it remains a 2-variant seam already reviewed at length elsewhere (8 findings/6 rounds, 0 blocking) with the same conclusion, so nothing new there. Checked for math leaking into the UI (bfsDistances/shortestPath/eccentricity/asplGap all come from 'ringweave', neighborhood.ts's stated bounded-degree exception aside) and found none.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface review of app/src: all React components, state management, worker protocol, IO logic, data model, constraints system, and core panels. Traced data flow from user input through generation and import. Reviewed 35+ source files plus test coverage. Verified comment accuracy against current code. Checked for:\n\n- FALSE comments (not just missing ones)\n- Misleading names that describe HOW instead of WHAT  \n- Silently drifting duplication\n- Public surfaces easy to misuse\n- Function shape issues\n\nRan `npm run lint` to confirm baseline cleanliness (oxlint, knip, hygiene all pass). Reviewed error handling flows, state consistency invariants, and type safety patterns. Examined test coverage (appErrorRecovery.test.tsx, constraints.test.ts, reroll.test.ts) to verify behaviors are protected.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read and traced the full interaction surface under app/src: App.tsx's inert/focus-rescue/notice orchestration, RosterModal + ConstraintsEditor + SettingsControls, GraphCanvas (keyboard-reachability delegation, reduced-motion gating of the JS tween, pan/zoom), LayoutToggle/BuddyList/PersonPanel/PersonSearch/PathPanel/QualityPanel/Slips, and the state hooks (useFocusRescue, useEscape, useExplorerHistory, useNotice, useBuddyGraph, useGenerationWorker, usePathFinder). Carried out the scenario end-to-end by reading handlers rather than assuming: cold load -> paste roster -> Generate -> read QualityPanel numbers -> PersonSearch a name -> PersonPanel buddies/two-steps -> BuddyList/QualityPanel export -> a refused generation (the \"recover from an error\" step). Verified the one confirmed finding by reproducing it with a throwaway RTL harness (written under .review-scratch/, temporarily copied into app/test/ to run under the project's vitest config, then deleted; app/test/ is back to its original 29 files and `npm test` is green — 274/274 passing). Also checked CSS reduced-motion coverage (app/src/styles/app.css:245 catches both transition and animation globally), aria-pressed/aria-current tracking (LayoutToggle, BuddyList), tab-order-vs-visual-order comments in App.tsx, and the search result-count truncation (RESULT_LIMIT=8, no \"N more\" affordance — looked but did not pursue further, judged non-blocking).",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 3,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (3) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "A generation refusal (and the roster dialog it reopens) is described using App's separately-held `names`/`settings`/`constraintRows` state instead of the roster snapshot that was actually dispatched, so after a superseded reroll the explanation and the reopened editor both reflect an abandoned edit rather than the on-screen graph.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "A generation refusal is worded with `describeReasons(bg.refusals, names)`, but `names` is App state committed when the roster modal last dispatched, while `handleReroll` dispatches `view.names` — so after any superseded Edit→Generate the refusal names people who are not in the graph on screen. The dialog the refusal reopens is likewise seeded with dispatch-time `names`, `settings` and `constraintRows`, so it shows the roster/rules of the abandoned edit next to a reason computed from the current graph's rules."
+      ],
+      "remediation": "Stop maintaining App's own second copy of the dispatched roster/settings — `useBuddyGraph` already captures it correctly in `pending.current`, so expose that single snapshot (e.g. `dispatchedNames`) and make both the refusal copy and the reopened dialog's seed read from it, deleting the App-level `names`/`settings`/`constraintRows` as the source for post-dispatch messaging."
+    },
+    {
+      "theme": "F9's planned 'preserve current buddies' feature is slated to route machine-derived prior data through two existing constraint structures that were sized/shaped for a different producer: an import-file-hostile pair cap on the way in, and a fraction-only report with no integer counts on the way out.",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "MAX_CONSTRAINT_PAIRS = 200 bounds ConstraintPair lists against a hostile imported FILE, not against the app's own largest self-generated graph; if F9 priors (up to n*k/2 pairs, e.g. 6000 at the app's own n=1000/k=12 ceiling) are threaded through the same ConstraintPair pipe, the cap would silently truncate most of the buddies the toggle exists to preserve.",
+        "PROJECT_PLAN.md F9's acceptance copy needs two integers ('kept 46 of 50 pairs'), but `ConstraintReport.priorsKeptFraction` only carries a ratio; the app has no channel back from the worker for the denominator except recomputing it itself from the prior list, duplicating a count the core already computed and discarded, with a rounding-mismatch risk."
+      ],
+      "remediation": "Don't reuse the ConstraintPair/MAX_CONSTRAINT_PAIRS pipe or the fraction-only report for F9's priors — stop feeding a machine-derived, count-shaped producer through machinery built and bounded for a hostile hand-authored/imported file, rather than growing that machinery with new caps or new fields to fit a second use case."
+    },
+    {
+      "theme": "App.tsx's focus-rescue logic locates elements owned by another component (RosterModal) via hardcoded aria-label/class selector strings rather than a shared reference, so the two definitions can silently drift apart.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Focus rescue queries elements by hardcoded aria-label and class strings that are defined in other components, creating fragile coupling where changes are not enforced or obviously linked."
+      ],
+      "remediation": "Delete the duplicate hardcoded-selector DOM query in App.tsx's focus rescue and have it use the same element reference already available via props/refs to RosterModal, removing the second, drift-prone definition rather than centralizing it in a new constants file."
+    },
+    {
+      "theme": "A comment in App.tsx states a present-tense structural rule and, in the same breath, an unmarked retrospective account of a past violation, leaving it unclear whether the rule is currently satisfied.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment 'THE OVERLAYS MUST BE SIBLINGS' is stated as a present requirement but immediately followed by explanation of a past bug, making it unclear whether the current code is correct or still has a problem."
+      ],
+      "remediation": "Delete the past-tense bug narrative from the comment, leaving only the present-tense rule statement; the ambiguity comes from the added historical text, so remove it rather than adding clarifying prose to disambiguate it."
+    },
+    {
+      "theme": "Imported-graph degree validation checks only the upper bound, leaving hand-edited files with degree below the app's own generation floor (BUDDY_MIN) silently accepted.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "importGraph checks `degreeMax > BUDDY_MAX` but does not check `degreeMin >= BUDDY_MIN`. A hand-edited file with someone having degree 1 (or 0) is imported without error, though reroll with the same k might fail or produce unexpected degree."
+      ],
+      "remediation": "Tighten the existing one-sided `degreeMax` boundary check into a full range check against both BUDDY_MIN and BUDDY_MAX, rather than leaving the lower bound unchecked."
+    },
+    {
+      "theme": "RosterModal's note-stack live region is torn down and recreated whenever App conditionally remounts the modal on reopen (`{modalOpen && <RosterModal .../>}`), so a refusal reopening the dialog creates the live region and populates it with its first, often most important, message in the same commit — violating the app's own documented rule that a live region must exist before its content changes.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "When a generation is refused (or errors with no view), App sets reopenReason and modalOpen(true) in the same effect, mounting a brand-new RosterModal instance. RosterModal's note-stack `role=\"status\"` region that carries reopenReason is therefore created and populated in one commit — the exact pattern the codebase elsewhere avoids for its other persistent live regions (busy-live, sr-live, Notice's toast-region, ConstraintsEditor's rule-note)."
+      ],
+      "remediation": "Remove the conditional-mount gate that unmounts RosterModal on close (`{modalOpen && ...}`) and keep it permanently mounted, toggling visibility instead, so its note-stack region persists across close/reopen the same way App's other top-level live regions already do."
+    },
+    {
+      "theme": "A capped results list (PersonSearch) gives no signal that results were truncated, leaving a user whose target sits past the cutoff with no cue to refine the query — unlike other capped/truncated UI elements elsewhere in the app that do announce it.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "PersonSearch shows at most RESULT_LIMIT=8 matches with no 'N more' or count text; a user whose target is the 9th-ranked match sees a full-looking list with no hint that narrowing the query would surface it, unlike ConstraintsEditor's at-cap live note or RosterModal's char-cap notice elsewhere in the same app."
+      ],
+      "remediation": "Unify the existing zero-match `.search-empty` status region with the truncated-results case into one always-mounted status note, rather than adding a second, separate truncation-notice element alongside it."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "refusal-message-names-wrong-roster",
+      "theme": "state committed at DISPATCH is used to describe a result that belongs to a different dispatch — the reroll path builds its request from `view` but the copy explaining the outcome is still worded against App's `names`",
+      "file": "app/src/App.tsx",
+      "line": 161,
+      "summary": "A generation refusal is worded with `describeReasons(bg.refusals, names)`, but `names` is App state committed when the roster modal last dispatched, while `handleReroll` dispatches `view.names` — so after any superseded Edit→Generate the refusal names people who are not in the graph on screen.",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/ccx/repro.test.tsx against the real App with a mocked worker hook: (1) generate roster Alice/Bob/Carol/Dan/Eve -> view A; (2) \"Edit people\" -> type Zed/Yan/Xan/Wan/Van -> Generate -> Cancel the busy overlay (App.names is now the Zed roster, view is still A); (3) click \"↻ Different arrangement\" (which correctly dispatches view A's roster/settings/rules) -> worker returns refused with {code:\"self-pair\", person:0}; (4) the reopened dialog renders `Zed can't be paired with themselves.` while the rail still shows roster A. Zed is in no graph, has no rules, and index 0 of the dispatched roster is Alice. Reachability of a reroll refusal is independently confirmed in .review-scratch/ccx/probe3.test.ts: importing {6 people, 6-cycle edges, required [[0,1],[0,2],[0,3]]} yields settings.buddies=2 (importGraph never validates rules against k), feasibility().canGenerate true, rerollBlockReason() null, and runGeneration returns kind:\"refused\" with {code:\"required-degree-exceeds-k\", person:0, required:3, k:2} — so the reroll refusal branch is ordinary traffic, not defensive-only. No existing test covers the roster provenance of a refusal (appErrorRecovery.test.tsx only injects refusals immediately after a modal dispatch, where `names` happens to agree), so the whole suite stays green.",
+      "remediation": "Make the roster that words a refusal come from the same place the request came from, rather than from a second copy. `useBuddyGraph` already captures the dispatched roster in `pending.current.names` for exactly this reason (\"so an async result is never paired with a roster that changed underneath it\"); expose it (e.g. return `dispatchedNames` alongside `refusals`) and have App call `describeReasons(bg.refusals, bg.dispatchedNames)`. Close the sibling in the same change: the dialog that the refusal reopens is seeded with `names`, `settings` and `constraintRows` — all dispatch-time state — so after a reroll refusal it shows the roster and rules of the abandoned edit next to a reason produced from the on-screen graph's rules. Either seed the reopened dialog from the same dispatched snapshot, or do not reuse the roster-editor dialog to explain a reroll refusal.",
+      "invariant": "For every refusal rendered by the app, the roster array used to resolve `Reason.person` / `Reason.a` / `Reason.b` into names is reference-identical to the `names` array passed to the `generate(...)` call that produced those refusals — for all dispatch paths (modal Generate, reroll) and all interleavings of prior cancelled/errored/refused dispatches.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fragile-dom-coupling",
+      "theme": "Hardcoded DOM selectors in cross-component focus rescue can silently drift from component definitions",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 111,
+      "summary": "Focus rescue queries elements by hardcoded aria-label and class strings that are defined in other components, creating fragile coupling where changes are not enforced or obviously linked.",
+      "failure": "If RosterModal.tsx line 137 changes `aria-label=\"Roster names\"` to a different string, the focus rescue silently falls back to the next candidate (busy button) instead of the intended roster field. No error is raised, making the regression invisible until discovered through testing.",
+      "remediation": "Extract the selector strings as exported constants, or refactor to use refs (forwardRef on RosterModal) instead of DOM queries. This makes dependencies explicit: change the constant in one place, and all usages automatically follow.",
+      "invariant": "For every DOM selector used in App.tsx's focus rescue, there must be a single source of truth. Any component that defines an aria-label or CSS class used by the focus rescue must export or co-locate that string with its definition, so changes propagate everywhere.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "ambiguous-historical-comment",
+      "theme": "Comment mixing current design rule with retrospective explanation of past failure creates ambiguity about code correctness",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 281,
+      "summary": "Comment 'THE OVERLAYS MUST BE SIBLINGS' is stated as a present requirement but immediately followed by explanation of a past bug (comment describing design while JSX did something else), making it unclear whether the current code is correct or still has a problem.",
+      "failure": "A maintainer reading this quickly sees 'OVERLAYS MUST BE SIBLINGS', then reads 'the previous version of this comment claimed RosterModal was a sibling while it was actually rendered inside' and might assume the current code still has this bug. They then re-check the JSX unnecessarily, or worse, misunderstand what layer the RosterModal is on. The code IS actually correct (RosterModal is a sibling at line 378), but the comment creates unnecessary doubt.",
+      "remediation": "Rewrite the comment to separate the rule from its history: move the explanation into a separate sentence that clearly marks it as past-tense. Example: 'THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS. (This was violated in an earlier version where the comment claimed siblings but the JSX rendered inside #app, making the dialog unreachable.)'",
+      "invariant": "Comments that explain both a current rule and a past failure of that rule must clearly separate the two — the rule statement in present tense, the failure explanation in past tense or parenthetical, so a reader cannot confuse current code with historical problems.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-remounts-with-its-first-text",
+      "theme": "App.tsx's own documented rule — 'a live region has to be in the accessibility tree BEFORE its content changes for the change to register as a change' — is applied everywhere the app owns a persistent region (busy-live, the two sr-live regions, Notice's toast-region, ConstraintsEditor's rule-note) but not to RosterModal's own note-stack, because RosterModal itself is conditionally mounted (`{modalOpen && <RosterModal .../>}`) rather than kept in the tree. Reopening the dialog therefore creates the note-stack region and its first (often the most important) message in the same commit.",
+      "file": "app/src/App.tsx",
+      "line": 378,
+      "summary": "When a generation is refused (or errors with no view), App sets reopenReason and modalOpen(true) in the same effect, which mounts a brand-new RosterModal instance — the dialog did not exist a moment before (it was closed to dispatch the generation). RosterModal's note-stack `<div role=\"status\" aria-live=\"polite\">` (RosterModal.tsx:189-233) that carries reopenReason is therefore created and populated in one commit, which is exactly the pattern the codebase elsewhere goes out of its way to avoid (see App.tsx:393-414's comments, and RosterModal.tsx:181-188's own comment about the note stack, which assumes the stack survives across renders — an assumption that holds while typing/dropping files but not across a close→reopen cycle).",
+      "failure": "Reproduced with an RTL harness driving the real App component: paste a 5-person roster with a rule that splits the group, click Generate. `document.querySelector('#modal')` is null immediately after the click (RosterModal fully unmounted). When the mocked worker responds `refused`, App reopens the dialog and the rendered markup is `<div id=\"modal\" ...>...<div role=\"status\" aria-live=\"polite\"><div class=\"note blocking\">The never-be-buddies rules split the group — A can't be connected to everyone.</div></div></div>` — the live region and its blocking text both appear for the first time in that single commit. A keyboard/screen-reader user who just submitted Generate has focus rescued into the reopened roster textarea (useFocusRescue's '[aria-label=\"Roster names\"]' fallback) but is never told WHY the dialog reopened; they only discover the reason by exploring the dialog's contents by hand. This is exactly the step the task scenario calls out ('recover from an error along the way').",
+      "remediation": "Hoist the reopen-reason announcement out of RosterModal's own (conditionally-mounted) note-stack into one of App's permanently-mounted top-level live regions (alongside the existing busy-live / sr-live / sr-live siblings around line 399-414), so the text changes inside a region that already existed before the dialog reopened — mirroring exactly how pathStatusText/selectionStatusText/busy status are already handled. Keep the in-dialog `<div className=\"note blocking\">{reopenReason}</div>` for sighted/visual context, but stop relying on it (or the note-stack that wraps it) for the announcement, since that wrapper is re-created every reopen."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "refusal-message-names-wrong-roster",
+      "theme": "state committed at DISPATCH is used to describe a result that belongs to a different dispatch — the reroll path builds its request from `view` but the copy explaining the outcome is still worded against App's `names`",
+      "file": "app/src/App.tsx",
+      "line": 161,
+      "summary": "A generation refusal is worded with `describeReasons(bg.refusals, names)`, but `names` is App state committed when the roster modal last dispatched, while `handleReroll` dispatches `view.names` — so after any superseded Edit→Generate the refusal names people who are not in the graph on screen.",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/ccx/repro.test.tsx against the real App with a mocked worker hook: (1) generate roster Alice/Bob/Carol/Dan/Eve -> view A; (2) \"Edit people\" -> type Zed/Yan/Xan/Wan/Van -> Generate -> Cancel the busy overlay (App.names is now the Zed roster, view is still A); (3) click \"↻ Different arrangement\" (which correctly dispatches view A's roster/settings/rules) -> worker returns refused with {code:\"self-pair\", person:0}; (4) the reopened dialog renders `Zed can't be paired with themselves.` while the rail still shows roster A. Zed is in no graph, has no rules, and index 0 of the dispatched roster is Alice. Reachability of a reroll refusal is independently confirmed in .review-scratch/ccx/probe3.test.ts: importing {6 people, 6-cycle edges, required [[0,1],[0,2],[0,3]]} yields settings.buddies=2 (importGraph never validates rules against k), feasibility().canGenerate true, rerollBlockReason() null, and runGeneration returns kind:\"refused\" with {code:\"required-degree-exceeds-k\", person:0, required:3, k:2} — so the reroll refusal branch is ordinary traffic, not defensive-only. No existing test covers the roster provenance of a refusal (appErrorRecovery.test.tsx only injects refusals immediately after a modal dispatch, where `names` happens to agree), so the whole suite stays green.",
+      "remediation": "Make the roster that words a refusal come from the same place the request came from, rather than from a second copy. `useBuddyGraph` already captures the dispatched roster in `pending.current.names` for exactly this reason (\"so an async result is never paired with a roster that changed underneath it\"); expose it (e.g. return `dispatchedNames` alongside `refusals`) and have App call `describeReasons(bg.refusals, bg.dispatchedNames)`. Close the sibling in the same change: the dialog that the refusal reopens is seeded with `names`, `settings` and `constraintRows` — all dispatch-time state — so after a reroll refusal it shows the roster and rules of the abandoned edit next to a reason produced from the on-screen graph's rules. Either seed the reopened dialog from the same dispatched snapshot, or do not reuse the roster-editor dialog to explain a reroll refusal.",
+      "invariant": "For every refusal rendered by the app, the roster array used to resolve `Reason.person` / `Reason.a` / `Reason.b` into names is reference-identical to the `names` array passed to the `generate(...)` call that produced those refusals — for all dispatch paths (modal Generate, reroll) and all interleavings of prior cancelled/errored/refused dispatches.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "cap-sized-for-wrong-producer",
+      "theme": "the constraint pair cap is sized for hand-authored/imported rules and will silently truncate a machine-derived prior list from the same conduit",
+      "file": "app/src/constraints.ts",
+      "line": 34,
+      "summary": "MAX_CONSTRAINT_PAIRS = 200 (constraints.ts:34) bounds ConstraintPair lists so the editor's per-row render and validate's O(pairs) walk stay cheap against an untrusted import. F9's 'preserve current buddies' toggle (PROJECT_PLAN.md F9) would derive priors from the PREVIOUS view's edges -- up to n*k/2 pairs, e.g. 200 at n=100,k=4 (already at the cap) and 6000 at the n=1000/k=12 ceiling the app itself can generate. If priors are threaded through the same ConstraintPair/splitPairs/GenerateRequest.constraints pipe F7 built (the obvious reuse, and the one app/CLAUDE.md's own follow-on note gestures at), the cap -- designed against a hostile FILE, not the app's own largest self-generated graph -- would drop most of the very buddies the toggle exists to preserve, silently (dedupePairs/truncation give no per-cause count the way resolveNamedPairs does).",
+      "failure": "A toggle-on 'preserve current buddies' at n=200,k=8 (800 previous edges) resolved through toConstraints/splitPairs with the existing 200-pair cap keeps only the first 200 priors seen, so up to 75% of the preservable pairs are never weighed by priorWeight at all -- and nothing in the current model surfaces that they were dropped.",
+      "remediation": "When F9 lands, do not route priors through ConstraintPair/MAX_CONSTRAINT_PAIRS at all -- give the prior list its own field in GenerateRequest (mirroring how required/prohibited already have their own lists) with a cap sized to the app's own generation ceiling (n*BUDDY_MAX/2), not to the hostile-file threat model.",
+      "invariant": "grep for a live reference to `priorWeight`/`priorHard`/`addPrior` in app/src returns nothing today; the finding is filed as a deferral per the no-caller rule and should be re-verified against whatever pipe F9 actually threads priors through once one exists."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "fraction-only-report-cant-source-a-count-based-ui-string",
+      "theme": "the report shape a UI would read from carries a ratio where the feature's committed copy needs two integers",
+      "file": "lib/src/core/index.ts",
+      "line": 266,
+      "summary": "PROJECT_PLAN.md F9's acceptance copy is literally 'kept 46 of 50 pairs' -- two counts. `ConstraintReport.priorsKeptFraction` (lib/src/core/index.ts:266-278) is the only field that carries the outcome, and it is a ratio (kept/total), not the pair (kept, total). The app has no other channel back from the worker that would supply the denominator except recomputing it itself from the prior list it sent -- which duplicates a count the core already had to compute internally (`priors.length` at index.ts:535-537) and discards, and risks a rounding mismatch between the app's recomputed total and whatever the core actually weighed (e.g. after `withHardPriors`/dedup normalization on the core side).",
+      "failure": "Deriving 'kept N of M' in the app as `Math.round(priorsKeptFraction * M)` where M is the app's own count of priors it sent, when the core's internal `priors.length` (post any core-side canonicalization) differs from the app's pre-send count, prints a number that does not match what the core actually measured -- exactly the 'the UI displays a number the core didn't actually produce' failure app/CLAUDE.md's own review lens calls out.",
+      "remediation": "When F9 lands, either add raw `priorsKept`/`priorsTotal` integer fields to `ConstraintReport` alongside the fraction (cheap, already computed at index.ts:536), or state explicitly that the app must treat its own pre-send count as authoritative and never recompute it from the fraction.",
+      "invariant": "grep for `priorsKeptFraction` outside lib/src/core and lib/test returns nothing in app/src today; deferral per the no-caller rule. When F9 adds a consumer, the checkable property becomes: the displayed 'kept N of M' integers must be traceable to values the CORE actually computed, not reconstructed by multiplying a rounded fraction against an app-side count."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fragile-dom-coupling",
+      "theme": "Hardcoded DOM selectors in cross-component focus rescue can silently drift from component definitions",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 111,
+      "summary": "Focus rescue queries elements by hardcoded aria-label and class strings that are defined in other components, creating fragile coupling where changes are not enforced or obviously linked.",
+      "failure": "If RosterModal.tsx line 137 changes `aria-label=\"Roster names\"` to a different string, the focus rescue silently falls back to the next candidate (busy button) instead of the intended roster field. No error is raised, making the regression invisible until discovered through testing.",
+      "remediation": "Extract the selector strings as exported constants, or refactor to use refs (forwardRef on RosterModal) instead of DOM queries. This makes dependencies explicit: change the constant in one place, and all usages automatically follow.",
+      "invariant": "For every DOM selector used in App.tsx's focus rescue, there must be a single source of truth. Any component that defines an aria-label or CSS class used by the focus rescue must export or co-locate that string with its definition, so changes propagate everywhere.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "ambiguous-historical-comment",
+      "theme": "Comment mixing current design rule with retrospective explanation of past failure creates ambiguity about code correctness",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 281,
+      "summary": "Comment 'THE OVERLAYS MUST BE SIBLINGS' is stated as a present requirement but immediately followed by explanation of a past bug (comment describing design while JSX did something else), making it unclear whether the current code is correct or still has a problem.",
+      "failure": "A maintainer reading this quickly sees 'OVERLAYS MUST BE SIBLINGS', then reads 'the previous version of this comment claimed RosterModal was a sibling while it was actually rendered inside' and might assume the current code still has this bug. They then re-check the JSX unnecessarily, or worse, misunderstand what layer the RosterModal is on. The code IS actually correct (RosterModal is a sibling at line 378), but the comment creates unnecessary doubt.",
+      "remediation": "Rewrite the comment to separate the rule from its history: move the explanation into a separate sentence that clearly marks it as past-tense. Example: 'THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS. (This was violated in an earlier version where the comment claimed siblings but the JSX rendered inside #app, making the dialog unreachable.)'",
+      "invariant": "Comments that explain both a current rule and a past failure of that rule must clearly separate the two — the rule statement in present tense, the failure explanation in past tense or parenthetical, so a reader cannot confuse current code with historical problems.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-remounts-with-its-first-text",
+      "theme": "App.tsx's own documented rule — 'a live region has to be in the accessibility tree BEFORE its content changes for the change to register as a change' — is applied everywhere the app owns a persistent region (busy-live, the two sr-live regions, Notice's toast-region, ConstraintsEditor's rule-note) but not to RosterModal's own note-stack, because RosterModal itself is conditionally mounted (`{modalOpen && <RosterModal .../>}`) rather than kept in the tree. Reopening the dialog therefore creates the note-stack region and its first (often the most important) message in the same commit.",
+      "file": "app/src/App.tsx",
+      "line": 378,
+      "summary": "When a generation is refused (or errors with no view), App sets reopenReason and modalOpen(true) in the same effect, which mounts a brand-new RosterModal instance — the dialog did not exist a moment before (it was closed to dispatch the generation). RosterModal's note-stack `<div role=\"status\" aria-live=\"polite\">` (RosterModal.tsx:189-233) that carries reopenReason is therefore created and populated in one commit, which is exactly the pattern the codebase elsewhere goes out of its way to avoid (see App.tsx:393-414's comments, and RosterModal.tsx:181-188's own comment about the note stack, which assumes the stack survives across renders — an assumption that holds while typing/dropping files but not across a close→reopen cycle).",
+      "failure": "Reproduced with an RTL harness driving the real App component: paste a 5-person roster with a rule that splits the group, click Generate. `document.querySelector('#modal')` is null immediately after the click (RosterModal fully unmounted). When the mocked worker responds `refused`, App reopens the dialog and the rendered markup is `<div id=\"modal\" ...>...<div role=\"status\" aria-live=\"polite\"><div class=\"note blocking\">The never-be-buddies rules split the group — A can't be connected to everyone.</div></div></div>` — the live region and its blocking text both appear for the first time in that single commit. A keyboard/screen-reader user who just submitted Generate has focus rescued into the reopened roster textarea (useFocusRescue's '[aria-label=\"Roster names\"]' fallback) but is never told WHY the dialog reopened; they only discover the reason by exploring the dialog's contents by hand. This is exactly the step the task scenario calls out ('recover from an error along the way').",
+      "remediation": "Hoist the reopen-reason announcement out of RosterModal's own (conditionally-mounted) note-stack into one of App's permanently-mounted top-level live regions (alongside the existing busy-live / sr-live / sr-live siblings around line 399-414), so the text changes inside a region that already existed before the dialog reopened — mirroring exactly how pathStatusText/selectionStatusText/busy status are already handled. Keep the in-dialog `<div className=\"note blocking\">{reopenReason}</div>` for sighted/visual context, but stop relying on it (or the note-stack that wraps it) for the announcement, since that wrapper is re-created every reopen."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "cap-sized-for-wrong-producer",
+      "theme": "the constraint pair cap is sized for hand-authored/imported rules and will silently truncate a machine-derived prior list from the same conduit",
+      "file": "app/src/constraints.ts",
+      "line": 34,
+      "summary": "MAX_CONSTRAINT_PAIRS = 200 (constraints.ts:34) bounds ConstraintPair lists so the editor's per-row render and validate's O(pairs) walk stay cheap against an untrusted import. F9's 'preserve current buddies' toggle (PROJECT_PLAN.md F9) would derive priors from the PREVIOUS view's edges -- up to n*k/2 pairs, e.g. 200 at n=100,k=4 (already at the cap) and 6000 at the n=1000/k=12 ceiling the app itself can generate. If priors are threaded through the same ConstraintPair/splitPairs/GenerateRequest.constraints pipe F7 built (the obvious reuse, and the one app/CLAUDE.md's own follow-on note gestures at), the cap -- designed against a hostile FILE, not the app's own largest self-generated graph -- would drop most of the very buddies the toggle exists to preserve, silently (dedupePairs/truncation give no per-cause count the way resolveNamedPairs does).",
+      "failure": "A toggle-on 'preserve current buddies' at n=200,k=8 (800 previous edges) resolved through toConstraints/splitPairs with the existing 200-pair cap keeps only the first 200 priors seen, so up to 75% of the preservable pairs are never weighed by priorWeight at all -- and nothing in the current model surfaces that they were dropped.",
+      "remediation": "When F9 lands, do not route priors through ConstraintPair/MAX_CONSTRAINT_PAIRS at all -- give the prior list its own field in GenerateRequest (mirroring how required/prohibited already have their own lists) with a cap sized to the app's own generation ceiling (n*BUDDY_MAX/2), not to the hostile-file threat model.",
+      "invariant": "grep for a live reference to `priorWeight`/`priorHard`/`addPrior` in app/src returns nothing today; the finding is filed as a deferral per the no-caller rule and should be re-verified against whatever pipe F9 actually threads priors through once one exists."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "fraction-only-report-cant-source-a-count-based-ui-string",
+      "theme": "the report shape a UI would read from carries a ratio where the feature's committed copy needs two integers",
+      "file": "lib/src/core/index.ts",
+      "line": 266,
+      "summary": "PROJECT_PLAN.md F9's acceptance copy is literally 'kept 46 of 50 pairs' -- two counts. `ConstraintReport.priorsKeptFraction` (lib/src/core/index.ts:266-278) is the only field that carries the outcome, and it is a ratio (kept/total), not the pair (kept, total). The app has no other channel back from the worker that would supply the denominator except recomputing it itself from the prior list it sent -- which duplicates a count the core already had to compute internally (`priors.length` at index.ts:535-537) and discards, and risks a rounding mismatch between the app's recomputed total and whatever the core actually weighed (e.g. after `withHardPriors`/dedup normalization on the core side).",
+      "failure": "Deriving 'kept N of M' in the app as `Math.round(priorsKeptFraction * M)` where M is the app's own count of priors it sent, when the core's internal `priors.length` (post any core-side canonicalization) differs from the app's pre-send count, prints a number that does not match what the core actually measured -- exactly the 'the UI displays a number the core didn't actually produce' failure app/CLAUDE.md's own review lens calls out.",
+      "remediation": "When F9 lands, either add raw `priorsKept`/`priorsTotal` integer fields to `ConstraintReport` alongside the fraction (cheap, already computed at index.ts:536), or state explicitly that the app must treat its own pre-send count as authoritative and never recompute it from the fraction.",
+      "invariant": "grep for `priorsKeptFraction` outside lib/src/core and lib/test returns nothing in app/src today; deferral per the no-caller rule. When F9 adds a consumer, the checkable property becomes: the displayed 'kept N of M' integers must be traceable to values the CORE actually computed, not reconstructed by multiplying a rounded fraction against an app-side count."
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "unchecked-degree-minimum",
+      "theme": "Import validation bounds maximum degree but not minimum, allowing hand-edited graphs with degree < 2 (below app generation floor)",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 268,
+      "summary": "importGraph checks `degreeMax > BUDDY_MAX` (line 268) but does not check `degreeMin >= BUDDY_MIN`. A hand-edited file with someone having degree 1 (or 0) is imported without error, though reroll with the same k might fail or produce unexpected degree.",
+      "failure": "User imports a file where Alice has only 1 buddy. importGraph succeeds (max degree check passes if others have degree ≤ 12). User tries to reroll with k=4. The app shows 'That's already an optimal arrangement' even though the graph has degree 1. The asymmetry between minimum and maximum bounds can confuse users about what constitutes a valid buddy graph.",
+      "remediation": "Add a check: `if (degreeMin < BUDDY_MIN) throw new ImportError(...)` after line 268. Or make the validation explicit in the docstring that hand-edited files may have unconventional degree distributions and reroll behavior is undefined for them.",
+      "invariant": "Import validation bounds must be symmetric: if maximum degree is gated at BUDDY_MAX, minimum degree should be gated at BUDDY_MIN (or doc explicitly states asymmetry and why).",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "truncated-list-no-count-affordance",
+      "theme": "A capped result list gives no indication that more results exist beyond the cap, so a keyboard/screen-reader user searching for a name past the cutoff has no signal to refine the query rather than assume a typo.",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 30,
+      "summary": "PersonSearch shows at most RESULT_LIMIT=8 matches with no 'N more' or count text; a user whose target is the 9th-ranked match sees a full-looking list of 8 options and no hint that narrowing the query would surface them, unlike ConstraintsEditor's at-cap live note or RosterModal's char-cap notice, which do announce truncation elsewhere in the same app.",
+      "failure": "Typing a common query against a >8-name roster where the desired person ranks 9th or later shows 8 populated options and the same visual/audible shape as a complete result set — nothing distinguishes 'these are all the matches' from 'there are more, keep typing.'",
+      "remediation": "Add a small always-mounted status note (same pattern as the zero-match `.search-empty` region a few lines below) that reports when matches.length was truncated by RESULT_LIMIT, e.g. 'Showing 8 of N — keep typing to narrow it down.'",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 4,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 12,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 673175,
+    "agents": 6,
+    "toolCalls": 186
+  }
+}
