@@ -12,9 +12,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, relative, extname } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-// Roots are overridable so `selftest.mjs` can point the very same checks at deliberate-violation
-// fixtures and prove each one still fires. A hygiene check that silently stopped working would
-// otherwise look identical to a clean tree.
+// Roots are overridable so `oracle-check.mjs` can aim these same checks at deliberate-violation
+// fixtures: a check that silently stopped firing looks identical to a clean tree.
 const SOURCE_ROOTS =
   process.argv.length > 2
     ? process.argv.slice(2).map((p) => join(ROOT, p))
@@ -46,25 +45,17 @@ const failures = [];
 const report = (check, file, detail) => failures.push({ check, file: rel(file), detail });
 
 // ---------------------------------------------------------------------------------------------
-// 1. Stale comment references.
-//
-// A comment naming a symbol that no longer exists is a comment that lies. Only UNAMBIGUOUS code
-// references are considered — a backticked token that is camelCase, PascalCase or SCREAMING_SNAKE
-// — because prose words in backticks (`npm test`, `--flag`) would otherwise flood this with noise.
-// A single-word lowercase token is skipped for the same reason.
+// 1. Stale comment references: a backticked token naming a symbol that no longer exists. Catches
+// only camelCase / PascalCase / SCREAMING_SNAKE tokens, so a lowercase or multi-word reference goes
+// unchecked — prose in backticks (`npm test`, `--flag`) would otherwise flood this with noise.
 // ---------------------------------------------------------------------------------------------
 const COMMENT = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
 const BACKTICKED = /`([^`\n]+)`/g;
 const LOOKS_LIKE_SYMBOL = /^(?:[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*|[A-Z][a-zA-Z0-9]*[a-z][a-zA-Z0-9]*|[A-Z][A-Z0-9]*_[A-Z0-9_]+)$/;
 
-// The existence haystack is WIDER than the scanned set: we only inspect comments under lib/src and
-// app/src, but a comment there may legitimately name a symbol living elsewhere in the repo — e.g.
-// feasibility.ts says it mirrors "the mock's `checkNote`", which really is at mock/app.js:314.
-// Scanning narrowly and searching widely is what keeps this precise in both directions.
-//
-// Comments MUST also be stripped before asking "does this symbol still exist?" — otherwise the
-// comment under test is part of its own haystack, every reference resolves to itself, and the
-// check can never fire. (Both of these were real bugs, caught by selftest.mjs.)
+// The haystack is WIDER than the scanned set, because a comment under lib/src may legitimately name
+// a symbol living elsewhere in the repo. Comments are stripped from it, or the comment under test
+// is part of its own haystack, every reference resolves to itself, and the check can never fire.
 const HAYSTACK_EXTRA = [join(ROOT, "mock")].filter((d) => {
   try {
     return statSync(d).isDirectory();
@@ -75,11 +66,9 @@ const HAYSTACK_EXTRA = [join(ROOT, "mock")].filter((d) => {
 const allCode = [...codeFiles, ...HAYSTACK_EXTRA.flatMap(walk).filter((f) => /\.(js|html|css)$/.test(f))]
   .map((f) => read(f).replace(COMMENT, " "))
   .join("\n");
-// Language and platform globals are real identifiers that are correctly never DECLARED in
-// this repo, so "does the source contain it" is the wrong question for them. Without this the
-// check fires on a comment saying a NaN weight poisons a comparison — which is exactly the
-// kind of comment it should be encouraging. Kept to genuine globals: anything a repo symbol
-// could plausibly shadow stays checkable.
+// Platform globals are never DECLARED in this repo, so "does the source contain it" is the wrong
+// question for them. Keep this list to genuine globals — anything a repo symbol could plausibly
+// shadow must stay checkable.
 const PLATFORM_GLOBALS = new Set([
   "NaN", "Infinity", "undefined", "null", "globalThis",
   "Math", "JSON", "Number", "String", "Boolean", "Object", "Array", "Set", "Map",
@@ -101,18 +90,15 @@ for (const file of codeFiles) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2. Dead CSS hooks.
-//
-// A class or id selector no source file mentions anywhere. Membership is checked against the raw
-// source text rather than parsed className expressions, because classes are legitimately built by
-// concatenation ("node " + state). That makes this deliberately permissive: it only catches a hook
-// nothing references at all, which is exactly the rename-residue case, with near-zero FPs.
+// 2. Dead CSS hooks: a class or id selector no source file mentions anywhere. Membership is tested
+// against raw source text, because classes are legitimately built by concatenation ("node " + state)
+// — so this catches only a hook nothing references at all, not one referenced from dead code.
 // ---------------------------------------------------------------------------------------------
 const SELECTOR = /(?:^|[\s,>+~(])([.#][a-zA-Z_][\w-]*)/g;
 const cssHooks = new Map();
 for (const file of cssFiles) {
-  // Scan SELECTORS only — strip every declaration block first. Without this, colour values like
-  // `#eef2fb` parse as id selectors and every token in the palette becomes a "dead hook".
+  // Strip declaration blocks first, or colour values like `#eef2fb` parse as id selectors and every
+  // token in the palette becomes a "dead hook".
   const selectorsOnly = read(file).replace(/\{[^{}]*\}/g, " { } ");
   for (const [, sel] of selectorsOnly.matchAll(SELECTOR)) {
     if (!cssHooks.has(sel)) cssHooks.set(sel, file);
@@ -125,12 +111,10 @@ for (const [sel, file] of cssHooks) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 3. Constants mirrored as literals.
-//
-// A file that ALREADY IMPORTS a module, then hardcodes the numeric value of one of that module's
-// exported constants, is drift waiting to happen — change the constant and the literal silently
-// disagrees. Requiring the import is what keeps this precise: without it, every coincidental `5`
-// in the codebase would be a finding. Small/common values are skipped for the same reason.
+// 3. Constants mirrored as literals: a file that ALREADY IMPORTS a module then hardcodes the value
+// of one of its exported constants, so changing the constant leaves the literal silently
+// disagreeing. Requiring the import, and skipping COMMON values, is what stops every coincidental
+// `5` being a finding — and is also why a mirror in a file with no such import goes unseen.
 // ---------------------------------------------------------------------------------------------
 const COMMON = new Set([0, 1, 2, 3, 4, 10, 100, 1000, -1]);
 const EXPORTED_CONST = /export const ([A-Z][A-Z0-9_]*)\s*(?::[^=]+)?=\s*(-?\d+(?:\.\d+)?)\s*(?:\*\*\s*(\d+))?/g;
@@ -147,16 +131,12 @@ for (const file of codeFiles) {
   const stripped = text.replace(COMMENT, "");
   for (const { name, value, file: origin } of constants) {
     if (file === origin) continue;
-    // Only if this file already has the defining module in scope — otherwise the literal may be
-    // an unrelated coincidence rather than a missed reference.
     const originModule = rel(origin).replace(/\.tsx?$/, "").split("/").pop();
     const imports = new RegExp(`from\\s+["'][^"']*${originModule}["']|from\\s+["']ringweave["']`).test(text);
     if (!imports) continue;
-    if (new RegExp(`\\b${name}\\b`).test(stripped)) continue; // uses the constant properly
-    // A value bound to its OWN named constant is a deliberate, independently-named concept, not
-    // drift — two thresholds are allowed to coincide numerically. (app/src/model.ts:53 documents
-    // exactly such a pair: POLISH_MAX_N and layout.ts's unrelated FORCE_TICK_KNEE_N, which a
-    // review already adjudicated as "don't consolidate them".) Only BARE literals are drift.
+    if (new RegExp(`\\b${name}\\b`).test(stripped)) continue;
+    // Only BARE literals are drift: a value bound to its OWN named constant is an independently
+    // named concept, and two thresholds are allowed to coincide numerically.
     const bare = new RegExp(`(?<!const\\s+[A-Z_][A-Z0-9_]*\\s*(?::[^=\\n]+)?=\\s*)(?<![\\w.])${value}(?![\\w.])`);
     if (!bare.test(stripped)) continue;
     report("mirrored-constant", file, `hardcodes ${value}, the value of \`${name}\` (${rel(origin)})`);
@@ -164,14 +144,10 @@ for (const file of codeFiles) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 4. Critic frontmatter must agree with the runner.
-//
-// `.claude/workflows/adversarial-review.js` holds the EXECUTABLE gating config (each lens's model,
-// surface globs and saturation gate) because workflow scripts have no filesystem access and cannot
-// read the agent definitions. The critic `.md` frontmatter carries the same values for anyone
-// reading the agent file. Two copies of a fact drift, and here the drift is invisible: a surface
-// that disagrees would silently gate the wrong lens, producing a review round with a hole in it
-// that still reports converged. So the two are compared mechanically.
+// 4. Critic frontmatter must agree with the runner. `.claude/workflows/adversarial-review.js` holds
+// the EXECUTABLE gating config and the critic `.md` frontmatter repeats it, because workflow scripts
+// cannot read the agent files. The drift is invisible without this: a disagreeing surface silently
+// gates the wrong lens, producing a review round with a hole in it that still reports converged.
 // ---------------------------------------------------------------------------------------------
 const AGENTS_DIR = join(ROOT, ".claude", "agents");
 const RUNNER = join(ROOT, ".claude", "workflows", "adversarial-review.js");
@@ -227,36 +203,21 @@ if (agentFiles.length > 0) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 5. Untracked test files.
+// 5. Untracked test files: scratch harnesses left behind by a tool or an agent, which vitest picks
+// up and which read as failing tests. git is the oracle — a test-shaped file no one has staged is
+// not a test, it is residue.
 //
-// Review lenses have Bash access on purpose — it is what lets them measure instead of speculate,
-// and one of them examined 432,954 fragmenting graph swaps to check a fix. But nothing tells an
-// agent to clean up, and one left a scratch harness at lib/test/zz_frag.test.ts. Vitest picked it
-// up, it ran 90 s and timed out, and on the next `npm test` it read as two FAILING tests — which
-// looks exactly like a regression in the fix that had just been made. Committed, it would have
-// broken CI.
-//
-// git is the oracle here: a file under a test directory that no one has staged is not a test, it is
-// residue. Cheap, and it cannot be argued with.
-//
-// WIDENED, because the first version of this check knew only two directories and the hazard did not.
-// It recurred four times in one run, in four different places: lib/test/zz_frag.test.ts,
-// app/test/tmpbench/, app/test/zz_probe.test.ts, and then app/zz-scratch/ — which was outside the two
-// paths this check scanned and so sailed straight past it. Fixing the case and calling the theme
-// closed is the anti-pattern REVIEW_PROTOCOL.md names, and this check had committed it. So the scan
-// is now the WHOLE TREE for anything test-shaped: directory names are unbounded, `*.test.*` is not.
-//
-// `--exclude-standard` means .gitignore'd paths never appear, so the sanctioned `.review-scratch/`
-// (and any other scratch directory the ignore file blesses) is invisible here by construction — a
-// designated place to work, exactly as intended, with no allowlist to maintain in this file.
+// Scanned across the WHOLE TREE, not a list of test directories: directory names are unbounded,
+// `*.test.*` is not. It therefore cannot see residue that is not test-shaped by name.
+// `--exclude-standard` hides .gitignore'd paths, so the sanctioned `.review-scratch/` is invisible
+// by construction and no allowlist is needed here.
 // ---------------------------------------------------------------------------------------------
 {
   const out = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], {
     cwd: ROOT,
     encoding: "utf8",
   });
-  // A missing or failing git is not this check's business to diagnose — skip rather than fail the
-  // lint gate for a reason unrelated to the tree's contents.
+  // Skip on a failing git rather than failing the lint gate for a reason unrelated to the tree.
   if (out.status === 0) {
     for (const line of out.stdout.split("\n").map((x) => x.trim()).filter(Boolean)) {
       if (!/\.(test|spec)\.[cm]?[jt]sx?$/.test(line)) continue;

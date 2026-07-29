@@ -46,7 +46,7 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
  *
  * Refuses rather than skipping bad pairs, so a user is never handed back a different rule set
  * than they saved. A pair that is both required and prohibited is refused here rather than at the
- * next generation, so a graph that renders but can never be regenerated isn't found later.
+ * next generation, so a graph that renders but can never be regenerated is caught on the way in.
  */
 function readConstraints(
   block: BuddyGraphFile["constraints"] | undefined,

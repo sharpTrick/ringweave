@@ -117,6 +117,13 @@ token-swap; M2 ships the mock-faithful dark theme only.
   cut item is cut as a deferral. There is no caller: the roster CSV path parses *names*, and a
   constraints CSV would need its own column contract, which nothing in the app or the file format
   currently defines.
+- **A constrained export records a `minSeparation` the graph can never meet.** `exportGraph` writes
+  `settings.minSeparation` into the file whatever builder produced the graph, and the constrained
+  path ignores that option entirely (`choosePartner` always takes the farthest legal partner), so a
+  constrained file states a target its own edges do not and could not satisfy. Surfaced by the
+  comment sweep, where it had been living only as a source comment. The fix is either to omit the
+  field on the constrained path or to write the achieved separation instead; both change the file
+  schema's meaning, so it is a deferral rather than a one-liner.
 - **Buddy rules are not re-checked on import.** `importGraph` rehydrates edges rather than
   regenerating, so no builder runs and there is no `ConstraintReport`. `GraphView.report` is null on
   that path and the quality panel says "not re-checked on import" — deliberately NOT "satisfied",

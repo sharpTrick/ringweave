@@ -1,6 +1,5 @@
 import type { ConstraintReport, Reason } from "ringweave";
 
-/** Generation options mirroring the subset of the core's `BuddyOptions` the UI exposes. */
 export interface GenerateOptions {
   minSeparation?: number;
   polish?: boolean | "auto";
@@ -8,11 +7,10 @@ export interface GenerateOptions {
 }
 
 /**
- * Main thread → worker. `id` correlates the response and lets stale runs be dropped.
+ * Main thread → worker; `id` correlates the response so stale runs can be dropped.
  *
- * Constraints cross as plain index pairs, not as a core `Constraints` instance:
- * that class holds private `#` Set fields and so is not structured-clone-safe. The
- * worker rebuilds one on the other side.
+ * Constraints cross as plain index pairs: a core `Constraints` holds private `#` Set fields and is
+ * not structured-clone-safe, so the worker rebuilds one on the other side.
  */
 export interface GenerateRequest {
   id: number;
@@ -26,19 +24,8 @@ export interface GenerateRequest {
 }
 
 /**
- * The one payload shape both builders are normalized into before crossing the
- * worker boundary.
- *
- * `BuddyResult` and `ConstrainedBuddyResult` differ (the constrained one omits
- * `girth`/`asplGap`, since Moore's bound assumes a k-regular target that
- * constrained graphs only approximate), so they are not assignable to one another
- * and a union would push the fork into every consumer. Normalizing here keeps the
- * view layer with a single producer and no branch on which builder ran.
- *
- * `girth` for the constrained path is measured in the worker from a rebuilt
- * `Graph`, exactly as `ConstrainedBuddyResult`'s own doc instructs — it is O(n²)
- * and belongs off the main thread. `asplGap` is not carried because nothing reads
- * it: `model.ts` computes quality from `aspl` itself.
+ * The one payload BOTH builders normalize into before crossing the worker boundary, so the view
+ * layer has a single producer and never branches on which builder ran.
  */
 export interface GraphResult {
   buddies: number[][];

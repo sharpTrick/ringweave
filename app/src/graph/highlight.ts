@@ -1,16 +1,3 @@
-/**
- * What the graph is currently emphasising, and the CSS classes that follow from it.
- *
- * Pulled out of `GraphCanvas` because M2's scheme could not express F10. That
- * scheme had one `focus` index and derived an edge's class from whether either
- * endpoint was a highlighted NODE — which structurally cannot distinguish "the
- * chain edge between two people on the route" from "any edge that happens to
- * touch one of them". A route needs the first and only the first.
- *
- * Being pure also makes the M2 behaviour testable as a table, which is what keeps
- * this refactor honest: with no route active, every class string must be exactly
- * what M2 produced.
- */
 import { neighborhood } from "../neighborhood";
 
 export type Highlight =
@@ -20,14 +7,7 @@ export type Highlight =
 
 const NO_HIGHLIGHT: Highlight = { kind: "none" };
 
-/**
- * Resolve the current emphasis.
- *
- * An active route beats hover. Otherwise hovering a name to read it would destroy
- * the route the user just asked for — the single most annoying way this feature
- * could fail. Within neighbourhood mode hover still beats selection, exactly as
- * M2 behaved.
- */
+/** An active route beats hover, or hovering a name to read it destroys the route just drawn. */
 export function buildHighlight(
   adjacency: number[][],
   selected: number | null,
@@ -66,11 +46,8 @@ export function edgeClass(h: Highlight, u: number, v: number): string {
       if (h.second.has(u) || h.second.has(v)) return "edge lit2";
       return "edge dim";
     case "route":
-      // Node membership is enough, and provably so. On a shortest path
-      // dist(path[i]) === i, and adjacency implies |dist(u) − dist(v)| <= 1, so
-      // two path members that are adjacent must be consecutive on the path. An
-      // explicit edge-key set would carry the same information and one more thing
-      // to keep canonical.
+      // Node membership is enough: on a shortest path dist(path[i]) === i and adjacency implies
+      // |dist(u) − dist(v)| <= 1, so two adjacent path members are consecutive on it.
       return h.nodes.has(u) && h.nodes.has(v) ? "edge route" : "edge dim";
   }
 }

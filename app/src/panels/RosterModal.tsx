@@ -17,22 +17,14 @@ import SettingsControls from "./SettingsControls";
 interface Props {
   initialText: string;
   settings: Settings;
-  /** The rules in force, with the roster their indices point into. */
   /**
-   * The rules as the user last TYPED them, name-keyed. Not index pairs plus a roster:
-   * a row naming someone who is no longer in the roster has no index to key on, and
-   * reconstructing rows from indices is what silently deleted those rows on Generate —
-   * contradicting the editor's own contract that an unrecognised row is kept and flagged.
+   * The rules as last TYPED, name-keyed rather than index pairs: a row naming someone no longer
+   * in the roster has no index, so rebuilding rows from indices deletes it.
    */
   rules: NamedPair[];
   /**
-   * Why the dialog was reopened, when it was reopened BY a refusal or a worker error.
-   *
-   * It arrives here rather than in the toast because the toast is `inert` while this dialog is
-   * open — deliberately, so Tab cannot escape an aria-modal dialog into it — and `inert` removes
-   * an element from the accessibility tree entirely, so a message shown there at the same moment
-   * this opened was never announced at all. Containment and announcement were fighting; the
-   * message belongs to the dialog it is explaining.
+   * Why the dialog was reopened. It arrives here rather than in the toast because the toast is
+   * `inert` while this dialog is open, and `inert` removes it from the accessibility tree.
    */
   reopenReason?: string | null;
   canCancel: boolean;
@@ -40,50 +32,34 @@ interface Props {
     names: string[],
     settings: Settings,
     constraints: ConstraintPair[],
-    /** The typed rows, so the caller can hand them straight back when the editor reopens. */
     rules: NamedPair[],
   ) => void;
   onCancel: () => void;
 }
 
 /**
- * The roster field's accessible name, exported because `App`'s focus rescue queries for it.
- * The rescue cannot hold a ref (this component is conditionally mounted and the rescue runs
- * from outside it), so it looks the field up by label — and a silent rename here would just
- * demote the rescue to its next candidate with nothing failing. One string, one definition.
+ * App's focus rescue finds this field by label, not by ref, so a rename here silently demotes the
+ * rescue to its next candidate with nothing failing.
  */
 export const ROSTER_FIELD_LABEL = "Roster names";
 
-/** The reopen reason's element id, so the dialog can point `aria-describedby` at it. */
 const REOPEN_REASON_ID = "reopen-reason";
 
-/** F1 + F2: roster entry (paste or .txt/.csv drop, tolerant parse, duplicate warnings)
-    and generate settings, with pre-run feasibility notes. */
 export default function RosterModal({
   initialText, settings: initialSettings, rules: initialRules, reopenReason, canCancel,
   onGenerate, onCancel,
 }: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
-  // Rules are edited BY NAME, so a roster edit can never silently re-point them at
-  // different people. They are converted in here, once, and back out on generate.
   const [rules, setRules] = useState<NamedPair[]>(initialRules);
   const [fileError, setFileError] = useState<string | null>(null);
   const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const rosterRef = useRef<HTMLTextAreaElement>(null);
 
-  // A modal dialog takes focus when it opens. That is the whole reason this is here and not in
-  // `useFocusRescue`: the rescue answers "focus was DESTROYED, put it somewhere usable", and it
-  // is deliberately gated on focus having been somewhere real first — so on the very first paint,
-  // when nothing has ever been focused, its precondition is unmet BY DESIGN and it does not run.
-  // Cold load is exactly that paint: `modalOpen` starts true, `#app` is `inert`, and this dialog
-  // is the entire accessible document — with focus sitting on `<body>`. Every other path into
-  // this dialog (Edit people, a refusal, a first-generation error) landed focus inside it, so the
-  // one path every user hits first was the one with no mechanism covering it.
-  //
-  // On mount only. Reopens are new mounts, so they are covered by the same line; a re-render is
-  // not, which is what keeps this from stealing focus from someone typing in a rule row.
+  // `useFocusRescue` is gated on focus having been somewhere real first, so it does not cover the
+  // cold load — where this dialog is the whole accessible document and focus sits on `<body>`.
+  // On mount only: a reopen is a new mount, and a re-render must not steal focus mid-typing.
   useEffect(() => {
     rosterRef.current?.focus();
   }, []);
@@ -91,21 +67,17 @@ export default function RosterModal({
   const parsed = useMemo(() => parseRoster(text), [text]);
   const feas = useMemo(() => feasibility(parsed.names.length, settings.buddies), [parsed.names.length, settings.buddies]);
 
-  // Bound the STORED (and DOM-rendered) string, not just the parse: an 8 MB file load or a
-  // huge paste would otherwise re-render a multi-MB controlled textarea on every keystroke.
-  // Because this pre-caps to exactly MAX_PARSE_CHARS, parseRoster's own char-truncation warning
-  // can't fire on the UI path (and the name-cap warning misses a <MAX_NAMES-distinct giant
-  // paste), so we surface the truncation notice here — capText is the UI truncation authority.
+  // Bound the STORED string, not just the parse, or a huge paste re-renders a multi-MB controlled
+  // textarea on every keystroke. Pre-capping to exactly MAX_PARSE_CHARS also stops parseRoster's
+  // own truncation warning from ever firing, so the notice has to be raised here.
   const capText = (s: string) => {
     const cut = clampToPoints(s, MAX_PARSE_CHARS);
     setInputCapped(cut !== s);
     return cut;
   };
 
-  // The ONE way to replace the roster text. Clears the transient notices (a stale file-error or
-  // truncation note must never outlive the text it described) and re-derives inputCapped via
-  // capText, so EVERY text-replacing path — typing, "try example names", a successful file read —
-  // resets consistently rather than only the path that raised a notice.
+  // The ONE way to replace the roster text: every replacing path must clear the transient notices,
+  // or a stale file-error or truncation note outlives the text it described.
   const setRoster = (s: string) => {
     setFileError(null);
     setText(capText(s));
@@ -125,22 +97,14 @@ export default function RosterModal({
     void readFile(e.dataTransfer.files[0]);
   };
 
-  // Resolve the name-keyed rules against the roster as currently typed. `dropped`
-  // counts rules naming somebody who is no longer there — surfaced below, never
-  // discarded quietly.
   const resolved = useMemo(() => resolveNamedPairs(rules, parsed.names), [rules, parsed.names]);
 
   /**
-   * The FIRST of F7's two feasibility gates: the same core check the worker will
-   * run, run here so an impossible rule set is explained in the editor instead of
-   * coming back as a refusal after a round trip. The worker's gate is the
-   * authority; this one exists so the message arrives next to the control that
-   * caused it.
+   * A pre-flight only: the worker's gate is the authority. It runs the SAME core check, so this
+   * can never call a rule set feasible that the worker then refuses.
    */
   const ruleProblems = useMemo(() => {
     if (resolved.pairs.length === 0) return [];
-    // The SAME builder the worker uses, so this pre-flight can never call a rule set
-    // feasible that the authoritative gate then refuses.
     const cons = toConstraints(parsed.names.length, resolved.pairs);
     return describeReasons(validateDetailed(cons, settings.buddies), parsed.names);
   }, [resolved.pairs, parsed.names, settings.buddies]);
@@ -151,21 +115,11 @@ export default function RosterModal({
   };
 
   return (
-    // `aria-describedby`, NOT the live region below, is what announces why this dialog came
-    // back. The note stack is a live region and every other region in this app satisfies the
-    // rule live regions have — exist in the accessibility tree BEFORE the text changes — by
-    // staying mounted. This one cannot: the dialog itself is conditionally mounted, and a
-    // refusal CLOSES it to dispatch and then reopens it, so the region and the one message
-    // explaining the reopen are created in the same commit and nothing is announced.
-    //
-    // Delaying the text by a commit was the first fix and it is not one: it cannot be observed
-    // to have worked (React flushes both commits inside one microtask, so even a MutationObserver
-    // sees a single batch), and a fix whose effect is unprovable is indistinguishable from none.
-    // A dialog's accessible DESCRIPTION is announced when focus enters it — which is exactly what
-    // happens here, since the focus rescue lands in the roster field inside this dialog — and it
-    // needs no ordering to be true. Round 8 moved this text out of an `inert` toast because
-    // `inert` hides it from assistive tech; hoisting it to one of App's permanent regions would
-    // be that mistake again, since they sit outside this `aria-modal` dialog.
+    // `aria-describedby`, NOT the live region below, announces why the dialog came back: a
+    // refusal closes and reopens this dialog, so the region and its one message are created in
+    // the same commit and nothing is announced. A description is read when focus enters, and
+    // needs no ordering. Hoisting the text to one of App's permanent regions would put it outside
+    // this `aria-modal` dialog.
     <div
       id="modal"
       role="dialog"
@@ -232,14 +186,9 @@ export default function RosterModal({
           </button>
         </div>
 
-        {/* ONE permanently-mounted live region around the whole note stack. Six kinds of text
-            appear and disappear here in response to typing, dropping a file, or editing a rule —
-            the file error, the character-cap notice, roster-parse warnings, feasibility messages,
-            the three by-cause rule notes, and the blocking rule problems — and none of them was
-            announced. Two of them GATE the primary action, so a keyboard-and-screen-reader user
-            could find "Generate buddy graph" disabled with no way to learn why.
-            Mounted around the stack rather than on each note, for the reason Notice.tsx documents:
-            a region that appears together with its first text is never announced. */}
+        {/* ONE permanently-mounted live region around the whole stack, not one per note: a region
+            that appears together with its first text is never announced, and two of these notes
+            gate the Generate button. */}
         <div role="status" aria-live="polite">
         {reopenReason && <div id={REOPEN_REASON_ID} className="note blocking">{reopenReason}</div>}
         {fileError && <div className="note blocking">{fileError}</div>}
@@ -250,9 +199,8 @@ export default function RosterModal({
         {feas.messages.map((m, i) => (
           <div className={"note" + (feas.canGenerate ? "" : " blocking")} key={i}>{m}</div>
         ))}
-        {/* By CAUSE. One "doesn't match anyone" message covering a duplicate
-            restatement or a self-pairing sends the user looking for a missing person
-            who is not missing. */}
+        {/* Split by CAUSE: one "doesn't match anyone" covering a duplicate or a self-pairing
+            sends the user hunting for a person who is not missing. */}
         {resolved.unmatched > 0 && (
           <div className="note">
             {resolved.unmatched === 1

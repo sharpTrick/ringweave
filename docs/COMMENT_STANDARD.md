@@ -62,6 +62,12 @@ That is writing to critics, and it is the wrong instinct twice over:
 - **The review ends when the change merges. The comment does not.** A paragraph written to win a
   round in July is read for years by people who were never in the argument.
 
+## One exception
+
+**Authorship and lineage attribution is credit, not commentary, and does not have to fit the shape.**
+`lib/src/core/greedy.ts` names who designed the algorithm and points at `CONCEPT_LINEAGE`; that
+stays. Keep it to two lines and keep it in the module header.
+
 ## Scope
 
 Applies to `lib/`, `app/`, `scripts/` and every test file. Tests are not exempt: a test name is

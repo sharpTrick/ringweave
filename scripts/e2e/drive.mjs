@@ -1,24 +1,17 @@
 /**
- * End-to-end verification of M3 in the real app: a real module Worker, real
- * rendering, real keyboard. The unit suite mocks the worker hook, so none of the
- * constrained generation path is exercised anywhere else.
- *
- * Drives the PRODUCTION BUILD, not the dev server, so what is checked is what
- * ships. Every step below is one of the plan's stated verification items.
+ * End-to-end verification in the real app. The unit suite mocks the worker hook, so none of the
+ * constrained generation path is exercised anywhere else. Drives the PRODUCTION BUILD, not the dev
+ * server, so what is checked is what ships.
  */
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:4173";
 
 /**
- * Wait for a generation to FINISH, not merely for the results panel to exist.
- *
- * `waitForSelector("#metrics")` is not a wait at all after the first generation — the
- * panel is still mounted from the previous one, so it returns instantly while the new run
- * is still going. That race was invisible while the page stayed interactive during
- * generation; now that `#app` is correctly `inert` behind the "Generating…" overlay, the
- * next step lands on a non-interactive control instead. Waiting for the overlay to go is
- * the condition that was always meant.
+ * Wait for a generation to FINISH, not merely for the results panel to exist. `#metrics` is not a
+ * wait at all after the first generation — the panel is still mounted from the previous one, so it
+ * returns instantly while the new run is still going and the next step lands on a control still
+ * behind `inert`. The overlay detaching is the condition that was always meant.
  */
 async function generationSettles(page) {
   await page.waitForSelector("#metrics", { timeout: 15000 });
@@ -48,13 +41,9 @@ page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
 await page.goto(BASE, { waitUntil: "networkidle" });
 
-// ---- a11y: the setup dialog must be operable on the very first paint ---------
-// The regression this exists for: RosterModal was rendered INSIDE the element carrying
-// `inert`, and `inert` cascades with no way for a descendant to opt back in. Since the
-// modal opens on load, that made the entire first paint unreachable by keyboard and absent
-// from the accessibility tree — while rendering perfectly. A jsdom test can assert the
-// containment but not the behaviour, because jsdom does not implement inert; only a real
-// browser can be asked whether the control can actually be focused and typed into.
+// `inert` cascades with no way for a descendant to opt back in, and the setup dialog opens on load
+// — so an inert ancestor makes the whole first paint unreachable while rendering perfectly. jsdom
+// does not implement `inert`, so only a real browser can be asked this.
 {
   const dialogInert = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"]');
@@ -64,12 +53,9 @@ await page.goto(BASE, { waitUntil: "networkidle" });
   });
   check("the setup dialog is not inside an inert ancestor", dialogInert === "ok", dialogInert);
 
-  // ASSERTED BEFORE ANYTHING TOUCHES IT. The previous version focused the field first and then
-  // checked that the focus had stuck — which proves the field is focusABLE, not that the app ever
-  // focuses it, and the app did not. On a cold load `#app` is inert and this dialog is the whole
-  // accessible page, so focus sitting on <body> means a screen reader is never told a dialog
-  // opened. Only a real browser can settle this one: jsdom will happily report focus wherever it
-  // was put.
+  // Asserted BEFORE anything touches focus: focusing the field first and then checking would prove
+  // the field is focusABLE, not that the app ever focuses it. The two checks are not the same
+  // claim, and only the first one is about the app.
   const landed = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
   check("focus lands in the setup dialog on cold load", landed === "Roster names", landed ?? "(none)");
   const roster = page.getByLabel("Roster names");
@@ -78,7 +64,6 @@ await page.goto(BASE, { waitUntil: "networkidle" });
   check("the roster field can actually take focus", focused === "Roster names", focused ?? "(none)");
 }
 
-// ---- roster + rules -------------------------------------------------------
 await page.getByLabel("Roster names").fill(ROSTER.join("\n"));
 await page.locator(".rules-block > summary").click();
 await page.getByText("+ Add a buddy rule").click();
@@ -92,18 +77,14 @@ await page.getByLabel("Rule 2, kind").selectOption("prohibited");
 await page.getByText("Generate buddy graph").click();
 await generationSettles(page);
 
-// `.rules-line` is the class the quality panel uses for EVERY disclosure line — the buddy
-// count shortfall, the separation shortfall, and the constraint summary — so the locator
-// has to name which one. Reading "the first .rules-line" would silently follow whichever
-// disclosure happens to render first.
+// `.rules-line` is the class the quality panel uses for EVERY disclosure line, so the locator has
+// to name which one; "the first" would silently follow whichever disclosure renders first.
 const rulesLine = await page.locator(".rules-line", { hasText: /buddy rule/ }).textContent();
 check("constrained generation reports its rules", /all 2 buddy rules satisfied/.test(rulesLine ?? ""), rulesLine ?? "(none)");
 
-// The rules must actually hold in the rendered graph, not just in the caption.
 const edges = await page.$$eval("line.edge", (ls) => ls.length);
 check("a graph was drawn", edges > 0, `${edges} edges`);
 
-// ---- infeasible rules name people, not indices ----------------------------
 await page.getByText("Edit people").click();
 await page.locator(".rules-block > summary").click();
 for (let i = 3; i <= 7; i++) {
@@ -117,12 +98,10 @@ check("infeasibility names a person, not an index",
 const disabled = await page.getByText("Generate buddy graph").isDisabled();
 check("generate is blocked while infeasible", disabled);
 
-// Back to a feasible set: remove the five bad rules.
 for (let i = 7; i >= 3; i--) await page.getByLabel(`Remove rule ${i}`).click();
 await page.getByText("Generate buddy graph").click();
 await generationSettles(page);
 
-// ---- F8: fuzzy search -----------------------------------------------------
 await page.getByLabel("Find a person").fill("jsmi");
 const firstOption = await page.locator('[role="option"]').first().textContent();
 check('"jsmi" finds "John Smith"', firstOption === "John Smith", firstOption ?? "(none)");
@@ -131,7 +110,6 @@ await page.waitForSelector("#person");
 const who = await page.locator("#person h2").textContent();
 check("selecting a result opens that person", who === "John Smith", who ?? "(none)");
 
-// ---- F8: explorer chips + back stack --------------------------------------
 const firstChip = page.locator("#person .pp-chips .personchip").first();
 const chipName = await firstChip.textContent();
 await firstChip.click();
@@ -141,7 +119,6 @@ await page.getByText("← Back").click();
 const backWho = await page.locator("#person h2").textContent();
 check("the back stack works", backWho === "John Smith", backWho ?? "(none)");
 
-// ---- F10: path finder -----------------------------------------------------
 await page.getByText("Find a path from here").click();
 await page.getByLabel("Find a person").fill("lena");
 await page.keyboard.press("Enter");
@@ -153,18 +130,15 @@ const routeEdges = await page.$$eval("line.edge.route", (ls) => ls.length);
 const hops = Number((steps.match(/(\d+) step/) ?? [])[1]);
 check("the lit chain has exactly one edge per step", routeEdges === hops, `${routeEdges} lit vs ${hops} steps`);
 
-// Hovering must not destroy the route.
 await page.locator("g.node").first().hover();
 const afterHover = await page.$$eval("line.edge.route", (ls) => ls.length);
 check("hovering does not destroy the route", afterHover === routeEdges);
 
-// ---- ESC clears -----------------------------------------------------------
 await page.keyboard.press("Escape");
 check("Escape clears the route", (await page.locator("#route").count()) === 0);
 await page.keyboard.press("Escape");
 check("a second Escape clears the selection", (await page.locator("#person").count()) === 0);
 
-// ---- F6: export round-trips the rules -------------------------------------
 const download = page.waitForEvent("download");
 await page.getByText("Export ↓").click();
 const file = await download;
@@ -176,9 +150,8 @@ check("export carries the rules",
   parsed.constraints.required.length === 1 && parsed.constraints.prohibited.length === 1,
   JSON.stringify(parsed.constraints));
 
-// ---- a11y: closing a panel must not strand focus on <body> ------------------
-// Removing the focused element moves focus to <body> per spec, so the next Tab restarts at
-// the top of the document. Nothing in app/src called .focus() at all.
+// Removing the focused element moves focus to <body> per spec, so the next Tab restarts at the top
+// of the document.
 {
   await page.locator(".brow").first().click();
   await page.waitForSelector("#person");
@@ -191,14 +164,10 @@ check("export carries the rules",
   check("closing the person panel keeps focus somewhere usable", landed !== "body", landed);
 }
 
-// ---- a11y on a PHONE: the rescue must not raise the soft keyboard -----------
-// Reported from a phone against this branch: creating the graph, and then selecting anyone,
-// put the caret in the fuzzy-search box — which opens the keyboard and scrolls the viewport
-// to it. Two separate defects behind one symptom, and neither is visible on a desktop
-// viewport, which is why this runs in its own touch-enabled context.
-//
-// The oracle is "does the focused element accept typing", asked of a real browser after a real
-// tap. jsdom can assert where focus went; it cannot tell you a keyboard came up.
+// A focus rescue that lands in a text field raises the soft keyboard and scrolls the viewport to it
+// — invisible on a desktop viewport, hence the touch-enabled context. The oracle is a PROPERTY of
+// the focused element, "does it accept typing": jsdom can say where focus went, not that a keyboard
+// came up, and no element identity answers it either.
 {
   const phone = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -225,10 +194,8 @@ check("export carries the rules",
   await generationSettles(mob);
   const afterGenerate = await typable();
   check("phone: creating the graph does not raise the keyboard", afterGenerate === "", afterGenerate);
-  // NOT VACUOUS. Focus stranded on <body> is not a text input either, so the check above passes
-  // on a completely broken rescue — and it did, against the first version of this fix, which
-  // disarmed itself when the anchor was momentarily unreachable behind `inert`. The rescue owes a
-  // reachable anchor here, and saying so is what makes the line above mean something.
+  // The check above is vacuous alone: focus stranded on <body> is not a text input either, so it
+  // passes on a completely broken rescue. This is what makes it mean something.
   const rescued = await mob.evaluate(() => {
     const a = document.activeElement;
     if (!a || a === document.body) return "body";
@@ -236,15 +203,14 @@ check("export carries the rules",
   });
   check("phone: creating the graph leaves focus reachable, not on <body>", rescued === "", rescued);
 
-  // Tapping a person. The buddy-list row is the touch-reachable equivalent of tapping a node,
-  // and it is the interaction the report calls out as making the graph hard to explore.
+  // The buddy-list row is the touch-reachable equivalent of tapping a node.
   await mob.locator(".brow").first().tap();
   await mob.waitForSelector("#person");
   const afterSelect = await typable();
   check("phone: selecting a person does not raise the keyboard", afterSelect === "", afterSelect);
 
-  // ...and the graph canvas itself, which is SVG and so not focusable — the exact gesture that
-  // blurred to <body> and made the rescue think the user's footing had been removed.
+  // The canvas is SVG and so not focusable — the gesture that blurs to <body> and makes the rescue
+  // think the user's footing was removed.
   await mob.locator("#stage svg").tap({ position: { x: 5, y: 5 } });
   const afterCanvas = await typable();
   check("phone: tapping the canvas does not raise the keyboard", afterCanvas === "", afterCanvas);

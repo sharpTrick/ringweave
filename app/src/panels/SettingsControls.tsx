@@ -6,12 +6,8 @@ interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
   /**
-   * Whether `minSeparation` reaches a builder that acts on it.
-   *
-   * False once the roster carries buddy rules: the constrained builder maximises separation
-   * instead of aiming at a target, so the core documents the option as accepted and ignored on
-   * that path. A control that cannot affect the output must not read as a request — the same
-   * reason `separationShortfall` stops reporting a shortfall there.
+   * False once the roster carries buddy rules: the constrained builder accepts and ignores
+   * `minSeparation`, and a control that cannot affect the output must not read as a request.
    */
   separationApplies?: boolean;
 }
@@ -19,9 +15,8 @@ interface Props {
 const polishValue = (p: boolean | "auto"): string => (p === "auto" ? "auto" : p ? "on" : "off");
 const parsePolish = (v: string): boolean | "auto" => (v === "auto" ? "auto" : v === "on");
 
-/** F2 settings: buddies-per-person (k) plus an Advanced disclosure for minimum
-    separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped
-    on change — HTML min/max don't stop a cleared/typed value (an empty field is 0). */
+/** Numeric inputs are clamped on change: HTML min/max do not stop a cleared or typed value, and
+    an empty field reads as 0. */
 export default function SettingsControls({ settings, onChange, separationApplies = true }: Props) {
   const separationNoteId = `${useId()}-sep`;
 
@@ -37,24 +32,14 @@ export default function SettingsControls({ settings, onChange, separationApplies
     <>
       <div className="field">
         Buddies each
-        {/* The value is announced two ways, because the two are for different moments.
-            `role="status"` reports the NEW number after a press — the buttons keep focus, so
-            without it a screen-reader user pressing "+" hears nothing at all and has no way to
-            know whether the press registered. The value in each button's own label reports the
-            CURRENT number to someone who has just tabbed onto the control and has not pressed
-            anything yet. LayoutToggle's `aria-pressed` is the same idea for a control whose
-            state is a choice rather than a count. */}
-        {/* AT THE BOUNDS the live region cannot carry the news, because the value does not
-            change: `setK` clamps 13 back to 12, the text stays "12", no DOM mutation happens and
-            nothing is announced. A user pressing "+" at the ceiling could not tell "my press did
-            not register" from "I am already at the limit" — the one distinction the region exists
-            to make. So the state is carried by the CONTROL rather than by the value.
-
-            `aria-disabled`, not `disabled`: a real `disabled` on the button under the user's
-            finger is blurred by the browser the moment it takes effect, and that happens on the
-            press that REACHES the bound — no element is removed, so `useFocusRescue` (which
-            watches for removals) correctly does not fire, and focus is simply gone. `aria-disabled`
-            conveys the state, keeps the control focusable, and leaves the no-op no-op. */}
+        {/* Announced two ways. `role="status"` reports the NEW value after a press, since the
+            button keeps focus and nothing else says the press registered; each button's label
+            repeats the CURRENT value for someone who has just tabbed on.
+            AT THE BOUNDS the region cannot help — `setK` clamps, the text does not change and no
+            mutation is announced — so the bound is carried by the control instead.
+            `aria-disabled`, not `disabled`: the press that REACHES the bound would otherwise blur
+            the button under the user's finger, and no element is removed for `useFocusRescue` to
+            catch. */}
         <div className="stepper">
           <button
             type="button"
@@ -95,9 +80,8 @@ export default function SettingsControls({ settings, onChange, separationApplies
               value={settings.minSeparation ?? SEPARATION_DEFAULT}
               onChange={(e) => setMinSep(Number(e.target.value))}
               style={{ width: 56 }}
-              // `aria-disabled`, not `disabled`, for the reason the stepper documents: the value
-              // is still worth reading, and a control blurred out from under a keyboard user is
-              // its own defect. The note beside it is what says why.
+              // `aria-disabled`, not `disabled`, for the reason the stepper gives: a real
+              // `disabled` blurs the control out from under a keyboard user.
               aria-disabled={!separationApplies || undefined}
               aria-describedby={separationApplies ? undefined : separationNoteId}
             />

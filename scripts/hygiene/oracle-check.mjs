@@ -1,15 +1,10 @@
 /**
  * Proves the hygiene linter is actually watching what we think it is.
  *
- * `docs/REVIEW_PROTOCOL.md` puts lint classes OUT OF SCOPE for the adversarial critics: a critic
- * that files a stale comment or an unused export is wasting a round, because the linter owns that
- * class. That handoff is only safe if the linter genuinely catches those classes — and oxlint
- * **silently ignores unknown rule names**, so a renamed or mistyped rule in `.oxlintrc.json` looks
- * exactly like a rule that is enabled and finding nothing.
- *
- * So: run oxlint against deliberate violations in `fixtures/` and assert each expected rule fires.
- * If a rule is renamed upstream, removed, or typo'd, this fails loudly instead of quietly opening a
- * gap that neither the linter nor the critics are covering.
+ * oxlint SILENTLY IGNORES unknown rule names, so a renamed or mistyped rule in `.oxlintrc.json`
+ * looks exactly like a rule that is enabled and finding nothing — and the review protocol tells the
+ * critics not to look there. Every rule is therefore run against a deliberate violation in
+ * `fixtures/` and required to fire.
  */
 import { writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -30,16 +25,15 @@ const REPO_ROOT = join(HERE, "..", "..");
 
 function lint(paths) {
   try {
-    // Run from the repo root with no -c so oxlint auto-discovers the real `.oxlintrc.json`: this
-    // must test the SHIPPED config — plugins, rule levels and options — not a copy of it.
-    // `--no-ignore` is needed because the fixtures are deliberately in `ignorePatterns`.
+    // No `-c`, run from the repo root: this must test the SHIPPED `.oxlintrc.json`, not a copy.
+    // `--no-ignore` because the fixtures are deliberately in `ignorePatterns`.
     return execFileSync("npx", ["oxlint", "--no-ignore", ...paths], {
       cwd: REPO_ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (err) {
-    // A non-zero exit is the expected case here — these files are meant to be errors.
+    // Non-zero exit is the expected case — these fixtures are meant to be errors.
     return `${err.stdout ?? ""}${err.stderr ?? ""}`;
   }
 }
@@ -62,10 +56,8 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-// The same argument applies to the custom checks in run.mjs, which are hand-written and so can
-// silently stop working (two of them already did — a self-referential haystack that made
-// stale-comment-ref unable to fire, and colour literals parsed as id selectors). Point them at
-// deliberate-violation fixtures and require every check to report.
+// The custom checks in run.mjs are hand-written and can silently stop firing, so they get the same
+// treatment: aimed at deliberate-violation fixtures, and every one required to report.
 const CUSTOM_CHECKS = ["stale-comment-ref", "dead-css-hook", "mirrored-constant"];
 // untracked-test-file is proved separately below — its oracle is git, not a committed fixture.
 
@@ -82,14 +74,12 @@ try {
 }
 
 // `untracked-test-file` cannot be proved by a committed fixture — its oracle is git, and a fixture
-// checked into the repo is by definition tracked. So it gets its own probe: create the exact thing
-// it exists to catch, require it to be caught, and remove it again. The finally is load-bearing;
-// leaving the probe behind would trip the very check being tested on the next run.
+// in the repo is by definition tracked. So it gets probes: create the exact thing it exists to
+// catch, require it to be caught, remove it. The `finally` is load-bearing; a leftover probe would
+// trip the very check being tested on the next run.
 //
-// TWO probes, in two places, because the check's first version scanned only `lib/test` and `app/test`
-// and the fourth recurrence of the hazard landed in `app/zz-scratch/` — outside both, so it was never
-// reported. A single in-a-test-directory probe passed happily the whole time. The second probe sits at
-// the repo root, where no test directory can be inferred, so the widened scan is what has to catch it.
+// TWO probes. The second sits at the repo root, where no test directory can be inferred, so it is
+// the whole-tree scan and not a directory list that has to catch it.
 const PROBES = [
   join(REPO_ROOT, "lib", "test", "__oracle_probe__.test.ts"),
   join(REPO_ROOT, "__oracle_probe_outside_test_dir__.test.ts"),
@@ -110,8 +100,8 @@ for (const probe of PROBES) {
   } finally {
     rmSync(probe, { force: true });
   }
-  // The check has to name THIS probe, not merely fire. Without the path assertion the second probe
-  // would pass on a report about the first, which is the hole being closed.
+  // Must name THIS probe, not merely fire: without the path assertion the second probe passes on a
+  // report about the first.
   const named = probeOutput.includes("untracked-test-file") && probeOutput.includes(basename(probe));
   if (!named) probeFailures.push({ probe, probeOutput });
 }

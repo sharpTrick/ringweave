@@ -1,25 +1,3 @@
-/**
- * The optimizer must never make a roster more broken than it found it.
- *
- * This is the invariant behind a real defect, not a hypothetical one. `aspl` is
- * averaged over REACHABLE pairs only, so splitting a disconnected graph further
- * LOWERS it; with a flat disconnection penalty both polish passes hill-climbed
- * into deeper fragmentation while the average separation they reported
- * "improved". A 16-person roster went from one group of 14 to five fragments and
- * reported its separation falling from 5.0 to 1.3.
- *
- * The guarantee now lives in the objective's shape — unreachable pairs are
- * charged above any achievable distance, so any fragmenting move strictly
- * increases energy and cannot be accepted by a strict-decrease optimizer. These
- * tests assert the property directly rather than the mechanism, so a future
- * rewrite of the objective is still held to it.
- *
- * Independently corroborated: a review lens built its own exhaustive probe over
- * randomly structured disconnected graphs (mixed paths, cycles and partial
- * cliques) and examined 432,954 fragmenting double-edge swaps without finding a
- * single one that lowers the energy. That is a far larger sample than fast-check
- * reaches here, and it was produced by something with no stake in the fix.
- */
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { Graph } from "../src/core/graph.js";
@@ -74,8 +52,6 @@ const scenario = fc.integer({ min: 6, max: 22 }).chain((n) =>
 
 describe("penalizedAspl", () => {
   it("leaves a connected graph's score exactly equal to its ASPL", () => {
-    // The early return, not arithmetic that happens to agree: every fixture in
-    // the repo is a connected case and none of them may move by even one bit.
     fc.assert(
       fc.property(scenario, (s) => {
         const g = graphOf(s.n, s.edges);
@@ -91,7 +67,6 @@ describe("penalizedAspl", () => {
       fc.property(scenario, (s) => {
         const g = graphOf(s.n, s.edges);
         const before = components(g);
-        // Remove one edge; keep only the draws where it actually splits something.
         const [u, v] = s.edges[0];
         const worse = g.copy();
         worse.removeEdge(u, v);
@@ -104,8 +79,8 @@ describe("penalizedAspl", () => {
   });
 
   it("scores every disconnected graph worse than every connected one", () => {
-    // The charged mean alone does not guarantee this — a clique plus one isolated
-    // vertex beats a sparse connected graph on it — which is why the flat term stays.
+    // The charged mean alone ranks a clique plus an isolate above a sparse connected graph, so
+    // this fixture is what pins the flat term.
     const connected = graphOf(6, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]);
     const almostComplete = graphOf(6, [
       [0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4], [2, 3], [2, 4], [3, 4],
@@ -116,8 +91,8 @@ describe("penalizedAspl", () => {
   });
 
   it("is finite for an edgeless graph rather than incomparable", () => {
-    // aspl is Infinity there (no reachable pairs), and an Infinity energy makes
-    // every candidate look equally good to an optimizer comparing energies.
+    // aspl is Infinity there (no reachable pairs), and an Infinity energy makes every candidate
+    // look equally good to an optimizer comparing energies.
     expect(Number.isFinite(penalizedAspl(allPairsSummary(new Graph(5)), 5))).toBe(true);
   });
 });
@@ -134,7 +109,7 @@ describe("polish never fragments the roster", () => {
     );
   });
 
-  it("holds in hill-climb mode too", () => {
+  it("leaves no more components than it started with in hill-climb mode too", () => {
     fc.assert(
       fc.property(scenario, (s) => {
         const g = graphOf(s.n, s.edges);
@@ -144,9 +119,7 @@ describe("polish never fragments the roster", () => {
     );
   });
 
-  it("holds on the recorded reproduction", () => {
-    // 12-cycle plus a disjoint 4-cycle. Before the fix, hill-climb took this to
-    // four components and reported an ASPL of 1.36.
+  it("keeps a 12-cycle plus a disjoint 4-cycle at no more than two components", () => {
     const edges: [number, number][] = [];
     for (let i = 0; i < 12; i++) edges.push([i, (i + 1) % 12]);
     for (let i = 0; i < 4; i++) edges.push([12 + i, 12 + ((i + 1) % 4)]);
@@ -163,8 +136,8 @@ describe("polishConstrained never fragments the roster", () => {
       fc.property(scenario, fc.integer({ min: 0, max: 50 }), (s, priorWeight) => {
         const g = graphOf(s.n, s.edges);
         const cons = new Constraints(s.n);
-        // Priors the current graph does NOT satisfy, so the prior term actively
-        // pushes for swaps — the case where a weight could buy fragmentation.
+        // Priors the graph does NOT satisfy, so the prior term actively pushes for swaps —
+        // without that, no weight could buy fragmentation and the property is trivial.
         for (let v = 0; v + 3 < s.n; v += 4) cons.addPrior(v, v + 3);
         const out = polishConstrained(g, cons, { seed: s.seed, iters: 400, priorWeight }).graph;
         expect(components(out)).toBeLessThanOrEqual(components(g));
@@ -172,8 +145,7 @@ describe("polishConstrained never fragments the roster", () => {
     );
   });
 
-  it("holds through the public constrained builder on the recorded reproduction", () => {
-    // The 16-person, k=2 instance that lost 14 people from one group down to 4.
+  it("leaves the constrained builder's largest group no smaller than generation produced", () => {
     const prohibited: [number, number][] = [
       [1, 2], [12, 15], [10, 13], [12, 13], [3, 10], [12, 14], [11, 14], [5, 11],
       [8, 13], [7, 10], [9, 15], [13, 15], [5, 6], [2, 12], [0, 9], [2, 13],
@@ -185,58 +157,40 @@ describe("polishConstrained never fragments the roster", () => {
     const polished = buildConstrainedBuddyGraph(16, 2, cons); // default options: polish is on
     const unpolished = buildConstrainedBuddyGraph(16, 2, cons, { polish: false });
 
-    // Polish may not take the roster backwards from what generation produced.
     expect(polished.report.largestComponentFraction).toBeGreaterThanOrEqual(
       unpolished.report.largestComponentFraction,
     );
-    // And the specific regression: it used to end at 0.25.
     expect(polished.report.largestComponentFraction).toBeGreaterThan(0.5);
   });
 });
 
 
-/**
- * Cost budgets. Both generators had an n-cap and no time bound, so the most
- * expensive input on each path sat just inside the gate.
- */
 describe("work budgets bound the default path", () => {
-  // ASSERTED ON THE GATE ITSELF, not on `result.polished`. These three used the flag as a proxy
-  // for "did auto-polish fire", which worked only while the flag meant "polish was called". It
-  // now means "the returned graph differs from the unpolished one" — a stricter and more useful
-  // claim, and a different one: at `polishIters: 1` a single iteration improves nothing, so the
-  // proxy reported false for a gate that had fired. `autoPolishEnabled` is the gate, it is
-  // exported precisely so consumers never re-derive it, and it is what these tests are about.
   it("keeps the polish gate exactly where it was at k=4, which is what the fixtures pin", () => {
     expect(autoPolishEnabled(120, 4)).toBe(true);
     expect(autoPolishEnabled(121, 4)).toBe(false);
   });
 
   it("turns polish off for a dense roster the n-cap waved through", () => {
-    // buildBuddyGraph(120, 12) ran for 33 s under the n-only gate, while
-    // buildBuddyGraph(121, 12) took 0.1 s — cost falling as the roster grew.
     expect(autoPolishEnabled(120, 12)).toBe(false);
   });
 
-  it("still honours an explicit polish request", () => {
-    // A heuristic must not override a direct instruction from the caller: the gate says no at
-    // (120, 12), and an explicit `polish: true` runs the pass anyway. Observed through the
-    // ITERATION count rather than `polished`, because "the pass ran" and "the pass changed
-    // something" are now different facts and this test is about the first.
+  it("still honours an explicit polish request the gate says no to", () => {
+    // Observed through the ITERATION count, not `polished`: "the pass ran" and "the pass changed
+    // something" are different facts and this test is about the first.
     expect(autoPolishEnabled(120, 12)).toBe(false);
     const { graph } = ringGreedy(120, 12, { mind: 5, repair: true });
     expect(polish(graph, { mode: "anneal", seed: 1, maxIters: 5 }).iters).toBeGreaterThan(0);
   });
 
   it("refuses an (n,k) that would run for tens of minutes", () => {
-    // (1000, 999) did not return within 22 minutes; (5000, 4) extrapolated to
-    // tens of minutes. Both cleared the memory-only n-cap.
     expect(() => buildBuddyGraph(1000, 999, { polish: false })).toThrow(/too large to generate/);
     expect(() => buildBuddyGraph(5000, 4, { polish: false })).toThrow(/too large to generate/);
   });
 
   it("still accepts the largest roster the app can ask for", () => {
-    // The app advertises up to 1000 people at up to 12 buddies. A budget that
-    // refused it would be a regression, not a fix.
+    // 1000 people at 12 buddies is what the app advertises, so a budget that refused it would be
+    // a regression rather than a fix.
     expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
     expect(greedyWork(1000, 4)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
   });
@@ -256,9 +210,6 @@ describe("work budgets bound the default path", () => {
 });
 
 describe("iteration budgets are validated before becoming loop bounds", () => {
-  // JSON has no Infinity literal, but JSON.parse('{"polishIters":1e999}') yields
-  // one — and the only other loop exit is "fewer than two edges", so a real graph
-  // meant neither polish pass ever returned.
   it("does not hang on a non-finite budget", () => {
     expect(JSON.parse('{"polishIters":1e999}').polishIters).toBe(Infinity);
     const r = buildBuddyGraph(30, 4, { polish: true, polishIters: Infinity });
@@ -284,30 +235,17 @@ describe("iteration budgets are validated before becoming loop bounds", () => {
 });
 
 
-/**
- * The budget must be AUTHORITATIVE, not advisory. Both cases below were found by
- * review against the first version of the fix above — the gate consulted the
- * budget only on the auto path, and the new iteration guard checked type but not
- * magnitude.
- */
 describe("MAX_POLISH_WORK cannot be stepped around", () => {
   const workOf = (n: number, k: number, iters: number) => polishWork(n, k, 0, iters);
 
-  // Honouring the request means actually running it, and running it costs one
-  // budget — so this needs a wall-clock allowance, like its sibling below.
+  // Honouring the request means running it, and running it costs one budget — hence the
+  // wall-clock allowance, here and in its sibling below.
   it("bounds an explicit polish request instead of honouring it unbounded", { timeout: 120_000 }, () => {
-    // `polish: true` at (120, 12) used to re-open the exact 33 s case the budget
-    // was introduced to close: one boolean, and the constant did not apply.
     const r = buildBuddyGraph(120, 12, { polish: true });
-    expect(r.polished).toBe(true); // the instruction is still honoured...
-    // ...but the work it may cost is capped. 20000 iterations would be 1.73e9.
+    expect(r.polished).toBe(true);
     expect(workOf(120, 12, 20000)).toBeGreaterThan(MAX_POLISH_WORK);
   });
 
-  // Any test where the clamp BINDS costs one full budget by definition — that is
-  // what the budget is — so this one gets a wall-clock allowance rather than the
-  // suite default. Rejecting Infinity while accepting 1e15 is a boundary one step
-  // to the left of the same defect, and only running it proves the wiring.
   it("clamps a large finite iteration count, not just a non-finite one", { timeout: 120_000 }, () => {
     const started = performance.now();
     const huge = buildBuddyGraph(120, 12, { polish: true, polishIters: 1e15 });
@@ -317,18 +255,14 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(huge.edges.length).toBeGreaterThan(0);
     // Bounded, not merely finite: 1e15 iterations would never have returned.
     expect(elapsed).toBeLessThan(90_000);
-    // And it is the SAME run as asking for exactly what the budget affords.
     const afforded = Math.floor(MAX_POLISH_WORK / polishWork(120, 12, 0, 1));
     expect(afforded).toBeLessThan(20000); // the clamp really does bind here
     expect(buildBuddyGraph(120, 12, { polish: true, polishIters: afforded }).edges).toEqual(huge.edges);
   });
 
   it("charges the n² term a sparse graph really costs", () => {
-    // The per-iteration cost is `allPairsSummary`, which is Theta(n*(n+m)): it
-    // allocates and fills an Int32Array(n) and runs an n-wide accumulation per
-    // source no matter how few edges exist. Modelling it as n*m under-charged
-    // sparse graphs by the entire n² term — a 3000-vertex graph with 4 edges was
-    // afforded the full 20,000 iterations, of which 2,000 alone took 67.6 s.
+    // Huge n with almost no edges on purpose: `allPairsSummary` is Theta(n(n+m)), so this is
+    // exactly where an n·m model under-charges by the whole n² term.
     const g = new Graph(3000);
     for (const [a, b] of [[0, 1], [2, 3], [4, 5], [6, 7]]) g.addEdge(a, b);
     const started = performance.now();
@@ -337,8 +271,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("leaves the auto path untouched, because the gate only admits what already fits", () => {
-    // The clamp is a no-op wherever auto-polish runs today: min(requested, afforded)
-    // is the requested value by construction.
     for (const [n, k] of [[30, 4], [60, 4], [120, 4]] as const) {
       const afforded = Math.floor(MAX_POLISH_WORK / polishWork(n, k, 0, 1));
       expect(afforded).toBeGreaterThanOrEqual(20000);
@@ -346,29 +278,21 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("never models an iteration as free, so the divisor is always positive", () => {
-    // The overhead term does double duty: it stops an edgeless graph from making
-    // the divisor zero (which would afford Infinity iterations), and it stops a
-    // tiny graph from being modelled as nearly free. Before it existed,
-    // buildBuddyGraph(3, 2, { polishIters: 1e9 }) ran for 35.7 SECONDS.
+    // A zero divisor would afford Infinity iterations, so the overhead term must survive both an
+    // edgeless graph and a tiny one.
     expect(polishWork(5, 0, 0, 1)).toBeGreaterThan(0);
     expect(polishWork(3, 2, 0, 1)).toBeGreaterThan(0);
     expect(() => buildConstrainedBuddyGraph(5, 0, new Constraints(5), { polish: true })).not.toThrow();
   });
 
   it("bounds a huge iteration request on a TINY graph, where the work model alone cannot", () => {
-    // The defect the absolute ceiling closes: as n·m falls the affordable
-    // iteration count rises without limit, and fixed per-iteration cost then
-    // dominates a number the model thinks is cheap.
     const started = performance.now();
     const r = buildBuddyGraph(3, 2, { polishIters: 1e9 });
-    expect(performance.now() - started).toBeLessThan(5_000); // was 35,700 ms
+    expect(performance.now() - started).toBeLessThan(5_000);
     expect(r.edges.length).toBeGreaterThan(0);
   });
 
   it("bounds the exported primitives, not just the wrappers around them", () => {
-    // `polish` and `polishConstrained` are public API. A clamp in
-    // buildBuddyGraph does not apply to a direct caller, and
-    // polish(ring(20), { maxIters: Infinity }) used to never return.
     const started = performance.now();
     const out = polish(ring(20), { mode: "hill", maxIters: Infinity });
     expect(performance.now() - started).toBeLessThan(20_000);
@@ -376,8 +300,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
 
     const cons = new Constraints(20);
     const started2 = performance.now();
-    // Sourced the way it actually arrives — JSON has no Infinity literal, but
-    // parsing an over-large exponent yields one.
+    // JSON has no Infinity literal, so an over-large exponent is how the value actually arrives.
     const fromJson = JSON.parse('{"iters":1e999}').iters as number;
     expect(fromJson).toBe(Infinity);
     expect(polishConstrained(ring(20), cons, { iters: fromJson }).graph.n).toBe(20);
@@ -385,33 +308,18 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("refuses a graph whose PRE-LOOP sweeps already blow the budget", { timeout: 60_000 }, () => {
-    // A work cap is not a size cap. Both polish passes pay two-to-three full
-    // Theta(n(n+m)) all-pairs sweeps plus two graph copies OUTSIDE the loop, and
-    // boundedPolishIterations cannot reach any of it — so the budget priced these
-    // calls at ZERO iterations and they still ran for 160 s and 48 s respectively.
-    //
-    // Asserted as a refusal rather than a duration: a timing bound would only say
-    // this machine was fast enough today, and the property is that the work is
-    // never attempted at all.
     const huge = ring(40000);
     expect(() => polish(huge, { maxIters: 0 })).toThrow(/too large to polish/);
     expect(() => polishConstrained(ring(30000), new Constraints(30000), { iters: 0 }).graph).toThrow(
       /too large to polish/,
     );
 
-    // And the cap must not have closed anything the loop would have accepted. The
-    // constrained path documents n=5000 as its ceiling, so that has to still pass.
+    // n=5000 is the constrained path's documented ceiling, so the cap must not have closed it.
     expect(() => checkPolishSize(5000, 10000, 0)).not.toThrow();
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
 
   it("reports `polished` only when the graph actually differs from an unpolished build", () => {
-    // THE PROPERTY, not a case table. The previous version of this test pinned the two
-    // zero-iteration cases and passed while `polished: true` was still being reported over an
-    // edge list byte-identical to `{ polish: false }` — because the flag was read off a COUNTER
-    // (`iters`, which counts loop PASSES: `polish(ring(3))` reports 19,990 of them over an
-    // untouched triangle, since no vertex-disjoint edge pair exists to propose). A test named
-    // for a property has to assert the property.
     // A SMALL iteration budget on purpose: it makes "the pass changed nothing" the common case,
     // which is the case under test, and keeps the sweep inside a normal test budget.
     let sawUnchanged = 0;
@@ -426,7 +334,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
         }
       }
     }
-    // ...and the same on the constrained tier, where a sibling flag gates priorsKeptFraction.
     for (let n = 4; n <= 20; n += 2) {
       const cons = new Constraints(n);
       for (let v = 0; v + 1 < n; v += 2) cons.addPrior(v, v + 1);
@@ -437,77 +344,54 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
         sawUnchanged++;
       }
     }
-    // The sweep must actually REACH the unchanged case, or it asserts nothing.
+    // Non-vacuity: the sweep must actually REACH the unchanged case, or it asserts nothing.
     expect(sawUnchanged).toBeGreaterThan(5);
   }, 60_000);
 
   it("reports `polished` from what the pass DID, not from the decision to call it", () => {
-    // `polished` was set at the call site, so it meant "I decided to run polish" rather than
-    // "polish ran". Two ways to reach a pass that does nothing, and neither needs an unusual
-    // option: `polishIters: 0` is an integer >= 0 and is honoured, and the loop breaks
-    // immediately on a graph with fewer than two edges. Both returned an edge list
-    // BYTE-IDENTICAL to `{ polish: false }` while reporting `polished: true` — and on the
-    // constrained tier they also published a `priorsKeptFraction`, which is a measurement of
-    // something that never happened. This is the open sibling of the correction recorded in
-    // polish.ts, which closed only the anneal-calibration route into the same state.
     const cons = new Constraints(60);
     for (let v = 0; v + 1 < 60; v += 2) cons.addPrior(v, v + 1);
 
     const off = buildConstrainedBuddyGraph(60, 4, cons, { polish: false });
     const zero = buildConstrainedBuddyGraph(60, 4, cons, { polish: true, polishIters: 0 });
-    expect(zero.edges).toEqual(off.edges); // the pass did nothing...
-    expect(zero.polished).toBe(false); // ...and no longer claims otherwise
+    expect(zero.edges).toEqual(off.edges);
+    expect(zero.polished).toBe(false);
     expect(zero.report.priorsKeptFraction).toBeNull();
 
-    // The same state with NO option at all: k=0 leaves an edgeless graph, so the loop's
-    // fewer-than-two-edges break fires on iteration one.
+    // k=0 leaves an edgeless graph, so the loop's fewer-than-two-edges break fires on iteration
+    // one — the same do-nothing state reached with no option at all.
     const edgeless = buildConstrainedBuddyGraph(12, 0, new Constraints(12));
     expect(edgeless.edges).toEqual([]);
     expect(edgeless.polished).toBe(false);
 
-    // And the fast tier, which had the identical defect one builder over.
     const fastOff = buildBuddyGraph(30, 4, { polish: false });
     const fastZero = buildBuddyGraph(30, 4, { polish: true, polishIters: 0 });
     expect(fastZero.edges).toEqual(fastOff.edges);
     expect(fastZero.polished).toBe(false);
 
-    // Not vacuous: a pass that really runs still reports true, on both tiers.
+    // Non-vacuity: a pass that really runs still reports true, on both tiers.
     const real = buildConstrainedBuddyGraph(60, 4, cons, { polish: true });
     expect(real.polished).toBe(true);
     expect(buildBuddyGraph(30, 4, { polish: true }).polished).toBe(true);
   });
 
   it("never lets an ITERATION option ask for more work than omitting it", () => {
-    // The enforcement point's own comment claimed `polishIters` is "an option that can only ask
-    // for LESS work than the default — never more", and concluded from that "a knob that can only
-    // reduce cost cannot be turned into a hang". It bounded the request by ONE constant equal to
-    // the UNCONSTRAINED default, so on the constrained path — default 8000 — a caller-supplied
-    // 20000 bought 2.5x the iterations, measured end to end as 11.71 s -> 18.98 s. Not a hang, but
-    // the invariant the ceiling existed to establish was false, and one number cannot make it true
-    // for two defaults.
+    // Both defaults, because one constant cannot bound a request made against two of them.
     for (const fallback of [8_000, 20_000]) {
       for (const [n, m] of [[30, 60], [60, 120], [120, 240], [1000, 6000]] as const) {
         const omitted = boundedPolishIterations(n, m, 0, undefined, fallback);
         for (const asked of [0, 1, 999, 8_000, 20_000, 1e6, 2 ** 31]) {
           expect(boundedPolishIterations(n, m, 0, asked, fallback)).toBeLessThanOrEqual(omitted);
         }
-        // ...and it is not vacuous: a SMALLER request is still honoured, which is the knob's job.
+        // Non-vacuity: a SMALLER request is still honoured, which is the knob's job.
         expect(boundedPolishIterations(n, m, 0, 10, fallback)).toBe(Math.min(10, omitted));
       }
     }
   });
 
   it("never admits a polish call that cannot afford a single iteration", () => {
-    // The two gates split one budget: the size check charges the fixed all-pairs sweeps and the
-    // iteration count is derived from what is LEFT. That stopped them summing past the constant
-    // they both cite, but nothing asked whether anything remained — so a band existed where the
-    // sweeps fit and the loop got zero, and the call was accepted, paid three sweeps and two
-    // graph copies, and returned its input byte-for-byte. Measured: `polish(ring(11000))` spent
-    // 6.68 s to report `iters: 0`, and `polishConstrained`'s return value has no iteration count
-    // at all, so nothing in it distinguishes that from a pass that worked.
-    //
-    // Asserted as the PROPERTY over the whole accept-set, not at the two n values that happen to
-    // straddle the band: for every shape the size gate admits, the loop must afford >= 1.
+    // Over the whole accept-set, not at the two n values that happen to straddle the band: for
+    // every shape the size gate admits, the loop must afford >= 1.
     for (let n = 200; n <= 14_000; n += 137) {
       for (const m of [n, 2 * n, (n * 3) / 2]) {
         let admitted = true;
@@ -521,41 +405,27 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
         }
       }
     }
-    // And the band itself is now refused rather than run: ring(11000) is n·(n+m) = 2.42e8, whose
-    // fixed sweeps (7.26e8) fit the 8.65e8 budget with less than one iteration left over.
+    // ring(11000) is the shape whose fixed sweeps fit the budget with less than one iteration
+    // left over — the band itself.
     expect(() => polish(ring(11_000), { maxIters: 20_000 })).toThrow(/leaving nothing for the loop/);
-    // ...while the shape just below it still runs, so this did not quietly shrink the accept-set
-    // beyond the calls that could not have done anything.
+    // Non-vacuity: the shape just below it still runs, so the accept-set did not quietly shrink.
     expect(() => polish(ring(9500), { maxIters: 1 })).not.toThrow();
   });
 
   it("charges the FIXED sweeps too, so the two gates cannot sum past the budget", () => {
-    // checkPolishSize and boundedPolishIterations each measured against the WHOLE budget,
-    // so a graph that just fit the size gate was then granted a full budget of loop
-    // iterations on top of its fixed sweeps — the two summed to roughly twice the constant
-    // they both cite. The property is that the TOTAL is what is bounded.
     const sweep = (n: number, m: number) => n * (n + m);
-    // Near the size boundary the loop allowance must collapse rather than reset.
     const bigN = 16000;
     const bigM = bigN;
     if (sweep(bigN, bigM) * 3 <= MAX_POLISH_WORK) {
       expect(boundedPolishIterations(bigN, bigM, 0, 20_000, 20_000)).toBe(0);
     }
-    // And a small roster is untouched — the fix must not quietly shrink normal budgets.
+    // Non-vacuity: a small roster is untouched, so normal budgets did not quietly shrink.
     expect(boundedPolishIterations(20, 40, 0, 20_000, 20_000)).toBe(20_000);
   });
 
   it("charges the PRIOR probes, the third per-iteration cost centre", { timeout: 120_000 }, () => {
-    // Same class as the prohibited-pair dimension `constrainedWork` was missing: the estimator
-    // was (n, m)-only while `constrainedMeasure` re-counts every prior pair on every measurement,
-    // and `buildConstrainedBuddyGraph` turns that on by ITSELF — it resolves `priorWeight` to the
-    // default whenever any prior exists. Measured at n=268, k=1 (the densest shape the auto-polish
-    // gate admits, which is why it is the shape here): 3.99 s with no priors, 17.58 s with all
-    // 35,778 pairs as priors, a 4.4x overrun of a budget that returned no refusal.
-    //
-    // Stated as the MONOTONICITY invariant rather than a wall-clock threshold, because the
-    // threshold would be a machine measurement and the invariant is what the budget promises:
-    // adding priors can only move a configuration toward refusal, never away from it.
+    // n=268, k=1 is the densest shape the auto-polish gate admits, which is why it is the shape
+    // here; 35,778 is every pair of that roster.
     const n = 268;
     for (const priors of [0, 1_000, 9_034, 35_778]) {
       expect(polishWork(n, 1, priors, 8_000)).toBeGreaterThanOrEqual(polishWork(n, 1, 0, 8_000));
@@ -568,15 +438,12 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(boundedPolishIterations(n, 134, 35_778, 8_000, 8_000)).toBeLessThan(
       boundedPolishIterations(n, 134, 0, 8_000, 8_000),
     );
-    // Charged only when the priors are WEIGHED. At weight 0 `constrainedMeasure` never builds the
-    // penalty and the probes never happen, so a configuration that costs nothing must not be
-    // refused — otherwise the fix for an overrun becomes a false refusal.
+    // At weight 0 the penalty is never built and the probes never happen, so a configuration that
+    // costs nothing must not be refused — otherwise the fix for an overrun becomes a false refusal.
     const cons = new Constraints(n);
     for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) cons.addPrior(a, b);
     const off = buildConstrainedBuddyGraph(n, 1, cons, { priorWeight: 0 });
     expect(off.report.refusals).toEqual([]);
-    // ...and with the weight on, the pass is BOUNDED rather than skipped when polish is asked for
-    // explicitly: the clamp cuts the iteration count instead of the gate cutting the pass.
     const started = performance.now();
     const on = buildConstrainedBuddyGraph(n, 1, cons, { polish: true });
     expect(on.report.refusals).toEqual([]);
@@ -584,27 +451,17 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("keeps the work model non-zero, so the guard built on it is a guard", () => {
-    // The correction that made greedyWork shape-correct introduced `edgesAdded = n·k/2 − n`,
-    // which is exactly 0 for every k <= 2 at every n. `repairDegrees`'s budget check is
-    // `greedyWork(n,k) > MAX_GREEDY_WORK`, so it became `0 > 1.5e10` — no check at all, for a
-    // roster of any size up to MAX_ROSTER. A fix for one unbounded path opened another.
+    // k <= 2 is where an edges-added model is exactly zero, so it is where the guard would vanish.
     expect(greedyWork(1_000_000, 2)).toBeGreaterThan(MAX_GREEDY_WORK);
     expect(greedyWork(1_000_000, 1)).toBeGreaterThan(MAX_GREEDY_WORK);
-    // And the floor must not have moved the shipping accept-set.
+    // Non-vacuity: the floor must not have moved the shipping accept-set.
     expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
     expect(greedyWork(1000, 2)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
   });
 
   it("bounds repair by its MEASURED cost, in both the single-pass and multi-pass regimes", { timeout: 120_000 }, () => {
-    // Three attempts, and the first two failed in opposite directions — which is the point of
-    // asserting the accept-set from BOTH sides. `greedyWork` is built from edges ADDED; repair's
-    // cost is driven by the degree DEFICIT it closes, so expressing one in the other's units was
-    // wrong however it was scaled. Measured: n=3000/k=4 is 0.25 s, n=20000/k=2 is 10.7 s, and
-    // n=70000/k=2 runs past two minutes.
-    // MULTI-PASS shapes, which is the whole point. The previous version of this test used only
-    // `deficitOf = n*k` — an edgeless graph — and every edgeless graph exits after ONE pass
-    // because nothing is reachable, so it could not see the regime the budget exists to bound.
-    // Review found a 239 s call the test called safe. These shapes make many passes.
+    // An edgeless graph exits after ONE pass, nothing being reachable, so these shapes exist to
+    // reach the multi-pass regime the budget is there to bound.
     const triCycle = (n: number) => {
       const g = new Graph(n);
       const half = Math.floor(n / 2);
@@ -616,13 +473,8 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
       for (let i = half; i < n; i++) g.addEdge(i, i + 1 < n ? i + 1 : half);
       return g;
     };
-    // A dense core with a sparse fringe: m is DECOUPLED from n·k, which is the regime the
-    // counter's first unit price could not see. It charged a sweep `n + n·k` — the cost of a
-    // k-regular graph — while `bfsDistances` walks `n + 2m`. Here that is 5600 charged against
-    // 1.44e6 real, a 257x undercharge, and at review's larger n=6000 version the call ran 32.8 s
-    // having spent 9% of its budget. Charging `n + 2m` is what makes this shape reachable by the
-    // budget at all; no size cap is needed alongside it, because the charge now precedes the
-    // sweep it prices.
+    // A dense core with a sparse fringe: m is DECOUPLED from n·k, the regime a sweep priced at
+    // `n + n·k` — the cost of a k-regular graph — cannot see, while `bfsDistances` walks `n + 2m`.
     const cliqueWithLeaves = (core: number, leaves: number) => {
       const g = new Graph(core + leaves);
       for (let i = 0; i < core; i++) for (let j = i + 1; j < core; j++) g.addEdge(i, j);
@@ -630,14 +482,12 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
       return g;
     };
     expect(() => repairDegrees(cliqueWithLeaves(1200, 1600), 2)).toThrow(/too large to repair/);
-    // The scan-bound shape, and the third cost centre. An edgeless graph gives the BFS nothing to
-    // walk, so `n + 2m` prices 20,000 sweeps at 0.33 s — but each sweep still scans all 20,000
-    // candidates with a `hasEdge` probe apiece, and the call takes 11 s. Charging the sweeps'
-    // traversal alone let this one back through after the sweep price was corrected.
+    // Scan-bound, the third cost centre: an edgeless graph gives the BFS nothing to walk, but
+    // each sweep still probes all n candidates, so pricing the traversal alone lets it through.
     expect(() => repairDegrees(new Graph(20_000), 2)).toThrow(/too large to repair/);
     expect(() => repairDegrees(ring(36_000), 4)).toThrow(/too large to repair/);
     expect(() => repairDegrees(triCycle(2400), 4)).toThrow(/too large to repair/);
-    // ...and the cheap shapes still run, in both regimes.
+    // Non-vacuity: the cheap shapes still run, in both regimes.
     expect(() => repairDegrees(ring(4000), 4)).not.toThrow();
     expect(() => repairDegrees(triCycle(600), 4)).not.toThrow();
     // A graph with NO deficit costs one scan however large it is.

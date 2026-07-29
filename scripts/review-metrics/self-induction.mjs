@@ -1,28 +1,18 @@
 #!/usr/bin/env node
 /**
- * E2, measured on Sextant's OWN loop: what fraction of this run's findings point at
- * code this run's earlier fixes wrote?
+ * E2 on Sextant's OWN loop: what fraction of this run's findings point at code this run's earlier
+ * fixes wrote? The same instrument as `blame-attribution.mjs`, with the same published error bar,
+ * pointed forward instead of back.
  *
- * The same oracle as `blame-attribution.mjs` (which runs it backwards over E1),
- * pointed at Sextant instead. For each finding, `git blame` the cited line in the
- * tree the critics actually reviewed, and ask whether the commit that wrote it is
- * one of this loop's earlier fix commits. No agent judges anything; `git` answers.
+ * Three things it does that a naive rate does not, all mandatory:
  *
- * Three things this does differently from a naive rate, all of them mandatory:
- *
- *   - It blames the tree the critics SAW — the fix commit's first parent — not
- *     HEAD. Blaming HEAD would attribute a line to the fix that was made in
- *     response to the finding, which reverses cause and effect.
- *   - It reports LIFT over a base rate, not a raw fraction. The base rate is the
- *     share of non-test product lines in the reviewed tree that this loop's fixes
- *     authored; a finding landing there by chance is not self-induction.
- *   - It has an UNKNOWN bucket. A finding with no line, or one whose cited line is
- *     blank/comment/brace-only, is not evidence either way. Blame-based attribution
- *     is documented as sub-optimal for non-functional findings (Quach et al.), and
- *     three of five lenses file mostly those.
- *
- * Fix commits are discovered from git, not from a hand-maintained list: the loop's
- * commits are titled "Review round N (<target>)".
+ *   - blames the tree the critics SAW (the fix commit's first parent), not HEAD; blaming HEAD
+ *     attributes a line to the fix made in RESPONSE to the finding, reversing cause and effect;
+ *   - reports LIFT over a base rate, not a raw fraction — a finding landing on fix-authored code by
+ *     chance is not self-induction;
+ *   - has an UNKNOWN bucket: a finding with no line, or one citing a blank/comment/brace-only line,
+ *     is not evidence either way, and blame is weakest exactly on the non-functional findings that
+ *     dominate here.
  *
  * Usage: node scripts/review-metrics/self-induction.mjs [--json]
  */
@@ -43,7 +33,7 @@ const tryGit = (...a) => {
   }
 };
 
-/** Blame configurations, reported as a sensitivity table rather than one number. */
+/** Reported as a sensitivity table rather than as one number. */
 const CONFIGS = [
   { name: "bare", flags: [] },
   { name: "-w", flags: ["-w"] },
@@ -51,7 +41,7 @@ const CONFIGS = [
   { name: "-w -M -CCC", flags: ["-w", "-M", "-CCC"] },
 ];
 
-/** A cited line carrying no logic is not evidence of anything (the AG-SZZ filter). */
+/** A cited line carrying no logic is not evidence of anything. */
 const NOISE = /^\s*(\/\/|\/\*|\*|\}|\{|\)|$)/;
 
 function blameLine(rev, file, line, flags) {
@@ -64,18 +54,9 @@ function blameLine(rev, file, line, flags) {
 
 // --- this loop's fix commits, discovered from git -------------------------------
 const log = git("log", "--format=%H%x09%s", "HEAD");
-/**
- * THREE subject shapes, because the run's own commit style drifted and pretending it did not is
- * how this instrument silently lost 34 of its 40 fix commits. It matched only the first shape, so
- * every finding from round 6 onward blamed to a commit it did not recognise as a fix and landed in
- * `unknown` — an oracle reporting 23.3% off six rounds of a forty-round loop. The regexes are
- * ugly; a regex that matches what the history actually says beats a tidy one that matches what it
- * ought to have said. Every shape is asserted against the real log by the coverage check below.
- *
- *   "Review round 5 (lib/src): ..."       rounds lib 1-5, app 1
- *   "lib round 19: ..." / "app round 20"  one target, most of the run
- *   "Rounds lib-13 and app-11: ..."       two targets closed in one commit ("Review rounds …" too)
- */
+/** Three subject shapes, because the run's own commit style drifted. A shape these regexes miss
+ *  routes that round's findings to `unknown`; the coverage check below asserts each against the
+ *  real log rather than trusting a tidier pattern. */
 const fixCommits = [];
 const addFix = (sha, round, target, subject) => fixCommits.push({ sha, round, target, subject });
 for (const line of log.split("\n")) {
@@ -96,7 +77,7 @@ for (const line of log.split("\n")) {
     addFix(sha, Number(m[4]), `${m[3]}/src`, subject);
   }
 }
-fixCommits.reverse(); // oldest first
+fixCommits.reverse();
 
 if (fixCommits.length === 0) {
   console.error("self-induction: no fix commits found (expected subjects like \"lib round 7: …\")");
@@ -118,12 +99,8 @@ if (!existsSync(findingsPath)) {
 }
 const findings = JSON.parse(readFileSync(findingsPath, "utf8"));
 
-/**
- * COVERAGE, checked rather than assumed. A round whose fix commit this script cannot find has all
- * of its findings silently routed to `unknown`, which reads as caution and is actually blindness —
- * the failure that made the first run of this report quote a rate off six of forty rounds. An
- * unmapped round is printed, not tolerated in silence.
- */
+/** Coverage, checked rather than assumed: a round whose fix commit this cannot find has all of its
+ *  findings silently routed to `unknown`, which reads as caution and is blindness. */
 const roundsInData = new Set(findings.map((f) => `${f.target}#${f.round}`));
 const roundsMapped = new Set(fixCommits.map((c) => `${c.target}#${c.round}`));
 const unmapped = [...roundsInData].filter((r) => !roundsMapped.has(r)).sort();

@@ -12,13 +12,9 @@ interface Props {
 const fmt1 = (x: number | null): string => (x == null ? "—" : x.toFixed(1));
 const fmtInt = (x: number | null): string => (x == null ? "—" : String(x));
 
-/** F5: plain-language quality readout — avg hops, max hops, and a connection-quality
-    score from the core's Moore gap. Numbers come straight from the GraphView metrics.
-    A disconnected import (some people in separate groups) is shown honestly, not as
-    "everyone's well-linked". */
 export default function QualityPanel({ view, onExport, onImport }: Props) {
   const m = view.metrics;
-  const q = qualityPercent(m); // same rounded value the caption thresholds on
+  const q = qualityPercent(m);
   const rules = constraintSummary(view);
   const shortfall = targetShortfall(view);
   const separation = separationShortfall(view);
@@ -45,29 +41,16 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
         <span className="l">{connectionSummary(m)}</span>
       </div>
       {shortfall && (
-        // Stated plainly, next to the gauge that reads 100. The gauge is not wrong — the graph
-        // IS optimal for the degree it delivered — but "optimal" and "what you asked for" are
-        // different claims, and only one of them was on screen.
         <div className="rules-line">
-          {/* Worded about the GRAPH, not about the roster or the request. `targetShortfall` cannot
-              tell a generated view from an imported one, and an imported edge set no generator
-              ever built was being blamed on "this roster" — a limit that came from the file.
-              Describing what is true of the graph in front of the user is accurate on both
-              paths, and needed no provenance flag to get there. */}
-          {/* `degreeLabel`, not `degreeMax` — the SAME seam the rail and the connection caption
-              use. Wording this off degreeMax asserted a count at least one person does not have
-              whenever the graph is not regular, and disagreed with the two panels beside it. The
-              caption had exactly this defect fixed one round earlier; this line was added in that
-              same commit and reintroduced it. */}
+          {/* Worded about the GRAPH: `targetShortfall` cannot tell a generated view from an
+              imported one, so blaming "this roster" blames a limit that came from a file.
+              `buddiesLabel`, not `degreeMax`: on an irregular graph `degreeMax` asserts a count
+              at least one person does not have. */}
           Each person has {buddiesLabel(view.metrics)}, not the{" "}
           {shortfall.asked} in Settings.
         </div>
       )}
       {separation && (
-        // The same disclosure as the buddy-count line above, in the same words and the same
-        // place, because it is the same defect: a Settings value shown as if it were delivered.
-        // Worded about the GRAPH for the same reason too — an imported graph has no request
-        // behind it, and the sentence is still true of what is on screen.
         <div className="rules-line">
           Buddies are {separation.got} {separation.got === 1 ? "step" : "steps"} apart, not the{" "}
           {separation.asked} in Settings.

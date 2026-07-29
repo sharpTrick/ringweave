@@ -1,28 +1,17 @@
 /**
- * Did the review loop find its own output? Measured with git rather than judgement.
+ * Did the review loop find its own output? For each finding, `git blame` answers whether the line
+ * it cites was written by an earlier round of the same loop.
  *
- * E1's headline "66.7% self-induced" was a hand-label, invented post-hoc and applied by the same
- * agent that had authored the fixes being judged. Its own corrections section calls it an upper
- * bound rather than a measurement and says the honest number needs blind coding. This replaces the
- * judgement with an oracle: for each finding, ask `git blame` whether the line it cites was written
- * by an earlier round of the same loop.
+ * This is an INSTRUMENT WITH A PUBLISHED ERROR BAR, not ground truth: no blame-based attribution
+ * has been pushed past F1≈0.7. So it reports three things, none of them optional:
  *
- * This is SZZ (Śliwerski, Zimmermann & Zeller, MSR 2005) with the hard parts removed — we already
- * know the fix commits and the critic hands us the line, so only the blame step remains. Plain
- * `git blame -L n,n` is R-SZZ, the highest-precision variant measured (P≈0.73 in Rosa et al.'s
- * developer-informed evaluation), but no blame-based attribution has been pushed past F1≈0.7. So
- * this is an instrument with an error bar, not ground truth, and it reports accordingly:
- *
- *   - a SENSITIVITY TABLE across blame configurations, because the choice moves published precision
- *     from 0.42 to 0.73 and we should show how much it moves ours;
- *   - an explicit UNKNOWN bucket. This matters more than it sounds. SZZ runs backwards and goes
- *     blind on addition-only fixes; we run FORWARD from a line that exists, so we always get an
- *     answer — including for "missing guard / missing bound" findings where no line is wrong and
- *     blame merely names whoever wrote the neighbourhood. An oracle that can never say "I can't
- *     tell" is not more rigorous than a hand label, just differently overconfident;
- *   - LIFT over the base rate, not the raw fraction. If ~22% of all product lines were written by
- *     fix commits, then ~22% of randomly-located findings land on fix-authored code by chance. The
- *     raw percentage is meaningless without that denominator.
+ *   - a SENSITIVITY TABLE across blame configurations, since the choice moves published precision
+ *     substantially and should be shown moving ours;
+ *   - an explicit UNKNOWN bucket, for findings where no line is wrong and blame merely names
+ *     whoever wrote the neighbourhood. An oracle that can never say "I can't tell" is not more
+ *     rigorous than a hand label, just differently overconfident;
+ *   - LIFT over the base rate. The raw fraction is not the claim: whatever share of product lines
+ *     fix commits wrote is the share randomly-located findings land on by chance.
  *
  * Usage:  node scripts/review-metrics/blame-attribution.mjs [--json]
  */
@@ -47,23 +36,18 @@ const tryGit = (...a) => {
 const manifest = JSON.parse(readFileSync(join(SEXTANT, "e1-commits.json"), "utf8"));
 const findings = JSON.parse(readFileSync(join(OUROBOROS, "findings_full.json"), "utf8"));
 
-/** Fix commits by round label. Round N's fix commit is titled "M2 review round N". */
 const fixByRound = new Map(manifest.fixCommits.map((c) => [String(c.round), c.sha]));
 const fixShas = new Set(manifest.fixCommits.map((c) => c.sha));
 const OUTLIER = manifest.outlier?.sha;
 
-/**
- * E1's dataset mixes relative (`app/src/io/importGraph.ts`) and absolute
- * (`/home/user/ringweave/app/src/model.ts`) paths — a known inconsistency. Normalize before use, or
- * every absolute-path finding silently becomes unknown.
- */
+/** E1's dataset mixes relative and absolute paths; without normalizing, every absolute-path finding
+ *  silently becomes `unknown`. */
 function normalizePath(p) {
   if (!p) return null;
   const cleaned = p.replace(/^\/home\/[^/]+\/[^/]+\//, "").replace(/^\.\//, "");
   return cleaned.startsWith("lib/") || cleaned.startsWith("app/") ? cleaned : null;
 }
 
-/** Blame configurations, weakest to strongest mitigation. */
 const CONFIGS = [
   { name: "bare", flags: [] },
   { name: "-w", flags: ["-w"] },
@@ -71,7 +55,7 @@ const CONFIGS = [
   { name: "-w -M -CCC", flags: ["-w", "-M", "-CCC"] },
 ];
 
-/** A line that is blank, a lone brace, or comment-only carries no attribution signal (AG-SZZ). */
+/** A blank, brace-only or comment-only line carries no attribution signal. */
 function isUninformative(text) {
   const t = (text ?? "").trim();
   return t === "" || /^[{}[\]();,]+$/.test(t) || t.startsWith("//") || t.startsWith("*") || t.startsWith("/*");
@@ -127,13 +111,9 @@ for (const cfg of CONFIGS) {
   let preExisting = 0;
   let unknown = 0;
   const unknownReasons = {};
-  // Split by severity as well as pooled. E1 filed 79 suggestions against 13
-  // blocking findings, so a pooled rate is necessarily suggestion-dominated —
-  // comparing it to another loop's pooled rate can compare a mostly-blocking
-  // number against a mostly-suggestion one. Added when Sextant's own oracle showed
-  // its self-induction was 55.6% among blocking findings and 15.4% among
-  // suggestions; the same cut had to exist on this side for the comparison to mean
-  // anything.
+  // Split by severity as well as pooled: this corpus is suggestion-dominated, so comparing its
+  // pooled rate with another loop's can compare a mostly-blocking number against a
+  // mostly-suggestion one.
   const bySeverity = {};
   const perFinding = [];
 
@@ -150,9 +130,8 @@ for (const cfg of CONFIGS) {
       continue;
     }
     if (f.line == null) {
-      // ~Half of E1's findings carry no line. Blaming the whole file would attribute a finding to
-      // whoever last touched anything in it, which is not what "this finding targets fix-authored
-      // code" means. Honest answer: unknown.
+      // Blaming the whole file would attribute the finding to whoever last touched anything in it,
+      // which is not the claim being made. Honest answer: unknown.
       bump("no-line-recorded");
       continue;
     }
@@ -160,8 +139,8 @@ for (const cfg of CONFIGS) {
       bump("round-not-in-manifest");
       continue;
     }
-    // Round N reviewed the tree as it stood BEFORE round N's fix, i.e. that commit's parent. Any
-    // fix commit appearing in the blame is therefore necessarily from an earlier round.
+    // Round N reviewed that commit's PARENT, so any fix commit in the blame is necessarily from an
+    // earlier round — a fix made in response to a finding cannot be counted as its cause.
     const rev = `${fixSha}^`;
     const b = blameLine(rev, file, f.line, cfg.flags);
     if (!b) {
@@ -185,7 +164,6 @@ for (const cfg of CONFIGS) {
   }
 
   const classified = selfInduced + preExisting;
-  // Base rate measured at the last reviewed revision, under the same blame configuration.
   const lastRev = `${fixByRound.get("21")}^`;
   const base = baseRateAt(lastRev, cfg.flags, cfg.name);
   const rate = classified === 0 ? 0 : selfInduced / classified;
@@ -219,7 +197,6 @@ const out = {
   outlierReportedSeparately: OUTLIER?.slice(0, 7) ?? null,
   totalFindings: findings.length,
   primaryConfig: "-w -M -C",
-  // Strip the bulky per-finding rows from the sensitivity table; they are kept once, under `primary`.
   sensitivity: results.map(({ perFinding: _perFinding, ...r }) => r),
   primary,
 };
