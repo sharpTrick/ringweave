@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { viewFromResult, type GraphView, type Settings } from "../model";
 import { autoPolishEnabled } from "ringweave";
-import { splitPairs, type ConstraintPair } from "../constraints";
+import { splitPairs, type ConstraintPair, type NamedPair } from "../constraints";
 import { isConstrainedRequest } from "../worker/protocol";
 import { useGenerationWorker } from "./useGenerationWorker";
 
@@ -40,6 +40,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     names: string[];
     settings: Settings;
     constraints: ConstraintPair[];
+    rows: NamedPair[];
     reroll: boolean;
   } | null>(null);
   // consumed: the last worker result we've already turned into a view. Guards against a
@@ -55,6 +56,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
         pending.current.names,
         pending.current.settings,
         pending.current.constraints,
+        pending.current.rows,
         gen.result,
       );
       const cur = viewRef.current;
@@ -81,6 +83,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
           ...cur,
           settings: next.settings,
           constraints: next.constraints,
+          rows: next.rows,
           report: next.report,
         });
         if (wasReroll) onIdenticalRerollRef.current?.(cur);
@@ -94,6 +97,8 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     names: string[],
     settings: Settings,
     constraints: ConstraintPair[],
+    /** The rules AS TYPED — see `GraphView.rows`. Carried so an adopted view owns its own rows. */
+    rows: NamedPair[],
     opts?: { reroll?: boolean },
   ) => {
     // `pending.settings` is filled in BELOW, after the polish downgrade, not here — see there.
@@ -127,6 +132,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
       names,
       settings: { ...settings, polish },
       constraints,
+      rows,
       reroll: opts?.reroll ?? false,
     };
     genGenerate({

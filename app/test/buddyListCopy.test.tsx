@@ -22,7 +22,7 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
   it("prefixes a name starting with '=' so a pasted cell isn't a live formula", async () => {
     // A hostile-but-valid imported name: non-empty, unique, no comma/newline -> passes import.
     const roster = ['=HYPERLINK("http://evil","x")', "Bob", "Cara", "Dana"];
-    const view = viewFromResult(roster, DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
+    const view = viewFromResult(roster, DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
 
     render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));
@@ -61,7 +61,7 @@ describe("a repeated Copy is announced again, not silently", () => {
     // Asserted by WATCHING the region rather than by reading the final markup, because the final
     // markup is identical either way — which is how this survived fifteen rounds, and which is
     // the lesson from the round-12 "fix" that could not be observed to have worked.
-    const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
+    const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
     const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
     const seen: string[] = [];
     const observer = new MutationObserver(() => {
@@ -97,7 +97,7 @@ describe("a newer confirmation is not cut short by an older one's timer", () => 
     // confirmations and the second one did not.
     vi.useFakeTimers();
     try {
-      const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
+      const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
       const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
       const ui = within(container);
       const label = () => (container.querySelector(".chipbtn") as HTMLElement).textContent;
@@ -127,5 +127,25 @@ describe("a newer confirmation is not cut short by an older one's timer", () => 
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("a copy that fails says so", () => {
+  it("announces the failure and names the way out", async () => {
+    // `copyText` resolves false on any clipboard-write rejection — insecure context, permission
+    // denied, no Clipboard API, focus not in the document — and only the success branch did
+    // anything: no label change, no live-region text, no toast. A screen-reader user pressing
+    // Copy in that state heard nothing at all, and had no way to learn CSV exists.
+    copyText.mockResolvedValueOnce(false);
+    const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
+    const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
+    const ui = within(container);
+    fireEvent.click(ui.getByRole("button", { name: /^copy$/i }));
+    await waitFor(() =>
+      expect(container.querySelector(".sr-live")?.textContent).toMatch(/couldn't copy/i),
+    );
+    expect(container.querySelector(".sr-live")?.textContent).toMatch(/CSV/);
+    // The label does NOT claim success.
+    expect((container.querySelector(".chipbtn") as HTMLElement).textContent).toBe("Copy");
   });
 });

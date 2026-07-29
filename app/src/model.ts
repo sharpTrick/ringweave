@@ -4,7 +4,7 @@ import {
   DEFAULT_MIN_SEPARATION,
   type ConstraintReport,
 } from "ringweave";
-import type { ConstraintPair } from "./constraints";
+import type { ConstraintPair, NamedPair } from "./constraints";
 import type { GraphResult } from "./worker/protocol";
 import { clamp, clampList } from "./io/clamp";
 
@@ -433,6 +433,19 @@ export interface GraphView {
    */
   constraints: ConstraintPair[];
   /**
+   * The rules AS TYPED, name-keyed, that were submitted with this generation.
+   *
+   * `constraints` is what survived resolution — index pairs — so it is not a substitute: a row
+   * naming somebody not in the roster, a half-typed row and a duplicate all resolve to nothing
+   * and would be silently deleted by rebuilding rows from indices, which the editor contracts
+   * never to do. They travel WITH the view because they describe one generation together with
+   * `names` and `settings`, and three separately-written copies of "what was dispatched" is a
+   * defect this loop has now closed three times: the seed drift (round 13), the roster the
+   * refusal was worded from (round 15), and these rows (round 20). The third fix is the one that
+   * removes the copy rather than adding another writer to it.
+   */
+  rows: NamedPair[];
+  /**
    * How the rules turned out, or null when there were none to report on.
    *
    * Also null for an IMPORTED constrained graph: import rehydrates edges rather
@@ -456,6 +469,7 @@ export function viewFromResult(
   names: string[],
   settings: Settings,
   constraints: ConstraintPair[],
+  rows: NamedPair[],
   r: GraphResult,
 ): GraphView {
   return {
@@ -464,6 +478,7 @@ export function viewFromResult(
     buddies: r.buddies,
     settings,
     constraints,
+    rows,
     report: r.report,
     metrics: assembleMetrics(names.length, {
       aspl: r.aspl,

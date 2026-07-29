@@ -21,7 +21,7 @@ import { useEscape } from "./state/useEscape";
 import { useFocusRescue } from "./state/useFocusRescue";
 import { usePathFinder } from "./state/usePathFinder";
 import { describeReasons } from "./io/constraintMessages";
-import { toNamedPairs, type ConstraintPair, type NamedPair } from "./constraints";
+import { type ConstraintPair, type NamedPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
@@ -52,19 +52,27 @@ export default function App() {
   // Cleared whenever the dialog is dismissed or a generation is dispatched, so a stale reason
   // never outlives the attempt it describes.
   const [reopenReason, setReopenReason] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [names, setNames] = useState<string[]>([]);
-  // The rules the EDITOR is holding, as the user typed them. There is deliberately no sibling
-  // `constraints` state: the rules a GENERATION ran under live on `view.constraints`, which is
-  // what reroll and export read and the only copy guaranteed to describe the graph on screen. A
-  // third copy committed at dispatch time became write-only once reroll stopped reading it, and
-  // a write-only copy of state two other places already disagree about is how the reroll desync
-  // happened.
-  //
-  // Name-keyed, not derived from index pairs: a row naming someone no longer in the roster
-  // resolves to no index at all, so rebuilding rows from index pairs deleted exactly the rows
-  // the editor promises to keep and flag.
-  const [constraintRows, setConstraintRows] = useState<NamedPair[]>([]);
+  /**
+   * WHAT THE EDITOR REOPENS SHOWING — one object, not three states, and that is the whole point.
+   *
+   * These three describe ONE generation together, and three separately-written copies is a
+   * defect this loop closed three times before removing the copies: the seed a graph was not
+   * built with (round 13), the roster a refusal was worded from (round 15), and the rule rows a
+   * reroll left behind (round 20). Each fix added a writer to a site that had forgotten one; the
+   * instruction "remember to write all three" failed twice, so it is gone. There is now one
+   * setter, and every dispatch site calls it with a whole triple — writing two of three is not
+   * expressible.
+   *
+   * `rows` are the rules AS TYPED (name-keyed), never rebuilt from `view.constraints`: index
+   * pairs are what SURVIVED resolution, so rebuilding deletes the unresolved rows the editor
+   * contracts to keep and flag. They travel on the view for the same reason the roster does.
+   */
+  const [draft, setDraft] = useState<{ names: string[]; settings: Settings; rows: NamedPair[] }>({
+    names: [],
+    settings: DEFAULT_SETTINGS,
+    rows: [],
+  });
+  const { names, settings, rows: constraintRows } = draft;
   const [layout, setLayout] = useState<LayoutMode>("ring");
   // Selection carries a back stack: in the explorer every name is a link, so
   // "where was I" is part of the model rather than something the user re-derives.
@@ -122,7 +130,7 @@ export default function App() {
   // state is the answer both critics actually recommended: one copy, consistent with the roster
   // text and rule rows beside it, and never stale.
   useEffect(() => {
-    if (view) setSettings(view.settings);
+    if (view) setDraft({ names: view.names, settings: view.settings, rows: view.rows });
   }, [view]);
 
   // Rebuilt only when the edge set changes; the explorer and the path finder both
@@ -202,12 +210,10 @@ export default function App() {
     rules: ConstraintPair[],
     rows: NamedPair[],
   ) => {
-    setNames(roster);
-    setSettings(s);
-    setConstraintRows(rows);
+    setDraft({ names: roster, settings: s, rows });
     resetSelection();
     setReopenReason(null);
-    bg.generate(roster, s, rules);
+    bg.generate(roster, s, rules, rows);
     setModalOpen(false);
   };
 
@@ -262,9 +268,8 @@ export default function App() {
     //     forbidden and the editor's "kept and flagged, never deleted" contract forbids. Nothing
     //     needs writing: a reroll changes neither the roster nor the rules, and `constraintRows`
     //     already holds what the user submitted.
-    setNames(view.names);
-    setSettings(view.settings);
-    bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
+    setDraft({ names: view.names, settings: view.settings, rows: view.rows });
+    bg.generate(view.names, s, view.constraints, view.rows, { reroll: true }); // identical -> notice
   };
 
   const cancelGeneration = () => {
@@ -278,11 +283,9 @@ export default function App() {
 
   const applyImported = (v: GraphView) => {
     bg.loadView(v);
-    setNames(v.names);
-    setSettings(v.settings);
-    // An imported file carries only index pairs, so the rows are derived here — the one
-    // place that conversion is correct, because the file's names and indices do agree.
-    setConstraintRows(toNamedPairs(v.constraints, v.names));
+    // `v.rows` was derived by `importGraph`, the one place rebuilding rows from indices is
+    // lossless, so this path writes the same whole triple every other dispatch site writes.
+    setDraft({ names: v.names, settings: v.settings, rows: v.rows });
     resetSelection();
     clear(); // a superseding import must not leave a stale error/notice over the fresh graph
     setModalOpen(false);

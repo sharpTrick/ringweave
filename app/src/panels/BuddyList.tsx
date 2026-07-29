@@ -14,6 +14,9 @@ interface Props {
 /** What a successful copy announces. One string, so the emptied/refilled pair cannot drift. */
 const COPIED_MESSAGE = "Buddy list copied to the clipboard.";
 
+/** What a FAILED copy announces — and it names the way out, since the button gives none. */
+const COPY_FAILED_MESSAGE = "Couldn't copy to the clipboard — use CSV instead.";
+
 /**
  * MEMOIZED for the same measured reason as `Slips`: a hover transition over the graph rewrote
  * App-level state this component does not read, and re-rendered all n rows — ~70 ms at the import
@@ -45,6 +48,23 @@ function BuddyListInner({ view, selected, onSelect }: Props) {
       .map((name, i) => `${neutralizeCell(name)}: ${buddyLabel(view, i)}`)
       .join("\n");
     const ok = await copyText(text);
+    if (!ok) {
+      // THE FAILURE PATH EXISTS AND WAS SILENT. `copyText` resolves false whenever the clipboard
+      // write rejects — insecure context, permission denied, no Clipboard API, focus not in the
+      // document at write time — and only the true branch did anything, so a press produced no
+      // label change, no live-region text and no toast. A screen-reader user heard nothing at
+      // all and had no way to learn that CSV is the way out. Same emptied-then-refilled pattern
+      // as the success message, so a repeated failed press is announced again rather than
+      // setting an identical string.
+      timers.current.forEach(clearTimeout);
+      setCopied(false);
+      setAnnounced("");
+      timers.current = [
+        setTimeout(() => setAnnounced(COPY_FAILED_MESSAGE), 0),
+        setTimeout(() => setAnnounced(""), AUTO_CLEAR_MS),
+      ];
+      return;
+    }
     if (ok) {
       setCopied(true);
       // EMPTIED, THEN REFILLED, in two commits. A live region announces a CHANGE, and pressing

@@ -21,7 +21,7 @@ describe("export -> import round-trip (F6)", () => {
     const settings: Settings = { ...DEFAULT_SETTINGS, buddies: 4 };
     const roster = names(30);
     const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const view = viewFromResult(roster, settings, [], result);
+    const view = viewFromResult(roster, settings, [], [], result);
 
     // Serialize through JSON (the real boundary) and back.
     const roundTripped = importGraph(JSON.parse(exportGraphJson(view)));
@@ -36,7 +36,7 @@ describe("export -> import round-trip (F6)", () => {
     const settings = { ...DEFAULT_SETTINGS };
     const roster = names(20);
     const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const file = exportGraph(viewFromResult(roster, settings, [], result));
+    const file = exportGraph(viewFromResult(roster, settings, [], [], result));
     for (const [a, b] of file.edges) expect(a).toBeLessThan(b);
     const flat = file.edges.map(([a, b]) => a * 1000 + b);
     expect(flat).toEqual([...flat].sort((x, y) => x - y));
@@ -393,7 +393,7 @@ describe("import: lossless round-trip and defaults", () => {
 describe("file schema stays in sync with Metrics", () => {
   it("meta.metrics has exactly the keys of a produced Metrics object", () => {
     const r = generateResult(20, 4, { seed: 1, polish: false });
-    const view = viewFromResult(names(20), DEFAULT_SETTINGS, [], r);
+    const view = viewFromResult(names(20), DEFAULT_SETTINGS, [], [], r);
     const file = exportGraph(view);
     expect(Object.keys(file.meta.metrics).sort()).toEqual(Object.keys(view.metrics).sort());
   });

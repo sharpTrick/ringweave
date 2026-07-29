@@ -6,7 +6,7 @@ import {
 } from "../model";
 import { MAX_NAME_CHARS, MAX_PARSE_CHARS, NAME_HOSTILE_CHARS, parseRoster } from "./parseRoster";
 import {
-  MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
+  MAX_CONSTRAINT_PAIRS, joinPairs, pairKey, toNamedPairs,
   type ConstraintPair,
 } from "../constraints";
 import { clamp, clampText, codePointsIfOver } from "./clamp";
@@ -287,6 +287,11 @@ export function importGraph(data: unknown): GraphView {
     buddies,
     settings,
     constraints,
+    // Derived here and ONLY here: a file carries index pairs and no typed rows, so there is
+    // nothing to lose by rebuilding them — which is exactly why `toNamedPairs` is documented as
+    // single-call-site. Everywhere else the rows are what SURVIVED nothing, and rebuilding them
+    // from indices deletes the ones the editor promises to keep.
+    rows: toNamedPairs(constraints, names),
     // Import rehydrates edges rather than regenerating, so no builder ran and there is
     // no constraint report to show. Null means "not measured" and the panel says so —
     // it must never be read as "all rules satisfied".

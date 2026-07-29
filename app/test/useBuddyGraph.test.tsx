@@ -52,12 +52,12 @@ beforeEach(() => {
 
 describe("useBuddyGraph result↔state pairing", () => {
   it("an import during in-flight generation survives the late worker result (no clobber)", () => {
-    const imported = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], generateResult(6, 2, { seed: 1 }),
+    const imported = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], [], generateResult(6, 2, { seed: 1 }),
     );
     const stale = generateResult(4, 2, { seed: 2 }); // the superseded generate's eventual result
 
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS, [])); // pending set; mock -> running
+    act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS, [], [])); // pending set; mock -> running
     act(() => rerender());
     expect(result.current.status).toBe("running");
 
@@ -75,7 +75,7 @@ describe("useBuddyGraph result↔state pairing", () => {
   it("applies a worker result when nothing superseded it", () => {
     const gen = generateResult(4, 2, { seed: 3 });
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(["A", "B", "C", "D"], DEFAULT_SETTINGS, []));
+    act(() => result.current.generate(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], []));
     act(() => rerender());
 
     hooks.state.status = "done";
@@ -92,7 +92,7 @@ describe("useBuddyGraph result↔state pairing", () => {
     const g2 = generateResult(5, 4, { seed: 2 }); // K5 again — byte-identical edges
 
     const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, []));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
@@ -100,7 +100,7 @@ describe("useBuddyGraph result↔state pairing", () => {
     const kept = result.current.view;
     expect(kept?.names).toEqual(roster);
 
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }, [], { reroll: true }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }, [], [], { reroll: true }));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -120,13 +120,13 @@ describe("useBuddyGraph result↔state pairing", () => {
     const g2 = generateResult(5, 4, { seed: 1 }); // same seed -> identical, but a plain generate
 
     const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, []));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
     act(() => rerender());
 
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [])); // no reroll flag
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], [])); // no reroll flag
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -148,14 +148,14 @@ describe("useBuddyGraph result↔state pairing", () => {
     const g2 = generateResult(5, 4, { seed: 2 }); // K5 again — identical edges
 
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, []));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
     act(() => rerender());
     const priorEdges = result.current.view!.edges;
 
-    act(() => result.current.generate(roster, changed, [])); // non-reroll, changed settings
+    act(() => result.current.generate(roster, changed, [], [])); // non-reroll, changed settings
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -182,12 +182,12 @@ describe("useBuddyGraph result↔state pairing", () => {
       const roster = (count: number) => Array.from({ length: count }, (_, i) => `P${i}`);
 
       hooks.generate.mockClear();
-      act(() => result.current.generate(roster(boundary), { buddies: k, polish: true, seed: 1 }, []));
+      act(() => result.current.generate(roster(boundary), { buddies: k, polish: true, seed: 1 }, [], []));
       expect(hooks.generate.mock.calls.at(-1)![0].options.polish).not.toBe(true);
 
       hooks.generate.mockClear();
       act(() =>
-        result.current.generate(roster(boundary - 1), { buddies: k, polish: true, seed: 1 }, []),
+        result.current.generate(roster(boundary - 1), { buddies: k, polish: true, seed: 1 }, [], []),
       );
       expect(hooks.generate.mock.calls.at(-1)![0].options.polish).toBe(true);
     }

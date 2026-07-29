@@ -38,7 +38,7 @@ describe("quality score (F5)", () => {
   it("the SHIPPED quality (via assembleMetrics/viewFromResult) is scored at degreeMax, regular AND irregular", () => {
     for (const [n, k] of [[24, 4], [25, 3], [15, 3]] as const) {
       const r = generateResult(n, k, { seed: 1 });
-      const v = viewFromResult(names(n), DEFAULT_SETTINGS, [], r);
+      const v = viewFromResult(names(n), DEFAULT_SETTINGS, [], [], r);
       const expected = Math.max(0, Math.min(1, 1 - asplGap(r.aspl, n, r.degreeMax)));
       expect(v.metrics.quality).toBeCloseTo(expected, 12);
     }
@@ -188,6 +188,7 @@ describe("a Settings value shown as delivered is disclosed when it was not", () 
     viewFromResult(
       Array.from({ length: n }, (_, i) => `P${i}`),
       { ...DEFAULT_SETTINGS, buddies: k, minSeparation: asked, polish: false },
+      [],
       [],
       generateResult(n, k, { seed: 12345, polish: false, minSeparation: asked }),
     );

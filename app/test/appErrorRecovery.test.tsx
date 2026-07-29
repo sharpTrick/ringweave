@@ -111,7 +111,7 @@ describe("App recovers from a worker error", () => {
     expect(screen.getByText(/generation failed/i)).toBeTruthy();
 
     // Import a valid graph via the JSON file input.
-    const view = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], generateResult(6, 2, { seed: 1, polish: false }));
+    const view = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], [], generateResult(6, 2, { seed: 1, polish: false }));
     const json = exportGraphJson(view);
     const input = document.querySelector('input[accept*="json"]') as HTMLInputElement;
     const file = new File([json], "graph.json", { type: "application/json" });
@@ -284,6 +284,59 @@ describe("App handles a refusal from the worker", () => {
     // Both rows are still there, including the one that never resolved.
     expect((screen.getByLabelText("Rule 1, second person") as HTMLInputElement).value).toBe("B");
     expect((screen.getByLabelText("Rule 2, second person") as HTMLInputElement).value).toBe("Zoe");
+  });
+
+  it("a reroll never shows rules the graph on screen was not built under", async () => {
+    // The third instalment of one theme. `names`, `settings` and the rule ROWS describe ONE
+    // generation, and three separately-written copies meant a dispatch site could forget one:
+    // the seed (round 13), the roster a refusal was worded from (round 15), and these rows. After
+    // an abandoned Edit->Generate, the reopened editor showed the VIEW's roster next to the
+    // ABANDONED edit's rules — and the next Generate would have applied a constraint the user
+    // never set on that roster. There is now one setter and one object; writing two of three is
+    // not expressible.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Alice\nBob\nCarol\nDan\nEve\nFay" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(6, 4, { polish: false });
+      rerender(<App />);
+    });
+    // An edit that never lands: a different roster AND a rule naming two of ITS people.
+    fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Zed\nYan\nXan\nWan\nVan\nUma" },
+    });
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
+    fireEvent.click(screen.getByText("+ Add a buddy rule"));
+    fireEvent.change(screen.getByLabelText("Rule 1, first person"), { target: { value: "Zed" } });
+    fireEvent.change(screen.getByLabelText("Rule 1, second person"), { target: { value: "Yan" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "idle"; // cancelled; the view is still Alice's graph
+      rerender(<App />);
+    });
+
+    // The reroll is REFUSED, deliberately: on success the adoption effect rewrites the whole
+    // draft from the new view and would mask a dispatch site that forgot the rows. The paths
+    // that are only covered by the dispatch site itself are the ones that do NOT produce a view
+    // — cancel, error, refusal — which is exactly where the three earlier instalments of this
+    // theme lived. (Written the other way round first, it passed with the defect restored.)
+    fireEvent.click(screen.getByRole("button", { name: /different arrangement/i }));
+    act(() => {
+      hooks.state.status = "refused";
+      hooks.state.refusals = [{ code: "self-pair", person: 0 }];
+      rerender(<App />);
+    });
+    // The refusal reopens the editor. The roster is the view's...
+    expect((screen.getByLabelText("Roster names") as HTMLTextAreaElement).value)
+      .toBe("Alice\nBob\nCarol\nDan\nEve\nFay");
+    // ...and so are the rules: the abandoned edit's rule is gone, not sitting there ready to be
+    // applied to a roster it was never written for.
+    expect(screen.queryByLabelText("Rule 1, first person")).toBeNull();
+    expect(document.querySelector(".rules-block > summary")?.textContent).not.toMatch(/\(1\)/);
   });
 
   it("never shows a seed the graph on screen was not built with", async () => {
