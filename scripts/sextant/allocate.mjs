@@ -1,17 +1,7 @@
 /**
- * Apply the pre-registered allocation rule to the admission results.
- *
- * Mechanical on purpose. The rule is fixed in `PRE-REGISTRATION.md` before any scoring run, and this
- * script is the only thing that turns it into a seed list — so the subset cannot be nudged after
- * seeing which seeds look promising. That is the whole reason the rule is a rule.
- *
- * Rule (verbatim from the pre-registration):
- *   2. The prose subset is the admitted seeds in ascending seed-id order, capped at 12. If fewer
- *      than 12 are admitted, all of them are used and the shortfall is reported as a power
- *      limitation, not quietly absorbed.
- *   3. The homogeneous paired arm is every second member of the prose subset in the same order,
- *      capped at 6 — subset positions 1, 3, 5, 7, 9, 11.
- *   4. Controls are all four unseeded worktrees, reviewed under the model-diverse configuration.
+ * Apply the pre-registered allocation rule (`PRE-REGISTRATION.md` §Allocation rule) to the admission
+ * results. Mechanical on purpose: this script is the only thing that turns the rule into a seed
+ * list, so the subset cannot be nudged after seeing which seeds look promising.
  *
  * Usage:  node scripts/sextant/allocate.mjs [--json]
  */
@@ -29,8 +19,8 @@ const admitted = admission.results.filter((r) => r.admitted);
 const controls = admitted.filter((r) => r.isControl).sort((a, b) => a.id.localeCompare(b.id));
 
 // Seeds whose gates were deliberately allowed to fail are ORACLE PROBES, not critic-corpus members:
-// they exist to test whether the linter catches what the critics were told to stop filing. Scoring
-// them against the critics would double-count them and inflate whichever instrument found them.
+// they test whether the LINTER catches what the critics were told to stop filing. Scoring them
+// against the critics would inflate whichever instrument found them.
 const probes = admitted.filter((r) => !r.isControl && defById.get(r.id)?.expectGates === false);
 const criticSeeds = admitted
   .filter((r) => !r.isControl && defById.get(r.id)?.expectGates !== false)
@@ -44,10 +34,9 @@ const enrich = (r) => {
   return {
     id: r.id,
     worktree: r.worktree,
-    // Point the critics at app/src INSIDE the worktree, not at the worktree root. Every seed is in
-    // app/src, and the protocol's rule is "the whole component under review" — the component is the
-    // app, not the repo. Handing over the worktree root would also invite a critic to wander into
-    // lib/ or the tooling, which is neither the surface under test nor comparable to E1.
+    // app/src INSIDE the worktree, not the worktree root: the component under review is the app,
+    // and the root would invite a critic into lib/ and the tooling — neither the surface under test
+    // nor comparable to E1.
     reviewTarget: `${r.worktree}/app/src (the BuddyGraph app)`,
     stratum: r.stratum,
     class: d.class,

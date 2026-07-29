@@ -3,6 +3,11 @@
 *Hard-won during the M1 adversarial review of the constraint core (2026-07). The code
 is in `lib/src/core/{constrainedGreedy,constraints,graph}.ts`; this explains the why.*
 
+*Sibling document: [`generation-cost-budgets.md`](./generation-cost-budgets.md) covers the
+**unconstrained** generator (`greedyWork` / `MAX_GREEDY_WORK`, `MAX_REPAIR_WORK`) and **all** the
+polish budgets. The two cost models are deliberately separate and their accept-sets are not
+nested — this path pays O(n) per edge for a BFS, that one pays O(n²) per edge for a cache update.*
+
 ## The one-line lesson
 
 `constrainedGreedy` runs **one BFS per edge added**, and it adds `~n·min(k,n-1)/2`

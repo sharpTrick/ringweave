@@ -1,23 +1,15 @@
 #!/usr/bin/env node
 /**
  * Derive each lens's saturation streak per target from the round record, and write
- * `.claude/review-state.json` for the next round to pass back in.
+ * `.claude/review-state.json` for the next round to pass back in. The review workflow is pure — it
+ * cannot touch the filesystem — so the caller owns this state, and a round invoked without it
+ * restarts every streak at zero, silently skipping nothing and logging no reason.
  *
- * The review workflow is pure — it cannot read or write the filesystem — so the
- * caller owns this state. That contract was documented from the start and then
- * quietly broken: nothing ever wrote the file, every round was invoked with no
- * prior state, and so every streak restarted at zero. `critic-interaction` went
- * quiet on `lib/src` in rounds 1, 3, 4, 5 and 6 — four consecutive — and was
- * spawned every time, because a skip that fails to happen produces no log line.
- *
- * The state is DERIVED, never hand-maintained. A number typed into a state file by
- * whoever ran the round is exactly the kind of bookkeeping this experiment exists
- * to replace with an oracle; the round files are the record, so the streaks are a
+ * The state is DERIVED, never hand-maintained: the round files are the record, so the streaks are a
  * function of them and can be recomputed from scratch at any time.
  *
- * Streak rule, matching the workflow's own: +1 when a lens returns `nothingFound`
- * and did not error, 0 on any finding, and UNCHANGED when the lens was skipped —
- * a skipped lens learned nothing, so it neither progresses nor loses its streak.
+ * Streak rule, matching the workflow's own: +1 when a lens returns `nothingFound` and did not error,
+ * 0 on any finding, and UNCHANGED when the lens was skipped — a skipped lens learned nothing.
  *
  * Usage: node scripts/review-metrics/saturation-state.mjs [dataDir] [stateFile]
  */
@@ -35,13 +27,8 @@ if (!existsSync(roundsDir)) {
   process.exit(1);
 }
 
-/**
- * Rounds must be replayed in the order they RAN, and the filename carries that
- * order (`lib-round-05.json`) while the mtime does not — re-saving a round file to
- * fix a field would reorder history. Sorting by target then round number keeps each
- * target's replay independent, which matters because `lib` and `app` are separate
- * loops with separate streaks.
- */
+/** Rounds must be replayed in the order they RAN: the filename carries that order and the mtime does
+ *  not, so re-saving a round file to fix a field would reorder history. */
 const rounds = readdirSync(roundsDir)
   .filter((f) => f.endsWith(".json"))
   .map((file) => {
@@ -51,9 +38,8 @@ const rounds = readdirSync(roundsDir)
   })
   .sort((a, b) => a.round - b.round);
 
-/** `target` was polluted with the whole JSON arg blob in the rounds run before the
- *  workflow learned to parse a JSON-string arg. Recover the real target from it
- *  rather than discarding those rounds — they are most of the record. */
+/** `target` carries the whole JSON arg blob in the rounds run before the workflow learned to parse a
+ *  JSON-string arg; recovering it beats discarding those rounds, which are most of the record. */
 function targetOf(raw) {
   const t = typeof raw.target === "string" ? raw.target : "";
   const text = t.trim().startsWith("{") ? (JSON.parse(t).target ?? "") : t;
@@ -85,9 +71,8 @@ for (const { file, round, raw } of rounds) {
 
 writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n");
 
-// The gates the runner actually applies. Duplicated here on purpose and checked by
-// the hygiene gate, same as the critic frontmatter is — this script has to be able
-// to say "this lens is now skippable" without spawning a workflow to find out.
+// A SECOND COPY of the gates the runner applies, kept so this script can say "skippable" without
+// spawning a workflow. Nothing checks the two agree, so change both together.
 const GATES = {
   "critic-correctness": 3,
   "critic-security": 2,

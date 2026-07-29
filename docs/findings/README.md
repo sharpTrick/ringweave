@@ -34,6 +34,9 @@ the other places the project remembers things:
 - **`constrained-generation-cost-and-caps.md`** — the cost model of constrained generation,
   the two safety caps that bound it, and how the naive cost metric was disproved by
   measurement.
+- **`generation-cost-budgets.md`** — the sibling cost model: the unconstrained generator
+  (`greedyWork`/`MAX_GREEDY_WORK`, the counted `MAX_REPAIR_WORK`) and every polish budget, with
+  the calibration tables each constant is pinned to.
 - **`churn-priors-weight.md`** — the prior-weight sweep behind the honest F9 claim: how much
   of an existing buddy assignment survives a roster change, and at what ASPL cost.
 - **`critical-review/`** — experiments on the *review mechanism itself* rather than on the

@@ -77,37 +77,23 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     names: string[],
     settings: Settings,
     constraints: ConstraintPair[],
-    /** The rules AS TYPED — see `GraphView.rows`. Carried so an adopted view owns its own rows. */
+    /** The rules AS TYPED — see `GraphView.rows`. */
     rows: NamedPair[],
     opts?: { reroll?: boolean },
   ) => {
-    // `pending.settings` is filled in BELOW, after the polish downgrade, not here — see there.
-    // Never DISPATCH an explicit polish=on for a configuration the core would not
-    // auto-polish: it is O(n·m)/iter and would run for tens of seconds. Downgrade to
-    // "auto" (which the core then declines anyway), so a hostile imported polish=true
-    // can't drive a multi-minute run.
-    //
-    // Asks the core rather than comparing against a mirrored cap. The old `names.length >
-    // POLISH_MAX_N` was k-blind, so at k=12 it happily dispatched an explicit polish=true
-    // at n=100 — well past the point the budget declines — which is the expensive
-    // direction of the same drift.
-    // The SAME predicate the worker routes on, over the same wire shape, computed once and used
-    // for both — see `isConstrainedRequest`. Asking `constraints.length > 0` here was a second,
-    // structurally different way to decide one fact, and the budget it picks is only correct if
-    // it agrees with the builder that actually runs.
+    // Never DISPATCH an explicit polish=on where the core would not auto-polish: polish is
+    // O(n·m)/iter, so a hostile imported polish=true would drive a multi-minute run. The core is
+    // ASKED rather than compared against a mirrored cap, which was k-blind and let it through.
+    // `isConstrainedRequest` is the same predicate the worker routes on: the budget picked here
+    // is only correct if it agrees with the builder that actually runs.
     const wire = splitPairs(constraints);
     const wouldAutoPolish = autoPolishEnabled(names.length, settings.buddies, {
       constrained: isConstrainedRequest(wire),
     });
     const polish = settings.polish === true && !wouldAutoPolish ? "auto" : settings.polish;
-    // THE DISPATCHED OPTIONS, not the requested ones. `viewFromResult` reads this, so it is what
-    // the Advanced panel renders, what `exportGraph` writes, and what the next reroll sends. An
-    // explicit `polish: true` that this function downgrades to "auto" (so the core declines it)
-    // was still stored as `true`, so the file recorded a configuration that does not reproduce
-    // the graph beside it: feeding the exported settings back into `buildBuddyGraph(80, 12,
-    // {polish: true})` yields a different edge list. Same class as the seed drift the comments
-    // in App.tsx were written for, one field over — a stored setting that the graph does not
-    // satisfy — and the fix is the same shape: record what ran, not what was asked for.
+    // Store the DISPATCHED options, not the requested ones: `exportGraph` writes this, so storing
+    // a downgraded `polish` as `true` records a configuration that does not reproduce the graph
+    // beside it.
     pending.current = {
       names,
       settings: { ...settings, polish },
@@ -128,10 +114,9 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
   }, [genGenerate]);
 
   const loadView = useCallback((v: GraphView) => {
-    // Supersede any in-flight generation: clearing `pending` makes the effect drop a
-    // worker result that arrives AFTER this import, and reset() cancels the running
-    // computation + clears the "running" status so no stale "Generating…" overlay lingers
-    // over the imported graph.
+    // Supersede any in-flight generation: clearing `pending` makes the effect drop a result that
+    // arrives after this import, and reset() clears the "running" status so no stale overlay
+    // lingers over the imported graph.
     pending.current = null;
     genReset();
     setView(v);

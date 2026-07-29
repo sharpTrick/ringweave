@@ -1,21 +1,11 @@
 #!/usr/bin/env node
 /**
- * Normalize the review runner's raw per-round output into E1/Ouroboros's dataset
- * shapes, so Sextant's numbers can be compared with E1's rather than merely
- * placed beside them.
+ * Normalize the review runner's raw per-round output into E1/Ouroboros's dataset shapes, so
+ * Sextant's numbers can be compared with E1's rather than merely placed beside them.
  *
- * Reads every `data/rounds/*.json` (one raw workflow result per round, saved by
- * the caller at the time it completed) and writes `perRound.json`,
- * `rounds.json` and `findings_full.json` next to them.
- *
- * It also fixes E1's two documented dataset inconsistencies at the source rather
- * than at analysis time:
- *   - lens names: E1 mixes `correctness` and `critic-correctness`. Everything is
- *     normalized to the SHORT form, which is what E1's `findings_full.json` uses
- *     and therefore what a joint query needs.
- *   - file paths: E1 mixes repo-relative and absolute. Everything is normalized
- *     to repo-relative, since an absolute path is machine-specific and useless in
- *     a committed dataset.
+ * Reads every `data/rounds/*.json` and writes `perRound.json`, `rounds.json` and
+ * `findings_full.json` next to them. Lens names are normalized to the SHORT form and paths to
+ * repo-relative, because E1's committed dataset mixes both and a joint query needs one of each.
  *
  * Usage: node scripts/review-metrics/round-log.mjs <dataDir>
  */
@@ -32,7 +22,6 @@ if (!existsSync(roundsDir)) {
 
 const REPO_ROOT = resolve(process.cwd());
 
-/** Repo-relative, forward-slashed. An absolute path in a committed dataset is noise. */
 function relPath(file) {
   if (typeof file !== "string" || file === "") return "";
   const normalized = file.replaceAll("\\", "/");
@@ -52,8 +41,8 @@ const findings = [];
 
 for (const file of files) {
   const raw = JSON.parse(readFileSync(join(roundsDir, file), "utf8"));
-  // `round` is whatever the caller recorded; the runner itself returns null when
-  // args arrived as a string, so the filename is the fallback of record.
+  // The runner returns a null `round` when its args arrived as a string, so the
+  // filename is the fallback of record.
   const round = raw.round ?? Number(/(\d+)/.exec(file)?.[1] ?? 0);
   const target = raw.target ?? "";
 
@@ -102,8 +91,7 @@ for (const file of files) {
     totalFindings: confirmed.length + deferrals.length + plausible.length,
     files: files_,
     classes,
-    // Recorded per round because it is the E4 cost series. E1 had to reconstruct
-    // this from workflow output files after the fact.
+    // The E4 cost series — recorded per round so it never has to be reconstructed after the fact.
     subagentTokens: raw.tokens?.subagentTokens ?? null,
     agents: raw.tokens?.agents ?? null,
     toolCalls: raw.tokens?.toolCalls ?? null,
@@ -121,8 +109,8 @@ for (const file of files) {
       model: c.model ?? null,
       nothingFound: c.nothingFound === true,
       findings: c.findings ?? 0,
-      // Recorded because a dead lens that reads as a clean one is the single
-      // failure mode that can fabricate a convergence.
+      // A dead lens that reads as a clean one is the one failure mode that can fabricate a
+      // convergence.
       errored: c.errored === true,
       erroredReason: c.erroredReason ?? null,
     })),
@@ -144,8 +132,7 @@ console.log(
     `${perRound.reduce((a, r) => a + (r.subagentTokens ?? 0), 0).toLocaleString()} subagent tokens`,
 );
 if (dead.length > 0) {
-  // Loud, not a footnote: any round containing a dead lens cannot support an
-  // absence claim, and "0 findings" from a lens that never ran looks identical
-  // to a clean one in every downstream table.
+  // Loud, not a footnote: a round with a dead lens cannot support an absence claim, and "0
+  // findings" from a lens that never ran looks identical to a clean one downstream.
   console.log(`round-log: WARNING — ${dead.length} dead lens/lenses: ${dead.join(", ")}`);
 }

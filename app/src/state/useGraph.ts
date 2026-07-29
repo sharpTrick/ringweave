@@ -2,17 +2,9 @@ import { useMemo } from "react";
 import { Graph } from "ringweave";
 
 /**
- * The core `Graph` for the current view, rebuilt only when the edge set changes.
- *
- * The single place the app rehydrates a Graph from a view. The explorer and the
- * path finder both need real graph queries (`eccentricity`, `shortestPath`) and
- * neither may reimplement them — so they need an actual `Graph`, and building one
- * per render would be O(m) work on every mouse-move.
- *
- * Keyed on the `edges` array IDENTITY, which the view model maintains
- * deliberately: `useBuddyGraph` reuses the previous array when a regeneration
- * produces the same graph, precisely so downstream memos and layouts do not
- * recompute.
+ * The core `Graph` for the current view. Keyed on the `edges` array IDENTITY, which `useBuddyGraph`
+ * preserves across an identical regeneration precisely so this does not rebuild — building one per
+ * render is O(m) on every mouse-move.
  */
 export function useGraph(n: number, edges: [number, number][]): Graph {
   return useMemo(() => {

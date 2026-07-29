@@ -7,14 +7,11 @@ import type {
   GraphResult,
 } from "../worker/protocol";
 
-/** Module-local: `GenState.status` carries it structurally, so nothing outside needs the name. */
 type GenStatus = "idle" | "running" | "done" | "error" | "refused";
 
 /**
- * `refused` is a distinct status, not an error: the app worked and the input was
- * well-formed, but the buddy rules admit no graph. Collapsing it into `error`
- * would route a fixable, per-person explanation through copy that reads like a
- * crash.
+ * `refused` is a distinct status, not an error: collapsing it into `error` routes a fixable,
+ * per-person explanation through copy that reads like a crash.
  */
 export interface GenState {
   status: GenStatus;
@@ -31,11 +28,9 @@ export interface GenerateArgs {
 }
 
 /**
- * Owns the generation worker. StrictMode-safe (worker created in an effect, terminated in
- * cleanup). Responses are correlated by an incrementing `id`; a non-latest response is a
- * stale run and is ignored. A new generate() or reset() also TERMINATES an in-flight
- * computation and swaps in a fresh worker, so a slow/superseded run can't monopolize the
- * single worker (blocking the next reroll) or leave a false "running" status.
+ * Owns the generation worker. StrictMode-safe: created in an effect, terminated in cleanup. A new
+ * generate() or reset() TERMINATES an in-flight run and swaps in a fresh worker, so a superseded
+ * run cannot monopolize the single worker or leave a false "running" status.
  */
 /** The cleared state every transition starts from, so no stale field survives a status change. */
 const IDLE: GenState = { status: "idle", result: null, error: null, refusals: [] };
@@ -49,20 +44,15 @@ export function useGenerationWorker() {
   const attach = useCallback((worker: Worker) => {
     worker.onmessage = (e: MessageEvent<GenerateResponse>) => {
       const msg = e.data;
-      if (msg.id !== latestId.current) return; // stale run — superseded by a newer request
+      if (msg.id !== latestId.current) return;
       runningRef.current = false;
       if (msg.kind === "ok") setState({ ...IDLE, status: "done", result: msg.result });
       else if (msg.kind === "refused") setState({ ...IDLE, status: "refused", refusals: msg.refusals });
       else setState({ ...IDLE, status: "error", error: msg.error });
     };
-    // The worker's OWN failure channels, not just the ones it reports over the protocol.
-    // Only `onmessage` was registered, so a worker that failed to load or died mid-run
-    // never produced a message at all and the hook sat at status "running" forever. That
-    // was cosmetic when the page stayed interactive; now that `#app` is `inert` while
-    // running, it locks the entire UI with the overlay up and no way out.
-    //
-    // Both map onto the existing "error" transition, whose recovery path (toast, and
-    // reopening the setup modal when there is no graph yet) is already tested.
+    // The worker's OWN failure channels: a worker that fails to load or dies mid-run posts no
+    // message at all, so without these the hook sits at "running" forever — and `#app` is `inert`
+    // while running, which locks the whole UI.
     const fail = (what: string) => {
       runningRef.current = false;
       setState({ ...IDLE, status: "error", error: what });
@@ -93,13 +83,13 @@ export function useGenerationWorker() {
     if (runningRef.current) {
       latestId.current++; // drop the in-flight response
       runningRef.current = false;
-      swapWorker(); // stop the running computation, fresh worker for next time
+      swapWorker();
     }
     setState(IDLE);
   }, [swapWorker]);
 
   const generate = useCallback((args: GenerateArgs) => {
-    if (runningRef.current) swapWorker(); // supersede a slow in-flight run instead of queueing behind it
+    if (runningRef.current) swapWorker(); // supersede a slow run rather than queue behind it
     const id = ++latestId.current;
     runningRef.current = true;
     setState({ ...IDLE, status: "running" });

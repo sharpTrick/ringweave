@@ -1,19 +1,12 @@
 /**
- * How much of the review loop's own output did the review loop then rewrite?
+ * How much of the review loop's own output did the review loop then rewrite? The label-free
+ * companion to the self-induction rate: no model and no judgement in it, only git's answer to how
+ * many lines each fix commit added and how many still survive.
  *
- * This is the label-free companion to the self-induction rate. Every other measure of
- * "the loop consumed its own output" involves judgement somewhere — E1's headline 66.7% was a
- * hand-label applied post-hoc by the same agent that had authored the fixes being judged, which its
- * own corrections section calls an upper bound rather than a measurement. This number has no model
- * and no judgement anywhere in it: it asks git how many lines each review-round fix commit added,
- * and how many of those lines still survive at the end of the loop.
+ * Reads the commit manifest rather than `main`, which is squash-merged — blame there resolves at PR
+ * granularity and cannot tell a review-round fix from the baseline.
  *
  * Usage:  node scripts/review-metrics/fix-churn.mjs [--json]
- *
- * Reads the commit manifest at
- * docs/findings/critical-review/2026-07-25-sextant/data/e1-commits.json, which records why `main`
- * cannot be used: it is squash-merged (one commit per PR), so blame there resolves at PR
- * granularity and cannot tell a review-round fix from the M2 baseline.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -29,9 +22,8 @@ const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
 const head = manifest.head;
 const fixShas = manifest.fixCommits.map((c) => c.sha);
 
-// Product code only. Tests are excluded deliberately: the loop was *supposed* to grow and rework
-// the suite (E1 took it from 68 to 136 tests), so counting test churn would conflate the ratchet
-// working as intended with the loop rewriting its own fixes.
+// Tests are excluded deliberately: the loop was SUPPOSED to rework the suite, so counting test
+// churn would score the ratchet working as intended as if it were waste.
 const isProduct = (p) =>
   (p.startsWith("lib/src/") || p.startsWith("app/src/")) && !/\.(test|spec)\.[tj]sx?$/.test(p);
 
@@ -58,17 +50,9 @@ function addedLines(sha) {
   return out;
 }
 
-/**
- * Lines at HEAD still attributed to each fix commit.
- *
- * `git blame` at HEAD attributes every surviving line to the commit that last touched it, so lines
- * still blamed on commit C are exactly C's surviving contribution — if a later round rewrote or
- * deleted the line, blame moves to that round (or the line is gone). `-w` ignores whitespace-only
- * rewrites so a reindent does not read as a rewrite.
- *
- * This is computed once for the whole tree rather than per commit: one blame pass per product file
- * at HEAD gives the survivor count for every fix commit simultaneously.
- */
+/** Lines at HEAD still attributed to each fix commit — exactly its surviving contribution, since a
+ *  later round rewriting a line moves blame to that round. `-w` so a reindent does not read as a
+ *  rewrite. */
 function survivingLinesByCommit() {
   const counts = new Map();
   const files = git("ls-tree", "-r", "--name-only", head).split("\n").filter(isProduct);

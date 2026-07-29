@@ -1,36 +1,21 @@
 /**
- * Reconstruct a scoring run from its transcripts, when the run itself cannot finish.
- *
- * `resumeFromRunId` handles the ordinary case: completed agents replay from cache and only the
- * killed ones re-run. This is the backstop for when that is not enough — repeated usage-limit
- * halts, a run that can never complete, or simply wanting the partial picture *now* without
- * spending more agents.
- *
- * Everything needed is already on disk and survives container restarts, because it lives under
- * ~/.claude/projects rather than in the repo:
- *   journal.jsonl              — one {type:"result", agentId, result} per completed agent
- *   agent-<id>.jsonl           — first line is the prompt, which names the lens AND the worktree
- *
- * Joining those two gives seed -> lens -> findings without re-running anything.
+ * Reconstruct a scoring run from its transcripts, when the run itself cannot finish. Resuming is the
+ * primary path; this is the backstop. It joins the run's journal (one result per completed agent)
+ * with each agent's transcript (whose first line is the prompt, naming the lens AND the worktree),
+ * giving seed -> lens -> findings without re-running anything.
  *
  * Usage:
  *   node scripts/sextant/recover-run.mjs <runId> [--json]
  *
- * WHAT PARTIAL DATA CAN AND CANNOT SUPPORT. Incomplete does not mean worthless — the observations
- * are real and are never discarded. The asymmetry is between two kinds of claim:
- *
- *   EXISTENCE  "critic-correctness found sd-13"  — VALID from a partial round. A positive
- *              observation stands alone; it does not matter that another lens never ran.
+ * WHAT PARTIAL DATA CAN AND CANNOT SUPPORT:
+ *   EXISTENCE  "critic-correctness found sd-13"  — VALID. A positive observation stands alone.
  *   ABSENCE    "the ensemble missed sd-15"       — INVALID. Absence requires that the whole
- *              ensemble actually looked. This is the fabricated blind spot that the first
- *              contaminated run nearly published.
- *   RATIO      "recall = 4/5"                    — INVALID, because it is an absence claim wearing
- *              a ratio's clothes: the denominator asserts the ensemble looked at all five.
+ *              ensemble actually looked; asserting it fabricates a blind spot.
+ *   RATIO      "recall = 4/5"                    — INVALID: an absence claim wearing a ratio's
+ *              clothes, since the denominator asserts the ensemble looked at all five.
  *
- * So per seed this reports `found` (a lens matched it — durable), or `indeterminate` (nothing
- * matched YET and the ensemble is incomplete — say nothing), and only ever `missed` once every lens
- * has reported. Resume remains the primary path; this is the backstop that keeps the confirmed hits
- * while refusing to invent the misses.
+ * So a seed is `found`, or `indeterminate` while the ensemble is incomplete, and only ever `missed`
+ * once every lens has reported.
  */
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -45,10 +30,9 @@ if (!runId) {
   process.exit(2);
 }
 
-/** Find the transcript dir for a run id, wherever the project hash puts it. */
+/** Layout is PROJECTS/<projectHash>/<sessionId>/subagents/workflows/<runId>, but the session level
+ *  is not guaranteed, so both depths are tried. */
 function findRunDir(id) {
-  // Layout is PROJECTS/<projectHash>/<sessionId>/subagents/workflows/<runId>, but the session level
-  // is not guaranteed, so try both depths rather than hardcoding one.
   const candidates = [];
   for (const proj of readdirSync(PROJECTS, { withFileTypes: true }).filter((d) => d.isDirectory())) {
     const base = join(PROJECTS, proj.name);
@@ -83,7 +67,7 @@ const jsonl = (p) =>
     })
     .filter(Boolean);
 
-// agentId -> { lens, worktree } parsed out of the prompt the agent was given.
+// agentId -> { lens, worktree }, recoverable only from the prompt the agent was given.
 const LENSES = ["correctness", "security", "SOLID/architecture", "maintainability", "interaction/accessibility"];
 const LENS_KEY = { "SOLID/architecture": "critic-solid", "interaction/accessibility": "critic-interaction" };
 const agents = new Map();
@@ -124,8 +108,8 @@ function matches(finding, seed) {
   const nearby = finding.line != null && seed.line != null && Math.abs(finding.line - seed.line) <= 10;
   const seedT = new Set([...tokens(seed.class), ...tokens(seed.theme)]);
   const shared = [...tokens(finding.class), ...tokens(finding.theme)].some((t) => seedT.has(t));
-  // Both levels, because the pre-registration commits to reporting both: quoting only the
-  // flattering one would be the same error as quoting a single blame configuration.
+  // Both levels: the pre-registration commits to reporting both, and quoting only the flattering
+  // one is the same error as quoting a single blame configuration.
   return { strict: !!nearby, loose: !!nearby || shared };
 }
 
@@ -160,7 +144,6 @@ const out = {
 
 const complete = out.rounds.filter((r) => r.complete);
 
-// Per-seed status, honouring the existence/absence asymmetry above.
 let seedStatus = [];
 try {
   const alloc = JSON.parse(readFileSync(join(ROOT, "docs/findings/critical-review/2026-07-25-sextant/data/allocation.json"), "utf8"));
@@ -176,9 +159,8 @@ try {
       return {
         id: seed.id,
         worktree: r.worktree,
-        // FOUND is durable even from a partial round — a missing lens can only ADD hits, never
-        // remove one. MISSED is assertable only once every lens has reported; until then it is
-        // INDETERMINATE and must never be called a blind spot.
+        // FOUND is durable from a partial round — a missing lens can only ADD hits. MISSED needs
+        // every lens to have reported; until then it is INDETERMINATE, never a blind spot.
         status: st(looseHits),
         statusStrict: st(strictHits),
         foundBy: [...new Set(looseHits.map((h) => h.f.critic))],

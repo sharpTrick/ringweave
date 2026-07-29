@@ -1,22 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 
-/**
- * Cap on retained history. Every click through the explorer pushes an entry, so
- * without a bound a long browsing session grows the array forever. 50 is far more
- * back-steps than anyone retraces, and dropping the oldest is invisible.
- */
+/** Every explorer click pushes an entry, so an unbounded stack grows for the whole session. */
 const MAX_HISTORY = 50;
 
 /**
- * Selection with a back stack (F8).
- *
- * The explorer turns selection into navigation — every name in the panel is a
- * link to that person — so "back" has to mean something, and a plain `selected`
- * state cannot express it.
- *
- * Going back from the FIRST selection is not offered: the stack returns to
- * previous *people*, and emptying it is what clearing the selection does. That
- * keeps "Back" from ever landing on nothing.
+ * Selection with a back stack. Going back from the FIRST selection is not offered, so "Back" can
+ * never land on nothing; clearing the selection is what empties the stack.
  */
 export function useExplorerHistory() {
   const [stack, setStack] = useState<number[]>([]);
@@ -24,8 +13,7 @@ export function useExplorerHistory() {
   const select = useCallback((i: number | null) => {
     setStack((prev) => {
       if (i === null) return prev.length === 0 ? prev : [];
-      // Re-selecting the person already shown is not a navigation step; pushing it
-      // would make "Back" appear to do nothing.
+      // Re-selecting the person already shown is not a step: pushing it makes "Back" do nothing.
       if (prev[prev.length - 1] === i) return prev;
       const next = [...prev, i];
       return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
