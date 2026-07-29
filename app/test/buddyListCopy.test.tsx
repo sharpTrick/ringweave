@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { buddyLabel, DEFAULT_SETTINGS, viewFromResult } from "../src/model";
 import { generateResult } from "./helpers";
 import { importGraph } from "../src/io/importGraph";
@@ -48,5 +48,41 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
       expect(lines[i]).toBe(`${name}: ${buddyLabel(view, i)}`); // separator AND empty glyph shared
     });
     expect(lines[3]).toBe("P3: —"); // the isolated person copies the em dash, not "P3: "
+  });
+});
+
+describe("a repeated Copy is announced again, not silently", () => {
+  it("empties and refills the live region on every successful copy", async () => {
+    // The region's text is the only feedback a screen-reader user gets, and a live region
+    // announces a CHANGE. Setting the identical string on a second press is no DOM mutation at
+    // all — and the second press is exactly the one a user makes when unsure the first
+    // registered, since the clipboard write is awaited and nothing else is synchronous.
+    //
+    // Asserted by WATCHING the region rather than by reading the final markup, because the final
+    // markup is identical either way — which is how this survived fifteen rounds, and which is
+    // the lesson from the round-12 "fix" that could not be observed to have worked.
+    const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
+    const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => {
+      seen.push(container.querySelector(".sr-live")?.textContent ?? "");
+    });
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+
+    // Scoped to THIS render: the file's earlier tests do not clean up, so a global query would
+    // find their buttons too.
+    const ui = within(container);
+    fireEvent.click(ui.getByRole("button", { name: /^copy$/i }));
+    await waitFor(() => expect(container.querySelector(".sr-live")?.textContent).toMatch(/copied/i));
+    const afterFirst = seen.length;
+    // Press again while the label still reads "Copied" — inside the window, same string.
+    fireEvent.click(ui.getByRole("button", { name: /copied/i }));
+    await waitFor(() => expect(seen.length).toBeGreaterThan(afterFirst));
+    observer.disconnect();
+
+    // Two clipboard writes, and the region was emptied before each message so each is a change.
+    expect(copyText).toHaveBeenCalledTimes(2);
+    expect(seen.filter((t) => /copied/i.test(t)).length).toBeGreaterThanOrEqual(2);
+    expect(seen.filter((t) => t === "").length).toBeGreaterThanOrEqual(2);
   });
 });

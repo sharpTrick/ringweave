@@ -96,7 +96,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     constraints: ConstraintPair[],
     opts?: { reroll?: boolean },
   ) => {
-    pending.current = { names, settings, constraints, reroll: opts?.reroll ?? false };
+    // `pending.settings` is filled in BELOW, after the polish downgrade, not here — see there.
     // Never DISPATCH an explicit polish=on for a configuration the core would not
     // auto-polish: it is O(n·m)/iter and would run for tens of seconds. Downgrade to
     // "auto" (which the core then declines anyway), so a hostile imported polish=true
@@ -115,6 +115,20 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
       constrained: isConstrainedRequest(wire),
     });
     const polish = settings.polish === true && !wouldAutoPolish ? "auto" : settings.polish;
+    // THE DISPATCHED OPTIONS, not the requested ones. `viewFromResult` reads this, so it is what
+    // the Advanced panel renders, what `exportGraph` writes, and what the next reroll sends. An
+    // explicit `polish: true` that this function downgrades to "auto" (so the core declines it)
+    // was still stored as `true`, so the file recorded a configuration that does not reproduce
+    // the graph beside it: feeding the exported settings back into `buildBuddyGraph(80, 12,
+    // {polish: true})` yields a different edge list. Same class as the seed drift the comments
+    // in App.tsx were written for, one field over — a stored setting that the graph does not
+    // satisfy — and the fix is the same shape: record what ran, not what was asked for.
+    pending.current = {
+      names,
+      settings: { ...settings, polish },
+      constraints,
+      reroll: opts?.reroll ?? false,
+    };
     genGenerate({
       n: names.length,
       k: settings.buddies,

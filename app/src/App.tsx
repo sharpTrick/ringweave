@@ -234,23 +234,25 @@ export default function App() {
     // no graph. There are exactly two dispatch sites, and now both do this — which is what makes
     // the array that resolves a `Reason.person` the same array that was generated from.
     //
-    // ALL THREE FROM THE VIEW, and `view.settings` rather than `s`. Three rounds argued over
-    // these lines and each answer was closer than the last, because there are two different
-    // things here and only one of them is a copy:
-    //   - `names` and the rule rows are COPIED from the view verbatim, so committing them is
-    //     always safe. Not committing them was the refusal-names-the-wrong-roster bug.
-    //   - `settings` is a copy too EXCEPT for the seed, which this path SYNTHESISES with
+    // COMMIT WHAT IS A COPY, SYNTHESISE NOTHING, AND REBUILD NOTHING. Four rounds argued over
+    // these lines, and the reason it took four is that the three pieces of state look alike and
+    // are not:
+    //   - `names` is a COPY: `view.names` is exactly what `parseRoster` emitted, so writing it
+    //     back cannot lose anything. Not writing it was the refusal-names-the-wrong-roster bug.
+    //   - `settings` is a copy too EXCEPT the seed, which this path SYNTHESISES with
     //     `nextRerollSeed` and which only becomes true if the reroll succeeds. Committing `s`
-    //     left the Advanced → Seed field showing a seed the displayed graph was not built with,
-    //     contradicting the file `exportGraph` writes.
-    // Committing NOTHING was the over-correction: `s`'s non-seed fields ARE `view.settings`, so
-    // dropping all of `settings` left a buddy count from an abandoned edit beside a roster just
-    // re-committed from the view — a reopened dialog with Generate DISABLED and a feasibility
-    // note that is false of the graph on screen. Committing `view.settings` keeps the seed out
-    // and the split provenance with it.
+    //     showed a seed the displayed graph was not built with; committing nothing left a buddy
+    //     count from an abandoned edit beside a roster re-committed from the view. `view.settings`
+    //     is the copy, without the synthesised part.
+    //   - the rule ROWS are NOT a copy and are not written here at all. `view.constraints` is
+    //     resolved INDEX pairs; rebuilding rows from them silently deleted every row that had not
+    //     resolved — one naming somebody no longer in the roster, one half-typed, a duplicate —
+    //     which is the exact index-reconstruction `RosterModal`'s `rules` prop documents as
+    //     forbidden and the editor's "kept and flagged, never deleted" contract forbids. Nothing
+    //     needs writing: a reroll changes neither the roster nor the rules, and `constraintRows`
+    //     already holds what the user submitted.
     setNames(view.names);
     setSettings(view.settings);
-    setConstraintRows(toNamedPairs(view.constraints, view.names));
     bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
   };
 

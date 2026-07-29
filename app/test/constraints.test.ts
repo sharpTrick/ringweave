@@ -10,6 +10,7 @@
  * silently dropped.
  */
 import { describe, it, expect } from "vitest";
+import { validateDetailed } from "ringweave";
 import {
   MAX_CONSTRAINT_PAIRS,
   joinPairs,
@@ -17,6 +18,7 @@ import {
   resolveNamedPairs,
   resolvePerson,
   splitPairs,
+  toConstraints,
   toNamedPairs,
   type ConstraintPair,
   type NamedPair,
@@ -144,5 +146,57 @@ describe("MAX_CONSTRAINT_PAIRS", () => {
   it("is a real bound the import path can check before per-pair work", () => {
     expect(Number.isInteger(MAX_CONSTRAINT_PAIRS)).toBe(true);
     expect(MAX_CONSTRAINT_PAIRS).toBeGreaterThan(0);
+  });
+});
+
+describe("the editor's pre-flight and the worker's check cannot disagree", () => {
+  // `toConstraints` normalises to required-then-prohibited so the two callers — RosterModal's
+  // pre-flight, which follows the user's EDIT order, and the worker, which does all requireds
+  // then all prohibiteds — build the same object. The docblock says so; nothing held it. Order
+  // happens not to matter today because both sets are Set-backed, and that is exactly what makes
+  // the duplication comfortable: the failure would be the editor calling a rule set feasible that
+  // the worker then refuses, which is a silent disagreement between the message a user reads and
+  // the answer they get. Asserted mechanically rather than described.
+  const shapes: ConstraintPair[][] = [
+    [{ a: 0, b: 1, kind: "required" }, { a: 2, b: 3, kind: "prohibited" }, { a: 1, b: 4, kind: "required" }],
+    [{ a: 5, b: 2, kind: "prohibited" }, { a: 0, b: 3, kind: "prohibited" }, { a: 4, b: 5, kind: "required" }],
+    [{ a: 1, b: 2, kind: "required" }],
+    [],
+  ];
+
+  const shuffles = (pairs: ConstraintPair[]): ConstraintPair[][] => [
+    pairs,
+    [...pairs].reverse(),
+    // The worker's own order: everything required, then everything prohibited.
+    joinPairs(splitPairs(pairs).required, splitPairs(pairs).prohibited),
+  ];
+
+  it("builds the same Constraints whatever order the rules arrive in", () => {
+    for (const pairs of shapes) {
+      const built = shuffles(pairs).map((order) => toConstraints(8, order));
+      for (const c of built) {
+        // `prohibitedCount` is the only count the core exposes — there is no `requiredCount`, and
+        // asserting one would have compared undefined to undefined and passed while checking
+        // nothing. The membership sweep below is what actually holds this.
+        expect(c.prohibitedCount).toBe(built[0].prohibitedCount);
+        // Membership, not just counts — a reordering that swapped two pairs' KINDS would keep
+        // both counts and change the answer.
+        for (let a = 0; a < 8; a++) {
+          for (let b = a + 1; b < 8; b++) {
+            expect(c.isRequired(a, b)).toBe(built[0].isRequired(a, b));
+            expect(c.isProhibited(a, b)).toBe(built[0].isProhibited(a, b));
+          }
+        }
+      }
+    }
+  });
+
+  it("gives the same feasibility verdict from either caller's order", () => {
+    for (const pairs of shapes) {
+      for (const k of [2, 3, 4]) {
+        const verdicts = shuffles(pairs).map((order) => validateDetailed(toConstraints(8, order), k));
+        for (const v of verdicts) expect(v).toEqual(verdicts[0]);
+      }
+    }
   });
 });

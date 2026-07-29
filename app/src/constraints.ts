@@ -148,6 +148,14 @@ export interface NamedPair {
 /**
  * Index pairs → name pairs, for editing. A pair referencing a position the roster
  * no longer has is dropped; it names nobody, so there is nothing to show.
+ *
+ * ONE CALLER, and the constraint is load-bearing rather than incidental: `applyImported`, where
+ * the file carries only index pairs and there are no typed rows to lose. Anywhere else it is
+ * LOSSY in the direction the editor promises never to be — index pairs are what SURVIVED
+ * resolution, so rebuilding rows from them deletes exactly the rows RosterModal contracts to
+ * keep and flag: a row naming somebody not in the roster, a half-typed row, a duplicate. The
+ * reroll path did that for three rounds and the deletion was silent. If a second caller ever
+ * appears, check first whether it has typed rows already — if it does, it does not need this.
  */
 export function toNamedPairs(pairs: ConstraintPair[], names: string[]): NamedPair[] {
   const out: NamedPair[] = [];

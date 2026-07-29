@@ -11,8 +11,14 @@ interface Props {
 
 /** F3: the always-available, non-graph interface — a Name → buddies table with copy
     and CSV export. Clicking a row selects that person in the graph. */
+/** What a successful copy announces. One string, so the emptied/refilled pair cannot drift. */
+const COPIED_MESSAGE = "Buddy list copied to the clipboard.";
+
 export default function BuddyList({ view, selected, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
+  // The live region's text, held separately from `copied` so it can be emptied and refilled —
+  // see copyAll. The button's own label still reads from `copied`.
+  const [announced, setAnnounced] = useState("");
 
   const copyAll = async () => {
     // Each line starts with a name, so a hostile name (`=HYPERLINK(...)`) pasted into a
@@ -26,8 +32,20 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
     const ok = await copyText(text);
     if (ok) {
       setCopied(true);
+      // EMPTIED, THEN REFILLED, in two commits. A live region announces a CHANGE, and pressing
+      // Copy again inside the window below sets the identical string — no DOM mutation, so the
+      // second press is silent, which is exactly the press a user makes when unsure the first
+      // registered (the clipboard write is awaited and there is no other synchronous feedback).
+      // The two setStates are in different tasks, so this is two commits and two mutations, not
+      // one batch: a fix that cannot be observed to have happened is not a fix, and this one is
+      // asserted by watching the region rather than by reading the final markup.
+      setAnnounced("");
+      setTimeout(() => setAnnounced(COPIED_MESSAGE), 0);
       // The app's shared floor, not a local literal — see AUTO_CLEAR_MS.
-      setTimeout(() => setCopied(false), AUTO_CLEAR_MS);
+      setTimeout(() => {
+        setCopied(false);
+        setAnnounced("");
+      }, AUTO_CLEAR_MS);
     }
   };
 
@@ -46,9 +64,7 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
           {/* The label swap is the ONLY confirmation that the copy worked, and a label change on
               the focused control is not reliably announced. Every other transient feedback in the
               app has a live region; this one did not. Mounted always, filled conditionally. */}
-          <span className="sr-live" role="status" aria-live="polite">
-            {copied ? "Buddy list copied to the clipboard." : ""}
-          </span>
+          <span className="sr-live" role="status" aria-live="polite">{announced}</span>
           <button className="chipbtn" onClick={exportCsv}>CSV</button>
         </div>
       </div>

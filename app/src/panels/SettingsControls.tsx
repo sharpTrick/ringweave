@@ -32,10 +32,26 @@ export default function SettingsControls({ settings, onChange }: Props) {
             CURRENT number to someone who has just tabbed onto the control and has not pressed
             anything yet. LayoutToggle's `aria-pressed` is the same idea for a control whose
             state is a choice rather than a count. */}
+        {/* AT THE BOUNDS the live region cannot carry the news, because the value does not
+            change: `setK` clamps 13 back to 12, the text stays "12", no DOM mutation happens and
+            nothing is announced. A user pressing "+" at the ceiling could not tell "my press did
+            not register" from "I am already at the limit" — the one distinction the region exists
+            to make. So the state is carried by the CONTROL rather than by the value.
+
+            `aria-disabled`, not `disabled`: a real `disabled` on the button under the user's
+            finger is blurred by the browser the moment it takes effect, and that happens on the
+            press that REACHES the bound — no element is removed, so `useFocusRescue` (which
+            watches for removals) correctly does not fire, and focus is simply gone. `aria-disabled`
+            conveys the state, keeps the control focusable, and leaves the no-op no-op. */}
         <div className="stepper">
           <button
             type="button"
-            aria-label={`fewer buddies, currently ${settings.buddies}`}
+            aria-disabled={settings.buddies <= BUDDY_MIN}
+            aria-label={
+              settings.buddies <= BUDDY_MIN
+                ? `fewer buddies, currently ${settings.buddies} — the fewest allowed`
+                : `fewer buddies, currently ${settings.buddies}`
+            }
             onClick={() => setK(settings.buddies - 1)}
           >
             −
@@ -43,7 +59,12 @@ export default function SettingsControls({ settings, onChange }: Props) {
           <span className="val tabnum" role="status" aria-live="polite">{settings.buddies}</span>
           <button
             type="button"
-            aria-label={`more buddies, currently ${settings.buddies}`}
+            aria-disabled={settings.buddies >= BUDDY_MAX}
+            aria-label={
+              settings.buddies >= BUDDY_MAX
+                ? `more buddies, currently ${settings.buddies} — the most allowed`
+                : `more buddies, currently ${settings.buddies}`
+            }
             onClick={() => setK(settings.buddies + 1)}
           >
             +

@@ -21,6 +21,14 @@ export interface Neighborhood {
 
 const EMPTY: Neighborhood = { first: new Set(), second: new Set() };
 
+/**
+ * BOUNDED BY DEGREE, NOT BY n — the constraint is the whole reason this function exists in the
+ * app rather than in the core, and it is invisible from the signature. Both call sites feed it a
+ * graph whose degree is capped at BUDDY_MAX = 12 (generation enforces it; `importGraph`'s
+ * per-vertex gate refuses a file that breaks it), so the walk is at most ~144 set operations. On
+ * a graph without that cap it is O(d²) with no ceiling, and the core's `bfsDistances` is the
+ * right call instead. See the module docblock for why the "improvement" runs the other way here.
+ */
 export function neighborhood(adjacency: number[][], focus: number | null): Neighborhood {
   if (focus == null) return EMPTY;
   const first = new Set<number>();

@@ -247,6 +247,45 @@ describe("App handles a refusal from the worker", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeNull();
   });
 
+  it("a reroll never deletes a rule row the editor promised to keep", async () => {
+    // The editor's contract is that an unresolvable row is KEPT AND FLAGGED, never deleted — a
+    // row naming somebody not in the roster, a half-typed row, a duplicate. `view.constraints` is
+    // resolved INDEX pairs, i.e. exactly the rows that SURVIVED resolution, so rebuilding the
+    // editor's rows from them deletes the others silently. The reroll path did that for three
+    // rounds; nothing covered it, because the editor's own tests exercise RosterModal in
+    // isolation and nothing asserted on the rows ACROSS a dispatch.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "A\nB\nC\nD\nE\nF" },
+    });
+    fireEvent.click(screen.getByText(/Buddy rules/));
+    fireEvent.click(screen.getByText("+ Add a buddy rule"));
+    fireEvent.change(screen.getByLabelText("Rule 1, first person"), { target: { value: "A" } });
+    fireEvent.change(screen.getByLabelText("Rule 1, second person"), { target: { value: "B" } });
+    fireEvent.click(screen.getByText("+ Add a buddy rule"));
+    fireEvent.change(screen.getByLabelText("Rule 2, first person"), { target: { value: "A" } });
+    // Names somebody who is not in the roster: kept and flagged, per the editor's contract.
+    fireEvent.change(screen.getByLabelText("Rule 2, second person"), { target: { value: "Zoe" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(6, 4, { polish: false });
+      rerender(<App />);
+    });
+    // Reroll, which changes neither the roster nor the rules.
+    fireEvent.click(screen.getByRole("button", { name: /different arrangement/i }));
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(6, 4, { polish: false });
+      rerender(<App />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
+    fireEvent.click(screen.getByText(/Buddy rules/));
+    // Both rows are still there, including the one that never resolved.
+    expect((screen.getByLabelText("Rule 1, second person") as HTMLInputElement).value).toBe("B");
+    expect((screen.getByLabelText("Rule 2, second person") as HTMLInputElement).value).toBe("Zoe");
+  });
+
   it("never shows a seed the graph on screen was not built with", async () => {
     // The seed is the one value the reroll path SYNTHESISES rather than copying from the view,
     // and it only becomes true if the reroll succeeds. Committing it at dispatch left the
@@ -319,6 +358,31 @@ describe("overlays and focus", () => {
     expect(dialog.contains(document.activeElement)).toBe(true);
     // ...and specifically at the field the dialog exists for.
     expect(document.activeElement).toBe(screen.getByLabelText("Roster names"));
+  });
+
+  it("says so at the stepper's bounds, where the value cannot", () => {
+    // `setK` clamps, so pressing "+" at BUDDY_MAX leaves the live region's text byte-identical —
+    // no DOM mutation, nothing announced. A user could not tell "my press did not register" from
+    // "I am already at the limit", which is the one distinction that region exists to make. The
+    // state therefore has to live on the CONTROL. `aria-disabled` rather than `disabled`: the
+    // browser blurs a real `disabled` button under the user's finger on the press that REACHES
+    // the bound, and no element is removed, so the focus rescue correctly does not fire.
+    render(<App />);
+    fireEvent.click(screen.getByText("Advanced"));
+    const up = () => screen.getByRole("button", { name: /more buddies/i });
+    const down = () => screen.getByRole("button", { name: /fewer buddies/i });
+    expect(up().getAttribute("aria-disabled")).toBe("false");
+    for (let i = 0; i < 20; i++) fireEvent.click(up());
+    expect(up().getAttribute("aria-disabled")).toBe("true");
+    expect(up().getAttribute("aria-label")).toMatch(/the most allowed/);
+    // Focus is NOT taken away by reaching the bound — the whole reason this is not `disabled`.
+    up().focus();
+    fireEvent.click(up());
+    expect(document.activeElement).toBe(up());
+    for (let i = 0; i < 20; i++) fireEvent.click(down());
+    expect(down().getAttribute("aria-disabled")).toBe("true");
+    expect(down().getAttribute("aria-label")).toMatch(/the fewest allowed/);
+    expect(up().getAttribute("aria-disabled")).toBe("false");
   });
 
   it("never nests the dialog inside an inert ancestor", () => {
