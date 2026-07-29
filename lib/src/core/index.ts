@@ -52,6 +52,7 @@ export {
   polishConstrained,
   type ConstrainedGreedyOptions,
   type PolishConstrainedOptions,
+  type PolishConstrainedResult,
 } from "./constrainedGreedy.js";
 
 import { Graph, MAX_ROSTER } from "./graph.js";
@@ -180,8 +181,13 @@ export function buildBuddyGraph(
     // input (disconnection is penalized, so a connected input stays connected) —
     // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
     // polishConstrained.
-    g = polish(g, { mode: "anneal", seed, maxIters: options.polishIters }).graph;
-    polished = true;
+    // OBSERVED, NOT INFERRED. `polished` used to be set from the decision to CALL, so a pass
+    // that ran zero iterations — `polishIters: 0`, or a graph with fewer than two edges — was
+    // reported as polished over an edge list byte-identical to `{ polish: false }`. `polish`
+    // already reports what it ran; the fact now comes from there.
+    const res = polish(g, { mode: "anneal", seed, maxIters: options.polishIters });
+    g = res.graph;
+    polished = res.iters > 0;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);
@@ -224,9 +230,9 @@ export interface ConstrainedBuddyOptions {
    * contract says the same. Kept for call-site compatibility with
    * {@link BuddyOptions}; removing it would be a breaking change.
    *
-   * It previously documented "Default 5", which was doubly wrong: nothing applies a
-   * default because nothing reads the field, and stating one invites a caller to
-   * believe passing 7 does something.
+   * It previously documented "Default 5", which was doubly wrong: nothing applies a default
+   * because nothing ACTS on the field — it is read here and passed to `constrainedGreedy`, which
+   * ignores it — and stating a default invites a caller to believe passing 7 does something.
    */
   minSeparation?: number;
   /**
@@ -385,12 +391,16 @@ export function buildConstrainedBuddyGraph(
     // its `RNG` throws on. Polish is the only seed-dependent stage here, so unlike the fast
     // tier there is nothing outside this branch for the seed to affect.
     const requestedSeed = options.seed ?? 0;
-    g = polishConstrained(g, active, {
+    const res = polishConstrained(g, active, {
       seed: isSeed(requestedSeed) ? requestedSeed : 0,
       iters: options.polishIters,
       priorWeight,
     });
-    polished = true;
+    g = res.graph;
+    // Same correction as the fast tier: from the pass, not from the call. `priorsKeptFraction`
+    // rides on this, and publishing a fraction when nothing ever weighed the priors is the
+    // "coincidental number" that field's own contract says must be null.
+    polished = res.decisions > 0;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);

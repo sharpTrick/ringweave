@@ -126,7 +126,7 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
 
         const g = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         const before = g.degrees();
-        const polished = polishConstrained(g, cons, { seed: 3, iters: 600 });
+        const polished = polishConstrained(g, cons, { seed: 3, iters: 600 }).graph;
 
         expect(polished.degrees()).toEqual(before);
         for (const [a, b] of cons.prohibitedPairs()) {
@@ -155,7 +155,7 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
             seed: 5,
             iters: 800,
             priorWeight: weight,
-          });
+          }).graph;
           return cons.priorPairs().filter(([a, b]) => g.hasEdge(a, b)).length;
         };
         expect(kept(50)).toBeGreaterThanOrEqual(kept(0));

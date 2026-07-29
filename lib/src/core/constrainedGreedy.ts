@@ -136,15 +136,32 @@ export function constrainedGreedy(
  * never break a required edge, create a prohibited one, or leave the roster in more
  * pieces than it arrived in — keeping only strictly-improving moves. The objective
  * is ASPL (with a large disconnection penalty) plus an optional
- * prior-preservation penalty for churn. Returns just the graph — run-level
- * metrics (unlike `polish`'s `PolishResult`) come from the caller's report in
- * `buildConstrainedBuddyGraph`.
+ * prior-preservation penalty for churn.
+ *
+ * Reports `decisions` alongside the graph, matching `polish`'s `PolishResult.iters`. It used to
+ * return the graph alone, with a comment saying run-level metrics come from the caller's report
+ * — and that was the hole: the caller could only infer whether a pass had happened from its own
+ * decision to CALL, so `polishIters: 0`, or a graph with fewer than two edges, produced
+ * `polished: true` over an untouched graph and a `priorsKeptFraction` measuring nothing. A fact
+ * about what a pass did has to come from the pass.
  */
+export interface PolishConstrainedResult {
+  graph: Graph;
+  /**
+   * Accept/reject decisions actually taken — swaps proposed, applied and measured.
+   *
+   * Not the iteration BUDGET: the loop breaks immediately on a graph with fewer than two edges,
+   * and an iteration that finds no legal swap weighs nothing. Both are cases where a budget of
+   * 8,000 and a real count of 0 differ, and both are reachable without passing an option.
+   */
+  decisions: number;
+}
+
 export function polishConstrained(
   input: Graph,
   cons: Constraints,
   opts: PolishConstrainedOptions = {},
-): Graph {
+): PolishConstrainedResult {
   checkConstraintIds(input.n, cons);
   // ALWAYS-ON, not a dev-mode postcondition. This pass only ever SWAPS edges, so it
   // cannot repair an input that already violates the constraints — yet the module header
@@ -193,6 +210,7 @@ export function polishConstrained(
   let best = g.copy();
   let bestEnergy = current;
 
+  let decisions = 0;
   for (let it = 0; it < iters; it++) {
     const edges = g.edgeList();
     if (edges.length < 2) break;
@@ -201,6 +219,7 @@ export function polishConstrained(
 
     applySwap(g, swap);
     const next = measure(g);
+    decisions++;
     // Never trade connectivity away, however large the prior weight, and never
     // shrink the biggest group. BOTH quantities are needed: component count alone
     // is too weak, because a swap that splits the largest group while merging two
@@ -230,7 +249,7 @@ export function polishConstrained(
 
   assertHardConstraints(best, cons, "polishConstrained");
   assertDegreesPreserved(startDegrees, best, "polishConstrained");
-  return best;
+  return { graph: best, decisions };
 }
 
 // --- generation helpers -----------------------------------------------------

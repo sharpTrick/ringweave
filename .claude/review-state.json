@@ -23,20 +23,20 @@
   },
   "lib/src": {
     "critic-correctness": {
-      "nothingFoundStreak": 2,
-      "lastRound": 15
+      "nothingFoundStreak": 0,
+      "lastRound": 16
     },
     "critic-security": {
-      "nothingFoundStreak": 0,
-      "lastRound": 15
+      "nothingFoundStreak": 1,
+      "lastRound": 16
     },
     "critic-solid": {
-      "nothingFoundStreak": 1,
-      "lastRound": 15
+      "nothingFoundStreak": 2,
+      "lastRound": 16
     },
     "critic-maintainability": {
       "nothingFoundStreak": 0,
-      "lastRound": 15
+      "lastRound": 16
     },
     "critic-interaction": {
       "nothingFoundStreak": 5,

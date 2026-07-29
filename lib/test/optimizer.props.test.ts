@@ -165,7 +165,7 @@ describe("polishConstrained never fragments the roster", () => {
         // Priors the current graph does NOT satisfy, so the prior term actively
         // pushes for swaps — the case where a weight could buy fragmentation.
         for (let v = 0; v + 3 < s.n; v += 4) cons.addPrior(v, v + 3);
-        const out = polishConstrained(g, cons, { seed: s.seed, iters: 400, priorWeight });
+        const out = polishConstrained(g, cons, { seed: s.seed, iters: 400, priorWeight }).graph;
         expect(components(out)).toBeLessThanOrEqual(components(g));
       }),
     );
@@ -368,7 +368,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // parsing an over-large exponent yields one.
     const fromJson = JSON.parse('{"iters":1e999}').iters as number;
     expect(fromJson).toBe(Infinity);
-    expect(polishConstrained(ring(20), cons, { iters: fromJson }).n).toBe(20);
+    expect(polishConstrained(ring(20), cons, { iters: fromJson }).graph.n).toBe(20);
     expect(performance.now() - started2).toBeLessThan(20_000);
   });
 
@@ -383,7 +383,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // never attempted at all.
     const huge = ring(40000);
     expect(() => polish(huge, { maxIters: 0 })).toThrow(/too large to polish/);
-    expect(() => polishConstrained(ring(30000), new Constraints(30000), { iters: 0 })).toThrow(
+    expect(() => polishConstrained(ring(30000), new Constraints(30000), { iters: 0 }).graph).toThrow(
       /too large to polish/,
     );
 
@@ -391,6 +391,42 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // constrained path documents n=5000 as its ceiling, so that has to still pass.
     expect(() => checkPolishSize(5000, 10000)).not.toThrow();
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
+  });
+
+  it("reports `polished` from what the pass DID, not from the decision to call it", () => {
+    // `polished` was set at the call site, so it meant "I decided to run polish" rather than
+    // "polish ran". Two ways to reach a pass that does nothing, and neither needs an unusual
+    // option: `polishIters: 0` is an integer >= 0 and is honoured, and the loop breaks
+    // immediately on a graph with fewer than two edges. Both returned an edge list
+    // BYTE-IDENTICAL to `{ polish: false }` while reporting `polished: true` — and on the
+    // constrained tier they also published a `priorsKeptFraction`, which is a measurement of
+    // something that never happened. This is the open sibling of the correction recorded in
+    // polish.ts, which closed only the anneal-calibration route into the same state.
+    const cons = new Constraints(60);
+    for (let v = 0; v + 1 < 60; v += 2) cons.addPrior(v, v + 1);
+
+    const off = buildConstrainedBuddyGraph(60, 4, cons, { polish: false });
+    const zero = buildConstrainedBuddyGraph(60, 4, cons, { polish: true, polishIters: 0 });
+    expect(zero.edges).toEqual(off.edges); // the pass did nothing...
+    expect(zero.polished).toBe(false); // ...and no longer claims otherwise
+    expect(zero.report.priorsKeptFraction).toBeNull();
+
+    // The same state with NO option at all: k=0 leaves an edgeless graph, so the loop's
+    // fewer-than-two-edges break fires on iteration one.
+    const edgeless = buildConstrainedBuddyGraph(12, 0, new Constraints(12));
+    expect(edgeless.edges).toEqual([]);
+    expect(edgeless.polished).toBe(false);
+
+    // And the fast tier, which had the identical defect one builder over.
+    const fastOff = buildBuddyGraph(30, 4, { polish: false });
+    const fastZero = buildBuddyGraph(30, 4, { polish: true, polishIters: 0 });
+    expect(fastZero.edges).toEqual(fastOff.edges);
+    expect(fastZero.polished).toBe(false);
+
+    // Not vacuous: a pass that really runs still reports true, on both tiers.
+    const real = buildConstrainedBuddyGraph(60, 4, cons, { polish: true });
+    expect(real.polished).toBe(true);
+    expect(buildBuddyGraph(30, 4, { polish: true }).polished).toBe(true);
   });
 
   it("never lets an ITERATION option ask for more work than omitting it", () => {
@@ -605,11 +641,11 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     const g = ring(8);
     const cons = new Constraints(8);
     cons.prohibit(0, 1); // ring(8) has this edge
-    expect(() => polishConstrained(g, cons, { iters: 10 })).toThrow(/prohibited pair/);
+    expect(() => polishConstrained(g, cons, { iters: 10 }).graph).toThrow(/prohibited pair/);
 
     const missing = new Constraints(8);
     missing.require(0, 4); // ring(8) does not have this edge
-    expect(() => polishConstrained(g, missing, { iters: 10 })).toThrow(/missing required pair/);
+    expect(() => polishConstrained(g, missing, { iters: 10 }).graph).toThrow(/missing required pair/);
   });
 
   it("charges the anneal calibration against the same budget as the loop", () => {
@@ -727,7 +763,7 @@ describe("the fragmentation guard needs BOTH count and largest-size", () => {
         const g = graphOf(s2.n, s2.edges);
         const cons = new Constraints(s2.n);
         for (let v = 0; v + 3 < s2.n; v += 4) cons.addPrior(v, v + 3);
-        const out = polishConstrained(g, cons, { seed: s2.seed, iters: 400, priorWeight });
+        const out = polishConstrained(g, cons, { seed: s2.seed, iters: 400, priorWeight }).graph;
         expect(largestComponentFraction(out)).toBeGreaterThanOrEqual(largestComponentFraction(g));
         expect(components(out)).toBeLessThanOrEqual(components(g));
       }),

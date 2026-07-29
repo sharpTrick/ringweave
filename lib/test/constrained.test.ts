@@ -295,7 +295,7 @@ describe("polishConstrained preserves hard constraints and degrees", () => {
     const base = constrainedGreedy(40, 4, cons, { minSeparation: 5 });
     const before = base.degrees();
 
-    const polished = polishConstrained(base, cons, { seed: 1, iters: 4000 });
+    const polished = polishConstrained(base, cons, { seed: 1, iters: 4000 }).graph;
 
     expect(hasNoProhibited(polished, cons)).toBe(true);
     expect(hasAllRequired(polished, cons)).toBe(true);
@@ -315,7 +315,7 @@ describe("polishConstrained preserves hard constraints and degrees", () => {
       [0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5],
     ];
     for (const [a, b] of tri) cons.addPrior(a, b);
-    const polished = polishConstrained(g, cons, { seed: 1, iters: 4000, priorWeight: 100 });
+    const polished = polishConstrained(g, cons, { seed: 1, iters: 4000, priorWeight: 100 }).graph;
     expect(isConnected(polished)).toBe(true);
   });
 });
@@ -334,7 +334,7 @@ describe("prior weight preserves churn buddies", () => {
         seed: 7,
         iters: 6000,
         priorWeight: weight,
-      });
+      }).graph;
       return cons.priorPairs().filter(([a, b]) => g.hasEdge(a, b)).length;
     };
 

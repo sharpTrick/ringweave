@@ -1,0 +1,220 @@
+{
+  "target": "lib/src",
+  "round": 16,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 2,
+    "confirmed": 2,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 2
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full read of all 11 files in lib/src/core plus all 9 test files and the reference-python oracle. Ran `npm test` (252 pass). Regenerated fixtures via `python3 gen_fixtures.py` — no drift. Cross-language parity beyond the fixtures: 300 fresh random constraint scenarios, `validate` agreed on all 300, and on the 255 feasible ones `constrainedGreedy` was byte-identical to `constrained_gen.constrained_greedy` on edge list, degree sequence, ASPL, diameter and connectivity. Fuzzed constrainedGreedy hard guarantees (prohibited absent, required present, degree cap, legal-edge maximality, determinism) over 4000 random feasible constraint sets — clean. Verified `girth` against a brute-force shortest-cycle oracle over 6000 random graphs and confirmed edge-insertion-order invariance for girth/shortestPath/eccentricity/allPairsSummary; confirmed buildConstrainedBuddyGraph, polishConstrained and polish are invariant to both reversed constraint insertion and reversed edge insertion over 400 cases. Traced that forceConnect's Set-order-dependent component walk is genuinely inert (completion exits legal-edge-maximal; step count is bounded well below the completionCap). Verified buildConstrainedBuddyGraph never throws over ~2000 malformed (n,k,options) combinations including priorHard, and traced the arithmetic showing checkPolishSize cannot throw out of either builder even with explicit `polish: true`. Confirmed MAX_REPAIR_WORK does not fire on the largest greedy-admitted shapes ((1000,12),(2000,3),(5000,2),(1200,5)). Swept buildBuddyGraph over n=2..22 x k=2..6 recomputing every returned metric from the returned edges (aspl, diameter, connected, girth, largestComponentFraction, buddies, regular, degreeMax<=k, asplGap>=0) — all agree, all deterministic. Checked n=0/1/2, k=0/1, k>=n, mind demotion floor against gen_c_cached, n!=cons.n, everyone-under-degree, one-vs-many components. Verified ringGreedy's in-place incremental distance-cache update is exact despite reading partially-updated rows (single-edge min-plus identity is a fixed point, so it agrees with the numpy copy-based reference).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial DoS/robustness pass over lib/src (all 11 modules + lib/test), measured against the shipped lib/dist build, probes under .review-scratch/.\n\nGATE ORDERING (cost before commitment): traced every cap against the work it bounds. validateDetailed orders structuralReasons -> MAX_CONSTRAINED_N -> k-validity -> MAX_CONSTRAINED_WORK -> degree vectors -> O(n^2) connectivityReasons; the expensive walk is last (measured 68 ms at the n=5000 ceiling). checkPolishSize precedes input.copy() and energy() in polish, and precedes the copy/sweeps in polishConstrained. ringGreedy's MAX_CACHED_N and MAX_GREEDY_WORK both precede ring(n) and the Int32Array(n*n) allocation. refusedResult clamps to MAX_CONSTRAINED_N not MAX_ROSTER.\n\nBUDGET HONESTY (re-measured rather than trusting the comments): constrained (5000,4) 16.2s, (464,463) 48.3s, (550,330) 38.3s, (600,277) 34.8s, (1000,100) 25.8s, (2000,25) 22.3s, (465,464) refused. Unconstrained (1000,12) 38.5s, (2154,3) 20.5s, (1709,4) 22.2s, (5000,2) 1.9s. All inside the documented ~46s/~60s envelopes. Polish: measured the realised unit rate of MAX_POLISH_WORK at n=120/500/1000/2000/5000 -> flat 4.5-5.4e7 units/s, so the 8.65e8 budget caps polish at ~19s at every n; the \"calibrated at one point in (n,k) space\" hypothesis is dead.\n\nUNMODELLED TERM: greedyWork charges nothing for minSeparation, and findPair pays a full O(n^2) eccentricity scan per demotion (up to floor(n/2) times). Bounded above by n^3/2 vs greedyWork's 1.5n^3 at k=3, and the ecc loop is skipped entirely at k=2. Measured (2154,3) 20.5 -> 24.0s with minSeparation 1077; (1000,12) 38.5 -> 35.3s. Not exploitable.\n\nNUMERIC EDGES: swept [-1, -0, 0, 1, 2.5, NaN, +/-Infinity, 5e9, 1e21, 2**53, \"3\", null, undefined, {}, []] through n, k, seed, polishIters, priorWeight, minSeparation on both builders and mooreLowerBounds. No hang, no native RangeError, no NaN in a result. polishIters is genuinely reduce-only after round 15 (clamped to the caller's own fallback, 20000/8000), so retiring MAX_POLISH_ITERS left the ceiling intact by construction on both paths. priorWeight null/undefined correctly take ?? DEFAULT_PRIOR_WEIGHT; non-finite/negative/non-number normalise to 0 and report priorsKeptFraction null.\n\nTHROW-VS-REFUSE: tried to make buildConstrainedBuddyGraph throw. checkPolishSize is the only candidate and cannot fire: max n(n+m) = n^2(1+k/2) subject to n^2*k <= 1e8 and n <= 5000 peaks at 7.5e7, against a 2.25e8 fixed charge of an 8.65e8 budget leaving 6.4e8 for a 7.5e7 iteration. Same for buildBuddyGraph + polish:true (peak 5e7 at (5000,2)).\n\nDETERMINISM: 80 paired builds with the same required (then prohibited) pair set inserted in reversed order, auto-polish active. Zero divergence — Set insertion order reaches nothing observable (choosePartner sorts on farness/degree/index, edgeList canonicalises, forceConnect is provably inert because completion exits only at legal-edge maximality).\n\nBUILD-ARTIFACT SKEW: lib/tsconfig targets ES2020, so #checkEndpoints/#prohibited downlevel to __classPrivateFieldGet brand checks on the hottest read path (~n^2*k/2 hasEdge calls). Suspected the budgets were calibrated on vitest's modern transform. Rebuilt at ES2022 and compared: 2308 vs 2582 ms, 3776 vs 4275 ms, 12.1 vs 12.2 s — ~10%, within calibration margin.\n\nSPREADSHEET/CLIPBOARD SINK: not present in this component. lib has no CSV, clipboard, filename or DOM surface, and formatReason interpolates only numbers. That lens belongs to app/.\n\nConstraints.fromTags still has no caller outside lib/test (grepped app/src, lib/src, scripts), so its O(n^2) materialization remains correctly filed as a deferral in lib/CLAUDE.md; not re-filed as noise.\n\nBaseline: lib suite green, 252 tests / 9 files.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of lib/src/core (graph.ts, budgets.ts, constraints.ts, greedy.ts, constrainedGreedy.ts, polish.ts, swap.ts, metrics.ts, bounds.ts, rng.ts, index.ts) and lib/CLAUDE.md's own known-limitations ledger, cross-referenced against docs/PROJECT_PLAN.md and app/CLAUDE.md to identify the actually-committed next change.\n\nTwo concrete extension attempts against real files, not speculation:\n\n1. Declared OCP seam (constraints.ts TagPolicy switch in Constraints.fromTags): added a second live case (\"require_same\", mirroring prohibit_same but calling c.require instead of c.prohibit) directly in src/core/constraints.ts, ran `npm run typecheck` and the full `npm test` suite (252 tests) with no other file touched. Both passed clean. The change was then reverted (git diff empty). This confirms the seam genuinely pays exactly as lib/CLAUDE.md claims: validateDetailed, buildReport, connectivityReasons, degreeOf etc. are already generic over required/prohibited/prior pairs, so a new policy branch needs no caller changes.\n\n2. F11 (construction replay) — the one place PROJECT_PLAN.md explicitly states core work is required (\"F11 is therefore core work first... not a UI concern only\") — traced what implementing a construction trace/bestAtIter would actually require: ringGreedy (order is implicit in the loop, cheap), repairDegrees (mutates in place, void return, no result object to extend), constrainedGreedy (three separate mutating phases — required edges, extendOne loop, forceConnect — with no trace channel), polish (PolishResult would gain bestAtIter, correctly identified in lib/CLAUDE.md as sitting exactly at `best = g.copy()`), polishConstrained (returns a bare Graph today, no result type at all — the biggest gap), swap.ts (Swap already carries enough detail to reconstruct trace deltas, no change needed there), and index.ts (BuddyResult/ConstrainedBuddyResult would need new fields to carry the trace to callers). Confirmed by grep that no caller (app or test) references fromTags, priorHard, or any replay/trace concept today. This fan-out is real but is already documented accurately in lib/CLAUDE.md's known-limitations section as a deferred item with the correct reasoning (no caller in the tree yet), so I am not re-filing it — re-filing an already-correctly-deferred item would just be duplicate bookkeeping, not a new finding.\n\nAlso checked: legalEdge/constrainedMeasure remain factory functions rather than caller-injectable predicates (consistent with the stated determinism/hard-constraint rationale, not rigidity); the tag-policy switch has only one live case today but is a single trivial switch arm plus a throwing default, not a class hierarchy or DI container, so it does not read as gratuitous machinery for a single variant; index.ts's size (~590 lines) is a facade over two builder entry points plus their shared helpers (summarize, buildReport, refusedResult, resolveWantPolish/autoPolishEnabled, withHardPriors, degreeExtent) — each helper has one clear responsibility and none reach toward UI concerns, so it reads as a composition root doing facade work, not a god component; metrics.ts/bounds.ts/rng.ts/swap.ts are each single-purpose with swap.ts a genuine (not speculative) shared dependency of both polish.ts and constrainedGreedy.ts today.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 2,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (2/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Optimization pass result fields (`polished`, `priorsKeptFraction`) are derived from the decision to invoke the pass rather than from what the pass actually did, so a zero-iteration run is misreported as a completed/measured pass",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`polished` is set from the decision to CALL polish rather than from anything polish did, so a pass that executes zero iterations is reported as polished — and `priorsKeptFraction` is then published as a measurement when nothing ever weighed the priors."
+      ],
+      "remediation": "Delete the call-site-derived `polished`/`priorsKeptFraction` assignments and drive both directly off the pass's own executed-iteration count (`iters`) in every builder that sets them, so there is a single source of truth instead of separate inferred values per call site."
+    },
+    {
+      "theme": "A comment about `minSeparation` overstates the field's inertness (\"nothing reads it\") when the code in fact reads and forwards the value, just without acting on it",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment states 'nothing reads the field' for minSeparation, contradicted by lines 348 and 376-377 where the field is accessed and passed through."
+      ],
+      "remediation": "Remove the inaccurate 'nothing reads the field' clause from the comment rather than adding new qualifying language, leaving only a factual note that the value is unused once forwarded."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "no-op-reported-as-work",
+      "theme": "a result field asserts that an optimisation pass ran when the pass performed zero iterations, so the caller cannot tell a measured number from a coincidental one",
+      "file": "lib/src/core/index.ts",
+      "line": 393,
+      "summary": "`polished` is set from the decision to CALL polish rather than from anything polish did, so a pass that executes zero iterations is reported as polished — and `priorsKeptFraction` is then published as a measurement when nothing ever weighed the priors.",
+      "failure": "`buildConstrainedBuddyGraph(60, 4, cons, { polishIters: 0 })` (cons carrying 30 priors from a previous round) returns an edge list BYTE-IDENTICAL to `{ polish: false }`, but reports `polished: true` and `report.priorsKeptFraction: 0.0333…`; the same call with `{ polish: false }` correctly reports `polished: false, priorsKeptFraction: null`, and with polish actually running reports 1.0. `boundedPolishIterations` honours 0 (it is an integer >= 0), so `polishConstrained` returns its input untouched. Reachable with NO option at all whenever the graph has fewer than 2 edges: `buildConstrainedBuddyGraph(12, 0, cons)` -> `polished: true, priorsKeptFraction: 0`. Same on the unconstrained builder: `buildBuddyGraph(30, 4, { polishIters: 0 })` -> `polished: true` on a graph identical to `{ polish: false }`. This is the open sibling of the correction already recorded at lib/src/core/polish.ts:87 (\"loopIters 0, no accept/reject decision, the input returned byte-for-byte, and `polished: true` reported. A silent no-op sold as work\"), which closed only the anneal-calibration route into the same state.",
+      "remediation": "Make the fact flow from the pass instead of from the call site: have `polishConstrained` report the iteration count it actually executed (as `polish` already does via `PolishResult.iters`), and in BOTH builders set `polished = iters > 0` and gate `priorsKeptFraction` on `active.priorHard || (iters > 0 && priorWeight !== 0)`. Fixing only the `polishIters: 0` case leaves the `m < 2` case (k<=1 rosters) open, and fixing only the constrained builder leaves `buildBuddyGraph` open — both are the same fact being inferred rather than observed.",
+      "invariant": "For every input to either builder, `result.polished === true` implies the polish pass executed at least one accept/reject decision (equivalently, `polished === false` whenever the pass's effective iteration budget is 0 or the graph it was handed has fewer than 2 edges); and `report.priorsKeptFraction === null` whenever priors were not promoted to required and no polish iteration was executed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-prose",
+      "theme": "Comment claims field is never read, but code reads and passes it through",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 228,
+      "summary": "Comment states 'nothing reads the field' for minSeparation, contradicted by lines 348 and 376-377 where the field is accessed and passed through",
+      "failure": "Claim: 'nothing reads the field' (line 228). Reality: options.minSeparation is accessed at line 348 and passed to constrainedGreedy. Further contradiction at line 376-377 which explicitly states 'minSeparation is passed through to constrainedGreedy'.",
+      "remediation": "Replace 'nothing reads the field' with 'nothing USES the field' or 'the field is read but ultimately ignored' to accurately reflect that the value is accessed but not acted upon.",
+      "invariant": "The prose describing field usage must match reality: if a field appears on the right-hand side of an assignment (accessed/read), the comment must not claim it is never read",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "no-op-reported-as-work",
+      "theme": "a result field asserts that an optimisation pass ran when the pass performed zero iterations, so the caller cannot tell a measured number from a coincidental one",
+      "file": "lib/src/core/index.ts",
+      "line": 393,
+      "summary": "`polished` is set from the decision to CALL polish rather than from anything polish did, so a pass that executes zero iterations is reported as polished — and `priorsKeptFraction` is then published as a measurement when nothing ever weighed the priors.",
+      "failure": "`buildConstrainedBuddyGraph(60, 4, cons, { polishIters: 0 })` (cons carrying 30 priors from a previous round) returns an edge list BYTE-IDENTICAL to `{ polish: false }`, but reports `polished: true` and `report.priorsKeptFraction: 0.0333…`; the same call with `{ polish: false }` correctly reports `polished: false, priorsKeptFraction: null`, and with polish actually running reports 1.0. `boundedPolishIterations` honours 0 (it is an integer >= 0), so `polishConstrained` returns its input untouched. Reachable with NO option at all whenever the graph has fewer than 2 edges: `buildConstrainedBuddyGraph(12, 0, cons)` -> `polished: true, priorsKeptFraction: 0`. Same on the unconstrained builder: `buildBuddyGraph(30, 4, { polishIters: 0 })` -> `polished: true` on a graph identical to `{ polish: false }`. This is the open sibling of the correction already recorded at lib/src/core/polish.ts:87 (\"loopIters 0, no accept/reject decision, the input returned byte-for-byte, and `polished: true` reported. A silent no-op sold as work\"), which closed only the anneal-calibration route into the same state.",
+      "remediation": "Make the fact flow from the pass instead of from the call site: have `polishConstrained` report the iteration count it actually executed (as `polish` already does via `PolishResult.iters`), and in BOTH builders set `polished = iters > 0` and gate `priorsKeptFraction` on `active.priorHard || (iters > 0 && priorWeight !== 0)`. Fixing only the `polishIters: 0` case leaves the `m < 2` case (k<=1 rosters) open, and fixing only the constrained builder leaves `buildBuddyGraph` open — both are the same fact being inferred rather than observed.",
+      "invariant": "For every input to either builder, `result.polished === true` implies the polish pass executed at least one accept/reject decision (equivalently, `polished === false` whenever the pass's effective iteration budget is 0 or the graph it was handed has fewer than 2 edges); and `report.priorsKeptFraction === null` whenever priors were not promoted to required and no polish iteration was executed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-prose",
+      "theme": "Comment claims field is never read, but code reads and passes it through",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 228,
+      "summary": "Comment states 'nothing reads the field' for minSeparation, contradicted by lines 348 and 376-377 where the field is accessed and passed through",
+      "failure": "Claim: 'nothing reads the field' (line 228). Reality: options.minSeparation is accessed at line 348 and passed to constrainedGreedy. Further contradiction at line 376-377 which explicitly states 'minSeparation is passed through to constrainedGreedy'.",
+      "remediation": "Replace 'nothing reads the field' with 'nothing USES the field' or 'the field is read but ultimately ignored' to accurately reflect that the value is accessed but not acted upon.",
+      "invariant": "The prose describing field usage must match reality: if a field appears on the right-hand side of an assignment (accessed/read), the comment must not claim it is never read",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 1,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 2,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 16,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 570844,
+    "agents": 5,
+    "toolCalls": 185
+  }
+}
