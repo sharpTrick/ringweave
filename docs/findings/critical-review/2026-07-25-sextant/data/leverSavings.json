@@ -1,7 +1,7 @@
 {
   "generatedFrom": {
     "dataDir": "/home/user/ringweave/docs/findings/critical-review/2026-07-25-sextant/data",
-    "rounds": 16
+    "rounds": 40
   },
   "a1LintPreemption": {
     "what": "today's oxlint rule set, replayed over E1's own history",
@@ -90,6 +90,104 @@
         "collapsed": 2
       },
       {
+        "target": "app/src",
+        "round": 7,
+        "rawFindings": 6,
+        "themes": 6,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 8,
+        "rawFindings": 6,
+        "themes": 6,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 9,
+        "rawFindings": 9,
+        "themes": 7,
+        "collapsed": 2
+      },
+      {
+        "target": "app/src",
+        "round": 10,
+        "rawFindings": 5,
+        "themes": 4,
+        "collapsed": 1
+      },
+      {
+        "target": "app/src",
+        "round": 11,
+        "rawFindings": 5,
+        "themes": 4,
+        "collapsed": 1
+      },
+      {
+        "target": "app/src",
+        "round": 12,
+        "rawFindings": 8,
+        "themes": 7,
+        "collapsed": 1
+      },
+      {
+        "target": "app/src",
+        "round": 13,
+        "rawFindings": 7,
+        "themes": 7,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 14,
+        "rawFindings": 8,
+        "themes": 7,
+        "collapsed": 1
+      },
+      {
+        "target": "app/src",
+        "round": 15,
+        "rawFindings": 11,
+        "themes": 5,
+        "collapsed": 6
+      },
+      {
+        "target": "app/src",
+        "round": 16,
+        "rawFindings": 4,
+        "themes": 4,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 17,
+        "rawFindings": 1,
+        "themes": 1,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 18,
+        "rawFindings": 3,
+        "themes": 2,
+        "collapsed": 1
+      },
+      {
+        "target": "app/src",
+        "round": 19,
+        "rawFindings": 4,
+        "themes": 4,
+        "collapsed": 0
+      },
+      {
+        "target": "app/src",
+        "round": 20,
+        "rawFindings": 4,
+        "themes": 3,
+        "collapsed": 1
+      },
+      {
         "target": "lib/src",
         "round": 1,
         "rawFindings": 9,
@@ -158,18 +256,88 @@
         "rawFindings": 8,
         "themes": 7,
         "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 11,
+        "rawFindings": 7,
+        "themes": 6,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 12,
+        "rawFindings": 7,
+        "themes": 6,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 13,
+        "rawFindings": 4,
+        "themes": 4,
+        "collapsed": 0
+      },
+      {
+        "target": "lib/src",
+        "round": 14,
+        "rawFindings": 6,
+        "themes": 5,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 15,
+        "rawFindings": 5,
+        "themes": 5,
+        "collapsed": 0
+      },
+      {
+        "target": "lib/src",
+        "round": 16,
+        "rawFindings": 2,
+        "themes": 2,
+        "collapsed": 0
+      },
+      {
+        "target": "lib/src",
+        "round": 17,
+        "rawFindings": 4,
+        "themes": 3,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 18,
+        "rawFindings": 1,
+        "themes": 1,
+        "collapsed": 0
+      },
+      {
+        "target": "lib/src",
+        "round": 19,
+        "rawFindings": 6,
+        "themes": 5,
+        "collapsed": 1
+      },
+      {
+        "target": "lib/src",
+        "round": 20,
+        "rawFindings": 7,
+        "themes": 6,
+        "collapsed": 1
       }
     ],
-    "totalRaw": 146,
-    "totalThemes": 109,
-    "totalCollapsed": 37,
+    "totalRaw": 276,
+    "totalThemes": 219,
+    "totalCollapsed": 57,
     "caveat": "a deduplication figure only; multiple critics on one theme is not corroboration and carries no severity information"
   },
   "a3SaturationSkipping": {
     "what": "critic-rounds not spent because a lens was gated, × the measured mean agent cost",
-    "skippedCriticRounds": 3,
-    "meanAgentCostTokens": 88015,
-    "tokensSaved": 264045,
+    "skippedCriticRounds": 16,
+    "meanAgentCostTokens": 97851,
+    "tokensSaved": 1565616,
     "perRound": [
       {
         "target": "app/src",
@@ -209,6 +377,110 @@
       {
         "target": "app/src",
         "round": 6,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 7,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 8,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 9,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 10,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 11,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 12,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 13,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-security"
+        ]
+      },
+      {
+        "target": "app/src",
+        "round": 14,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 15,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 16,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 17,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-security"
+        ]
+      },
+      {
+        "target": "app/src",
+        "round": 18,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-security"
+        ]
+      },
+      {
+        "target": "app/src",
+        "round": 19,
+        "lensesRun": 5,
+        "skipped": 0,
+        "skippedLenses": []
+      },
+      {
+        "target": "app/src",
+        "round": 20,
         "lensesRun": 5,
         "skipped": 0,
         "skippedLenses": []
@@ -288,13 +560,103 @@
         "skippedLenses": [
           "critic-interaction"
         ]
+      },
+      {
+        "target": "lib/src",
+        "round": 11,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 12,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 13,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 14,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 15,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 16,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 17,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 18,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 19,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
+      },
+      {
+        "target": "lib/src",
+        "round": 20,
+        "lensesRun": 4,
+        "skipped": 1,
+        "skippedLenses": [
+          "critic-interaction"
+        ]
       }
     ]
   },
   "tokenTotals": {
-    "subagentTokens": 8185355,
-    "agents": 93,
-    "meanAgentCostTokens": 88015,
-    "roundsWithTokenData": 16
+    "subagentTokens": 21723022,
+    "agents": 222,
+    "meanAgentCostTokens": 97851,
+    "roundsWithTokenData": 40
   }
 }

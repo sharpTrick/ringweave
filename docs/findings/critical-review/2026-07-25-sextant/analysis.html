@@ -1,0 +1,525 @@
+<title>Sextant — 40 rounds, measured</title>
+<style>
+  :root {
+    --bg: #f5f7f9; --panel: #ffffff; --panel-2: #eef1f5; --ink: #161b24;
+    --ink-2: #49515f; --ink-3: #7b8494; --line: #e3e7ed; --line-2: #cdd4de;
+    --signal: #0d8a99; --signal-ink: #0a6f7c; --signal-soft: rgba(13,138,153,.11);
+    --blocking: #c23350; --suggestion: #b3761c; --converged: #2a9367; --plausible: #8b93a2;
+    --shadow: 0 1px 2px rgba(20,30,50,.05), 0 10px 30px -16px rgba(20,30,50,.18);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141c; --panel: #161d28; --panel-2: #1b2330; --ink: #e7ebf2;
+      --ink-2: #a4aebe; --ink-3: #6c7788; --line: #222b39; --line-2: #2f3a49;
+      --signal: #34c6d8; --signal-ink: #6fdcea; --signal-soft: rgba(52,198,216,.13);
+      --blocking: #e65c78; --suggestion: #d59a41; --converged: #46b487; --plausible: #8b95a7;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px -18px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7f9; --panel: #ffffff; --panel-2: #eef1f5; --ink: #161b24;
+    --ink-2: #49515f; --ink-3: #7b8494; --line: #e3e7ed; --line-2: #cdd4de;
+    --signal: #0d8a99; --signal-ink: #0a6f7c; --signal-soft: rgba(13,138,153,.11);
+    --blocking: #c23350; --suggestion: #b3761c; --converged: #2a9367; --plausible: #8b93a2;
+    --shadow: 0 1px 2px rgba(20,30,50,.05), 0 10px 30px -16px rgba(20,30,50,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f141c; --panel: #161d28; --panel-2: #1b2330; --ink: #e7ebf2;
+    --ink-2: #a4aebe; --ink-3: #6c7788; --line: #222b39; --line-2: #2f3a49;
+    --signal: #34c6d8; --signal-ink: #6fdcea; --signal-soft: rgba(52,198,216,.13);
+    --blocking: #e65c78; --suggestion: #d59a41; --converged: #46b487; --plausible: #8b95a7;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px -18px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px 96px; }
+  .col { max-width: 730px; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.14; letter-spacing: -0.018em; font-weight: 640; }
+  p { margin: 0 0 0.9em; }
+  a { color: var(--signal-ink); }
+  strong { font-weight: 650; color: var(--ink); }
+  code { font-family: var(--mono); font-size: 0.88em; color: var(--ink-2); background: var(--panel-2); padding: 0.06em 0.36em; border-radius: 4px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--signal-ink); font-weight: 600; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  header.top { padding: 60px 0 30px; border-bottom: 1px solid var(--line); }
+  .top .kicker { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+  .top .kicker .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+  h1 { font-size: clamp(30px, 5.2vw, 50px); margin: 0 0 18px; letter-spacing: -0.03em; }
+  h1 .sub { display: block; color: var(--ink-2); font-weight: 400; font-size: clamp(17px, 2.4vw, 21px); letter-spacing: -0.01em; margin-top: 12px; line-height: 1.4; }
+  .thesis { font-size: 18px; color: var(--ink-2); max-width: 660px; margin-top: 22px; }
+  .thesis b { color: var(--ink); font-weight: 600; }
+
+  .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 34px 0 8px; }
+  .strip .cell { background: var(--panel); padding: 16px 15px; }
+  .strip .v { font-family: var(--mono); font-size: 25px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .strip .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-top: 5px; line-height: 1.3; }
+  .strip .v.warn { color: var(--blocking); }
+  .strip .v.good { color: var(--converged); }
+  @media (max-width: 900px) { .strip { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 520px) { .strip { grid-template-columns: repeat(2, 1fr); } }
+
+  section { padding: 52px 0 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; flex-wrap: wrap; }
+  .sec-head h2 { font-size: clamp(21px, 3vw, 27px); margin: 0; }
+  h2 .idx { font-family: var(--mono); font-size: 13px; color: var(--ink-3); font-weight: 500; letter-spacing: 0; }
+  .lede { color: var(--ink-2); font-size: 17px; margin: 4px 0 26px; max-width: 720px; }
+  h3 { font-size: 18px; margin: 30px 0 8px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); margin: 20px 0; }
+  .panel .cap { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+
+  .tablewrap { overflow-x: auto; margin: 18px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 480px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  td.hi { color: var(--blocking); font-weight: 600; }
+  td.ok { color: var(--converged); font-weight: 600; }
+
+  svg { width: 100%; height: auto; display: block; }
+  .ax { font-family: var(--mono); font-size: 9px; fill: var(--ink-3); }
+  .axl { stroke: var(--line-2); stroke-width: 1; }
+  .chartgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 780px) { .chartgrid { grid-template-columns: 1fr; } }
+
+  ul.tight { margin: 0 0 1em; padding-left: 1.15em; }
+  ul.tight li { margin-bottom: 0.5em; }
+
+  .verdict { border-left: 3px solid var(--signal); padding: 4px 0 4px 18px; margin: 22px 0; color: var(--ink-2); font-size: 17px; }
+  .verdict b { color: var(--ink); }
+  .flag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ink-3); }
+  .flag.bad { color: var(--blocking); border-color: color-mix(in srgb, var(--blocking) 40%, transparent); }
+  .flag.good { color: var(--converged); border-color: color-mix(in srgb, var(--converged) 40%, transparent); }
+  footer { margin-top: 60px; padding-top: 26px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13.5px; }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="kicker">
+    <span class="dot"></span>
+    <span class="eyebrow">Experiment E2 · E3 · E4 — "Sextant"</span>
+    <span class="flag bad">did not converge</span>
+  </div>
+  <h1>Sextant
+    <span class="sub">Forty rounds of adversarial review across two targets, with a mechanical
+    self-induction oracle, seeded-defect recall, and unseeded controls attached. The successor run to
+    Ouroboros, measured against it on every axis it published.</span>
+  </h1>
+  <p class="thesis">
+    Ouroboros converged in 21 rounds and its own analysis said the stopping rule had decoupled from
+    value eight rounds early. Sextant rebuilt the loop around external oracles and ran it twice as far.
+    <b>Self-induction halved. Convergence never fired.</b> Cost per finding rose faster than it did in
+    Ouroboros, and over half the blocking findings still pointed at code the loop itself had written.
+  </p>
+
+  <div class="strip">
+    <div class="cell"><div class="v">40</div><div class="k">rounds<br>(20 lib · 20 app)</div></div>
+    <div class="cell"><div class="v">304</div><div class="k">findings<br>277 confirmed</div></div>
+    <div class="cell"><div class="v warn">0</div><div class="k">converged<br>rounds</div></div>
+    <div class="cell"><div class="v">21.7<span style="font-size:15px">M</span></div><div class="k">subagent<br>tokens</div></div>
+    <div class="cell"><div class="v good">32.5<span style="font-size:15px">%</span></div><div class="k">self-induced<br>(E1: 68%)</div></div>
+    <div class="cell"><div class="v warn">51.9<span style="font-size:15px">%</span></div><div class="k">of blocking<br>self-induced</div></div>
+  </div>
+  <p style="color:var(--ink-3);font-size:13px;margin-top:10px">
+    Every number on this page is computed from <code>data/</code> by a committed script. Nothing here
+    is a recollection.
+  </p>
+</header>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">01</span> &nbsp;What was run</h2></div>
+  <div class="col">
+    <p>
+      Sextant reviewed M3 — the constraints UI, fuzzy search and path finder features, plus the core
+      additions underneath them — on <strong>two targets in parallel</strong>, <code>lib/src</code>
+      (the zero-dependency graph core) and <code>app/src</code> (the React front-end). Ouroboros
+      reviewed one target, <code>app/src</code>, on M2.
+    </p>
+    <p>
+      Five lenses ran each round instead of four: correctness, security, SOLID, maintainability, and a
+      new interaction/accessibility lens. Lenses were spread across models rather than all running the
+      same one. Every round ran a lint gate first, clustered findings by theme, fixed each confirmed
+      non-deferral finding under a subtractive fix skill, and ratcheted an invariant — not a case —
+      into the suite.
+    </p>
+  </div>
+
+  <div class="tablewrap">
+  <table>
+    <tr><th>&nbsp;</th><th class="n">Ouroboros (E1)</th><th class="n">Sextant</th></tr>
+    <tr><td>Targets</td><td class="n">1</td><td class="n">2</td></tr>
+    <tr><td>Rounds</td><td class="n">21</td><td class="n">40</td></tr>
+    <tr><td>Lenses per round</td><td class="n">4</td><td class="n">5</td></tr>
+    <tr><td>Models in the ensemble</td><td class="n">1</td><td class="n">3</td></tr>
+    <tr><td>Findings</td><td class="n">92</td><td class="n">304</td></tr>
+    <tr><td>Blocking findings</td><td class="n">13</td><td class="n">77</td></tr>
+    <tr><td>Deferrals (logged, non-gating)</td><td class="n">—</td><td class="n">56</td></tr>
+    <tr><td>Subagent tokens</td><td class="n">5.26 M</td><td class="n">21.7 M</td></tr>
+    <tr><td>Tests, start → end</td><td class="n">68 → 136</td><td class="n">448 → 568</td></tr>
+    <tr><td>Converged</td><td class="n ok">round 21</td><td class="n hi">never</td></tr>
+  </table>
+  </div>
+  <p class="col" style="color:var(--ink-3);font-size:14px">
+    Ouroboros's token figure covers rounds 4–21 only; earlier rounds predate in-band accounting. The
+    deferral category did not exist in E1, so its 92 findings are not a like-for-like denominator with
+    Sextant's 304.
+  </p>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">02</span> &nbsp;What worked</h2></div>
+  <p class="lede">Five changes carried measurable weight. Each is stated with the number that supports it.</p>
+  <div class="col">
+
+    <h3>1. Self-induction halved, and the oracle has no model in it</h3>
+    <p>
+      A finding is <em>self-induced</em> when <code>git blame</code> puts the line it cites in an
+      earlier fix commit of the same loop, blamed against the tree that round's critics actually saw.
+      No agent judges anything.
+    </p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>&nbsp;</th><th class="n">Ouroboros</th><th class="n">Sextant</th></tr>
+    <tr><td>Self-induced, of classifiable</td><td class="n">68.0%</td><td class="n ok">32.5%</td></tr>
+    <tr><td>Matched chance base rate</td><td class="n">21.4%</td><td class="n">23.2%</td></tr>
+    <tr><td>Lift over chance</td><td class="n">3.37×</td><td class="n ok">1.40×</td></tr>
+    <tr><td>Unknown (blame declined to answer)</td><td class="n">5 / 92</td><td class="n">92 / 304</td></tr>
+    <tr><td>Sensitivity across 4 blame configs</td><td class="n">71.3–68.0%</td><td class="n">33.5–32.5%</td></tr>
+  </table>
+  </div>
+  <div class="col">
+    <p>
+      The pre-registered E2 criterion — <em>the injected-defect rate falls by at least half against
+      E1's re-derived blame-oracle rate</em> — is met on the aggregate. Ouroboros's finding location was
+      3.37× enriched for its own code; Sextant's is 1.40×.
+    </p>
+
+    <h3>2. The interaction lens was the most productive one, on the smallest model</h3>
+    <p>
+      Lens rotation was the cheapest change in the design and it returned the most. The new
+      interaction lens filed the fewest findings and the highest share of blocking ones.
+    </p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Lens</th><th>Model tier</th><th class="n">Findings</th><th class="n">Blocking</th><th class="n">Blocking rate</th><th class="n">Sole-lens themes</th></tr>
+    <tr><td>interaction <span class="flag good">new</span></td><td>small</td><td class="n">42</td><td class="n">25</td><td class="n ok">60%</td><td class="n">38</td></tr>
+    <tr><td>correctness</td><td>large</td><td class="n">74</td><td class="n">28</td><td class="n">38%</td><td class="n">73</td></tr>
+    <tr><td>security</td><td>large</td><td class="n">70</td><td class="n">21</td><td class="n">30%</td><td class="n">57</td></tr>
+    <tr><td>maintainability</td><td>mid</td><td class="n">71</td><td class="n">5</td><td class="n">7%</td><td class="n">68</td></tr>
+    <tr><td>SOLID</td><td>mid</td><td class="n">47</td><td class="n">0</td><td class="n hi">0%</td><td class="n">32</td></tr>
+  </table>
+  </div>
+  <div class="col">
+    <p>
+      In Ouroboros the equivalent split was correctness 17, SOLID 24, security 14, maintainability 37 —
+      with SOLID the second-largest producer. Here it produced <strong>47 findings and zero blocking
+      ones across 40 rounds</strong>, and 30 of them were deferrals.
+    </p>
+
+    <h3>3. External oracles closed themes that critic attention could not</h3>
+    <p>
+      Every blocking finding in the last five rounds of each target was closed by adding an oracle
+      rather than by adding scrutiny: a bridge-exact connectivity repair written in the Python
+      reference first and validated cross-language; a work budget that <em>counts</em> what it spends
+      instead of predicting it; a source-reading guard that fails when three hard-constraint
+      enforcement sites stop covering the same kinds; a CSS guard that fails when any rule hides a
+      live region.
+    </p>
+    <p>
+      The <strong>lint gate</strong> is the sharpest single datum. Replaying today's rule set over
+      Ouroboros's own history, one violation site survived <em>all 21 of its review rounds</em> — a
+      mechanical check catches what twenty-one rounds of adversarial reading did not. (Lower bound:
+      only the oxlint rules can be replayed at those refs; the custom checks and dead-export analysis
+      cannot.)
+    </p>
+
+    <h3>4. Deferrals stopped the loop building scaffolding for unbuilt features</h3>
+    <p>
+      Ouroboros spent 8 findings over 6 rounds hardening an extension seam for a layout mode that was
+      never built — every one a suggestion, none blocking. Sextant added a <code>deferral</code>
+      severity with a mechanical test (<em>does a caller exist in the current tree?</em>) and logged
+      <strong>56</strong> of them, none of which gated convergence and none of which became code.
+    </p>
+
+    <h3>5. Agent-level resumability turned a halt from a lost round into a lost third</h3>
+    <p>
+      Three session-limit halts hit the run. The first killed three lenses mid-round and the round was
+      recorded contaminated — it is still flagged by the round-log script on every run. The second
+      killed everything and cost a full re-run. The third was replayed from the runner's per-agent
+      journal: only the killed lenses re-ran, at roughly a third of a round. The unit of retry has to
+      be the agent, not the round.
+    </p>
+
+    <p style="color:var(--ink-2)">
+      The two smaller levers were real but modest: theme clustering collapsed
+      <strong>276 raw findings into 219 themes</strong> (20.7%), and saturation gating skipped
+      <strong>16 critic-rounds</strong>, worth about <strong>1.57 M tokens</strong> — 7.2% of the run.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">03</span> &nbsp;What did not work</h2></div>
+  <p class="lede">Stated at the same resolution as the successes, because a result that can only succeed is not a measurement.</p>
+
+  <div class="col">
+    <h3>1. Convergence never fired, in either target, in twenty rounds each</h3>
+    <p>
+      The rule is a round with zero confirmed non-deferral findings, then one confirming round. Neither
+      target ever produced the first. The best rounds were lib&nbsp;18 (one suggestion) and app&nbsp;17
+      (one blocking). Both targets then produced <em>fresh blocking findings</em> at rounds 17 and 20 —
+      the false-summit shape Ouroboros described, observed twice more.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="cap">Blocking findings per round — lib/src (left), app/src (right)</div>
+    <div class="chartgrid">
+      <div><svg viewBox="0 0 460 110" role="img" aria-hidden="true"><rect x="23.2" y="40.0" width="18.4" height="48.0" fill="var(--blocking)" rx="1.4"/><text x="32.4" y="103.0" class="ax">1</text><rect x="44.0" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><rect x="64.8" y="24.0" width="18.4" height="64.0" fill="var(--blocking)" rx="1.4"/><rect x="85.6" y="72.0" width="18.4" height="16.0" fill="var(--blocking)" rx="1.4"/><rect x="106.4" y="8.0" width="18.4" height="80.0" fill="var(--blocking)" rx="1.4"/><text x="115.6" y="103.0" class="ax">5</text><rect x="127.2" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><rect x="148.0" y="40.0" width="18.4" height="48.0" fill="var(--blocking)" rx="1.4"/><rect x="168.8" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="189.6" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><rect x="210.4" y="72.0" width="18.4" height="16.0" fill="var(--blocking)" rx="1.4"/><text x="219.6" y="103.0" class="ax">10</text><rect x="231.2" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><rect x="252.0" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><rect x="272.8" y="72.0" width="18.4" height="16.0" fill="var(--blocking)" rx="1.4"/><rect x="293.6" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="314.4" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><text x="323.6" y="103.0" class="ax">15</text><rect x="335.2" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="356.0" y="40.0" width="18.4" height="48.0" fill="var(--blocking)" rx="1.4"/><rect x="376.8" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="397.6" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="418.4" y="56.0" width="18.4" height="32.0" fill="var(--blocking)" rx="1.4"/><text x="427.6" y="103.0" class="ax">20</text><line x1="22" y1="88.0" x2="438" y2="88.0" class="axl"/><text x="16" y="92.0" class="ax" text-anchor="end">0</text><text x="16" y="12.0" class="ax" text-anchor="end">5</text></svg></div>
+      <div><svg viewBox="0 0 460 110" role="img" aria-hidden="true"><rect x="23.2" y="8.0" width="18.4" height="80.0" fill="var(--blocking)" rx="1.4"/><text x="32.4" y="103.0" class="ax">1</text><rect x="44.0" y="19.4" width="18.4" height="68.6" fill="var(--blocking)" rx="1.4"/><rect x="64.8" y="76.6" width="18.4" height="11.4" fill="var(--blocking)" rx="1.4"/><rect x="85.6" y="42.3" width="18.4" height="45.7" fill="var(--blocking)" rx="1.4"/><rect x="106.4" y="53.7" width="18.4" height="34.3" fill="var(--blocking)" rx="1.4"/><text x="115.6" y="103.0" class="ax">5</text><rect x="127.2" y="30.9" width="18.4" height="57.1" fill="var(--blocking)" rx="1.4"/><rect x="148.0" y="65.1" width="18.4" height="22.9" fill="var(--blocking)" rx="1.4"/><rect x="168.8" y="65.1" width="18.4" height="22.9" fill="var(--blocking)" rx="1.4"/><rect x="189.6" y="42.3" width="18.4" height="45.7" fill="var(--blocking)" rx="1.4"/><rect x="210.4" y="76.6" width="18.4" height="11.4" fill="var(--blocking)" rx="1.4"/><text x="219.6" y="103.0" class="ax">10</text><rect x="231.2" y="76.6" width="18.4" height="11.4" fill="var(--blocking)" rx="1.4"/><rect x="252.0" y="65.1" width="18.4" height="22.9" fill="var(--blocking)" rx="1.4"/><rect x="272.8" y="76.6" width="18.4" height="11.4" fill="var(--blocking)" rx="1.4"/><rect x="293.6" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="314.4" y="65.1" width="18.4" height="22.9" fill="var(--blocking)" rx="1.4"/><text x="323.6" y="103.0" class="ax">15</text><rect x="335.2" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="356.0" y="76.6" width="18.4" height="11.4" fill="var(--blocking)" rx="1.4"/><rect x="376.8" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="397.6" y="88.0" width="18.4" height="0.8" fill="var(--blocking)" rx="1.4"/><rect x="418.4" y="65.1" width="18.4" height="22.9" fill="var(--blocking)" rx="1.4"/><text x="427.6" y="103.0" class="ax">20</text><line x1="22" y1="88.0" x2="438" y2="88.0" class="axl"/><text x="16" y="92.0" class="ax" text-anchor="end">0</text><text x="16" y="12.0" class="ax" text-anchor="end">7</text></svg></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>2. Cost per finding rose faster than it did in Ouroboros</h3>
+    <p>
+      Ouroboros's headline was 47 K → 143 K tokens per confirmed finding, a 3.04× rise across its two
+      regimes. Sextant, measured in five-round windows against gating findings (blocking + suggestion):
+    </p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Window</th><th class="n">lib blocking</th><th class="n">lib tok/gating</th><th class="n">app blocking</th><th class="n">app tok/gating</th></tr>
+    <tr><td>rounds 1–5</td><td class="n">15</td><td class="n">67 K</td><td class="n">21</td><td class="n">62 K</td></tr>
+    <tr><td>rounds 6–10</td><td class="n">8</td><td class="n">78 K</td><td class="n">14</td><td class="n">80 K</td></tr>
+    <tr><td>rounds 11–15</td><td class="n">5</td><td class="n">119 K</td><td class="n">6</td><td class="n">117 K</td></tr>
+    <tr><td>rounds 16–20</td><td class="n">5</td><td class="n hi">159 K</td><td class="n">3</td><td class="n hi">250 K</td></tr>
+  </table>
+  </div>
+  <div class="col">
+    <p>
+      Per <em>blocking</em> finding the last window cost 541 K on lib and <strong>1.08 M</strong> on
+      app — a 7.9× rise from the first window, against Ouroboros's 3.04×. Reforming the loop did not
+      flatten the curve; on this axis it steepened it.
+    </p>
+
+    <h3>3. Over half the blocking findings were still the loop's own work</h3>
+    <p>
+      The aggregate improvement is carried by the cheap tier. Split by severity, the picture inverts:
+    </p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Severity</th><th class="n">Self-induced</th><th class="n">Pre-existing</th><th class="n">Rate</th><th class="n">Ouroboros rate</th></tr>
+    <tr><td>blocking</td><td class="n">28</td><td class="n">26</td><td class="n hi">51.9%</td><td class="n">61.5%</td></tr>
+    <tr><td>suggestion</td><td class="n">41</td><td class="n">77</td><td class="n">34.7%</td><td class="n">73.0%</td></tr>
+    <tr><td>deferral</td><td class="n">0</td><td class="n">40</td><td class="n ok">0%</td><td class="n">—</td></tr>
+  </table>
+  </div>
+
+  <div class="panel">
+    <div class="cap">Self-induced findings per round — lib/src (left), app/src (right)</div>
+    <div class="chartgrid">
+      <div><svg viewBox="0 0 460 110" role="img" aria-hidden="true"><rect x="23.2" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><text x="32.4" y="103.0" class="ax">1</text><rect x="44.0" y="56.0" width="18.4" height="32.0" fill="var(--suggestion)" rx="1.4"/><rect x="64.8" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="85.6" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="106.4" y="40.0" width="18.4" height="48.0" fill="var(--suggestion)" rx="1.4"/><text x="115.6" y="103.0" class="ax">5</text><rect x="127.2" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="148.0" y="40.0" width="18.4" height="48.0" fill="var(--suggestion)" rx="1.4"/><rect x="168.8" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="189.6" y="56.0" width="18.4" height="32.0" fill="var(--suggestion)" rx="1.4"/><rect x="210.4" y="24.0" width="18.4" height="64.0" fill="var(--suggestion)" rx="1.4"/><text x="219.6" y="103.0" class="ax">10</text><rect x="231.2" y="40.0" width="18.4" height="48.0" fill="var(--suggestion)" rx="1.4"/><rect x="252.0" y="8.0" width="18.4" height="80.0" fill="var(--suggestion)" rx="1.4"/><rect x="272.8" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="293.6" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="314.4" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><text x="323.6" y="103.0" class="ax">15</text><rect x="335.2" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="356.0" y="40.0" width="18.4" height="48.0" fill="var(--suggestion)" rx="1.4"/><rect x="376.8" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="397.6" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><rect x="418.4" y="72.0" width="18.4" height="16.0" fill="var(--suggestion)" rx="1.4"/><text x="427.6" y="103.0" class="ax">20</text><line x1="22" y1="88.0" x2="438" y2="88.0" class="axl"/><text x="16" y="92.0" class="ax" text-anchor="end">0</text><text x="16" y="12.0" class="ax" text-anchor="end">5</text></svg></div>
+      <div><svg viewBox="0 0 460 110" role="img" aria-hidden="true"><rect x="23.2" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><text x="32.4" y="103.0" class="ax">1</text><rect x="44.0" y="68.0" width="18.4" height="20.0" fill="var(--suggestion)" rx="1.4"/><rect x="64.8" y="68.0" width="18.4" height="20.0" fill="var(--suggestion)" rx="1.4"/><rect x="85.6" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="106.4" y="8.0" width="18.4" height="80.0" fill="var(--suggestion)" rx="1.4"/><text x="115.6" y="103.0" class="ax">5</text><rect x="127.2" y="8.0" width="18.4" height="80.0" fill="var(--suggestion)" rx="1.4"/><rect x="148.0" y="48.0" width="18.4" height="40.0" fill="var(--suggestion)" rx="1.4"/><rect x="168.8" y="48.0" width="18.4" height="40.0" fill="var(--suggestion)" rx="1.4"/><rect x="189.6" y="28.0" width="18.4" height="60.0" fill="var(--suggestion)" rx="1.4"/><rect x="210.4" y="68.0" width="18.4" height="20.0" fill="var(--suggestion)" rx="1.4"/><text x="219.6" y="103.0" class="ax">10</text><rect x="231.2" y="28.0" width="18.4" height="60.0" fill="var(--suggestion)" rx="1.4"/><rect x="252.0" y="8.0" width="18.4" height="80.0" fill="var(--suggestion)" rx="1.4"/><rect x="272.8" y="68.0" width="18.4" height="20.0" fill="var(--suggestion)" rx="1.4"/><rect x="293.6" y="68.0" width="18.4" height="20.0" fill="var(--suggestion)" rx="1.4"/><rect x="314.4" y="8.0" width="18.4" height="80.0" fill="var(--suggestion)" rx="1.4"/><text x="323.6" y="103.0" class="ax">15</text><rect x="335.2" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="356.0" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="376.8" y="88.0" width="18.4" height="0.8" fill="var(--suggestion)" rx="1.4"/><rect x="397.6" y="48.0" width="18.4" height="40.0" fill="var(--suggestion)" rx="1.4"/><rect x="418.4" y="48.0" width="18.4" height="40.0" fill="var(--suggestion)" rx="1.4"/><text x="427.6" y="103.0" class="ax">20</text><line x1="22" y1="88.0" x2="438" y2="88.0" class="axl"/><text x="16" y="92.0" class="ax" text-anchor="end">0</text><text x="16" y="12.0" class="ax" text-anchor="end">4</text></svg></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>
+      By window, self-induction runs 14% / 30% / 31% / 22% on lib and 10% / 31% / 28% / 24% on app. It
+      rises after the first five rounds and then <strong>plateaus</strong>. It does not decay. A loop
+      whose blocking findings are half its own output does not have a descending residual; it has a
+      fixed point above zero.
+    </p>
+
+    <h3>4. The gate that was designed was never the gate that ran</h3>
+    <p>
+      The design says a finding with no statable machine-checkable invariant is filed
+      <code>caseOnly</code> and does <em>not</em> gate convergence — the mechanism intended to stop the
+      preference tail from blocking forever. Critics set the flag on <strong>23 of 304</strong>
+      findings (10 of them in the first five rounds, 2 in the last five). In practice every suggestion
+      gated. The reform most directly aimed at Ouroboros's stated cause of non-convergence was left to
+      agent self-declaration and therefore never operated.
+    </p>
+
+    <h3>5. Precision was measured, and it is not good</h3>
+    <p>
+      Four unseeded clean worktrees drew <strong>20 findings, 14 of them gating</strong>. On code with
+      no planted defect, the ensemble still files roughly three-and-a-half gating findings per surface.
+      Ouroboros had no controls at all, so this is new information rather than a regression — but it
+      means the loop's output cannot be read as a defect list without confirmation.
+    </p>
+
+    <h3>6. The seeded-recall corpus never reached its pre-registered size</h3>
+    <p>
+      The pre-registration specified roughly 24 seeds in two strata with a 12-seed prose subset.
+      What was actually scored was <strong>5 seeds, all from the mutation stratum</strong>: recall
+      0.80 (4 of 5), one blind spot (a dropped guard clause in the canvas neighbourhood derivation),
+      and a leave-one-out showing that removing the correctness lens drops recall to 0.40 while
+      removing SOLID or maintainability costs nothing. At n=5 those are existence claims and nothing
+      more. The real-reverted-defect stratum, which was the arm designed to carry E4's zero-loss test,
+      was never built.
+    </p>
+
+    <h3>7. The measurement apparatus needed reviewing too</h3>
+    <p>
+      Two defects in the self-induction oracle were found only when it was pointed at the full 40-round
+      dataset. It discovered fix commits by matching one commit-subject shape; the run's own subject
+      style drifted after round 5, so <strong>34 of 40 fix commits went unrecognised</strong> and every
+      finding from round 6 on fell into <code>unknown</code> — the instrument reported 23.3% off six of
+      forty rounds and looked conservative doing it. Separately it took the chance base rate once on
+      the final tree, where fix-authored code is at its maximum, and compared it against a run-averaged
+      observed rate, producing a lift of 0.73× — the loop apparently <em>avoiding</em> its own code.
+      Both are corrected here; both were silent.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">04</span> &nbsp;Head to head</h2></div>
+  <p class="lede">Every axis Ouroboros published, with Sextant beside it.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Axis</th><th class="n">Ouroboros</th><th class="n">Sextant</th><th>Direction</th></tr>
+    <tr><td>Self-induction lift over chance</td><td class="n">3.37×</td><td class="n">1.40×</td><td class="ok">better</td></tr>
+    <tr><td>Blocking findings self-induced</td><td class="n">61.5%</td><td class="n">51.9%</td><td class="ok">better</td></tr>
+    <tr><td>Suggestions self-induced</td><td class="n">73.0%</td><td class="n">34.7%</td><td class="ok">better</td></tr>
+    <tr><td>Cost/finding growth across the run</td><td class="n">3.04×</td><td class="n">2.4× lib · 4.0× app</td><td class="hi">worse on app</td></tr>
+    <tr><td>Cost per blocking finding, last window</td><td class="n">— (zero found)</td><td class="n">541 K · 1.08 M</td><td>not comparable</td></tr>
+    <tr><td>Blocking findings in the final third</td><td class="n">0</td><td class="n">5 lib · 3 app</td><td class="hi">still finding them</td></tr>
+    <tr><td>Convergence</td><td class="n">round 21</td><td class="n">never</td><td class="hi">worse</td></tr>
+    <tr><td>Ground truth (seeded recall)</td><td class="n">none</td><td class="n">0.80 at n=5</td><td class="ok">new</td></tr>
+    <tr><td>Precision (unseeded controls)</td><td class="n">none</td><td class="n">20 findings / 4 clean trees</td><td class="ok">new</td></tr>
+    <tr><td>Scaffolding for unbuilt features</td><td class="n">8 findings, 6 rounds</td><td class="n">56 deferrals, 0 built</td><td class="ok">better</td></tr>
+  </table>
+  </div>
+  <div class="col verdict">
+    <b>The honest reading.</b> Sextant is a better-instrumented loop that found more real defects and
+    manufactured proportionally less of its own work — and it is further from a stopping rule than the
+    run it was designed to improve on. Ouroboros converged and its own analysis said the convergence
+    was hollow. Sextant did not converge, and it is not clear that its failure to is worse evidence
+    than Ouroboros's success was.
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">05</span> &nbsp;In hindsight</h2></div>
+  <p class="lede">Four things that were knowably wrong at the time, not with the benefit of the result.</p>
+  <div class="col">
+    <ul class="tight">
+      <li><strong>The self-induction oracle should have asserted its own coverage from round one.</strong>
+        It discovered fix commits by regex and never checked that every round in the dataset mapped to
+        one. The check is four lines and it now prints any unmapped round. A silent
+        <code>unknown</code> bucket reads as caution and is blindness.</li>
+      <li><strong>The base rate should have been computed per round from the start.</strong> Comparing
+        a run-averaged observed rate to an end-of-run chance rate is a denominator mismatch, not a
+        subtle statistical point — fix-authored code accumulates monotonically and the final tree is
+        the largest that share ever is.</li>
+      <li><strong><code>caseOnly</code> should have been decided mechanically, not by asking critics to
+        self-declare it.</strong> The design named the flag as the mechanism that would stop the
+        preference tail gating convergence, then delegated it to the same judgement the experiment
+        exists to remove. Ten uses in the first five rounds and two in the last five is what that
+        delegation bought.</li>
+      <li><strong>The saturation state channel should have been wired before round one.</strong> The
+        lever was designed, committed, and did not fire for the first several rounds because the
+        caller never passed the state in — recorded in the run's own history as a fix, which means
+        several rounds of the A3 measurement describe a mechanism that was not running.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">06</span> &nbsp;Open questions</h2></div>
+  <p class="lede">Unresolved by this data, stated so a later run can attack them rather than rediscover them.</p>
+  <div class="col">
+    <ul class="tight">
+      <li><strong>Does this loop have a fixed point above zero, or an unbounded suggestion space?</strong>
+        Forty rounds is consistent with both. They are distinguishable only by a run that reviews the
+        same tree repeatedly <em>without</em> fixing anything — which no round of either experiment did.</li>
+      <li><strong>Is the interaction lens's 60% blocking rate a property of the lens or of the model?</strong>
+        The new lens and the new model tier arrived in the same change. The confound is total and was
+        not designed out.</li>
+      <li><strong>Is SOLID worth running?</strong> Zero blocking findings in 40 rounds and zero recall
+        cost in leave-one-out say no. Thirty-two themes no other lens raised say the question is not
+        settled by those two numbers alone.</li>
+      <li><strong>What is inside the 92-finding <code>unknown</code> bucket?</strong> Blame-based
+        attribution is documented as weakest on non-functional findings, and three of five lenses file
+        mostly those. The self-induction figure is measured over 212 classifiable findings, not 304.</li>
+      <li><strong>Does an invariant ratchet generalise better than a case ratchet?</strong> Ouroboros
+        doubled its suite (68 → 136); Sextant grew it 27% (448 → 568) while requiring every guard to be
+        a property. The claim that fewer, broader tests catch more is untested — neither run measured a
+        suite against defects it had not already seen.</li>
+      <li><strong>What is the effective false-positive rate on the real target?</strong> The controls
+        measure it on clean trees. On a tree with real defects, nothing distinguishes "filed and not
+        acted on" from "filed, real, and deferred".</li>
+      <li><strong>Would two consecutive clean rounds ever fire?</strong> Never observed, so the second
+        confirming round — inherited from Ouroboros, where it did supply robustness — is untested here.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2><span class="idx">07</span> &nbsp;Method &amp; provenance</h2></div>
+  <div class="col">
+    <h3>Deterministic — reproducible from the repository</h3>
+    <ul class="tight">
+      <li>Round records: <code>data/rounds/{lib,app}-round-NN.json</code>, one per round, saved verbatim
+        from the runner plus a token block. Forty files.</li>
+      <li>Normalised dataset: <code>data/findings_full.json</code>, <code>perRound.json</code>,
+        <code>rounds.json</code>, produced by <code>scripts/review-metrics/round-log.mjs</code>.</li>
+      <li>Self-induction: <code>scripts/review-metrics/self-induction.mjs</code> — <code>git blame</code>
+        against each round's reviewed tree, four blame configurations, per-round base rate, explicit
+        unknown bucket.</li>
+      <li>Lever savings: <code>scripts/review-metrics/lever-a-savings.mjs</code> — lint replay over E1's
+        refs in temporary worktrees, theme collapse per round, skipped critic-rounds × measured mean
+        agent cost.</li>
+      <li>Ouroboros comparison figures: <code>data/e1-self-induction.json</code>,
+        <code>data/e1-fix-churn.json</code>, computed by the same oracles run backwards over
+        <code>claude/m2-xapjhu</code>.</li>
+      <li>Test counts: both suites executed at <code>544940f</code> (last M3 feature commit, before
+        round 1) and at the final commit.</li>
+    </ul>
+
+    <h3>Interpretive — judgement, labelled as such</h3>
+    <ul class="tight">
+      <li>Severity is assigned by the filing critic. "Blocking" is its claim, verified by a second
+        agent, not by an oracle.</li>
+      <li>The five-round windows are a presentation choice. They are not a claimed regime boundary;
+        Ouroboros's two-regime split was located by four independent analyses and this one is not.</li>
+      <li>"Closed by an oracle rather than by scrutiny" in §2.3 is a reading of the last ten rounds'
+        fix commits, not a computed statistic.</li>
+      <li>Blame attribution is an instrument with a published error bar (best measured F1 ≈ 0.7), not
+        ground truth. It is reported with sensitivity and an unknown bucket for that reason.</li>
+    </ul>
+
+    <h3>Known contamination</h3>
+    <ul class="tight">
+      <li><code>lib-round-02</code> lost three lenses to a session halt and is recorded with them dead.
+        <code>round-log.mjs</code> warns about it on every run; it is not excluded, because excluding a
+        round after seeing its contents is the selection the pre-registration forbids.</li>
+      <li><code>app-round-07</code> shows 31 K tokens against a run average near 600 K — a resumed
+        round replayed almost entirely from the agent journal. Its findings are real; its token figure
+        is not comparable and is left in rather than adjusted.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Sextant · experiments E2 (self-induction), E3 (seeded recall), E4 (lever cost) ·
+  data under <code>docs/findings/critical-review/2026-07-25-sextant/data/</code> ·
+  predecessor: <code>2026-07-24-ouroboros/</code>
+</footer>
+</div>
