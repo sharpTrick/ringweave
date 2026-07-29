@@ -26,9 +26,6 @@ describe("malformed inputs throw a clear error (unconstrained path)", () => {
     expect(() => buildBuddyGraph(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
   });
 
-  // The ring seed floors degree at 2, so k<2 can't be honored — reject rather
-  // than silently return a 2-regular graph. (Constrained path handles k<2; see
-  // constrained.test.ts.)
   it.each([0, 1])("buildBuddyGraph/ringGreedy reject k=%i (ring floors degree at 2)", (k) => {
     expect(() => buildBuddyGraph(20, k)).toThrow(/needs k >= 2/);
     expect(() => ringGreedy(20, k)).toThrow(/needs k >= 2/);
@@ -50,15 +47,12 @@ describe("buildBuddyGraph", () => {
   it("produces a valid symmetric buddy assignment", () => {
     const r = buildBuddyGraph(30, 4);
     expect(r.buddies.length).toBe(30);
-    // symmetry: i lists j iff j lists i
     for (let i = 0; i < 30; i++) {
       for (const j of r.buddies[i]) {
         expect(r.buddies[j]).toContain(i);
       }
     }
-    // degree cap respected
     expect(r.degreeMax).toBeLessThanOrEqual(4);
-    // well connected
     expect(r.diameter).toBeGreaterThan(0);
     expect(r.asplGap).toBeLessThan(0.2);
   });
@@ -107,31 +101,22 @@ describe("polish", () => {
   });
 
   it("refuses a seed it cannot honour instead of aliasing it onto another one", () => {
-    // The invariant: every seed the core ACCEPTS names its own stream. `seed >>> 0` broke that
-    // for a whole family of values at once — `0.9`, `-0`, `NaN`, `2**32` and `12345 + 2**32` all
-    // silently became a seed that had already been asked for. Seed is the app's "give me a
-    // different arrangement" control, so aliasing answers the one request the user made with the
-    // graph they were trying to leave, and reports success. It was the last numeric option in the
-    // core that was coerced rather than checked.
     const { graph } = ringGreedy(40, 4, { mind: 5, repair: true });
     for (const bad of [0.9, -1, NaN, Infinity, 2 ** 32, 12345 + 2 ** 32]) {
       expect(() => polish(graph, { seed: bad, maxIters: 10 })).toThrow(/seed .* must be an integer/);
     }
     expect(() => polish(graph, { seed: 0, maxIters: 10 })).not.toThrow();
     expect(() => polish(graph, { seed: 2 ** 32 - 1, maxIters: 10 })).not.toThrow();
-    // -0 is `Number.isInteger`-true and >= 0, so it is accepted — and it must be, because it IS
-    // 0: `-0 === 0`, `(-0) >>> 0 === 0`, and the stream is identical. Aliasing is only a defect
-    // when two DISTINCT values collide.
+    // -0 is accepted because it IS 0 — `-0 === 0` and the stream is identical. Aliasing is only a
+    // defect when two DISTINCT values collide.
     expect(() => polish(graph, { seed: -0, maxIters: 10 })).not.toThrow();
 
-    // Closed at the theme, not the case: the same option on the two builders above it. The fast
-    // tier throws (its documented contract), and does so whether or not polish runs — the check
-    // is at the option, not at the RNG, so it cannot become a function of roster size.
+    // The check is at the option, not at the RNG, so it fires whether or not polish runs.
     expect(() => buildBuddyGraph(24, 4, { seed: 12345.6 })).toThrow(/seed .* must be an integer/);
     expect(() => buildBuddyGraph(24, 4, { seed: 12345.6, polish: false })).toThrow(
       /seed .* must be an integer/,
     );
-    // ...and distinct accepted seeds are distinct arrangements, which is what the caller asked for.
+    // Non-vacuity: distinct accepted seeds are distinct arrangements, which is the knob's job.
     const s1 = buildBuddyGraph(60, 4, { seed: 1, polish: true });
     const s2 = buildBuddyGraph(60, 4, { seed: 2, polish: true });
     expect(s1.edges).not.toEqual(s2.edges);

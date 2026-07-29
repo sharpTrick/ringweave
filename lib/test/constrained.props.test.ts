@@ -1,9 +1,3 @@
-/**
- * Property-based invariants for the constraint core. A graph algorithm is
- * defined by what must always hold; these assert the hard guarantees over many
- * randomized *feasible* constraint sets, catching whole classes of bugs that
- * example fixtures miss.
- */
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { isConnected, largestComponentFraction } from "../src/core/metrics.js";
@@ -72,27 +66,20 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
 
         const g = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
 
-        // symmetry
         for (let u = 0; u < s.n; u++) {
           for (const v of g.adj[u]) expect(g.adj[v].has(u)).toBe(true);
         }
-        // hard guarantees
         for (const [a, b] of cons.prohibitedPairs()) expect(g.hasEdge(a, b)).toBe(false);
         for (const [a, b] of cons.requiredPairs()) expect(g.hasEdge(a, b)).toBe(true);
-        // degree cap is hard (forceConnect respects it)
         for (let v = 0; v < s.n; v++) expect(g.degree(v)).toBeLessThanOrEqual(s.k);
-        // no self-loops, no isolated vertices, connected
         for (let v = 0; v < s.n; v++) expect(g.hasEdge(v, v)).toBe(false);
         expect(isConnected(g)).toBe(true);
-        // the graded connectivity metric stays in range and agrees with the
-        // boolean on every input: frac === 1 exactly when the graph is connected
         const frac = largestComponentFraction(g);
         expect(frac).toBeGreaterThanOrEqual(1 / s.n);
         expect(frac).toBeLessThanOrEqual(1);
         expect(frac === 1).toBe(isConnected(g));
-        // legal-edge-maximal: no addable legal edge remains. This is why
-        // forceConnect is provably inert (it reuses the same legality predicate),
-        // and it guards that completion never leaves a joinable pair behind.
+        // Legal-edge-maximal: no addable legal edge may remain, which is what makes forceConnect
+        // provably inert — it reuses the same legality predicate.
         for (let u = 0; u < s.n; u++) {
           for (let v = u + 1; v < s.n; v++) {
             const addable =
@@ -103,14 +90,10 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
             expect(addable).toBe(false);
           }
         }
-        // determinism: RNG-free, so a rerun is identical
         const rerun = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         expect(rerun.edgeList()).toEqual(g.edgeList());
-        // stronger: constraint insertion ORDER must not leak into output. Every
-        // decision routes through explicit index tie-breaks and order-invariant BFS
-        // distances, so the same set rebuilt in reversed order must be identical —
-        // a regression guard against a future change that consumes adjacency-Set
-        // iteration order directly.
+        // Constraint insertion ORDER must not leak into output — a guard against a future change
+        // that consumes adjacency-Set iteration order directly.
         const reordered = buildReversed(s);
         const g2 = constrainedGreedy(s.n, s.k, reordered, { minSeparation: 5 });
         expect(g2.edgeList()).toEqual(g.edgeList());
@@ -147,7 +130,7 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
         const cons = build(s);
         fc.pre(validate(cons, s.k).length === 0);
 
-        // treat the generated graph's own edges as the prior buddies (churn)
+        // The generated graph's own edges stand in for last round's buddies (churn).
         const base = constrainedGreedy(s.n, s.k, cons, { minSeparation: 5 });
         for (const [a, b] of base.edgeList()) cons.addPrior(a, b);
 
@@ -165,8 +148,6 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
     );
   });
 });
-
-// --- repair maximality ------------------------------------------------------
 
 /** Component id per vertex, by plain BFS — independent of the generator's Tarjan pass. */
 function componentOwner(g: Graph): number[] {
@@ -190,7 +171,6 @@ function componentOwner(g: Graph): number[] {
   return owner;
 }
 
-/** Naive bridge test: drop the edge, ask whether its endpoints are still together. */
 function isBridge(g: Graph, a: number, b: number): boolean {
   const copy = g.copy();
   copy.removeEdge(a, b);
@@ -198,11 +178,9 @@ function isBridge(g: Graph, a: number, b: number): boolean {
 }
 
 /**
- * The k=2 regime with heavy prohibitions — the ONLY regime that strands anyone. The scenario above
- * (n in [10,40], k in [3,5], prohibited <= n/8) produces a connected graph on every run, so a
- * maximality property asserted over it would be vacuously true; that is why this generator exists
- * rather than a new property on the old one. The non-vacuity counter below is what keeps that
- * honest if the generator ever drifts back to always-connected.
+ * Non-vacuity: `scenario` above connects on every run, so a maximality property asserted over it
+ * would be vacuously true. Small n at k=2 with heavy prohibitions is the only regime that strands
+ * anyone, and the counter in the test below keeps that honest if this generator ever drifts.
  */
 const strandScenario = fc.integer({ min: 4, max: 8 }).chain((n) =>
   fc.record({
@@ -229,11 +207,8 @@ describe("constrainedGreedy leaves no repair on the table", () => {
         const g = constrainedGreedy(s.n, s.k, cons);
         if (!isConnected(g)) sawDisconnected++;
 
-        // The invariant `stealSlot` establishes, checked from OUTSIDE with an independent
-        // component walk and a remove-and-retest bridge oracle: if a person still has a free
-        // slot, and some OTHER component holds an edge that is neither required nor a bridge,
-        // and that person may legally buddy either endpoint of it — then a merge was available
-        // and generation stopped early. That is precisely the state the n=4 witness was in.
+        // Checked from OUTSIDE the generator, with an independent component walk and a
+        // remove-and-retest bridge oracle rather than the generator's own Tarjan pass.
         const owner = componentOwner(g);
         for (let u = 0; u < s.n; u++) {
           if (g.degree(u) >= s.k) continue;
@@ -249,8 +224,8 @@ describe("constrainedGreedy leaves no repair on the table", () => {
       }),
       { numRuns: 300 },
     );
-    // NON-VACUITY. Without this the property above passes on a generator that never strands
-    // anyone, which is exactly what the pre-existing scenario does.
+    // Non-vacuity: without this the property above passes on a generator that never strands
+    // anyone.
     expect(sawDisconnected).toBeGreaterThan(0);
   });
 });

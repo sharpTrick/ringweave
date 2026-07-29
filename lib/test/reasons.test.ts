@@ -1,16 +1,7 @@
 /**
- * `validateDetailed` / `formatReason`: the structured form of `validate`.
- *
- * Two things are pinned here. First, the exact wording of all twelve messages —
- * `validate` is `validateDetailed` mapped through `formatReason`, so these strings
- * are the message contract the Python reference mirrors, and a typo would
- * otherwise only surface as a diff in one unrelated assertion. Second, that every
- * reason code is reachable and carries the roster indices a UI needs to name
- * people instead of printing "person 4".
- *
- * The `Record<Reason["code"], ...>` sample table is the mechanical part: adding a
- * variant to `Reason` without adding a sample fails the typecheck, so the
- * exhaustiveness of this file cannot silently rot.
+ * These strings are the message contract `reference-python` mirrors, so edit them only alongside
+ * it. The `Record<Reason["code"], ...>` sample table is what keeps this file exhaustive: adding a
+ * variant to `Reason` without adding a sample fails the typecheck.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -63,8 +54,8 @@ const SAMPLES: Record<Reason["code"], { reason: Reason; text: string }> = {
     text: "person 4 has 5 required buddies but each person gets 4",
   },
   "required-and-prohibited": {
-    // The en-dash here is the reason a UI must not do string substitution on
-    // these messages: it is easy to retype as a hyphen and impossible to see.
+    // An en-dash, not a hyphen — impossible to see, and why a UI must not string-substitute
+    // these messages.
     reason: { code: "required-and-prohibited", a: 3, b: 7 },
     text: "pair 3–7 is both required and prohibited",
   },
@@ -104,8 +95,8 @@ describe("validateDetailed reachability", () => {
   it("reports an out-of-range endpoint without pretending it is a person", () => {
     const reasons = validateDetailed(new Constraints(4).require(0, 9), 3);
     expect(reasons).toEqual([{ code: "unknown-person", person: 9, n: 4 }]);
-    // The index is out of range on purpose — that IS the finding. A caller that
-    // rendered names[9] here would print "undefined".
+    // Out of range on purpose — that IS the finding, and a caller rendering names[9] here would
+    // print "undefined".
     expect((reasons[0] as { person: number }).person).toBeGreaterThanOrEqual(4);
   });
 
@@ -141,8 +132,7 @@ describe("validateDetailed reachability", () => {
   });
 
   it("reports a prohibited-pair split of the group", () => {
-    // Isolate person 0 and person 1 from each other and from the rest, so the
-    // allowed-pairs graph itself is disconnected.
+    // Person 0 prohibited from everyone, so the allowed-pairs graph itself is disconnected.
     const cons = new Constraints(4);
     for (const [a, b] of [
       [0, 1],
@@ -187,8 +177,8 @@ describe("validate is exactly validateDetailed formatted", () => {
   }
 
   it("stays sorted and deduplicated", () => {
-    // Two required pairs sharing an over-subscribed person produce the same
-    // message twice before dedupe.
+    // Non-vacuity: required pairs sharing an over-subscribed person produce the same message
+    // twice before dedupe.
     const cons = new Constraints(10);
     for (const b of [1, 2, 3, 4, 5]) cons.require(0, b);
     cons.prohibit(0, 6);
@@ -199,11 +189,7 @@ describe("validate is exactly validateDetailed formatted", () => {
 });
 
 describe("a number renders the same way in both languages", () => {
-  // `formatReason`'s docblock claims byte-identity with reference-python's `format_reason`, and
-  // raw interpolation broke it on exactly the values these reasons are documented to CARRY:
-  // `${NaN}` is "NaN" in JS and "nan" in Python, `${Infinity}` is "Infinity" against "inf". A
-  // 3,000-case differential fuzz matched 2,993 messages byte-for-byte and all 7 mismatches were
-  // this class — invisible to the rest of this file, which only ever uses finite values.
+  // Raw interpolation gives "NaN" / "Infinity" where Python gives "nan" / "inf".
   it("spells non-finite numbers Python's way, because the oracle is the spec", () => {
     expect(validate(new Constraints(4), NaN)).toEqual([
       "buddy count nan must be a non-negative whole number",
@@ -223,11 +209,6 @@ describe("a number renders the same way in both languages", () => {
 });
 
 describe("the structural reason list is bounded", () => {
-  // It was unbounded in work AND output: two Reason objects per malformed pair, then a Map build
-  // and a string SORT over all of them, then `validate` mapping formatReason over the survivors
-  // again. A ten-person roster with a million out-of-range pairs returned 2,000,000 reasons in
-  // 5.0 s and 925 MB; at four million the process died inside `validate` with a V8
-  // out-of-memory — the function whose contract is that it refuses rather than throws, threw.
   it("summarises instead of listing, however many pairs are malformed", () => {
     const c = new Constraints(10);
     for (let i = 0; i < 50_000; i++) c.prohibit(1000 + 2 * i, 1001 + 2 * i);
@@ -236,7 +217,6 @@ describe("the structural reason list is bounded", () => {
     const texts = validate(c, 4);
     expect(texts.some((t) => /100000 constraints are invalid/.test(t))).toBe(true);
     // The count is EXACT even though the list is not: two bad endpoints per pair.
-    // And a small malformed set is still listed in full, not summarised away.
     const few = new Constraints(10);
     few.prohibit(99, 1);
     expect(validate(few, 4)).toEqual([
@@ -245,11 +225,6 @@ describe("the structural reason list is bounded", () => {
   });
 
   it("lists the same reasons whatever order the constraint set was built in", () => {
-    // The cap has to choose WHICH reasons survive, and choosing "the first 16 encountered" made
-    // that choice a function of `Set` insertion order — so the same constraint SET, built
-    // forwards or backwards, refused with different text. The Python mirror iterates its sets in
-    // hash order and would have disagreed with both, which is the message parity this module is
-    // held to. Selecting the alphabetically smallest distinct messages is order-free.
     const bad: [number, number][] = [];
     for (let i = 0; i < 60; i++) bad.push([200 + i, 400 + i]);
 
@@ -257,7 +232,7 @@ describe("the structural reason list is bounded", () => {
     for (const [a, b] of bad) forward.prohibit(a, b);
     const backward = new Constraints(10);
     for (let i = bad.length - 1; i >= 0; i--) backward.prohibit(bad[i][1], bad[i][0]);
-    // A third order that interleaves the three pair kinds, since the scan reads them in sequence.
+    // A third order interleaving the three pair kinds, since the scan reads them in sequence.
     const mixed = new Constraints(10);
     for (let i = 0; i < bad.length; i++) {
       const [a, b] = bad[(i * 37) % bad.length];
@@ -270,8 +245,6 @@ describe("the structural reason list is bounded", () => {
     expect(validate(mixed, 4)).toEqual(validate(forward, 4));
     // Non-vacuity: the cap must actually be biting, or all three agree trivially.
     expect(validate(forward, 4).length).toBe(17); // 16 listed + the exact-count summary
-    // And the survivors are distinct, which "the first 16" did not guarantee: a thousand copies
-    // of one fault used to fill every slot and dedupe back down to a single listed reason.
     const listed = validate(forward, 4).filter((t) => !/constraints are invalid/.test(t));
     expect(new Set(listed).size).toBe(listed.length);
   });

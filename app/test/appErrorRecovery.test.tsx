@@ -510,8 +510,8 @@ describe("focus survives a panel closing itself", () => {
     remove.focus();
     expect(document.activeElement).toBe(remove);
     fireEvent.click(remove);
-    // `await`, not a bare assertion: a MutationObserver delivers on a microtask after the batch,
-    // which is the property that lets it see React's remove-then-insert sequences settled.
+    // Awaited: a MutationObserver delivers on the microtask after the batch, which is what lets
+    // it see React's remove-then-insert sequences settled.
     await waitFor(() => expect(document.activeElement).not.toBe(document.body));
     // The roster field is the landing spot while the dialog owns the screen.
     expect(document.activeElement).toBe(screen.getByLabelText("Roster names"));

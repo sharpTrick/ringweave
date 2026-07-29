@@ -1,8 +1,6 @@
 /**
- * `shortestPath` and `eccentricity`: the two queries the app's path finder and
- * node explorer are built on. Both are user-facing in a way the aggregate metrics
- * are not — a path is shown edge by edge — so determinism is asserted directly
- * rather than inferred from a metric matching.
+ * A path is user-facing edge by edge, unlike the aggregate metrics, so determinism is asserted
+ * directly here rather than inferred from a metric matching.
  */
 import { describe, it, expect } from "vitest";
 import { Graph, ring } from "../src/core/graph.js";
@@ -64,10 +62,9 @@ describe("shortestPath", () => {
   });
 
   it("is greedy from the start, so it is not simply reversible", () => {
-    // Two disjoint 3-hop routes between 0 and 5: 0-1-4-5 and 0-2-3-5. Reading
-    // smallest-first from 0 takes 1 and lands on the first; reading smallest-first
-    // from 5 takes 3 and lands on the second. This asymmetry is documented, and it
-    // is why the path finder canonicalises on min(s, t).
+    // Two disjoint 3-hop routes: 0-1-4-5 and 0-2-3-5. Smallest-first from 0 takes 1 and lands on
+    // the first, from 5 takes 3 and lands on the second — which is why the path finder
+    // canonicalises on min(s, t).
     const g = graphOf(6, [
       [0, 1],
       [1, 4],
@@ -108,8 +105,8 @@ describe("eccentricity", () => {
       [0, 1],
       [2, 3],
     ]);
-    // The reachable half is one step away; reporting 1 would read as "everyone is
-    // within one step" for a roster split down the middle.
+    // The reachable half is one step away, so reporting 1 would read as "everyone is within one
+    // step" for a roster split down the middle.
     expect(eccentricity(g, 0)).toBe(Infinity);
   });
 
