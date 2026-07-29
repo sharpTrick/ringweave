@@ -93,7 +93,7 @@ def validate(cons, k):
 
     # Dense k blows generation up past the n-cap (one BFS per edge, ~n*min(k,n-1)/2
     # edges); refuse when the estimated work exceeds the budget. Mirrors the TS port.
-    if _constrained_work(cons.n, k) > MAX_CONSTRAINED_WORK:
+    if _constrained_work(cons.n, k, len(cons.prohibited)) > MAX_CONSTRAINED_WORK:
         return [
             f"roster size {cons.n} with {k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count"
         ]
@@ -140,9 +140,21 @@ MAX_CONSTRAINED_N = 5000
 MAX_CONSTRAINED_WORK = 100_000_000
 
 
-def _constrained_work(n, k):
-    """Estimated constrained-generation cost, proportional to vertices x edges-added."""
-    return n * n * min(k, max(0, n - 1))
+# Cost charged per prohibited pair. A FLOOR, not a model of the shape: every legality decision
+# in the generator probes the prohibited set, and a dense set makes more candidates fail, so more
+# are scanned per edge added. Calibrated as a rate on the shape with headroom to measure (n=3000,
+# k=4: 11.7 s more with a million pairs, 77 units/pair at that roster's 6.55e6 units/s, rounded
+# up). Mirrors PROHIBITED_PROBE_COST in the TS port.
+PROHIBITED_PROBE_COST = 80
+
+
+def _constrained_work(n, k, prohibited_count):
+    """Estimated constrained-generation cost: vertices x edges-added, plus the constraint set.
+
+    `prohibited_count` is required rather than defaulted — the caller holds the Constraints, and
+    an optional argument is how the dimension went missing the first time.
+    """
+    return n * n * min(k, max(0, n - 1)) + PROHIBITED_PROBE_COST * prohibited_count
 
 
 def _structural_errors(cons):

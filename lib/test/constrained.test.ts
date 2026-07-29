@@ -223,7 +223,7 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
       [500, 499], // near-complete (dense)
     ];
     it.each(OVER)("refuses n=%i, k=%i whose estimated work exceeds the budget", (n, k) => {
-      expect(constrainedWork(n, k)).toBeGreaterThan(MAX_CONSTRAINED_WORK);
+      expect(constrainedWork(n, k, 0)).toBeGreaterThan(MAX_CONSTRAINED_WORK);
       expect(validate(new Constraints(n), k).some((m) => /too large to generate/.test(m))).toBe(
         true,
       );
@@ -233,9 +233,48 @@ describe("malformed inputs are refused, never thrown (constrained path)", () => 
       expect(() => constrainedGreedy(n, k, new Constraints(n))).toThrow(/too large to generate/);
     });
     it("accepts a roster at exactly the budget (work not strictly over)", () => {
-      expect(constrainedWork(5000, 4)).toBe(MAX_CONSTRAINED_WORK);
+      expect(constrainedWork(5000, 4, 0)).toBe(MAX_CONSTRAINED_WORK);
       expect(validate(new Constraints(5000), 4)).toEqual([]);
     });
+
+    it("charges the constraint set, so no dimension the inner loop probes is invisible", () => {
+      // The estimator was (n, k)-only while every legality decision in the generator probes the
+      // prohibited set. Measured at k=4: n=5000 with no prohibitions is 15.0 s (the calibration
+      // point, exactly at the budget) and the same roster with a million prohibited pairs is
+      // 49.4 s — 3.3x the worst case the constant documents — with `validate` returning `[]`.
+      // n=3000 is the shape with headroom: 5.5 s bare, 17.1 s with a million pairs.
+      const dense = (n: number, pairs: number): Constraints => {
+        const c = new Constraints(n);
+        let made = 0;
+        for (let a = 0; a < n && made < pairs; a++) {
+          for (let b = a + 1; b < n && made < pairs; b++) {
+            c.prohibit(a, b);
+            made++;
+          }
+        }
+        return c;
+      };
+      const withPairs = dense(3000, 1_000_000);
+      expect(constrainedWork(3000, 4, 0)).toBeLessThanOrEqual(MAX_CONSTRAINED_WORK);
+      expect(constrainedWork(3000, 4, withPairs.prohibitedCount)).toBeGreaterThan(MAX_CONSTRAINED_WORK);
+      expect(validate(withPairs, 4).some((m) => /too large to generate/.test(m))).toBe(true);
+      // ...and the refusal reaches both entry points, so the gate and the throw stay in step.
+      expect(() => constrainedGreedy(3000, 4, withPairs)).toThrow(/too large to generate/);
+      expect(buildConstrainedBuddyGraph(3000, 4, withPairs).report.refusals.length).toBeGreaterThan(0);
+
+      // MONOTONE in the constraint set: adding a prohibited pair can only move an input toward
+      // refusal. That is the property, and it is what a (n,k)-only estimator could not have.
+      for (const n of [50, 500, 3000]) {
+        let prev = constrainedWork(n, 4, 0);
+        for (const pairs of [1, 100, 10_000, 1_000_000]) {
+          const next = constrainedWork(n, 4, pairs);
+          expect(next).toBeGreaterThan(prev);
+          prev = next;
+        }
+      }
+      // And nothing the APP can express is affected: its cap is 200 pairs.
+      expect(constrainedWork(200, 4, 200)).toBeLessThanOrEqual(MAX_CONSTRAINED_WORK);
+    }, 60_000);
   });
 
   it.each(BAD_N)(

@@ -38,12 +38,42 @@ export const MAX_CONSTRAINED_N = 5000;
 export const MAX_CONSTRAINED_WORK = 100_000_000;
 
 /**
- * Estimated constrained-generation cost, ∝ vertices × edges-added. Monotone in n
- * and k; compared against MAX_CONSTRAINED_WORK to refuse rosters that would hang.
- * `min(k, n-1)` mirrors the effective degree cap (k is silently capped at n-1).
+ * Cost charged per prohibited pair.
+ *
+ * A FLOOR, deliberately, not a model of the shape. Every legality decision in the generator is
+ * a `cons.isProhibited` probe, and a dense prohibited set does not merely make each probe dearer
+ * — it makes more candidates fail, so more are scanned per edge added. Measured at k=4:
+ *   n=5000, 0 pairs        15.0 s      n=5000, 250k pairs   42.8 s      n=5000, 1M pairs  49.4 s
+ *   n=3000, 0 pairs         5.5 s                                       n=3000, 1M pairs  17.1 s
+ * The marginal rate FALLS as pairs rise (742 units/pair at 250k, 230 at 1M), so a linear term
+ * cannot be the true shape — and this module has already watched four models of another
+ * generator's cost fail. So this is calibrated as a RATE on the one shape where the (n,k) term
+ * leaves headroom to measure: n=3000 spends 11.7 s more with a million pairs, which at that
+ * roster's observed 6.55e6 units/s is 77 units per pair, rounded up. (At n=5000,k=4 the base term
+ * already sits exactly on the budget, so any positive charge refuses and the shape teaches
+ * nothing.) It binds only above n≈1500 with a large fraction of all pairs prohibited — precisely
+ * the regime measured — and can never bind at n<=500, where every pair that exists costs 1e7.
+ *
+ * What it buys is the INVARIANT, not an accurate prediction: adding prohibited pairs can only
+ * move an input toward refusal, so no dimension the inner loop probes is invisible to the gate.
+ * The app's own ceiling is 200 pairs (12,800 units), so nothing it can express is affected.
  */
-export function constrainedWork(n: number, k: number): number {
-  return n * n * Math.min(k, Math.max(0, n - 1));
+const PROHIBITED_PROBE_COST = 80;
+
+/**
+ * Estimated constrained-generation cost, ∝ vertices × edges-added, PLUS a charge per prohibited
+ * pair. Monotone in n, k and the constraint set; compared against MAX_CONSTRAINED_WORK to refuse
+ * rosters that would hang. `min(k, n-1)` mirrors the effective degree cap (k is silently capped
+ * at n-1).
+ *
+ * `prohibitedCount` is REQUIRED rather than defaulted. Both callers hold the `Constraints` when
+ * they call this, and an optional argument is how the dimension went missing the first time: the
+ * estimator was (n, k)-only while every legality decision in the generator probes the prohibited
+ * set, so a SPARSE roster sitting exactly on the budget could cost 3.3x the calibrated worst case
+ * and `validate` returned `[]` for it.
+ */
+export function constrainedWork(n: number, k: number, prohibitedCount: number): number {
+  return n * n * Math.min(k, Math.max(0, n - 1)) + PROHIBITED_PROBE_COST * prohibitedCount;
 }
 
 // Work budget for the UNCONSTRAINED generator (ringGreedy). MAX_CACHED_N bounds

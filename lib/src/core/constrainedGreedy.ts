@@ -663,7 +663,7 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
     throw new Error(`k must be a non-negative integer, got ${k} — call validate() first`);
   }
   // Dense k blows generation up past the n-cap (see MAX_CONSTRAINED_WORK).
-  if (constrainedWork(n, k) > MAX_CONSTRAINED_WORK) {
+  if (constrainedWork(n, k, cons.prohibitedCount) > MAX_CONSTRAINED_WORK) {
     throw new Error(
       `roster size ${n} with k=${k} is too large to generate in reasonable time — call validate() first`,
     );

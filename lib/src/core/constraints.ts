@@ -272,7 +272,7 @@ export function validateDetailed(cons: Constraints, k: number): Reason[] {
   // Dense k blows generation up past the n-cap (rationale on MAX_CONSTRAINED_WORK
   // in budgets.ts); refuse when the estimated work exceeds the budget. Mirrored as a
   // throw in constrainedGreedy's checkWellFormed.
-  if (constrainedWork(cons.n, k) > MAX_CONSTRAINED_WORK) {
+  if (constrainedWork(cons.n, k, cons.prohibitedCount) > MAX_CONSTRAINED_WORK) {
     return [{ code: "work-too-large", n: cons.n, k }];
   }
 
