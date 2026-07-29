@@ -21,6 +21,7 @@ const SAMPLES: Record<Reason["code"], Reason> = {
   "roster-too-large": { code: "roster-too-large", n: 2_000_000, max: 1_000_000 },
   "unknown-person": { code: "unknown-person", person: 99, n: 5 },
   "self-pair": { code: "self-pair", person: 1 },
+  "too-many-invalid-constraints": { code: "too-many-invalid-constraints", count: 4000 },
   "roster-too-large-constrained": { code: "roster-too-large-constrained", n: 9000, max: 5000 },
   "buddy-count-invalid": { code: "buddy-count-invalid", k: -2 },
   "work-too-large": { code: "work-too-large", n: 4000, k: 900 },

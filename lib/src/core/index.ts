@@ -584,7 +584,14 @@ function buildReport(
   g: Graph,
   cons: Constraints,
   connected: boolean,
-  priorsWeighed: boolean,
+  /**
+   * Whether the priors were ACCOUNTED FOR — by either route, which is why the name is not
+   * `priorsWeighed`. The argument is `priorHard || (a polish pass took decisions && weight !== 0)`,
+   * so it is true when priors were PROMOTED to required edges and never weighed at all. Reading
+   * the narrower name in isolation, a maintainer would conclude `priorsKeptFraction` is null on
+   * the promotion path; it is 1, correctly, because promotion guarantees the edges are present.
+   */
+  priorsAccountedFor: boolean,
 ): ConstraintReport {
   let prohViolations = 0;
   for (const [a, b] of cons.prohibitedPairs()) if (g.hasEdge(a, b)) prohViolations++;
@@ -593,7 +600,7 @@ function buildReport(
 
   const priors = cons.priorPairs();
   const priorsKeptFraction =
-    priorsWeighed && priors.length > 0 ? countPresentEdges(g, priors) / priors.length : null;
+    priorsAccountedFor && priors.length > 0 ? countPresentEdges(g, priors) / priors.length : null;
 
   return {
     satisfied: reqViolations === 0 && prohViolations === 0 && connected,

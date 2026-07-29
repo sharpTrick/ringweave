@@ -51,10 +51,13 @@ export class Graph {
    * quietly false. A guard that runs after half the work is not a guard.
    */
   #checkEndpoints(u: number, v: number): void {
-    for (const x of [u, v]) {
-      if (!Number.isInteger(x) || x < 0 || x >= this.n) {
-        throw new Error(`vertex ${x} must be an integer in [0, ${this.n - 1}]`);
-      }
+    this.#checkVertex(u);
+    this.#checkVertex(v);
+  }
+
+  #checkVertex(x: number): void {
+    if (!Number.isInteger(x) || x < 0 || x >= this.n) {
+      throw new Error(`vertex ${x} must be an integer in [0, ${this.n - 1}]`);
     }
   }
 
@@ -83,6 +86,22 @@ export class Graph {
   }
 
   degree(u: number): number {
+    // GUARDED like every other public index-taking method. `hasEdge`'s comment already gives the
+    // reason — a non-vertex must be named, not surfaced as `Cannot read properties of undefined`
+    // — and this was the one entry point left out of it, which showed in both directions:
+    // `degree(-1)` threw a raw TypeError naming nothing, while `degree("0")` returned a real
+    // answer, because `adj["0"]` aliases `adj[0]`. `metrics.ts` added the same guard to
+    // `bfsDistances` for the same reason; this is its sibling.
+    //
+    // The cost is one `Number.isInteger` and two comparisons on a path the generators call
+    // ~n²k times, so it was measured rather than assumed — and the first measurement was wrong.
+    // A single run of `buildBuddyGraph(600, 8)` showed 3.84 s -> 4.68 s and looked like a 22%
+    // regression; repeated, the medians are 4.90 s unguarded against 5.19 s guarded with the
+    // ranges overlapping (4.52-5.42 vs 4.77-5.30). So the honest figure is single-digit percent
+    // at most, not zero and not 22%. It is paid because every internal caller passes a loop
+    // index, so the branch never fires, and because the alternative is a public read path that
+    // answers `1` for `degree("0")`.
+    this.#checkVertex(u);
     return this.adj[u].size;
   }
 

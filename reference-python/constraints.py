@@ -139,6 +139,9 @@ MAX_CONSTRAINED_N = 5000
 # seconds. Mirrors the TS port (see MAX_CONSTRAINED_WORK in graph.ts).
 MAX_CONSTRAINED_WORK = 100_000_000
 
+# Mirrors MAX_STRUCTURAL_REASONS in the TS port — see there for why the list is capped.
+MAX_STRUCTURAL_REASONS = 16
+
 
 # Cost charged per prohibited pair. A FLOOR, not a model of the shape: every legality decision
 # in the generator probes the prohibited set, and a dense set makes more candidates fail, so more
@@ -166,18 +169,28 @@ def _structural_errors(cons):
     if n > MAX_ROSTER:
         return [f"roster size {n} exceeds the maximum of {MAX_ROSTER}"]
     errs = []
+    counted = [0]
+
+    # Counted always, listed up to the cap. The list used to be unbounded in both work and
+    # output; see MAX_STRUCTURAL_REASONS in the TS port for the measurements.
+    def note(msg):
+        counted[0] += 1
+        if len(errs) < MAX_STRUCTURAL_REASONS:
+            errs.append(msg)
 
     def scan(pairs):
         for (a, b) in pairs:
             for x in (a, b):
                 if not isinstance(x, int) or isinstance(x, bool) or x < 0 or x >= n:
-                    errs.append(f"constraint references unknown person {x} (roster has {n})")
+                    note(f"constraint references unknown person {x} (roster has {n})")
             if a == b:
-                errs.append(f"person {a} cannot be paired with themselves")
+                note(f"person {a} cannot be paired with themselves")
 
     scan(cons.required)
     scan(cons.prohibited)
     scan(cons.priors)
+    if counted[0] > len(errs):
+        errs.append(f"{counted[0]} constraints are invalid — only the first few are listed")
     return errs
 
 

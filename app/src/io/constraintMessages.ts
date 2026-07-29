@@ -31,6 +31,12 @@ function describeReason(r: Reason, names: string[]): string {
       return "A buddy rule refers to someone who isn't in this roster — remove it and try again.";
     case "self-pair":
       return `${personName(r.person, names)} can't be paired with themselves.`;
+    case "too-many-invalid-constraints":
+      // The core summarises rather than listing once a rule set is malformed past counting; the
+      // count is exact even though the list it replaces is not. Reached only through the library
+      // directly — this app caps rules long before it — but the switch is exhaustive on purpose,
+      // and leaving a code unhandled is what the compiler is here to refuse.
+      return `${r.count} buddy rules refer to someone who isn't in this roster — remove them and try again.`;
     case "roster-too-large-constrained":
       return `Buddy rules can only be used with up to ${r.max} people — this roster has ${r.n}.`;
     case "buddy-count-invalid":

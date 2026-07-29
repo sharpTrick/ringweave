@@ -36,6 +36,10 @@ const SAMPLES: Record<Reason["code"], { reason: Reason; text: string }> = {
     reason: { code: "unknown-person", person: 9, n: 4 },
     text: "constraint references unknown person 9 (roster has 4)",
   },
+  "too-many-invalid-constraints": {
+    reason: { code: "too-many-invalid-constraints", count: 4000 },
+    text: "4000 constraints are invalid — only the first few are listed",
+  },
   "self-pair": {
     reason: { code: "self-pair", person: 2 },
     text: "person 2 cannot be paired with themselves",
@@ -191,5 +195,52 @@ describe("validate is exactly validateDetailed formatted", () => {
     const messages = validate(cons, 2);
     expect(messages).toEqual([...new Set(messages)]);
     expect(messages).toEqual([...messages].sort());
+  });
+});
+
+describe("a number renders the same way in both languages", () => {
+  // `formatReason`'s docblock claims byte-identity with reference-python's `format_reason`, and
+  // raw interpolation broke it on exactly the values these reasons are documented to CARRY:
+  // `${NaN}` is "NaN" in JS and "nan" in Python, `${Infinity}` is "Infinity" against "inf". A
+  // 3,000-case differential fuzz matched 2,993 messages byte-for-byte and all 7 mismatches were
+  // this class — invisible to the rest of this file, which only ever uses finite values.
+  it("spells non-finite numbers Python's way, because the oracle is the spec", () => {
+    expect(validate(new Constraints(4), NaN)).toEqual([
+      "buddy count nan must be a non-negative whole number",
+    ]);
+    expect(validate(new Constraints(4), Infinity)).toEqual([
+      "buddy count inf must be a non-negative whole number",
+    ]);
+    expect(validate(new Constraints(4), -Infinity)).toEqual([
+      "buddy count -inf must be a non-negative whole number",
+    ]);
+    const c = new Constraints(4);
+    c.prohibit(Infinity, 1);
+    expect(validate(c, 2)).toEqual([
+      "constraint references unknown person inf (roster has 4)",
+    ]);
+  });
+});
+
+describe("the structural reason list is bounded", () => {
+  // It was unbounded in work AND output: two Reason objects per malformed pair, then a Map build
+  // and a string SORT over all of them, then `validate` mapping formatReason over the survivors
+  // again. A ten-person roster with a million out-of-range pairs returned 2,000,000 reasons in
+  // 5.0 s and 925 MB; at four million the process died inside `validate` with a V8
+  // out-of-memory — the function whose contract is that it refuses rather than throws, threw.
+  it("summarises instead of listing, however many pairs are malformed", () => {
+    const c = new Constraints(10);
+    for (let i = 0; i < 50_000; i++) c.prohibit(1000 + 2 * i, 1001 + 2 * i);
+    const reasons = validateDetailed(c, 4);
+    expect(reasons.length).toBeLessThanOrEqual(20);
+    const texts = validate(c, 4);
+    expect(texts.some((t) => /100000 constraints are invalid/.test(t))).toBe(true);
+    // The count is EXACT even though the list is not: two bad endpoints per pair.
+    // And a small malformed set is still listed in full, not summarised away.
+    const few = new Constraints(10);
+    few.prohibit(99, 1);
+    expect(validate(few, 4)).toEqual([
+      "constraint references unknown person 99 (roster has 10)",
+    ]);
   });
 });

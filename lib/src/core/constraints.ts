@@ -176,6 +176,7 @@ export type Reason =
   | { code: "roster-too-large"; n: number; max: number }
   | { code: "unknown-person"; person: number; n: number }
   | { code: "self-pair"; person: number }
+  | { code: "too-many-invalid-constraints"; count: number }
   | { code: "roster-too-large-constrained"; n: number; max: number }
   | { code: "buddy-count-invalid"; k: number }
   | { code: "work-too-large"; n: number; k: number }
@@ -190,32 +191,51 @@ export type Reason =
  * `validateDetailed`, so these strings are the authoritative wording and stay
  * byte-identical to the Python reference's.
  */
+/**
+ * How a number appears in a message, so the TS and Python renderings cannot disagree.
+ *
+ * `formatReason`'s docblock claims byte-identity with `reference-python`'s `format_reason`, and
+ * raw interpolation broke it on exactly the values these reasons are documented to CARRY:
+ * `${NaN}` is "NaN" in JS and "nan" in Python, `${Infinity}` is "Infinity" against "inf". A
+ * 3,000-case differential fuzz matched 2,993 messages byte-for-byte and every one of the 7
+ * mismatches was this class — invisible to the suite, which only ever uses finite values.
+ * Python's spelling wins because the oracle is the spec.
+ */
+function num(x: number): string {
+  if (Number.isNaN(x)) return "nan";
+  if (x === Infinity) return "inf";
+  if (x === -Infinity) return "-inf";
+  return String(x);
+}
+
 export function formatReason(r: Reason): string {
   switch (r.code) {
     case "roster-invalid":
-      return `roster size ${r.n} is not a valid count`;
+      return `roster size ${num(r.n)} is not a valid count`;
     case "roster-too-large":
-      return `roster size ${r.n} exceeds the maximum of ${r.max}`;
+      return `roster size ${num(r.n)} exceeds the maximum of ${num(r.max)}`;
     case "unknown-person":
-      return `constraint references unknown person ${r.person} (roster has ${r.n})`;
+      return `constraint references unknown person ${num(r.person)} (roster has ${num(r.n)})`;
     case "self-pair":
-      return `person ${r.person} cannot be paired with themselves`;
+      return `person ${num(r.person)} cannot be paired with themselves`;
+    case "too-many-invalid-constraints":
+      return `${num(r.count)} constraints are invalid — only the first few are listed`;
     case "roster-too-large-constrained":
-      return `roster size ${r.n} exceeds the constrained maximum of ${r.max} (generation is O(n²))`;
+      return `roster size ${num(r.n)} exceeds the constrained maximum of ${num(r.max)} (generation is O(n²))`;
     case "buddy-count-invalid":
-      return `buddy count ${r.k} must be a non-negative whole number`;
+      return `buddy count ${num(r.k)} must be a non-negative whole number`;
     case "work-too-large":
-      return `roster size ${r.n} with ${r.k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`;
+      return `roster size ${num(r.n)} with ${num(r.k)} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`;
     case "required-degree-exceeds-k":
-      return `person ${r.person} has ${r.required} required buddies but each person gets ${r.k}`;
+      return `person ${num(r.person)} has ${num(r.required)} required buddies but each person gets ${num(r.k)}`;
     case "required-and-prohibited":
-      return `pair ${r.a}–${r.b} is both required and prohibited`;
+      return `pair ${num(r.a)}–${num(r.b)} is both required and prohibited`;
     case "required-within-prohibited":
-      return `person ${r.person} cannot meet required buddies within their prohibited set`;
+      return `person ${num(r.person)} cannot meet required buddies within their prohibited set`;
     case "prohibited-from-everyone":
-      return `person ${r.person} is prohibited from everyone — they'd have no buddies`;
+      return `person ${num(r.person)} is prohibited from everyone — they'd have no buddies`;
     case "prohibited-splits-group":
-      return `prohibited pairs split the group — person ${r.person} can never be connected to everyone`;
+      return `prohibited pairs split the group — person ${num(r.person)} can never be connected to everyone`;
   }
 }
 
@@ -328,8 +348,28 @@ export function validate(cons: Constraints, k: number): string[] {
  * Mirrored as throws in constrainedGreedy's `checkConstraintIds` for direct
  * callers that skip validate, and in reference-python `_structural_errors`.
  */
+/**
+ * How many distinct structural faults are listed before the rest are summarised.
+ *
+ * The list used to be unbounded in BOTH work and output: two `Reason` objects per malformed
+ * pair, then `normalize` built a Map of all of them and SORTED it, then `validate` mapped
+ * `formatReason` over the survivors again. Measured on a ten-person roster with a million
+ * out-of-range prohibited pairs: `validateDetailed` returned 2,000,000 reasons in 5.0 s and grew
+ * RSS from 197 MB to 925 MB, and `validate` spent a further 7.9 s producing 2,000,000 strings.
+ * At four million pairs the process died inside `validate` with a V8 out-of-memory — i.e. the
+ * function whose documented contract is that it REFUSES rather than throws, threw.
+ *
+ * The scan itself stays O(P) and that is unavoidable: it matches the Set the caller already
+ * built. What disappears is the 5x memory amplification, the O(P log P) string sort and the
+ * unbounded return array. Nothing the app can express is affected — it caps at 200 pairs — but
+ * `lib/` ships standalone and `validateDetailed` has a live MAIN-THREAD caller that renders
+ * whatever array it returns.
+ */
+const MAX_STRUCTURAL_REASONS = 16;
+
 function structuralReasons(cons: Constraints): Reason[] {
   const errs: Reason[] = [];
+  let invalid = 0;
   const n = cons.n;
   if (!Number.isInteger(n) || n < 0) {
     return [{ code: "roster-invalid", n }];
@@ -339,19 +379,26 @@ function structuralReasons(cons: Constraints): Reason[] {
     return [{ code: "roster-too-large", n, max: MAX_ROSTER }];
   }
 
+  // Counted always, listed up to the cap: the total stays exact while the allocation does not
+  // grow with it.
+  const note = (r: Reason) => {
+    invalid++;
+    if (errs.length < MAX_STRUCTURAL_REASONS) errs.push(r);
+  };
   const scan = (pairs: [number, number][]) => {
     for (const [a, b] of pairs) {
       for (const x of [a, b]) {
         if (!Number.isInteger(x) || x < 0 || x >= n) {
-          errs.push({ code: "unknown-person", person: x, n });
+          note({ code: "unknown-person", person: x, n });
         }
       }
-      if (a === b) errs.push({ code: "self-pair", person: a });
+      if (a === b) note({ code: "self-pair", person: a });
     }
   };
   scan(cons.requiredPairs());
   scan(cons.prohibitedPairs());
   scan(cons.priorPairs());
+  if (invalid > errs.length) errs.push({ code: "too-many-invalid-constraints", count: invalid });
   return errs;
 }
 
