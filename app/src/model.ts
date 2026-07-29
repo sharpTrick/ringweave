@@ -6,7 +6,7 @@ import {
 } from "ringweave";
 import type { ConstraintPair } from "./constraints";
 import type { GraphResult } from "./worker/protocol";
-import { clampList } from "./io/clamp";
+import { clamp, clampList } from "./io/clamp";
 
 /** Generation settings surfaced in the UI (mirrors the core's BuddyOptions + k). */
 export interface Settings {
@@ -43,7 +43,7 @@ export const SEPARATION_MAX = 12;
     IN-RANGE fallback, so it's clamped to [SEPARATION_MIN, SEPARATION_MAX]: if the core ever moves
     its default outside the UI range, this stays a value the stepper can express (guarded by a
     model invariant test) rather than silently feeding an out-of-range value to a reroll. */
-export const SEPARATION_DEFAULT = Math.max(SEPARATION_MIN, Math.min(SEPARATION_MAX, DEFAULT_MIN_SEPARATION));
+export const SEPARATION_DEFAULT = clamp(DEFAULT_MIN_SEPARATION, SEPARATION_MIN, SEPARATION_MAX);
 
 /** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
     runs tens of seconds even off-thread, so the roster parser truncates and feasibility refuses
@@ -106,7 +106,7 @@ export interface Metrics {
 
 /** Clamp an ASPL gap to a 0..1 quality score (1 = provably optimal). */
 function clampQuality(gap: number): number {
-  return Math.max(0, Math.min(1, 1 - gap));
+  return clamp(1 - gap, 0, 1);
 }
 
 /**
@@ -193,7 +193,7 @@ export function connectionSummary(m: Metrics): string {
     // reading as "100% are in the largest group" while disconnected; the floor had the
     // mirror-image problem, reporting "0% are in the largest group" for a badly shattered
     // roster whose largest group is non-empty by definition. Same one-line symmetry.
-    const pct = Math.max(1, Math.min(99, Math.floor(m.largestComponentFraction * 100)));
+    const pct = clamp(Math.floor(m.largestComponentFraction * 100), 1, 99);
     return `not everyone's connected — ${pct}% are in the largest group`;
   }
   if (m.aspl == null) return "not enough people yet to score";

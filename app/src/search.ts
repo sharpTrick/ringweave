@@ -18,7 +18,13 @@
  * every keystroke.
  */
 function matchNormalized(needle: string, name: string): number[] | null {
-  const haystack = name.toLowerCase();
+  // CODE POINTS on both sides, which is what makes `spread` mean what it says. The query was
+  // already iterated by code point (`for...of`) while the offsets came from `indexOf`, i.e. UTF-16
+  // code units — so `spread` subtracted a code-POINT count from a code-UNIT span and reported
+  // scatter for a name that matched contiguously: `fuzzyMatch("Año😀b", "Año😀b")`, the tightest
+  // match possible, scored 1 instead of 0 and was ranked below genuinely scattered matches. Same
+  // unit confusion `clamp.ts`'s `codePointsIfOver` exists for; this was the last site.
+  const haystack = Array.from(name.toLowerCase());
   const positions: number[] = [];
   let at = 0;
   for (const ch of needle) {
@@ -39,7 +45,7 @@ export function fuzzyMatch(query: string, name: string): number[] | null {
 export interface Match {
   /** Roster index. */
   index: number;
-  /** Character offsets in the name that the query matched, ascending. */
+  /** Code-point offsets in the name that the query matched, ascending. */
   positions: number[];
 }
 

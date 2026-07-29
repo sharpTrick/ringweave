@@ -9,7 +9,7 @@ import {
   MAX_CONSTRAINT_PAIRS, joinPairs, pairKey,
   type ConstraintPair,
 } from "../constraints";
-import { clampText, codePointsIfOver } from "./clamp";
+import { clamp, clampText, codePointsIfOver } from "./clamp";
 import type { BuddyGraphFile } from "./schema";
 
 /** Thrown with a plain-language reason when a file can't be imported. */
@@ -41,7 +41,7 @@ const CONTROL_CHARS_TEST = new RegExp(NAME_HOSTILE_CHARS.source, "u");
 export const MAX_IMPORT_N = MAX_ROSTER_N;
 
 function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): number {
-  return Number.isInteger(value) ? Math.max(lo, Math.min(hi, value as number)) : fallback;
+  return Number.isInteger(value) ? clamp(value as number, lo, hi) : fallback;
 }
 
 /** Sanitize the settings block: values come from arbitrary JSON. `buddies` and
@@ -54,7 +54,7 @@ function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): 
 function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
   const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
   return {
-    buddies: Math.max(BUDDY_MIN, Math.min(BUDDY_MAX, declared)),
+    buddies: clamp(declared, BUDDY_MIN, BUDDY_MAX),
     minSeparation: s && s.minSeparation !== undefined ? sanitizeInt(s.minSeparation, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT) : undefined,
     seed: sanitizeInt(s?.seed, 0, SEED_MAX, DEFAULT_SEED),
     polish: s && (s.polish === true || s.polish === false || s.polish === "auto") ? s.polish : "auto",

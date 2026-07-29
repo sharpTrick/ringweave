@@ -247,6 +247,47 @@ describe("App handles a refusal from the worker", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeNull();
   });
 
+  it("never shows a seed the graph on screen was not built with", async () => {
+    // The seed is the one value the reroll path SYNTHESISES rather than copying from the view,
+    // and it only becomes true if the reroll succeeds. Committing it at dispatch left the
+    // Advanced -> Seed field one ahead of the displayed graph for every non-success outcome —
+    // cancel, error, refusal, supersession — contradicting the seed `exportGraph` writes. The
+    // invariant is stated over the state, not over the four outcomes: nothing may write a
+    // settings value that is neither user-entered nor taken from an adopted view.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), { target: { value: "A\nB\nC\nD\nE" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate buddy graph/i }));
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    // The seed the displayed graph was actually built with — the one exportGraph writes.
+    const shown = DEFAULT_SETTINGS.seed;
+    for (const abandon of ["idle", "error", "refused"] as const) {
+      fireEvent.click(screen.getByRole("button", { name: /different arrangement/i }));
+      act(() => {
+        hooks.state.status = abandon;
+        hooks.state.error = abandon === "error" ? "Boom" : null;
+        hooks.state.refusals = abandon === "refused" ? [{ code: "self-pair", person: 0 }] : [];
+        rerender(<App />);
+      });
+      if (!screen.queryByLabelText("Roster names")) {
+        fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
+      }
+      const seedField = screen.getByLabelText("Seed") as HTMLInputElement;
+      expect(Number(seedField.value)).toBe(shown);
+      // Back to a clean slate for the next outcome.
+      fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+      act(() => {
+        hooks.state.status = "idle";
+        hooks.state.error = null;
+        hooks.state.refusals = [];
+        rerender(<App />);
+      });
+    }
+  });
+
   it("falls back to a plain sentence if the reasons list is somehow empty", () => {
     // Defensive: `refused` with no reasons should still say something actionable
     // rather than showing an empty toast the user cannot interpret.
@@ -265,6 +306,21 @@ describe("App handles a refusal from the worker", () => {
 // removes its own panel must leave focus somewhere. Both are keyboard-only failures
 // that render perfectly and that a mouse-driven test cannot see.
 describe("overlays and focus", () => {
+  it("puts focus INSIDE the dialog on cold load, not on <body>", () => {
+    // The first paint is the one path with no mechanism covering it. `modalOpen` starts true and
+    // `#app` is inert, so this dialog is the entire accessible document — and the app's one focus
+    // mechanism, `useFocusRescue`, is gated on focus having been somewhere real first, which on a
+    // cold load is false BY DESIGN. So the rescue correctly declines, and nothing else acted: a
+    // screen reader that announces on focus entry never learned a modal had opened, and the first
+    // Tab had to guess where it would land. Every OTHER route into this dialog was covered.
+    render(<App />);
+    const dialog = screen.getByRole("dialog");
+    expect(document.activeElement).not.toBe(document.body);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    // ...and specifically at the field the dialog exists for.
+    expect(document.activeElement).toBe(screen.getByLabelText("Roster names"));
+  });
+
   it("never nests the dialog inside an inert ancestor", () => {
     // `inert` cascades to every descendant with no way to opt back in, so a modal
     // rendered inside the element carrying it is unreachable — and since the modal

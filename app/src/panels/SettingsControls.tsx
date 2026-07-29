@@ -1,3 +1,4 @@
+import { clamp } from "../io/clamp";
 import { BUDDY_MAX, BUDDY_MIN, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN, type Settings } from "../model";
 
 interface Props {
@@ -7,8 +8,6 @@ interface Props {
 
 const polishValue = (p: boolean | "auto"): string => (p === "auto" ? "auto" : p ? "on" : "off");
 const parsePolish = (v: string): boolean | "auto" => (v === "auto" ? "auto" : v === "on");
-
-const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 
 /** F2 settings: buddies-per-person (k) plus an Advanced disclosure for minimum
     separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped

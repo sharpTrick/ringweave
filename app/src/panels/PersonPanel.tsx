@@ -6,7 +6,15 @@ import type { GraphView } from "../model";
 interface Props {
   view: GraphView;
   graph: Graph;
-  /** Who is being explored. Selection only — never hover; see the note below. */
+  /**
+   * Who is being explored. Selection only — never hover; see the note below.
+   *
+   * PRECONDITION, and the caller owns it: `0 <= index < view.names.length`. It is not
+   * re-checked here because App already derives it that way against the view it renders with
+   * (a selection made during a generation can outlive a shorter replacement roster), and a
+   * second guard in a second module is a second thing to keep in step. `eccentricity` throws
+   * on an out-of-range vertex, so a violation is loud rather than silently wrong.
+   */
   index: number;
   canGoBack: boolean;
   onSelect: (index: number) => void;

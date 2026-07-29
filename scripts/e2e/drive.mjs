@@ -64,10 +64,18 @@ await page.goto(BASE, { waitUntil: "networkidle" });
   });
   check("the setup dialog is not inside an inert ancestor", dialogInert === "ok", dialogInert);
 
+  // ASSERTED BEFORE ANYTHING TOUCHES IT. The previous version focused the field first and then
+  // checked that the focus had stuck — which proves the field is focusABLE, not that the app ever
+  // focuses it, and the app did not. On a cold load `#app` is inert and this dialog is the whole
+  // accessible page, so focus sitting on <body> means a screen reader is never told a dialog
+  // opened. Only a real browser can settle this one: jsdom will happily report focus wherever it
+  // was put.
+  const landed = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+  check("focus lands in the setup dialog on cold load", landed === "Roster names", landed ?? "(none)");
   const roster = page.getByLabel("Roster names");
   await roster.focus();
   const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
-  check("the roster field can actually take focus on cold load", focused === "Roster names", focused ?? "(none)");
+  check("the roster field can actually take focus", focused === "Roster names", focused ?? "(none)");
 }
 
 // ---- roster + rules -------------------------------------------------------

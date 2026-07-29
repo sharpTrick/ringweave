@@ -23,10 +23,11 @@ export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly Layout
 
 /**
  * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
- * points depend only on the graph, not on the current selection. A future SELECTION-DEPENDENT
- * mode (a selection-dependent mode, whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
- * but deliberately NOT here: folding its per-selection points into the frame would rescale the
- * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
+ * points depend only on the graph, not on the current selection. If a SELECTION-DEPENDENT mode
+ * (one whose points move per hover/click) were ever added, it would go into `LAYOUT_MODES` and
+ * `positionsFor` but deliberately NOT here: folding its per-selection points into the frame would
+ * rescale the viewBox on every interaction, defeating the fixed-frame invariant (see the
+ * graphCanvasFit test). No such mode exists — see the deferral note below.
  */
 /* A selection-dependent layout (the focus/ego mode) is DEFERRED PAST M3 — see app/CLAUDE.md for
    why, and for the four unresolved problems it carries. Named here only because this is the seam

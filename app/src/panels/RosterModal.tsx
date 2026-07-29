@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { validateDetailed } from "ringweave";
 import type { Settings } from "../model";
 import {
@@ -70,6 +70,22 @@ export default function RosterModal({
   const [fileError, setFileError] = useState<string | null>(null);
   const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const rosterRef = useRef<HTMLTextAreaElement>(null);
+
+  // A modal dialog takes focus when it opens. That is the whole reason this is here and not in
+  // `useFocusRescue`: the rescue answers "focus was DESTROYED, put it somewhere usable", and it
+  // is deliberately gated on focus having been somewhere real first — so on the very first paint,
+  // when nothing has ever been focused, its precondition is unmet BY DESIGN and it does not run.
+  // Cold load is exactly that paint: `modalOpen` starts true, `#app` is `inert`, and this dialog
+  // is the entire accessible document — with focus sitting on `<body>`. Every other path into
+  // this dialog (Edit people, a refusal, a first-generation error) landed focus inside it, so the
+  // one path every user hits first was the one with no mechanism covering it.
+  //
+  // On mount only. Reopens are new mounts, so they are covered by the same line; a re-render is
+  // not, which is what keeps this from stealing focus from someone typing in a rule row.
+  useEffect(() => {
+    rosterRef.current?.focus();
+  }, []);
 
   const parsed = useMemo(() => parseRoster(text), [text]);
   const feas = useMemo(() => feasibility(parsed.names.length, settings.buddies), [parsed.names.length, settings.buddies]);
@@ -163,6 +179,7 @@ export default function RosterModal({
           the whole group stays closely connected. Nothing you type is uploaded.
         </p>
         <textarea
+          ref={rosterRef}
           value={text}
           onChange={(e) => setRoster(e.target.value)}
           placeholder={"Alice Nguyen\nBen Carter\nChloe Diaz\n…"}

@@ -11,7 +11,7 @@
     "lint:oxlint": "oxlint --deny-warnings",
     "lint:knip": "knip",
     "lint:hygiene": "node scripts/hygiene/oracle-check.mjs && node scripts/hygiene/run.mjs",
-    "e2e": "node scripts/e2e/drive.mjs"
+    "e2e": "npm --prefix lib run build && npm --prefix app run build && node scripts/e2e/drive.mjs"
   },
   "devDependencies": {
     "knip": "^6.29.0",

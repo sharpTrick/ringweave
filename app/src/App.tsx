@@ -234,12 +234,16 @@ export default function App() {
     // no graph. There are exactly two dispatch sites, and now both do this — which is what makes
     // the array that resolves a `Reason.person` the same array that was generated from.
     //
-    // This is NOT the pre-emptive `setSettings` an earlier round removed. That one wrote a seed
-    // App had not dispatched yet AND that `useBuddyGraph` would adopt again on success, so the
-    // two writers disagreed after a cancelled reroll. `s` here IS the dispatched value, written
-    // in the same commit as the dispatch — the adoption on success sets it to the same thing.
+    // ...and NOT the settings, which is where the previous version of this got it wrong twice.
+    // `names` and the rule rows are COPIED FROM THE VIEW verbatim, so committing them cannot
+    // make App disagree with the graph on screen. The seed is the one value this path
+    // SYNTHESISES (`nextRerollSeed`), and it only becomes true if the reroll succeeds — so
+    // writing it here left the Advanced → Seed field showing a seed the displayed graph was not
+    // built with, contradicting the file `exportGraph` writes, for every non-success outcome:
+    // cancel, error, refusal, supersession. The adoption effect above already takes the advanced
+    // seed from `view.settings` when — and only when — a view actually arrives. One deletion
+    // closes all four outcomes; a branch per outcome would not have.
     setNames(view.names);
-    setSettings(s);
     setConstraintRows(toNamedPairs(view.constraints, view.names));
     bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
   };
