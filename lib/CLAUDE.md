@@ -143,7 +143,7 @@ Surfaced by review, deliberately deferred (not silently ignored):
   F11 adds `bestAtIter` (or truncates the trace) at that moment rather than discovering the
   divergence from a replay that silently produces the wrong graph.
 - **Generation cost scales as n²·min(k,n-1) PLUS a charge per prohibited pair:** `constrainedGreedy` runs one BFS (~O(n)) per edge
-  added and adds ~n·min(k,n-1)/2 edges (n=500,k=4 ≈ 120 ms; n=5000,k=4 ≈ 13 s; the dense corner
+  added and adds ~n·min(k,n-1)/2 edges (n=500,k=4 ≈ 120 ms; n=5000,k=4 ≈ 13–15 s; the dense corner
   n=500,k=499 ≈ 89 s). Two caps bound it, both in `graph.ts` and enforced as a refusal in `validate`
   + a throw in `constrainedGreedy`: `MAX_CONSTRAINED_N` (5000) bounds the n-only costs (the O(n²)
   baseline and validate's prohibited-pair connectivity walk); `MAX_CONSTRAINED_WORK` (1e8, compared
@@ -151,11 +151,11 @@ Surfaced by review, deliberately deferred (not silently ignored):
   and, since round 18, the dense-PROHIBITION blow-up it also missed: the estimator was (n,k)-only
   while every legality decision in the generator probes the prohibited set, so a sparse roster
   (n=5000, k=4) sitting exactly on the budget measured 49 s with a million prohibited pairs
-  against a documented ~13 s, with `validate` returning no refusal. The per-pair charge is a
+  against a documented 13–15 s, with `validate` returning no refusal. The per-pair charge is a
   floor rather than a shape model (the marginal rate falls as pairs rise), and it binds only
   above n≈1500 with a large fraction of all pairs prohibited. Wall-clock tracks
   n²·min(k,n-1) at ~7.5M units/s sparse, ~2.2M/s near-complete; the budget holds worst-case
-  generation to ~13 s (sparse, n=5000,k=4) / ~46 s (deepest allowed corner n≈464,k=n-1). Lifting
+  generation to 13–15 s (sparse, n=5000,k=4) / ~46 s (deepest allowed corner n≈464,k=n-1). Lifting
   either needs an incremental single-source distance scheme (a follow-on) — lighter than
   `ringGreedy`'s all-pairs cache.
 - **`fromTags` on a dominant tag** materializes O(n²) prohibited pairs — a degenerate imported tag
