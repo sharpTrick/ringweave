@@ -233,9 +233,14 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 
 .busy { position: fixed; inset: 0; display: grid; place-items: center; z-index: 15; color: var(--ink-dim); font-size: 14px; }
 .busy-inner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-/* The always-mounted live region (see Notice.tsx). It holds no layout of its own — the toast
-   inside it is position:fixed — so an empty region is invisible and costs nothing. */
-.toast-region:empty { display: none; }
+/* The always-mounted live region (see Notice.tsx) has NO RULE, deliberately. It holds no layout
+   of its own — the toast inside it is position:fixed — so an empty region is already invisible
+   and costs nothing, and there was a `.toast-region:empty { display: none }` here that quietly
+   undid the whole point of mounting it: `display:none` takes the element OUT of the accessibility
+   tree, so the region and its first text entered the tree together and no toast — import errors,
+   worker errors, the reroll no-op notice — was ever announced. The policy is stated eleven lines
+   above for `.sr-live`/`.busy-live`; CSS broke it for the one region that is not screen-reader-only.
+   `cssTokens.test.ts` now asserts it against the stylesheet source for every live-region class. */
 /* The toast is a <button> so it can be dismissed from the keyboard; `font-family: inherit` and
    `text-align: inherit` undo the UA button defaults that a <div> never had. */
 .toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background: var(--panel-solid); border: 1px solid var(--line2); color: var(--ink); padding: 10px 16px; border-radius: 10px; font-family: inherit; font-size: 13px; text-align: inherit; z-index: 40; max-width: 90vw; cursor: pointer; }

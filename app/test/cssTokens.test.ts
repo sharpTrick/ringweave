@@ -34,3 +34,33 @@ describe("CSS tokens", () => {
     expect(generic![1]).toMatch(/background:\s*var\(--/); // a defined-token background, not transparent
   });
 });
+
+// Class: a live region must be IN the accessibility tree before its text changes, or the change
+// is never announced. Every mechanism the app has for that is in the markup — permanently
+// mounted regions, emptied-then-refilled text, `aria-describedby` where a dialog cannot stay
+// mounted — and CSS could undo all of it in one line, invisibly, from a file none of those
+// components import. `.toast-region:empty { display: none }` did exactly that: `display:none`
+// removes the subtree from the accessibility tree, so the region and its first message entered
+// together and no toast was ever announced. Asserted over the STYLESHEET SOURCE, for every
+// live-region class in the tree rather than the one that was broken.
+describe("CSS cannot un-mount a live region", () => {
+  it("no rule hides any live-region class, in any state", () => {
+    const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
+    const liveClasses = ["toast-region", "sr-live", "busy-live", "search-empty", "rule-note"];
+    const offenders: string[] = [];
+    // Rule-by-rule: selector up to `{`, declarations up to `}`. Comments are stripped first so
+    // the prose ABOVE a rule (which names these classes on purpose) is never mistaken for one.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const rule of withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector, body] = rule;
+      const hidden = /(^|[;\s])(display\s*:\s*none|visibility\s*:\s*hidden)\s*(;|$)/.test(body);
+      if (!hidden) continue;
+      for (const cls of liveClasses) {
+        if (new RegExp(`\\.${cls}\\b`).test(selector)) {
+          offenders.push(`${selector.trim()} { ${body.trim()} }`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
