@@ -21,7 +21,7 @@ import { useGraph } from "./state/useGraph";
 import { useEscape } from "./state/useEscape";
 import { useFocusRescue } from "./state/useFocusRescue";
 import { usePathFinder } from "./state/usePathFinder";
-import { describeReasons } from "./io/constraintMessages";
+import { anyAboutARule, describeReasons } from "./io/constraintMessages";
 import { type ConstraintPair, type NamedPair } from "./constraints";
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
@@ -51,7 +51,7 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(true);
   // Cleared whenever the dialog is dismissed or a generation is dispatched, so a stale reason
   // never outlives the attempt it describes.
-  const [reopenReason, setReopenReason] = useState<string | null>(null);
+  const [reopenReason, setReopenReason] = useState<{ text: string; onRules: boolean } | null>(null);
   /**
    * WHAT THE EDITOR REOPENS SHOWING — one object, not three states: these three describe ONE
    * generation, and one setter makes writing two of the three inexpressible.
@@ -146,13 +146,16 @@ export default function App() {
       // Into the DIALOG, not the toast: the toast is inert while the dialog is open, and inert
       // removes it from the accessibility tree, so a message shown there in the same commit that
       // opens this was never announced.
-      setReopenReason(describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.");
+      setReopenReason({
+        text: describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.",
+        onRules: anyAboutARule(bg.refusals),
+      });
       setModalOpen(true);
     } else if (bg.status === "error") {
       // Never hinge recovery on the message being non-empty: a "" error would otherwise skip
       // BOTH the toast and the reopen. Same dialog/toast split as above.
       if (!view) {
-        setReopenReason(bg.error || "Generation failed.");
+        setReopenReason({ text: bg.error || "Generation failed.", onRules: false });
         setModalOpen(true);
       } else {
         show(bg.error || "Generation failed.");
@@ -349,7 +352,8 @@ export default function App() {
           initialText={names.join("\n")}
           settings={settings}
           rules={constraintRows}
-          reopenReason={reopenReason}
+          reopenReason={reopenReason?.text ?? null}
+          reopenOnRules={reopenReason?.onRules}
           canCancel={view !== null}
           onGenerate={handleGenerate}
           onCancel={() => {

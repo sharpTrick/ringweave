@@ -50,3 +50,18 @@ function describeReason(r: Reason, names: string[]): string {
 export function describeReasons(reasons: Reason[], names: string[]): string[] {
   return reasons.map((r) => describeReason(r, names));
 }
+
+/**
+ * Codes that are about the ROSTER or the settings rather than a buddy rule. Listed as the
+ * exception because the majority are rule-shaped: each of those tells the user to edit a row, and
+ * the rows live behind a disclosure that opens closed.
+ */
+const NOT_ABOUT_A_RULE = new Set<Reason["code"]>([
+  "roster-invalid", "roster-too-large", "roster-too-large-constrained",
+  "buddy-count-invalid", "work-too-large",
+]);
+
+/** Whether any of these refusals asks the user to change a buddy rule. */
+export function anyAboutARule(reasons: Reason[]): boolean {
+  return reasons.some((r) => !NOT_ABOUT_A_RULE.has(r.code));
+}

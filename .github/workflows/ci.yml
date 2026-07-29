@@ -59,3 +59,12 @@ jobs:
         working-directory: .
       - run: npm run lint
         working-directory: .
+      # The layout, `inert`/focus and print-media contracts have no other oracle: jsdom computes
+      # no layout, implements neither inert's focus effects nor print media, and `npm test` mocks
+      # the worker hook. app/CLAUDE.md states those guarantees, so they run where they cannot be
+      # skipped. `run.mjs` serves the build it just made and tears the server down after.
+      # playwright-core ships no browser; the runner image's Chrome is what drives it.
+      - run: npm run e2e
+        working-directory: .
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome

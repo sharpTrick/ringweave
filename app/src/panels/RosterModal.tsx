@@ -13,6 +13,7 @@ import { feasibility } from "../io/feasibility";
 import { readFileText } from "../io/readFileText";
 import { SAMPLE_NAMES } from "../sample";
 import SettingsControls from "./SettingsControls";
+import { useFocusTrap } from "../state/useFocusTrap";
 
 interface Props {
   initialText: string;
@@ -27,6 +28,9 @@ interface Props {
    * `inert` while this dialog is open, and `inert` removes it from the accessibility tree.
    */
   reopenReason?: string | null;
+  /** Whether that reason is about a buddy rule, so the rows it names are not behind a closed
+      disclosure the user has to think to open. */
+  reopenOnRules?: boolean;
   canCancel: boolean;
   onGenerate: (
     names: string[],
@@ -46,8 +50,8 @@ export const ROSTER_FIELD_LABEL = "Roster names";
 const REOPEN_REASON_ID = "reopen-reason";
 
 export default function RosterModal({
-  initialText, settings: initialSettings, rules: initialRules, reopenReason, canCancel,
-  onGenerate, onCancel,
+  initialText, settings: initialSettings, rules: initialRules, reopenReason, reopenOnRules,
+  canCancel, onGenerate, onCancel,
 }: Props) {
   const [text, setText] = useState(initialText);
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -56,6 +60,12 @@ export default function RosterModal({
   const [inputCapped, setInputCapped] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const rosterRef = useRef<HTMLTextAreaElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(sheetRef);
+  // Local state, not the prop directly: a `<details open={prop}>` springs back open on the next
+  // re-render after the user closes it. A reopen is a fresh mount, so the prop still decides the
+  // initial value.
+  const [rulesOpen, setRulesOpen] = useState(reopenOnRules === true);
 
   // `useFocusRescue` is gated on focus having been somewhere real first, so it does not cover the
   // cold load — where this dialog is the whole accessible document and focus sits on `<body>`.
@@ -122,6 +132,7 @@ export default function RosterModal({
     // this `aria-modal` dialog.
     <div
       id="modal"
+      ref={sheetRef}
       role="dialog"
       aria-modal="true"
       aria-label="Set up your group"
@@ -158,7 +169,11 @@ export default function RosterModal({
           />
         </div>
 
-        <details className="rules-block">
+        <details
+          className="rules-block"
+          open={rulesOpen}
+          onToggle={(e) => setRulesOpen(e.currentTarget.open)}
+        >
           <summary>
             Buddy rules{rules.length > 0 ? ` (${rules.length})` : ""}
           </summary>

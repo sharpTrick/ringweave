@@ -10,32 +10,32 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 
-const CSS = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8")
-  .replace(/\/\*[\s\S]*?\*\//g, "");
+const APP_CSS = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
 
-/** The `@media (max-width: Npx)` block bodies, widest first, plus everything outside any block. */
-function tiers(): { width: number; body: string }[] {
+/** The `@media (max-width: Npx)` block bodies, plus everything outside any block, in source order. */
+function tiers(css: string): { width: number; body: string }[] {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const found: { width: number; body: string }[] = [];
   let rest = "";
   let at = 0;
-  while (at < CSS.length) {
-    const m = /@media[^{]*\(max-width:\s*(\d+)px\)[^{]*\{/.exec(CSS.slice(at));
+  while (at < stripped.length) {
+    const m = /@media[^{]*\(max-width:\s*(\d+)px\)[^{]*\{/.exec(stripped.slice(at));
     if (!m) {
-      rest += CSS.slice(at);
+      rest += stripped.slice(at);
       break;
     }
-    rest += CSS.slice(at, at + m.index);
+    rest += stripped.slice(at, at + m.index);
     let depth = 1;
     let i = at + m.index + m[0].length;
     const start = i;
-    for (; i < CSS.length && depth > 0; i++) {
-      if (CSS[i] === "{") depth++;
-      else if (CSS[i] === "}") depth--;
+    for (; i < stripped.length && depth > 0; i++) {
+      if (stripped[i] === "{") depth++;
+      else if (stripped[i] === "}") depth--;
     }
-    found.push({ width: Number(m[1]), body: CSS.slice(start, i - 1) });
+    found.push({ width: Number(m[1]), body: stripped.slice(start, i - 1) });
     at = i;
   }
-  return [{ width: Infinity, body: rest }, ...found.sort((a, b) => b.width - a.width)];
+  return [{ width: Infinity, body: rest }, ...found];
 }
 
 /** `{selector: declarations}` for rules whose selector is one plain `#id` or `.class`. */
@@ -50,56 +50,100 @@ function simpleRules(body: string): Map<string, string> {
   return out;
 }
 
-/** How `selector` is placed in `body`: its position keyword and any viewport-edge offsets. */
-function placement(body: string, selector: string): { position: string | null; insets: string[] } {
-  const decls = simpleRules(body).get(selector) ?? "";
-  const m = [...decls.matchAll(/(?:^|;)\s*position\s*:\s*([\w-]+)/g)].pop();
-  const insets = [...decls.matchAll(/(?:^|;)\s*(top|right|bottom|left|inset)\s*:\s*([^;]+)/g)]
-    .filter((i) => !/^\s*auto\s*$/.test(i[2]))
-    .map((i) => `${i[1]}: ${i[2].trim()}`);
-  return { position: m ? m[1] : null, insets };
+const INSET = /(?:^|;)\s*(top|right|bottom|left|inset)\s*:\s*([^;]+)/g;
+const POSITION = /(?:^|;)\s*position\s*:\s*([\w-]+)/g;
+
+/**
+ * How `selector` is placed at `width`, evaluated over the CASCADE rather than over one block: a
+ * panel demoted to `relative` in the narrow tier still inherits every offset the wider tiers set,
+ * and a block-local read reports it as carrying none.
+ */
+function placementAt(all: ReturnType<typeof tiers>, selector: string, width: number) {
+  const decls = all.filter((t) => t.width >= width)
+    .map((t) => simpleRules(t.body).get(selector) ?? "").join(";");
+  const position = [...decls.matchAll(POSITION)].pop()?.[1] ?? null;
+  // Last declaration wins per property, so an offset re-set to `auto` in a narrower tier is gone.
+  const insets = new Map<string, string>();
+  for (const m of decls.matchAll(INSET)) insets.set(m[1], m[2].trim());
+  return {
+    position,
+    insets: [...insets].filter(([, v]) => !/^auto$/.test(v)).map(([k, v]) => `${k}: ${v}`),
+  };
 }
 
 // Present in the accessibility tree and clipped to 1px on purpose — they render nothing, so being
 // off-screen is what they are for.
 const NOT_PANELS = new Set([".sr-live", ".busy-live"]);
 
-describe("every absolutely-positioned panel rejoins the flow at phone width", () => {
-  const all = tiers();
-  const narrow = all[all.length - 1];
-  const wider = all.slice(0, -1);
+/** Selectors the cascade positions absolutely at any tier, including the narrowest one itself. */
+function positionedSelectors(all: ReturnType<typeof tiers>): string[] {
+  const names = new Set<string>();
+  for (const tier of all) {
+    for (const sel of simpleRules(tier.body).keys()) if (!NOT_PANELS.has(sel)) names.add(sel);
+  }
+  // One width just inside each tier, plus one above them all — every width where the cascade can
+  // produce a different answer.
+  const widths = [Number.MAX_SAFE_INTEGER, ...all.map((t) => t.width).filter(Number.isFinite)];
+  return [...names]
+    .filter((sel) => widths.some((w) => placementAt(all, sel, w).position === "absolute"))
+    .sort();
+}
 
-  it("has a narrowest tier to rejoin into", () => {
-    expect(narrow.width).toBeLessThanOrEqual(820);
-    expect(wider.length).toBeGreaterThan(0);
-  });
-
-  // Absolute in ANY tier above the narrowest is enough to need checking — a panel can acquire its
-  // offsets in a middle tier (`#rightcol` does) or lose them there (`#sidecol` does) and is just
-  // as stranded at phone width either way.
-  const positioned = new Set<string>();
-  for (const tier of wider) {
-    for (const [sel, decls] of simpleRules(tier.body)) {
-      if (NOT_PANELS.has(sel)) continue;
-      const m = [...decls.matchAll(/(?:^|;)\s*position\s*:\s*([\w-]+)/g)].pop();
-      if (m?.[1] === "absolute") positioned.add(sel);
+/** Every complaint the guard makes about `css`; empty when the stylesheet strands nothing. */
+function strandedPanels(css: string): string[] {
+  const all = tiers(css);
+  const narrow = Math.min(...all.map((t) => t.width));
+  const out: string[] = [];
+  for (const sel of positionedSelectors(all)) {
+    const { position, insets } = placementAt(all, sel, narrow);
+    // `relative` counts as rejoining the flow — it offsets from the flowed position, not from a
+    // viewport edge — but only while nothing displaces it. `#stage` uses it.
+    if (position !== "static" && position !== "relative") {
+      out.push(`${sel} is ${position} at ${narrow}px`);
+    } else if (position === "relative" && insets.length > 0) {
+      out.push(`${sel} is relative at ${narrow}px but still carries ${insets.join(", ")}`);
     }
   }
+  return out;
+}
 
+describe("every absolutely-positioned panel rejoins the flow at phone width", () => {
   it("finds the panels to check", () => {
-    // Non-vacuity: an empty set would make every assertion below pass by having nothing to check.
-    expect([...positioned].sort()).toEqual(
+    // Non-vacuity: an empty set would make the assertion below pass by having nothing to check.
+    expect(positionedSelectors(tiers(APP_CSS))).toEqual(
       ["#buddies", "#rail", "#rightcol", "#sidecol", "#stage", "#toggle"],
     );
   });
 
-  // `relative` counts as rejoining the flow — it offsets from the flowed position, not from a
-  // viewport edge — but only while the tier sets no offsets to displace it by. `#stage` uses it.
-  for (const sel of positioned) {
-    it(`${sel} is placed by the flow at ${narrow.width}px`, () => {
-      const { position, insets } = placement(narrow.body, sel);
-      expect(position, `${sel} keeps its wide-tier offsets`).toMatch(/^(static|relative)$/);
-      if (position === "relative") expect(insets).toEqual([]);
-    });
-  }
+  it("strands none of them", () => {
+    expect(strandedPanels(APP_CSS)).toEqual([]);
+  });
+});
+
+describe("the guard itself", () => {
+  const NARROW = "@media (max-width: 820px) { #stage { position: relative } }";
+
+  it("catches a panel the narrow tier never names — the defect that shipped", () => {
+    const css = `#sidecol { position: absolute; right: 314px; width: 250px }\n${NARROW}`;
+    expect(strandedPanels(css)).toEqual(["#sidecol is absolute at 820px"]);
+  });
+
+  it("catches an offset INHERITED from a wider tier, which a block-local read cannot see", () => {
+    // The narrow tier demotes it to `relative` and says nothing about `left`, so reading only that
+    // block reports no offsets — while the browser computes `relative; left: 300px` and pushes the
+    // panel 300px off a 390px viewport.
+    const css = `#stage { position: absolute; left: 300px }\n${NARROW}`;
+    expect(strandedPanels(css)).toEqual(["#stage is relative at 820px but still carries left: 300px"]);
+  });
+
+  it("catches a panel that only becomes absolute INSIDE the narrow tier", () => {
+    const css = "#rail { color: red }\n@media (max-width: 820px) { #rail { position: absolute; left: 9px } }";
+    expect(strandedPanels(css)).toEqual(["#rail is absolute at 820px"]);
+  });
+
+  it("accepts an offset the narrow tier withdraws", () => {
+    const css = "#rail { position: absolute; left: 300px }\n" +
+      "@media (max-width: 820px) { #rail { position: relative; left: auto } }";
+    expect(strandedPanels(css)).toEqual([]);
+  });
 });

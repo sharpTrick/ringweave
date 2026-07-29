@@ -10,6 +10,8 @@ The algorithm library lives in `../lib` and is the source of truth for all graph
 - `npm test` — Vitest (pure logic: parsing, export/import round-trip, layout determinism,
   quality, worker payload, a GraphCanvas SSR smoke)
 - `npm run build` — `tsc --noEmit && vite build` → `dist/`
+- `npm run e2e` (from the **repo root**) — builds, serves and drives the production build in
+  Chromium. Needs a browser: it looks for `CHROMIUM_PATH`, then the usual install locations.
 
 **Build order (non-negotiable):** the app consumes the core via `"ringweave": "file:../lib"`,
 which resolves to `lib/dist`. `lib/dist` is gitignored and `lib` has no `prepare` script, so
@@ -86,9 +88,16 @@ below, invariants to a test whose name states the claim.
   cosmetic: a `bottom:` calibrated for the quality strip's minimum height had it covering the hover
   hint and the last rows of the buddy list once its disclosure lines wrapped, and a `right:` equal
   to the buddy panel's width put the person card at x = −174 on a phone. `responsiveCss.test.ts`
-  pins every absolutely-positioned panel to rejoining the flow at phone width;
-  `scripts/e2e/drive.mjs` measures containment and overlap at five viewports, which is the only
-  place either question can be asked — jsdom computes no layout.
+  pins every absolutely-positioned panel to rejoining the flow at phone width — a completeness
+  claim about a list, which is what the shipped defect was; `npm run e2e` measures the geometry
+  that results, at five viewports.
+- **Some contracts have no oracle outside a real browser, and they run in CI for that reason.**
+  jsdom computes no layout, implements neither `inert`'s focus effects nor print media, and
+  `npm test` mocks the worker hook — so panel containment/overlap, the focus rescue, the modal's
+  Tab cycle, and "nothing but the slips reaches paper" are all checked by `npm run e2e` (repo
+  root), which builds both packages, serves the build, drives it with Chromium and tears the
+  server down. It is a CI step in `ci.yml`'s `app` job, because a guarantee stated here and run
+  nowhere is a claim.
 
 ## One view model
 

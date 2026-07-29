@@ -4,7 +4,12 @@
 .slips { display: none; }
 
 @media print {
-  #app { display: none !important; }
+  /* Hides by EXCLUSION rather than by naming `#app`: the toast, the setup dialog, the busy scrim
+     and the live regions are SIBLINGS of `#app` — they have to be, or `inert` would cascade onto
+     them — so a rule that names `#app` leaves every one of them on the paper. Measured in
+     Chromium: printing with the setup dialog open put a full-page scrim and the whole sheet over
+     every slip. `drive.mjs` asserts the exclusion under `emulateMedia({media:"print"})`. */
+  #root > *:not(.slips) { display: none !important; }
   .slips { display: block; color: #000; }
   .slips .slip {
     border: 1px solid #999;

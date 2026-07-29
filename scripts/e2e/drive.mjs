@@ -1,8 +1,15 @@
 /**
- * End-to-end verification in the real app. The unit suite mocks the worker hook, so none of the
- * constrained generation path is exercised anywhere else. Drives the PRODUCTION BUILD, not the dev
- * server, so what is checked is what ships.
+ * End-to-end verification in the real app, driving the PRODUCTION BUILD rather than the dev server
+ * so what is checked is what ships. It earns its cost on the questions no other suite can ask:
+ * jsdom computes no layout and implements neither `inert`'s focus effects nor print media, and the
+ * unit suite mocks the worker hook so nothing else exercises generation across a real message
+ * channel. (The constrained BUILDER itself is unit-tested through `runGeneration` — see
+ * `app/test/generateWorker.test.ts`.)
+ *
+ * Run it with `npm run e2e` from the repo root, which builds both packages, serves the build and
+ * tears the server down again. `BASE` overrides the server it drives.
  */
+import { existsSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:4173";
@@ -19,7 +26,21 @@ async function generationSettles(page) {
   await page.waitForSelector("#app:not([inert])", { timeout: 20000 });
 }
 
-const EXEC = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+// playwright-core ships no browser, so the binary comes from the environment. Resolved rather
+// than hardcoded because CI and this sandbox install it in different places, and a wrong path
+// fails as a launch error that says nothing about which of the two is missing.
+const CHROMIUM_CANDIDATES = [
+  process.env.CHROMIUM_PATH,
+  "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+].filter(Boolean);
+const EXEC = CHROMIUM_CANDIDATES.find((p) => existsSync(p));
+if (!EXEC) {
+  console.error(`no Chromium found. Set CHROMIUM_PATH, or install one of:\n  ${CHROMIUM_CANDIDATES.join("\n  ")}`);
+  process.exit(2);
+}
 
 /**
  * Every panel <main> renders, by the selector the stylesheet places it with. Wrappers are included
@@ -52,15 +73,23 @@ async function panelBoxes(pg) {
         if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
         const r = a.getBoundingClientRect();
         const x = Math.max(box.left, r.left), y = Math.max(box.top, r.top);
-        box = new DOMRect(x, y, Math.min(box.right, r.right) - x, Math.min(box.bottom, r.bottom) - y);
+        // CLAMPED at zero: DOMRect normalises a negative dimension by swapping its edges, so an
+        // element clipped entirely away comes back RELOCATED rather than empty, and the next
+        // clipping ancestor intersects the swapped rect into a positive phantom box somewhere the
+        // element never was.
+        const w = Math.max(0, Math.min(box.right, r.right) - x);
+        const h = Math.max(0, Math.min(box.bottom, r.bottom) - y);
+        box = new DOMRect(x, y, w, h);
       }
       return box;
     };
 
     const els = sels.map((sel) => [sel, document.querySelector(sel)]).filter(([, el]) => el);
-    // Measured BEFORE anything scrolls, so every box shares one scroll state — interleaving the
-    // two passes made a panel's box depend on where a previously-checked panel had scrolled to.
-    const boxes = new Map(els.map(([sel, el]) => [sel, painted(el)]));
+    // BOTH boxes measured before anything scrolls, so every one shares a single scroll state.
+    // Interleaving the passes made a panel's box depend on where a previously-checked panel had
+    // scrolled to — and reading `own` in the loop while `painted` came from here compared two
+    // measurements taken at different scroll offsets, which the self-check below caught.
+    const boxes = new Map(els.map(([sel, el]) => [sel, { own: el.getBoundingClientRect(), flat: painted(el) }]));
 
     const restore = [];
     for (const el of document.querySelectorAll("*")) {
@@ -70,11 +99,21 @@ async function panelBoxes(pg) {
     // first, so "clipped at this scroll position" is not an answer to "can it be reached". Skipping
     // them left the phone tier — where <main> scrolls and most panels start below the fold —
     // measuring seven of ten, and the panel this check exists for could have been one of the three.
+    // The oracle checking itself: a clipped box must be a SUBSET of the element's own box. Stated
+    // because the arithmetic that produces it can fabricate a region the element never occupied,
+    // and a fabricated box both false-fails and hides a real overlap.
+    const bogus = [];
     const found = [];
     for (const [sel, el] of els) {
-      const own = el.getBoundingClientRect();
+      const { own, flat } = boxes.get(sel);
       if (own.width < 1 || own.height < 1) continue; // renders nothing at all
-      const flat = boxes.get(sel);
+      // An EMPTY box makes no claim about where the element is — its origin is the clamp point,
+      // which is deliberately outside the element when the element is clipped entirely away.
+      const empty = flat.width < 1 || flat.height < 1;
+      if (flat.width < 0 || flat.height < 0 || (!empty && (flat.left < own.left - 1
+        || flat.right > own.right + 1 || flat.top < own.top - 1 || flat.bottom > own.bottom + 1))) {
+        bogus.push(`${sel} painted ${[flat.left, flat.top, flat.right, flat.bottom].map(Math.round)} outside own ${[own.left, own.top, own.right, own.bottom].map(Math.round)}`);
+      }
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
       const s = el.getBoundingClientRect();
       found.push({
@@ -103,13 +142,13 @@ async function panelBoxes(pg) {
         if (w > 1 && h > 1) overlaps.push(`${a.sel}\u00d7${b.sel} share ${Math.round(w)}\u00d7${Math.round(h)}px`);
       }
     }
-    return { found, overlaps };
+    return { found, overlaps, bogus };
   }, PANELS);
 }
 
 /** One containment/overlap verdict per viewport, named so a failure says which one broke. */
 async function checkLayout(pg, label) {
-  const { found, overlaps } = await panelBoxes(pg);
+  const { found, overlaps, bogus } = await panelBoxes(pg);
   const off = found.filter((f) => f.offX || f.offY)
     .map((f) => `${f.sel} ${f.offX ? `x ${f.offX}` : ""}${f.offY ? ` y ${f.offY}` : ""}`.trim());
   // Non-vacuity: with no panels found, "none are off-screen" is true and means nothing. Nine
@@ -118,6 +157,7 @@ async function checkLayout(pg, label) {
   check(`${label}: every panel is measured`, found.length >= 9, `${found.length} panels`);
   check(`${label}: no panel is placed outside the viewport`, off.length === 0, off.join(" | "));
   check(`${label}: no panel covers another`, overlaps.length === 0, overlaps.join(" | "));
+  check(`${label}: the clipped box never leaves the element's own box`, bogus.length === 0, bogus.join(" | "));
 }
 
 const results = [];
@@ -157,6 +197,24 @@ await page.goto(BASE, { waitUntil: "networkidle" });
   // claim, and only the first one is about the app.
   const landed = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
   check("focus lands in the setup dialog on cold load", landed === "Roster names", landed ?? "(none)");
+  // Tab cannot leave an aria-modal dialog. `inert` on `#app` stops it walking INTO the page
+  // behind, which is a different guarantee: with every other focusable thing inert or unmounted,
+  // the native tab order simply runs out and the next Tab lands in the browser's own chrome, with
+  // no script-driven way back. Only a real browser has a tab order to walk.
+  {
+    await page.getByLabel("Roster names").focus();
+    let escaped = "";
+    for (let i = 0; i < 40 && !escaped; i++) {
+      await page.keyboard.press("Tab");
+      escaped = await page.evaluate(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body) return "body";
+        return a.closest('[role="dialog"]') ? "" : (a.getAttribute("aria-label") ?? a.tagName);
+      });
+    }
+    check("Tab cannot walk out of the setup dialog", escaped === "", escaped);
+  }
+
   const roster = page.getByLabel("Roster names");
   await roster.focus();
   const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
@@ -413,6 +471,25 @@ check("export carries the rules",
     check("a jump off the card starts a new trail",
       jumped === stranger && stillOffered === 0, `${jumped}, back x${stillOffered}`);
   }
+}
+
+// The overlays are siblings of `#app` so `inert` cannot cascade onto them, which also put them
+// outside a print rule that named `#app` — they printed on top of the slips. Asked with the setup
+// dialog OPEN, since that is the overlay that covers the whole page. jsdom implements no print
+// media, so only a browser can answer it.
+{
+  await page.getByText("Edit people").click();
+  await page.emulateMedia({ media: "print" });
+  const painting = await page.evaluate(() =>
+    [...document.querySelectorAll("#root > *")]
+      .filter((el) => !el.classList.contains("slips") && getComputedStyle(el).display !== "none")
+      .map((el) => el.id || el.className || el.tagName));
+  check("printing puts nothing but the slips on paper", painting.length === 0, painting.join(", "));
+  const slips = await page.evaluate(() => getComputedStyle(document.querySelector(".slips")).display);
+  // Non-vacuity: hiding EVERYTHING would satisfy the check above and print a blank page.
+  check("printing still puts the slips on paper", slips === "block", slips);
+  await page.emulateMedia({ media: null });
+  await page.getByText("Cancel").click();
 }
 
 check("no page errors or console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
