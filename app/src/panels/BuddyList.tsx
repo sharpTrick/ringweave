@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buddyLabel, type GraphView } from "../model";
 import { copyText, downloadBlob, neutralizeCell, toCsv } from "../io/download";
 import { AUTO_CLEAR_MS } from "../state/useNotice";
@@ -19,6 +19,15 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
   // The live region's text, held separately from `copied` so it can be emptied and refilled —
   // see copyAll. The button's own label still reads from `copied`.
   const [announced, setAnnounced] = useState("");
+  // The confirmation's pending timers. A NEWER PRESS WINS: without this, each press scheduled its
+  // own teardown and none cancelled the previous, so an earlier press's 4 s timer cleared a later
+  // press's confirmation — press at 0 s and again at 3 s, and the label reverts at 4.2 s, 1.2 s
+  // into a window that should have run to 7 s. `useNotice.flash` already implements exactly this
+  // guard for the toast; these are the app's two auto-clearing confirmations and now both have it.
+  // Clearing them on unmount also stops a resolved clipboard write from setting state on a
+  // component that is gone.
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const copyAll = async () => {
     // Each line starts with a name, so a hostile name (`=HYPERLINK(...)`) pasted into a
@@ -39,13 +48,16 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
       // The two setStates are in different tasks, so this is two commits and two mutations, not
       // one batch: a fix that cannot be observed to have happened is not a fix, and this one is
       // asserted by watching the region rather than by reading the final markup.
+      timers.current.forEach(clearTimeout);
       setAnnounced("");
-      setTimeout(() => setAnnounced(COPIED_MESSAGE), 0);
-      // The app's shared floor, not a local literal — see AUTO_CLEAR_MS.
-      setTimeout(() => {
-        setCopied(false);
-        setAnnounced("");
-      }, AUTO_CLEAR_MS);
+      timers.current = [
+        setTimeout(() => setAnnounced(COPIED_MESSAGE), 0),
+        // The app's shared floor, not a local literal — see AUTO_CLEAR_MS.
+        setTimeout(() => {
+          setCopied(false);
+          setAnnounced("");
+        }, AUTO_CLEAR_MS),
+      ];
     }
   };
 

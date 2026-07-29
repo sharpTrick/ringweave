@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { buddyLabel, DEFAULT_SETTINGS, viewFromResult } from "../src/model";
 import { generateResult } from "./helpers";
 import { importGraph } from "../src/io/importGraph";
@@ -84,5 +84,48 @@ describe("a repeated Copy is announced again, not silently", () => {
     expect(copyText).toHaveBeenCalledTimes(2);
     expect(seen.filter((t) => /copied/i.test(t)).length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((t) => t === "").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("a newer confirmation is not cut short by an older one's timer", () => {
+  it("keeps the second press's confirmation for its own full window", async () => {
+    // Each press scheduled its own teardown and none cancelled the previous, so an earlier
+    // press's 4 s timer cleared a LATER press's confirmation: press at 0 s, press again at 3 s,
+    // and the label reverts at 4.2 s — 1.2 s into a window that should run to 7 s. The existing
+    // tests press once, or twice inside one tick, so neither advances the clock across two
+    // presses. `useNotice.flash` already had this guard; these are the app's two auto-clearing
+    // confirmations and the second one did not.
+    vi.useFakeTimers();
+    try {
+      const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], generateResult(4, 2, { seed: 1 }));
+      const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
+      const ui = within(container);
+      const label = () => (container.querySelector(".chipbtn") as HTMLElement).textContent;
+
+      fireEvent.click(ui.getByRole("button", { name: /^copy$/i }));
+      // EVERY advance inside `act`: a timer-driven setState that React has not flushed never
+      // reaches the DOM, so a test that reads `textContent` after a bare advance observes the
+      // state before the timer — which made the first version of this test pass with the defect
+      // still present. Verified by restoring the defect and watching it fail.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(label()).toBe("Copied");
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      fireEvent.click(ui.getByRole("button", { name: /copied/i }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(label()).toBe("Copied");
+
+      // 1.2 s later the FIRST press's timer would have fired. The second press owns the window.
+      await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+      expect(label()).toBe("Copied");
+      expect(container.querySelector(".sr-live")?.textContent).toMatch(/copied/i);
+
+      // ...and it does still end, on its own schedule.
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(label()).toBe("Copy");
+      expect(container.querySelector(".sr-live")?.textContent).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

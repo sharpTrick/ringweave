@@ -112,7 +112,16 @@ token-swap; M2 ships the mock-faithful dark theme only.
   that path and the quality panel says "not re-checked on import" — deliberately NOT "satisfied",
   which would be the disconnected-reads-as-optimal failure in a new place. Closing it properly means
   verifying the rules against the imported edge set, which is a real (cheap) computation and a clean
-  follow-on; asserting satisfaction without it is not.
+  follow-on; asserting satisfaction without it is not. **One trap recorded with it, because the
+  cheap path is the wrong one:** the canonical computation already exists as `buildReport` in
+  `lib/src/core/index.ts`, and it is module-private — every primitive it uses (`Graph.hasEdge`,
+  `Constraints.requiredPairs()`/`prohibitedPairs()`, `largestComponentFraction`) IS exported, so
+  hand-rolling the two counting loops in `importGraph.ts` is the path of least resistance and would
+  put a second copy of the predicate that decides what "all buddy rules satisfied" MEANS outside the
+  core. A later change to that predicate would then update every generation-time report and silently
+  leave the import-time one on the old definition. Do it lib-first: export `buildReport` (or a
+  renamed public equivalent taking `(g, cons, connected)`) and call it. `importExport.roundtrip.test.ts`
+  pins `report` to null on import today and changes in the same commit.
 - **F9's worker-protocol groundwork is DEFERRED, and named here so it is not rediscovered.**
   `GenerateRequest.constraints` carries only `{required, prohibited}` and `GenerateOptions` has
   no `priorWeight`/`priorHard`; `ConstraintPair` has no `prior` concept. A grep for

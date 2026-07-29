@@ -8,8 +8,9 @@ import { shortestPath, type Graph } from "ringweave";
  * its source, so it returns the lexicographically smallest path read from that
  * end — which means s→t and t→s can be different (both shortest) paths. Picking
  * Ana then Ben and picking Ben then Ana are the same question, so they must draw
- * the same line; always running from the lower index guarantees that, and it also
- * makes the route stable across an export/import round trip.
+ * the same line; always running from the lower index guarantees that. (It does NOT
+ * survive an export/import round trip, because a route is never exported — the file
+ * carries the graph, and a re-selected route is recomputed from it.)
  *
  * The RESULT is then oriented to the person the user started from. Returning it in
  * canonical order meant that starting from the higher-indexed person rendered the chain

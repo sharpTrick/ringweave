@@ -101,10 +101,21 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
       })}
 
       <div className="rule-acts">
+        {/* `aria-disabled`, not `disabled`, for the reason the buddies stepper documents: the
+            click that adds the LAST allowed row is the click that flips `atCap`, so a real
+            `disabled` lands on the button under the user's finger and the browser blurs it. No
+            element is removed, so `useFocusRescue` fires on the new row's insertion instead and
+            relocates focus to the roster field at the top of the dialog — out of the rules
+            disclosure, away from the row just added and from the cap notice explaining why, with
+            200 rows to Tab back through. Keeping the button focusable and inert leaves the user
+            where they were, next to a live region that is already announcing the limit. */}
         <button
           className="linklike"
-          disabled={atCap}
-          onClick={() => onChange([...pairs, { a: "", b: "", kind: "required" }])}
+          aria-disabled={atCap}
+          onClick={() => {
+            if (atCap) return;
+            onChange([...pairs, { a: "", b: "", kind: "required" }]);
+          }}
         >
           + Add a buddy rule
         </button>
