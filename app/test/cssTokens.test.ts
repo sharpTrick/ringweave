@@ -23,10 +23,8 @@ describe("CSS tokens", () => {
     expect(offenders).toEqual([]);
   });
 
-  // Class: the data-driven layout toggle renders a button per LAYOUT_MODES entry, so the ACTIVE
-  // style must be mode-agnostic — a new mode's selected state can't depend on a hardcoded
-  // `.on.<mode>` rule or it renders invisible. The generic `#toggle button.on` rule must set a
-  // non-transparent background so any mode reads as selected.
+  // The toggle renders one button per LAYOUT_MODES entry, so an `.on.<mode>` rule would leave a
+  // new mode's selected state invisible.
   it("the active toggle button has a mode-agnostic background", () => {
     const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
     const generic = css.match(/#toggle button\.on\s*\{([^}]*)\}/); // the .on rule, not .on.<mode>
@@ -35,14 +33,8 @@ describe("CSS tokens", () => {
   });
 });
 
-// Class: a live region must be IN the accessibility tree before its text changes, or the change
-// is never announced. Every mechanism the app has for that is in the markup — permanently
-// mounted regions, emptied-then-refilled text, `aria-describedby` where a dialog cannot stay
-// mounted — and CSS could undo all of it in one line, invisibly, from a file none of those
-// components import. `.toast-region:empty { display: none }` did exactly that: `display:none`
-// removes the subtree from the accessibility tree, so the region and its first message entered
-// together and no toast was ever announced. Asserted over the STYLESHEET SOURCE, for every
-// live-region class in the tree rather than the one that was broken.
+// `display:none` and `visibility:hidden` remove a subtree from the accessibility tree, so a rule
+// hiding an empty live region makes its first message arrive WITH it and never be announced.
 describe("CSS cannot un-mount a live region", () => {
   it("no rule hides any live-region class, in any state", () => {
     const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");

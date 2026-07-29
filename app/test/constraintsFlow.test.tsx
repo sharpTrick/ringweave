@@ -1,14 +1,4 @@
 // @vitest-environment jsdom
-/**
- * F7 through the UI: the rule editor in the roster modal.
- *
- * The acceptance criterion is that prohibited rules are always respected and
- * required rules are either satisfied or refused with a specific, actionable
- * message — never a silent partial. The generator side of that is covered in
- * generateWorker.test.ts; this covers the half a user actually touches, including
- * the two ways a rule can go wrong here: an impossible set, and a rule whose
- * person was removed from the roster.
- */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import RosterModal from "../src/panels/RosterModal";
@@ -84,7 +74,6 @@ describe("the buddy-rule editor", () => {
 
   it("says so when a rule's person is no longer in the roster", () => {
     renderModal({ rules: toNamedPairs([{ a: 0, b: 5, kind: "required" }], ROSTER) });
-    // Remove Fran from the roster text; the rule naming her can no longer apply.
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: ROSTER.slice(0, 5).join("\n") },
     });
@@ -93,9 +82,8 @@ describe("the buddy-rule editor", () => {
 
   it("keeps a rule pointing at the same people when the roster is reordered", () => {
     const { onGenerate } = renderModal({ rules: toNamedPairs([{ a: 0, b: 5, kind: "required" }], ROSTER) });
-    // Alice moves from position 0 to position 5 and Fran from 5 to 0. A positional
-    // pair would still say {0,5} and mean the same two people only by luck; the
-    // real test is a reorder that is NOT a simple swap.
+    // Not a simple swap: a swap would leave a positional pair saying {0,5} and still meaning
+    // the same two people, by luck.
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: ["Ben", "Chloe", "Alice", "Dev", "Fran", "Eve"].join("\n") },
     });
@@ -110,7 +98,6 @@ describe("the buddy-rule editor", () => {
     const second = screen.getByLabelText("Rule 1, second person");
     expect(second.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByLabelText("Rule 1, first person").getAttribute("aria-invalid")).toBeNull();
-    // The row survives — the user is mid-edit.
     expect((second as HTMLInputElement).value).toBe("Nobody");
   });
 
@@ -130,11 +117,6 @@ describe("the buddy-rule editor", () => {
 
 describe("rules survive the round trip through Generate", () => {
   it("keeps a row naming someone outside the roster instead of deleting it", () => {
-    // The editor's stated contract is that an unrecognised row is kept and flagged,
-    // "because the user is mid-edit". That held while the modal was open and then broke on
-    // Generate: only the RESOLVED index pairs were handed back, so a row naming someone not
-    // in the roster had no index to survive as, and reopening "Edit people" could not show
-    // it again. The row was silently deleted by the act of generating.
     const { onGenerate } = renderModal();
     addRule();
     setRow(1, "Alice", "Nobody");
@@ -143,9 +125,7 @@ describe("rules survive the round trip through Generate", () => {
 
     fireEvent.click(screen.getByText("Generate buddy graph"));
     const [, , resolvedPairs, rows] = onGenerate.mock.calls[0];
-    // Only the resolvable rule becomes an index pair...
     expect(resolvedPairs).toEqual([{ a: 1, b: 2, kind: "prohibited" }]);
-    // ...but BOTH rows come back, so the editor can redisplay exactly what was typed.
     expect(rows).toEqual([
       { a: "Alice", b: "Nobody", kind: "required" },
       { a: "Ben", b: "Chloe", kind: "prohibited" },
@@ -153,8 +133,6 @@ describe("rules survive the round trip through Generate", () => {
   });
 
   it("redisplays the unresolved row when the editor is reopened", () => {
-    // The rows the previous test captured, handed straight back — which is what App now
-    // stores. Reconstructing them from index pairs is what could not represent this row.
     renderModal({
       rules: [
         { a: "Alice", b: "Nobody", kind: "required" },
@@ -169,10 +147,6 @@ describe("rules survive the round trip through Generate", () => {
 
 describe("a row still being typed is not a broken rule", () => {
   it("does not claim an empty row names a missing person", () => {
-    // `resolveNamedPairs` looked `""` up like any other name, so the modal announced
-    // "names someone who isn't in this roster" the instant a row was added — while the editor's
-    // own `unknownName` deliberately exempts empty text and left the row unflagged. Two views of
-    // one row, disagreeing, and the wrong one was the one that spoke.
     renderModal();
     addRule();
     expect(screen.queryByText(/isn't in this roster/)).toBeNull();
@@ -180,23 +154,17 @@ describe("a row still being typed is not a broken rule", () => {
   });
 
   it("still reports a genuinely unknown name", () => {
-    // The exemption must not swallow the real case it was carved out of.
     renderModal();
     addRule();
     setRow(1, "Alice", "Nobody");
-    // The AGGREGATE note, specifically: each flagged field now also carries its own per-row
-    // reason, so a bare text match finds two things and would pass on either.
+    // The AGGREGATE note specifically: each flagged field also carries its own per-row reason,
+    // so a looser match would find two things and pass on either.
     expect(screen.getByText(/buddy rule.* names? someone who isn't in this roster/)).toBeTruthy();
   });
 });
 
 describe("a flagged rule row carries its own reason", () => {
   it("points the flagged field at a description that names the person", () => {
-    // `aria-invalid` says a control is wrong and nothing more. The only explanation was a COUNT
-    // in the shared note stack ("2 buddy rules name someone who isn't in this roster"), which
-    // never says WHICH row — so a screen-reader user tabbing several rules heard "invalid, edit
-    // text, Rule 2, second person" and had to cross-reference an aggregate elsewhere in the DOM.
-    // The buddies stepper already carries its own state in its label for the same reason.
     renderModal();
     addRule();
     setRow(1, "Alice", "Zoe");

@@ -1,12 +1,4 @@
 // @vitest-environment jsdom
-/**
- * F8's node explorer and its back stack.
- *
- * Acceptance: every name in the panel is clickable, and the back stack works. The
- * third thing checked here is the honest disconnected reading — a split roster
- * must not report a small "everyone is within N steps", which is the
- * disconnected-reads-as-optimal class this app guards elsewhere.
- */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, renderHook, act } from "@testing-library/react";
 import { Graph } from "ringweave";
@@ -80,8 +72,7 @@ describe("PersonPanel", () => {
   });
 
   it("says the group is split rather than quoting a small reach", () => {
-    // Two disjoint triangles: from Alice, three people are unreachable. Reporting
-    // "everyone is within 1 step" here would be the exact failure being guarded.
+    // Two disjoint triangles: from Alice, three people are unreachable.
     const split = fixture(
       ["Alice", "Ben", "Chloe", "Dev", "Eve", "Fran"],
       [[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3]],
@@ -158,7 +149,6 @@ describe("useExplorerHistory", () => {
     const { result } = renderHook(() => useExplorerHistory());
     for (let i = 0; i < 120; i++) act(() => result.current.select(i));
     expect(result.current.current).toBe(119);
-    // Walk all the way back; it must terminate well before 120 steps.
     let steps = 0;
     while (result.current.canGoBack && steps < 200) {
       act(() => result.current.back());
@@ -237,9 +227,8 @@ describe("PersonSearch", () => {
   });
 
   it("lets Escape through when there is no query to clear", () => {
-    // After picking a result the box is empty but still focused. Swallowing
-    // Escape there would silently disable the global handler — the route and the
-    // selection would both become unclearable from the keyboard.
+    // After picking a result the box is empty but still focused. Swallowing Escape there would
+    // silently disable the global handler, leaving route and selection unclearable by keyboard.
     const onEscape = vi.fn();
     document.addEventListener("keydown", onEscape);
     try {

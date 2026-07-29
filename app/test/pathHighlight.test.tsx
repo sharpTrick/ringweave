@@ -1,16 +1,4 @@
 // @vitest-environment jsdom
-/**
- * F10: the path finder, its highlight model, and the M2 non-regression guard.
- *
- * The highlight refactor replaced a one-focus scheme with a tagged union, and the
- * riskiest part of that is not the new route mode — it is silently changing what
- * M2 already drew. The first block is therefore a table pinning every class
- * string the old scheme produced, checked against the new one with no route
- * active.
- *
- * Acceptance: the path matches BFS, ties break deterministically, and Escape
- * clears it.
- */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, renderHook, act } from "@testing-library/react";
 import { Graph, bfsDistances, shortestPath } from "ringweave";
@@ -89,8 +77,6 @@ describe("highlight: route mode", () => {
   });
 
   it("lights only the chain edges, not every edge touching the chain", () => {
-    // This is the distinction the old node-membership scheme could not draw:
-    // 3-4 and 5-0 each touch a route member but are not part of the chain.
     expect(RING_EDGES.map(([u, v]) => edgeClass(h, u, v))).toEqual([
       "edge route",
       "edge route",
@@ -108,8 +94,8 @@ describe("highlight: route mode", () => {
   });
 
   it("agrees with node membership on every graph the app can produce", () => {
-    // The "no edgeKeys needed" claim, checked rather than asserted: on a shortest
-    // path, two members that are adjacent must be consecutive.
+    // On a shortest path, two members that are adjacent must be consecutive — checked rather
+    // than assumed.
     const g = graphOf(9, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 0], [1, 6]]);
     for (let s = 0; s < g.n; s++) {
       for (let t = s + 1; t < g.n; t++) {
@@ -140,25 +126,14 @@ describe("usePathFinder", () => {
   });
 
   it("draws the same line whichever end is picked first, read from that end", () => {
-    // shortestPath is greedy from its source, so s->t and t->s can be different (both
-    // shortest) paths. Picking Ana then Dia is the same question as Dia then Ana, so the
-    // canonicalisation is what makes the UI make sense.
-    //
-    // But "the same line" is a claim about the EDGES LIT, not about array order. Asserting
-    // array equality also pinned the reading direction, and that pinned the wrong thing:
-    // starting from the higher-indexed person rendered the chain from the other end, while
-    // the panel's live region had just said "Starting from Dia". Same line, opposite
-    // sentence. So the property splits in two.
     const { result: a } = renderHook(() => usePathFinder(graph));
     act(() => a.current.start(0));
     act(() => { a.current.complete(3); });
     const { result: b } = renderHook(() => usePathFinder(graph));
     act(() => b.current.start(3));
     act(() => { b.current.complete(0); });
-
     // Same line: identical as a sequence once orientation is removed.
     expect(a.current.route).toEqual([...b.current.route!].reverse());
-    // Read from the end the user named: each route starts at that user's own first pick.
     expect(a.current.route![0]).toBe(0);
     expect(b.current.route![0]).toBe(3);
   });

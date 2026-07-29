@@ -1,8 +1,6 @@
 /**
- * The worker's request→response mapping. Previously untestable: it lived inside
- * `onmessage`, and a module worker cannot be instantiated under jsdom, so the
- * error channel in particular had no coverage at all — the suite mocks the
- * generation *hook*, never the protocol.
+ * The worker's request→response mapping. A module worker cannot be instantiated under jsdom,
+ * so the protocol is exercised through `runGeneration` rather than through the worker itself.
  */
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
@@ -25,8 +23,6 @@ describe("runGeneration", () => {
   });
 
   it("passes options through rather than substituting defaults", () => {
-    // Same (n, k, options) must give the same graph as calling the core directly:
-    // a dropped or rewritten option would show up as a different edge set.
     const direct = buildBuddyGraph(24, 4, { seed: 99, minSeparation: 4, polish: false });
     const viaWorker = runGeneration(req(1, 24, 4, { seed: 99, minSeparation: 4, polish: false }));
     expect(viaWorker.kind).toBe("ok");
@@ -44,8 +40,7 @@ describe("runGeneration", () => {
   });
 
   it("turns a throwing build into an error response, not an unhandled throw", () => {
-    // k < 2 throws in the core: the ring seed floors every degree at 2. The main
-    // thread would otherwise see a bare worker "error" event with no cause.
+    // k < 2 throws in the core: the ring seed floors every degree at 2.
     const res = runGeneration(req(3, 10, 1));
     expect(res.id).toBe(3);
     expect(res.kind).toBe("error");
@@ -79,7 +74,6 @@ describe("runGeneration with buddy rules", () => {
       res.result.edges.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
     for (const [a, b] of required) expect(has(a, b)).toBe(true);
     for (const [a, b] of prohibited) expect(has(a, b)).toBe(false);
-    // And the report agrees with the edge list rather than being decorative.
     expect(res.result.report).not.toBeNull();
     expect(res.result.report?.reqViolations).toBe(0);
     expect(res.result.report?.prohViolations).toBe(0);
@@ -89,14 +83,12 @@ describe("runGeneration with buddy rules", () => {
     const res = runGeneration(withRules(12, 4, { required: [[0, 1]], prohibited: [] }));
     expect(res.kind).toBe("ok");
     if (res.kind !== "ok") return;
-    // Not undefined, not zero-by-default: a real measurement of the built graph.
     expect(typeof res.result.girth).toBe("number");
     expect(res.result.girth).toBeGreaterThanOrEqual(3);
   });
 
   it("refuses an impossible rule set instead of returning a silent partial", () => {
-    // Six required buddies for one person with k=4: no graph satisfies it. The
-    // failure mode this guards is returning `ok` with some rules quietly unmet.
+    // Six required buddies for one person with k=4: no graph satisfies it.
     const required: [number, number][] = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]];
     const res = runGeneration(withRules(10, 4, { required, prohibited: [] }));
     expect(res.kind).toBe("refused");

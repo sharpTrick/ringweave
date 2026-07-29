@@ -7,9 +7,8 @@ import { importGraph } from "../src/io/importGraph";
 import BuddyList from "../src/panels/BuddyList";
 
 // Capture what the Copy button writes to the clipboard without touching the real navigator.
-// Typed by its ARGS. An untyped mock's `mock.calls` is an array of EMPTY tuples, so
-// reading calls[0][0] is a type error whose only escape is a cast asserting a shape
-// nobody checked — and the whole point of typechecking the suite is to stop that.
+// Typed by its ARGS: an untyped mock's `mock.calls` is an array of empty tuples, so reading
+// calls[0][0] is a type error whose only escape is a cast asserting an unchecked shape.
 const copyText = vi.hoisted(() => vi.fn<(text: string) => Promise<boolean>>(async () => true));
 vi.mock("../src/io/download", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../src/io/download")>();
@@ -28,10 +27,7 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));
 
     await waitFor(() => expect(copyText).toHaveBeenCalledTimes(1));
-    // `String(...)` rather than a cast: the mock is untyped, and asserting a type we
-    // have not checked is how a test starts lying about what it received.
     const text = copyText.mock.calls[0]?.[0] ?? "";
-    // The line for the hostile person must begin with the apostrophe guard, not a bare '='.
     expect(text.split("\n")[0]).toMatch(/^'=HYPERLINK/);
   });
 
@@ -53,14 +49,8 @@ describe("BuddyList Copy neutralizes formula-injecting names (parity with CSV)",
 
 describe("a repeated Copy is announced again, not silently", () => {
   it("empties and refills the live region on every successful copy", async () => {
-    // The region's text is the only feedback a screen-reader user gets, and a live region
-    // announces a CHANGE. Setting the identical string on a second press is no DOM mutation at
-    // all — and the second press is exactly the one a user makes when unsure the first
-    // registered, since the clipboard write is awaited and nothing else is synchronous.
-    //
-    // Asserted by WATCHING the region rather than by reading the final markup, because the final
-    // markup is identical either way — which is how this survived fifteen rounds, and which is
-    // the lesson from the round-12 "fix" that could not be observed to have worked.
+    // Asserted by WATCHING the region rather than reading the final markup: a live region
+    // announces a CHANGE, and the final markup is identical whether or not it was emptied first.
     const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
     const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
     const seen: string[] = [];
@@ -80,7 +70,6 @@ describe("a repeated Copy is announced again, not silently", () => {
     await waitFor(() => expect(seen.length).toBeGreaterThan(afterFirst));
     observer.disconnect();
 
-    // Two clipboard writes, and the region was emptied before each message so each is a change.
     expect(copyText).toHaveBeenCalledTimes(2);
     expect(seen.filter((t) => /copied/i.test(t)).length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((t) => t === "").length).toBeGreaterThanOrEqual(2);
@@ -89,12 +78,6 @@ describe("a repeated Copy is announced again, not silently", () => {
 
 describe("a newer confirmation is not cut short by an older one's timer", () => {
   it("keeps the second press's confirmation for its own full window", async () => {
-    // Each press scheduled its own teardown and none cancelled the previous, so an earlier
-    // press's 4 s timer cleared a LATER press's confirmation: press at 0 s, press again at 3 s,
-    // and the label reverts at 4.2 s — 1.2 s into a window that should run to 7 s. The existing
-    // tests press once, or twice inside one tick, so neither advances the clock across two
-    // presses. `useNotice.flash` already had this guard; these are the app's two auto-clearing
-    // confirmations and the second one did not.
     vi.useFakeTimers();
     try {
       const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
@@ -103,10 +86,8 @@ describe("a newer confirmation is not cut short by an older one's timer", () => 
       const label = () => (container.querySelector(".chipbtn") as HTMLElement).textContent;
 
       fireEvent.click(ui.getByRole("button", { name: /^copy$/i }));
-      // EVERY advance inside `act`: a timer-driven setState that React has not flushed never
-      // reaches the DOM, so a test that reads `textContent` after a bare advance observes the
-      // state before the timer — which made the first version of this test pass with the defect
-      // still present. Verified by restoring the defect and watching it fail.
+      // Every advance inside `act`: a timer-driven setState React has not flushed never reaches
+      // the DOM, so a bare advance observes the state before the timer.
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(label()).toBe("Copied");
 
@@ -132,10 +113,6 @@ describe("a newer confirmation is not cut short by an older one's timer", () => 
 
 describe("a copy that fails says so", () => {
   it("announces the failure and names the way out", async () => {
-    // `copyText` resolves false on any clipboard-write rejection — insecure context, permission
-    // denied, no Clipboard API, focus not in the document — and only the success branch did
-    // anything: no label change, no live-region text, no toast. A screen-reader user pressing
-    // Copy in that state heard nothing at all, and had no way to learn CSV exists.
     copyText.mockResolvedValueOnce(false);
     const view = viewFromResult(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], [], generateResult(4, 2, { seed: 1 }));
     const { container } = render(<BuddyList view={view} selected={null} onSelect={() => {}} />);
@@ -145,7 +122,6 @@ describe("a copy that fails says so", () => {
       expect(container.querySelector(".sr-live")?.textContent).toMatch(/couldn't copy/i),
     );
     expect(container.querySelector(".sr-live")?.textContent).toMatch(/CSV/);
-    // The label does NOT claim success.
     expect((container.querySelector(".chipbtn") as HTMLElement).textContent).toBe("Copy");
   });
 });

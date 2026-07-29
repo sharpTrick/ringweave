@@ -65,9 +65,6 @@ describe("connectionSummary caption never contradicts the gauge", () => {
     expect(connectionSummary(metrics({ connected: true, quality: 0.96 }))).toMatch(/well-linked/);
   });
 
-  // Class: the gauge number (qualityPercent) and the caption must agree in tier at the rounding
-  // boundary — a score can't render "50" with 'loosely' while a hair above renders "50" with
-  // 'well-linked'. Both derive from qualityPercent, so tier flips exactly at gauge 50.
   it("gauge percent and caption agree in tier across the 0.5 boundary", () => {
     for (const q of [0, 0.49, 0.494, 0.495, 0.499, 0.5, 0.501, 0.504, 0.505, 0.51, 0.9, 1]) {
       const m = metrics({ connected: true, aspl: 2, quality: q });
@@ -78,8 +75,6 @@ describe("connectionSummary caption never contradicts the gauge", () => {
     }
   });
 
-  // Class: the "already optimal" claim must fire ONLY at a provably-optimal score (quality === 1),
-  // never merely because the gauge rounds to 100 — a 99.6% graph a reroll could still improve.
   it("isOptimal is exact (quality === 1), not gauge-rounded to 100", () => {
     expect(isOptimal(metrics({ quality: 1 }))).toBe(true);
     for (const q of [0.996, 0.999, 0.9999]) {
@@ -92,10 +87,6 @@ describe("connectionSummary caption never contradicts the gauge", () => {
 });
 
 describe("the delivered graph vs the graph that was asked for", () => {
-  // Quality is scored against the DELIVERED degree, which is right — a 3-regular graph can be
-  // exactly optimal for 3 buddies. The consequence nobody had stated is that asking for 4 and
-  // getting 3 shows a gauge of 100, isOptimal true, and a re-roll answering "already optimal".
-  // All true of the graph that was built; none of them the answer to the question asked.
   const viewWith = (asked: number, got: number) =>
     ({
       names: ["a", "b", "c"],
@@ -120,7 +111,6 @@ describe("the delivered graph vs the graph that was asked for", () => {
   });
 
   it("can be optimal AND short of target at the same time", () => {
-    // The exact combination that produced the misleading copy: both are true together.
     const v = viewWith(4, 3);
     expect(isOptimal(v.metrics)).toBe(true);
     expect(targetShortfall(v)).not.toBeNull();
@@ -128,10 +118,6 @@ describe("the delivered graph vs the graph that was asked for", () => {
 });
 
 describe("every displayed buddy count comes from one seam", () => {
-  // Three panels state a per-person buddy count: the rail, the connection caption, and the
-  // shortfall line. The caption had `degreeMax` replaced with `degreeLabel` in one round and the
-  // shortfall line — added in that same commit — reintroduced `degreeMax` immediately. The
-  // invariant is not "this string is right" but "no displayed count contradicts degreeLabel".
   it("a non-regular graph never has two panels claiming different counts", () => {
     const m: Metrics = {
       aspl: 2, diameter: 3, girth: 4, quality: 0.9, connected: true,
@@ -139,9 +125,8 @@ describe("every displayed buddy count comes from one seam", () => {
     };
     const label = degreeLabel(m);
     expect(label).toBe("3–4");
-    // The count phrase in the caption must BE the label, not merely contain it — "3–4 buddies
-    // each" contains "4 buddies each" as a substring, so a negative match here is meaningless
-    // (my first attempt at this assertion failed on exactly that).
+    // Must BE the label, not merely contain it: "3–4 buddies each" contains "4 buddies each",
+    // so a negative substring match would be meaningless.
     const stated = /for (.+?) buddies each/.exec(connectionSummary(m))?.[1];
     expect(stated).toBe(label);
     expect(stated).not.toBe(String(m.degreeMax));
@@ -149,11 +134,6 @@ describe("every displayed buddy count comes from one seam", () => {
 });
 
 describe("every displayed count phrase agrees about its noun, too", () => {
-  // `degreeLabel` made the NUMBER single-sourced after two panels disagreed about it. The noun
-  // beside it stayed copy-pasted, and the rail then hardcoded both plurals: a 2-person, 1-edge
-  // import rendered "2 people · 1 buddies each" next to "everyone's well-linked for 1 buddy
-  // each" — one graph, two panels, disagreeing about the same count. A seam for the number and
-  // none for the noun is half a seam.
   const oneEach: Metrics = {
     aspl: 1, diameter: 1, girth: Infinity as unknown as number, quality: 1, connected: true,
     largestComponentFraction: 1, regular: true, degreeMin: 1, degreeMax: 1,
@@ -164,7 +144,6 @@ describe("every displayed count phrase agrees about its noun, too", () => {
   it("uses the singular exactly when the count it qualifies is 1", () => {
     expect(buddiesLabel(oneEach)).toBe("1 buddy");
     expect(buddiesLabel(fourEach)).toBe("4 buddies");
-    // A range is never singular, whatever its endpoints.
     expect(buddiesLabel(range)).toBe("3–4 buddies");
     expect(peopleNoun(1)).toBe("person");
     expect(peopleNoun(0)).toBe("people");
@@ -180,10 +159,6 @@ describe("every displayed count phrase agrees about its noun, too", () => {
 });
 
 describe("a Settings value shown as delivered is disclosed when it was not", () => {
-  // `targetShortfall` closed this for the buddy COUNT; the minimum separation had the identical
-  // gap and no disclosure. At k=4 the default request of 5 is delivered as 3 at n=12, 20 and 30,
-  // and `{minSeparation: 12}` and `{minSeparation: 5}` produce the identical graph — so the
-  // control looked inert and the export recorded a target the graph does not meet.
   const viewAt = (n: number, k: number, asked?: number): GraphView =>
     viewFromResult(
       Array.from({ length: n }, (_, i) => `P${i}`),
@@ -210,8 +185,7 @@ describe("a Settings value shown as delivered is disclosed when it was not", () 
   });
 
   it("says nothing when the request was met", () => {
-    // Ask for less than the graph delivers and the line must not appear — a disclosure that
-    // always fires is not a disclosure.
+    // A disclosure that always fires is not a disclosure.
     const view = viewAt(20, 4, 2);
     expect(separationShortfall(view)).toBeNull();
   });

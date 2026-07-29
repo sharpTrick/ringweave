@@ -1,9 +1,3 @@
-/**
- * Fuzzy roster search. F8's acceptance criterion is literally `"jsmi"` finding
- * `"John Smith"`, so that case is asserted by name; the rest pin the properties
- * that make the result list usable — subsequence semantics, and a total,
- * deterministic order.
- */
 import { describe, it, expect } from "vitest";
 import { fuzzyMatch, rankMatches } from "../src/search";
 
@@ -89,12 +83,8 @@ describe("rankMatches", () => {
   });
 
   it("measures scatter in the same unit it counts matches in", () => {
-    // The invariant: a name matched against ITSELF is the tightest match possible, so its
-    // positions must be 0,1,2,… — contiguous — for every name, not only all-BMP ones. The query
-    // was iterated by code point while the offsets came from `indexOf` (code units), so the two
-    // ranking terms disagreed for any astral character: an emoji-bearing name that matched
-    // contiguously scored as scattered and lost to genuinely scattered matches at the same
-    // starting offset, which is the exact inversion the scatter term exists to prevent.
+    // A name matched against ITSELF is the tightest match possible, so its positions must be
+    // 0,1,2,… — contiguous — for every name, not only all-BMP ones.
     for (const name of ["A\u00F1o\u{1F600}b", "\u{1F600}\u{1F601}\u{1F602}", "Jos\u00E9", "John Smith"]) {
       const positions = fuzzyMatch(name, name);
       expect(positions).not.toBeNull();

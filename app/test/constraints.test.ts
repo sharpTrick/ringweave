@@ -1,14 +1,3 @@
-/**
- * The app's constraint model, and specifically the roster-edit hazard it exists
- * to close.
- *
- * Pairs are stored positionally everywhere they are persisted (view, file format,
- * worker protocol) and the roster is editable, so a naive implementation
- * re-points every rule at different humans when a person is removed. The editor
- * therefore holds names and converts at the boundary; these tests pin that
- * conversion, including that a rule lost to a removed person is *counted*, not
- * silently dropped.
- */
 import { describe, it, expect } from "vitest";
 import { validateDetailed } from "ringweave";
 import {
@@ -68,8 +57,6 @@ describe("resolveNamedPairs — the roster-edit hazard", () => {
   ];
 
   it("follows people to their new positions when the roster is reordered", () => {
-    // Positionally, "Alice & Dev" was {0,3}. After the reorder it must be {3,0} —
-    // i.e. still Alice and Dev, not whoever now sits at 0 and 3.
     const reordered = ["Dev", "Ben", "Chloe", "Alice"];
     const { pairs, dropped } = resolveNamedPairs(rules, reordered);
     expect(dropped).toBe(0);
@@ -80,8 +67,6 @@ describe("resolveNamedPairs — the roster-edit hazard", () => {
   });
 
   it("re-points nobody when someone is removed — it drops the rule and says so", () => {
-    // This is the failure being prevented: with positional pairs, deleting Ben
-    // would leave {0,3} pointing at Alice and a person who used to be someone else.
     const shorter = ["Alice", "Chloe", "Dev"];
     const { pairs, dropped } = resolveNamedPairs(rules, shorter);
     expect(dropped).toBe(1);
@@ -101,9 +86,7 @@ describe("resolveNamedPairs — the roster-edit hazard", () => {
     ]);
   });
 
-  it("drops an incomplete row without counting it as a real rule loss", () => {
-    // A blank row is a row the user is still filling in, not a lost rule — but it
-    // is still reported, because the alternative is a rule that silently isn't applied.
+  it("drops an incomplete row but still reports it, so no rule is silently unapplied", () => {
     const { pairs, dropped } = resolveNamedPairs([{ a: "Alice", b: "", kind: "required" }], ROSTER);
     expect(pairs).toEqual([]);
     expect(dropped).toBe(1);
@@ -150,13 +133,6 @@ describe("MAX_CONSTRAINT_PAIRS", () => {
 });
 
 describe("the editor's pre-flight and the worker's check cannot disagree", () => {
-  // `toConstraints` normalises to required-then-prohibited so the two callers — RosterModal's
-  // pre-flight, which follows the user's EDIT order, and the worker, which does all requireds
-  // then all prohibiteds — build the same object. The docblock says so; nothing held it. Order
-  // happens not to matter today because both sets are Set-backed, and that is exactly what makes
-  // the duplication comfortable: the failure would be the editor calling a rule set feasible that
-  // the worker then refuses, which is a silent disagreement between the message a user reads and
-  // the answer they get. Asserted mechanically rather than described.
   const shapes: ConstraintPair[][] = [
     [{ a: 0, b: 1, kind: "required" }, { a: 2, b: 3, kind: "prohibited" }, { a: 1, b: 4, kind: "required" }],
     [{ a: 5, b: 2, kind: "prohibited" }, { a: 0, b: 3, kind: "prohibited" }, { a: 4, b: 5, kind: "required" }],
@@ -175,9 +151,8 @@ describe("the editor's pre-flight and the worker's check cannot disagree", () =>
     for (const pairs of shapes) {
       const built = shuffles(pairs).map((order) => toConstraints(8, order));
       for (const c of built) {
-        // `prohibitedCount` is the only count the core exposes — there is no `requiredCount`, and
-        // asserting one would have compared undefined to undefined and passed while checking
-        // nothing. The membership sweep below is what actually holds this.
+        // `prohibitedCount` is the only count the core exposes; asserting a `requiredCount`
+        // would compare undefined to undefined and pass while checking nothing.
         expect(c.prohibitedCount).toBe(built[0].prohibitedCount);
         // Membership, not just counts — a reordering that swapped two pairs' KINDS would keep
         // both counts and change the answer.

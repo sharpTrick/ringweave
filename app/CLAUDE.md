@@ -117,6 +117,13 @@ token-swap; M2 ships the mock-faithful dark theme only.
   cut item is cut as a deferral. There is no caller: the roster CSV path parses *names*, and a
   constraints CSV would need its own column contract, which nothing in the app or the file format
   currently defines.
+- **`neutralizeCell`'s formula-injection guard is narrower than the import refusal beside it.**
+  `download.ts` neutralises a leading `= + - @ TAB CR`; it does not cover `\n`, `U+2028`, `U+2029`,
+  or a space before a formula character. There is no live path today — `importGraph` refuses those
+  characters in names outright, and `parseRoster` normalises them — so the two together are sound,
+  and this is recorded rather than fixed because the guard is only reachable through data that has
+  already passed the stricter gate. It becomes live the moment any export path stops going through
+  that gate. Surfaced by the comment sweep, where it had no home outside a source comment.
 - **A constrained export records a `minSeparation` the graph can never meet.** `exportGraph` writes
   `settings.minSeparation` into the file whatever builder produced the graph, and the constrained
   path ignores that option entirely (`choosePartner` always takes the farthest legal partner), so a

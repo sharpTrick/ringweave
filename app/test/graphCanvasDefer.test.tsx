@@ -32,8 +32,6 @@ const render = (layout: "ring" | "force", n: number) => {
 
 beforeEach(() => forceSpy.mockClear());
 
-// Class: the synchronous force settle (bounded but non-trivial at large n) must not run unless
-// the force layout is actually on — so the default ring view and ring-mode re-rolls stay free.
 describe("GraphCanvas defers the force layout to when it's selected", () => {
   it("ring mode never computes the force layout", () => {
     render("ring", 60);
@@ -46,8 +44,6 @@ describe("GraphCanvas defers the force layout to when it's selected", () => {
   });
 });
 
-// Class: render `target`, the animation destination `to`, and `fit` all resolve mode->positions
-// through one function, so a new LayoutMode can't desync them. Pin the resolver's contract.
 describe("positionsFor is the single mode->positions resolver", () => {
   const ring: Pt[] = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
   const force: Pt[] = [{ x: 2, y: 2 }, { x: 3, y: 3 }];

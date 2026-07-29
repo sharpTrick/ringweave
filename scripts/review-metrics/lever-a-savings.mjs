@@ -1,30 +1,19 @@
 #!/usr/bin/env node
 /**
- * E4, measured in-run: what the three cost levers actually saved.
- *
- * The proposal claimed a ≥40% token reduction with no loss of recall. A second
- * full baseline run of E1's configuration would cost more than the experiment,
- * so the saving is measured from the run's own bookkeeping instead — three
- * components, reported SEPARATELY, because they have very different evidential
- * strength and pooling them would hide that:
+ * E4, measured in-run: what the three cost levers actually saved. Reported SEPARATELY, because they
+ * differ in evidential strength and pooling them would hide that:
  *
  *   A1 · lint preemption      how much of a critic's output the lint gate now owns
  *   A2 · triage theme-collapse  duplicate findings the clustering phase merged
  *   A3 · saturation skipping    critic-rounds not spent, × the measured mean cost
  *
- * A1 is the only one measured against E1 rather than inside Sextant, and it is
- * measured the strongest way available: run TODAY's rule set over E1's own
- * history. Two refs matter and they answer different questions.
- *   - at E1's BASELINE: violations the critics would have been handed for free.
- *   - at E1's CONVERGED HEAD: violations that 21 rounds of five-lens adversarial
- *     review did not file. This is the load-bearing number, because it is not a
- *     claim about cost at all — it is a claim about CAPABILITY, and it has no
- *     model anywhere in it.
+ * A1 replays TODAY's rule set over E1's history at two refs: the baseline (violations the critics
+ * would have been handed for free) and the converged head (violations adversarial review did not
+ * file — a claim about CAPABILITY, with no model anywhere in it).
  *
- * Honest scope limit on A1: only the oxlint rule set can be replayed historically.
- * knip needs the repo-root config and an install that did not exist at those refs,
- * and the custom hygiene checks are coupled to the current tree's identifiers. So
- * A1 is a LOWER bound on lint preemption, not an estimate of it.
+ * A1 is a LOWER bound, not an estimate: only oxlint can be replayed historically. knip needs a
+ * repo-root config and an install that did not exist at those refs, and the custom hygiene checks
+ * are coupled to the current tree's identifiers.
  *
  * Usage: node scripts/review-metrics/lever-a-savings.mjs [dataDir]
  */
@@ -44,7 +33,6 @@ if (!existsSync(roundsDir)) {
   process.exit(1);
 }
 
-/** E1's history, from the committed manifest rather than hardcoded here. */
 const e1 = JSON.parse(readFileSync(join(dataDir, "e1-commits.json"), "utf8"));
 
 function git(...argv) {
@@ -53,14 +41,9 @@ function git(...argv) {
 
 // ───────────────────────────── A1 · lint preemption ─────────────────────────────
 
-/**
- * Run the CURRENT oxlint config over a historical ref, via a detached worktree.
- *
- * The config path is absolute and outside the worktree on purpose: oxlint resolves
- * `--config` relative to its own cwd, and the historical tree has no config at all
- * (the lint gate is a Sextant artifact). Passing the live one is exactly the
- * intended question — "what would today's oracle have said about that code."
- */
+/** Run the CURRENT oxlint config over a historical ref. The config path is absolute and outside the
+ *  worktree on purpose: oxlint resolves `--config` against its own cwd, and the historical tree has
+ *  no config at all — the question being asked is what today's oracle says about that code. */
 function lintAtRef(ref) {
   const wt = mkdtempSync(join(tmpdir(), "sextant-lint-"));
   try {
@@ -75,9 +58,9 @@ function lintAtRef(ref) {
         { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
       );
     } catch (err) {
-      // oxlint exits non-zero WHEN IT FINDS SOMETHING, which is the normal case
-      // here. Its findings are on stdout; only a missing binary or an unparseable
-      // config would leave stdout empty, and that must not read as "clean".
+      // oxlint exits non-zero when it FINDS something, the normal case here. Only a
+      // missing binary or an unparseable config leaves the output empty, and that
+      // must not read as "clean".
       out = (err.stdout ?? "") + (err.stderr ?? "");
       if (!out.includes(":")) throw err;
     }
@@ -92,9 +75,9 @@ function lintAtRef(ref) {
         message: m[5],
       });
     }
-    // A "site" is one place in the code, which is what a critic would have filed
-    // ONE finding about. Two rules firing on the same JSX element is one defect,
-    // and counting rule-hits instead would double it.
+    // A "site" is one place in the code — what a critic would have filed ONE
+    // finding about. Two rules on the same element is one defect; counting rule
+    // hits instead would double it.
     const sites = [...new Set(violations.map((v) => `${v.file}:${v.line}`))].sort();
     return { ref, violations, sites };
   } finally {
@@ -107,10 +90,9 @@ function lintAtRef(ref) {
   }
 }
 
-// The baseline is not a named field — it is the commit the manifest EXCLUDED from
-// the fix set for being the baseline. Read it from there rather than restating the
-// sha here, so the two can never disagree; and fail loudly if the shape changes,
-// because silently falling back to some other ref would compare the wrong code.
+// The baseline is not a named field — it is the commit the manifest EXCLUDED from the fix set for
+// being the baseline. Derived rather than restated so the two cannot disagree, and fatal if the
+// shape changes, because falling back to another ref would compare the wrong code.
 const baselineEntry = (e1.excludedFromFixSet ?? []).find((c) => /baseline/i.test(c.reason ?? ""));
 const baselineRef = baselineEntry?.sha;
 const convergedRef = e1.head;
@@ -124,15 +106,9 @@ if (!baselineRef || !convergedRef) {
 const atBaseline = lintAtRef(baselineRef);
 const atConverged = lintAtRef(convergedRef);
 
-/**
- * Did a converged-head site SURVIVE from the baseline, or is it new?
- *
- * Not by path and line — E1 renamed `GraphView.tsx` to `GraphCanvas.tsx` and
- * extracted an inline element into its own component, so both moved. Match on the
- * rule set plus the offending source line's text, which is what actually stayed
- * the same. Anything that fails to match is reported as UNMATCHED rather than
- * silently classified either way.
- */
+/** Did a converged-head site SURVIVE from the baseline, or is it new? Not matched by path and line
+ *  — review renamed files and extracted components, so both moved. Matched on the offending line's
+ *  TEXT; anything that fails to match is reported UNMATCHED, not classified either way. */
 function sourceLine(ref, file, line) {
   try {
     const body = git("show", `${ref}:${file}`);
@@ -177,9 +153,8 @@ for (const f of roundFiles) {
     lensesRun: critics.length,
     rawFindings,
     themes,
-    // Duplicate findings that triage merged. Note this is a DEDUPLICATION figure
-    // and nothing else: several critics reporting one theme is not corroboration,
-    // and this number must never be read as a severity signal.
+    // A DEDUPLICATION figure and nothing else: several critics on one theme is not
+    // corroboration, and this must never be read as a severity signal.
     collapsed: Math.max(0, rawFindings - themes),
     skipped: (d.skipped ?? []).length,
     skippedLenses: (d.skipped ?? []).map((s) => s.critic ?? s.lens ?? s),
@@ -191,8 +166,8 @@ for (const f of roundFiles) {
 const measuredTokens = perRound.filter((r) => r.subagentTokens && r.agents);
 const totalTokens = measuredTokens.reduce((s, r) => s + r.subagentTokens, 0);
 const totalAgents = measuredTokens.reduce((s, r) => s + r.agents, 0);
-// Per AGENT, not per critic: each round spends its critics plus one triage agent,
-// and dividing by critics alone would inflate the unit cost of a skip.
+// Per AGENT, not per critic: a round spends its critics plus one triage agent, and dividing by
+// critics alone would inflate the unit cost of a skip.
 const meanAgentCost = totalAgents === 0 ? null : Math.round(totalTokens / totalAgents);
 
 const totalSkips = perRound.reduce((s, r) => s + r.skipped, 0);
@@ -218,13 +193,9 @@ const report = {
     },
     survivedAll21Rounds: survived,
     introducedDuringReview: introduced,
-    // What "introduced" does and does not assert. The match is on the offending
-    // source line's TEXT, so this bucket means "this line did not exist at the
-    // baseline" — a fact. It does NOT assert the defect class is new. In this run
-    // the one entry is `Notice.tsx:5`, which is the baseline's `App.tsx:153`
-    // notice element extracted into its own component during review: a new line
-    // carrying an equivalent defect. Both readings are in the data above; the
-    // stronger claim is `survivedAll21Rounds`, which needs no interpretation.
+    // `introduced` asserts the offending LINE did not exist at the baseline, NOT that the defect
+    // class is new — an extracted component carries its defect to a new line. The stronger claim is
+    // `survivedAll21Rounds`, which needs no interpretation.
     introducedMeaning:
       "the offending line is new code, not necessarily a new defect class — check the text against the baseline sites before claiming injection",
     unmatched,

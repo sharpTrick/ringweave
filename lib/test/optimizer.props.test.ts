@@ -494,11 +494,8 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(() => repairDegrees(ring(200_000), 2)).not.toThrow();
   });
 
-  it("bounds the exported repair pass, which had neither guard", () => {
-    // repairDegrees is public API and was the one generator with no k validation and no work
-    // budget: repairDegrees(ring(400), 1e9) ran to completion (5.6 s, ~n^3.4) while
-    // ringGreedy(400, 1e9) refuses the identical pair. NaN was accepted silently too, making
-    // `degree(v) < k` false everywhere — a no-op reported as success.
+  it("bounds the exported repair pass and refuses a k it cannot honour", () => {
+    // NaN makes `degree(v) < k` false everywhere, so accepting it is a no-op reported as success.
     expect(() => repairDegrees(ring(400), 1e9)).toThrow(/too large to repair/);
     expect(() => repairDegrees(ring(20), NaN)).toThrow(/must be a non-negative integer/);
     expect(() => repairDegrees(ring(20), Infinity)).toThrow(/must be a non-negative integer/);
@@ -506,17 +503,12 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("keeps the greedy work model an UPPER bound as k grows", () => {
-    // The old model charged n² per edge of a k-regular graph, ignoring that the ring seed
-    // supplies n edges free and that findPair scans per edge. Its error grew with k, so it
-    // stopped being an upper bound exactly where cost matters: (800,39) was ADMITTED and ran
-    // 221 s under a constant documented as ~60 s worst case.
-    //
-    // Asserted as the accept-set, which is the part users feel — and pinned in both
-    // directions so a future recalibration cannot quietly drop the shipping ceiling.
-    expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK); // ships, must stay
+    // Pinned in both directions, so a future recalibration cannot quietly drop the shipping
+    // ceiling while closing the dense corner.
+    expect(greedyWork(1000, 12)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
     expect(greedyWork(1000, 4)).toBeLessThanOrEqual(MAX_GREEDY_WORK);
-    expect(greedyWork(1000, 20)).toBeGreaterThan(MAX_GREEDY_WORK); // measured 137 s
-    expect(greedyWork(800, 39)).toBeGreaterThan(MAX_GREEDY_WORK); // measured 221 s
+    expect(greedyWork(1000, 20)).toBeGreaterThan(MAX_GREEDY_WORK);
+    expect(greedyWork(800, 39)).toBeGreaterThan(MAX_GREEDY_WORK);
     // Monotone in both arguments, or the gate could be stepped around by asking for more.
     for (const n of [100, 500, 1000]) {
       for (let k = 2; k < 12; k++) {
@@ -527,9 +519,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("names a bad vertex on the primitive every other query is built on", () => {
-    // bfsDistances is exported from the package index and was the only index-taking export
-    // skipping checkVertex, so a user-chosen index produced
-    // `TypeError: g.adj[u] is not iterable` instead of this module's own message.
     for (const bad of [-1, 10, 2.5, NaN, 1e9]) {
       expect(() => bfsDistances(ring(10), bad)).toThrow(/source .* must be an integer/);
     }
@@ -537,10 +526,8 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("never reports a graph as better than provably optimal", () => {
-    // `mooreLowerBounds(n, 1)` for n > 2 described a Moore tree no max-degree-1 graph can
-    // realise — a matching is the best possible and it is disconnected — so `asplGap` returned a
-    // NEGATIVE gap. Both TS and reference-python now return no bound there; the fixtures cover
-    // neither branch (regenerating them produces no diff), so the property is pinned here.
+    // At k=1, n>2 no max-degree-1 graph realises a Moore tree — a matching is the best possible
+    // and it is disconnected — so there is no bound to report rather than a negative one.
     for (let n = 1; n <= 40; n++) {
       for (let k = 1; k <= 6; k++) {
         const { asplLb } = mooreLowerBounds(n, k);
@@ -548,7 +535,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
         if (k === 1 && n > 2) expect(asplLb).toBe(0);
       }
     }
-    // The consequence that reaches a user: a quality score is never above 1.
     fc.assert(
       fc.property(scenario, (s) => {
         const g = graphOf(s.n, s.edges);
@@ -561,9 +547,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("refuses a NaN separation target instead of silently building a different graph", () => {
-    // `ecc < curMind` is false for every NaN, so a NaN target disabled the separation
-    // logic entirely and then came back out as `finalMinSeparation` — the result reported
-    // a target that was never applied. It was the one numeric option left unvalidated.
     expect(() => buildBuddyGraph(20, 4, { minSeparation: NaN })).toThrow(/minimum separation/);
     expect(() => buildBuddyGraph(20, 4, { minSeparation: -1 })).toThrow(/minimum separation/);
     expect(() => buildBuddyGraph(20, 4, { minSeparation: 2.5 })).toThrow(/minimum separation/);
@@ -571,9 +554,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("refuses a graph that already violates the constraints it is asked to preserve", () => {
-    // polishConstrained only SWAPS, so it cannot repair a violating input — but the only
-    // check was a dev-mode postcondition, compiled out in production and blaming this
-    // function for its caller's defect in dev.
+    // polishConstrained only SWAPS, so it cannot repair a violating input.
     const g = ring(8);
     const cons = new Constraints(8);
     cons.prohibit(0, 1); // ring(8) has this edge
@@ -585,9 +566,6 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
   });
 
   it("charges the anneal calibration against the same budget as the loop", () => {
-    // 100 full O(n·m) energy evaluations ran before the loop regardless of the
-    // budget: polish(g, {mode:"anneal", maxIters:0}) took 587 ms on a 300-vertex
-    // graph against 11 ms for the same call in hill mode.
     const g = ring(300);
     const anneal = performance.now();
     polish(g, { mode: "anneal", maxIters: 0 });
@@ -595,24 +573,20 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     const hill = performance.now();
     polish(g, { mode: "hill", maxIters: 0 });
     const hillMs = performance.now() - hill;
-    // A zero budget must buy zero work in BOTH modes, so they are now comparable.
+    // A zero budget must buy zero work in BOTH modes, which is what makes the two comparable.
     expect(annealMs).toBeLessThan(hillMs + 200);
   });
 });
 
 
-/** Two metrics that described an earlier pipeline stage rather than the result. */
 describe("reported metrics describe the graph actually returned", () => {
   it("reports the separation the returned graph has, not the one generation aimed for", () => {
-    // buildBuddyGraph(16, 5) advertised finalMinSeparation 3 while returning a
-    // graph of girth 3 — buddies two steps apart. ringGreedy reported its own
-    // achievement and polish, which is not separation-aware, then ran.
     const r = buildBuddyGraph(16, 5);
     expect(Number.isFinite(r.girth)).toBe(true);
     expect(r.finalMinSeparation).toBe(r.girth - 1);
   });
 
-  it("holds across sizes, polished and unpolished", () => {
+  it("reports the returned graph's separation across sizes, polished and unpolished", () => {
     for (const [n, k] of [[16, 5], [24, 4], [40, 6], [12, 3]] as const) {
       for (const polish of [true, false] as const) {
         const r = buildBuddyGraph(n, k, { polish });
@@ -623,23 +597,20 @@ describe("reported metrics describe the graph actually returned", () => {
   });
 
   it("scores the gap against the degree delivered, not the one requested", () => {
-    // buildBuddyGraph(8, 6) returns a 3-regular graph whose ASPL equals the
-    // Moore bound for k=3 exactly, yet used to report a gap of 0.375 by scoring
-    // it against k=6 — a graph that is provably optimal reading as badly wired.
+    // (8, 6) returns a 3-regular graph whose ASPL exactly meets the Moore bound for k=3, which
+    // is what separates scoring against the degree delivered from scoring against the request.
     const r = buildBuddyGraph(8, 6);
     expect(r.degreeMax).toBeLessThan(6); // the demotion floor really does bind here
     expect(r.asplGap).toBeCloseTo(0, 12);
   });
 
   it("never claims a diameter lower bound above an achievable diameter", () => {
-    // K2 is the unique 1-regular graph on 2 vertices; it has diameter 1 and meets
-    // the ASPL bound, but mooreLowerBounds(2, 1) claimed diameterLb 2.
+    // K2 is the unique 1-regular graph on 2 vertices, so diameter 1 is achievable there.
     expect(mooreLowerBounds(2, 1)).toEqual({ asplLb: 1, diameterLb: 1 });
     for (let n = 2; n <= 40; n++) {
       for (let k = 1; k < n; k++) {
         const b = mooreLowerBounds(n, k);
-        // A k-regular graph on n vertices always exists for some parity, and its
-        // diameter can never exceed n-1; a lower bound above that is vacuous.
+        // No graph on n vertices has diameter above n-1, so a lower bound above it is vacuous.
         expect(b.diameterLb).toBeLessThanOrEqual(n - 1);
       }
     }
@@ -649,9 +620,6 @@ describe("reported metrics describe the graph actually returned", () => {
 
 describe("Graph mutators refuse a bad endpoint before touching anything", () => {
   it("never leaves half an edge behind", () => {
-    // addEdge wrote adj[u] and then threw on an out-of-range v, so a caller that
-    // caught the error kept a Graph containing a non-vertex, with an odd degree
-    // sum and numEdges() disagreeing with edgeList().
     const g = new Graph(3);
     g.addEdge(0, 1);
     expect(() => g.addEdge(0, 5)).toThrow(/vertex 5/);
@@ -663,8 +631,8 @@ describe("Graph mutators refuse a bad endpoint before touching anything", () => 
   it("guards every endpoint-taking entry point, including the read path", () => {
     const g = new Graph(3);
     for (const bad of [3, -1, 1.5, NaN]) {
-      // The message names the offending index — a bare TypeError from
-      // `undefined.has` would not, which is half the point of guarding the reads.
+      // The message must name the offending index; a bare TypeError from `undefined.has` would
+      // not, which is half the point of guarding the reads.
       expect(() => g.addEdge(0, bad)).toThrow(/must be an integer/);
       expect(() => g.removeEdge(0, bad)).toThrow(/must be an integer/);
       expect(() => g.hasEdge(0, bad)).toThrow(/must be an integer/);
@@ -674,15 +642,12 @@ describe("Graph mutators refuse a bad endpoint before touching anything", () => 
 
 describe("a non-finite priorWeight does not silently disable the pass", () => {
   it("falls back to no penalty instead of poisoning every comparison", () => {
-    // NaN makes `next.energy < current` false for every candidate, so the pass
-    // burned its whole budget of O(n·m) re-measurements and returned the input
-    // unchanged — while still reporting polished: true.
     const cons = new Constraints(20).addPrior(0, 1);
     const withNaN = buildConstrainedBuddyGraph(20, 4, cons, { priorWeight: NaN });
     const withZero = buildConstrainedBuddyGraph(20, 4, cons, { priorWeight: 0 });
     expect(withNaN.edges).toEqual(withZero.edges);
     const unpolished = buildConstrainedBuddyGraph(20, 4, cons, { polish: false });
-    // And it is a real polish, not the input handed back.
+    // Non-vacuity: a real polish, not the input handed back.
     expect(withNaN.polished).toBe(true);
     expect(withNaN.aspl).toBeLessThanOrEqual(unpolished.aspl);
   });
@@ -691,9 +656,6 @@ describe("a non-finite priorWeight does not silently disable the pass", () => {
 
 describe("the fragmentation guard needs BOTH count and largest-size", () => {
   it("never shrinks the largest group, at any prior weight", () => {
-    // Component count alone was too weak: a swap that splits the largest group
-    // while merging two small ones leaves the count flat and passed the guard —
-    // reachable at the library's own DEFAULT_PRIOR_WEIGHT of 2.
     fc.assert(
       fc.property(scenario, fc.integer({ min: 0, max: 50 }), (s2, priorWeight) => {
         const g = graphOf(s2.n, s2.edges);
@@ -709,10 +671,8 @@ describe("the fragmentation guard needs BOTH count and largest-size", () => {
 
 describe("minSeparation is inert on the constrained path, provably and observably", () => {
   it("produces the same graph for every value it can be given", () => {
-    // `choosePartner` always returns the farthest candidate, so the separation
-    // scan that used to sit there could not change the answer. The scan is gone;
-    // this pins that removing it changed nothing, and that the option is honest
-    // about being ignored.
+    // `choosePartner` always returns the farthest candidate, so a separation scan could not
+    // change the answer — which is why the option can be ignored rather than honoured.
     const cons = new Constraints(24).require(0, 1).prohibit(4, 5);
     const base = buildConstrainedBuddyGraph(24, 4, cons, { polish: false }).edges;
     for (const minSeparation of [2, 3, 5, 8, 12, 0, 1000]) {

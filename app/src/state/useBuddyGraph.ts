@@ -16,16 +16,11 @@ function sameEdges(a: [number, number][], b: [number, number][]): boolean {
 
 
 /**
- * Orchestrates generation: sends a job to the worker and maps its GraphResult — the normalized builder outcome — back into
- * a GraphView using the exact roster + settings that produced it (captured in `pending`,
- * so an async result is never paired with a roster that changed underneath it).
+ * Orchestrates generation. The roster and settings that produced a job are captured in `pending`,
+ * so an async result is never paired with a roster that changed underneath it.
  *
- * `onIdenticalReroll(view)` fires ONLY when a REROLL (`generate(..., { reroll: true })`) yields a
- * byte-identical graph — a "Different arrangement" that couldn't vary (a small uniquely-determined
- * or polish-converged graph). It is not fired for a plain Edit→Generate no-op, which the user
- * didn't ask to vary. This is the robust, post-generation detection the pre-hoc `rerollBlockReason`
- * heuristic can't do. The kept (unchanged) view is passed so the caller can word the notice from
- * its actual quality rather than overclaiming optimality.
+ * `onIdenticalReroll(view)` fires ONLY for an explicit reroll that came back byte-identical, not
+ * for a plain Edit→Generate no-op the user never asked to vary.
  */
 export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
   const gen = useGenerationWorker();
@@ -43,9 +38,8 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     rows: NamedPair[];
     reroll: boolean;
   } | null>(null);
-  // consumed: the last worker result we've already turned into a view. Guards against a
-  // benign effect re-run (e.g. StrictMode's dev double-invoke) re-applying a still-"done"
-  // generation and clobbering a view set directly by loadView (an import).
+  // The last result already turned into a view: without it, a benign effect re-run (StrictMode's
+  // double-invoke) re-applies a still-"done" generation over a view set by loadView.
   const consumed = useRef<unknown>(null);
 
   useEffect(() => {
@@ -60,25 +54,11 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
         gen.result,
       );
       const cur = viewRef.current;
-      // A re-generation on the same roster that produced an identical graph is a visual no-op:
-      // keep the current graph rather than swapping in an indistinguishable one (no re-layout).
-      // But the SETTINGS may have changed (a new seed / minSeparation that happened to yield the
-      // same graph), and export + the Advanced panel must reflect what the user just configured —
-      // so adopt next.settings while REUSING cur's edges/buddies by reference (so GraphCanvas sees
-      // the same `edges` identity and doesn't re-lay-out/animate). Only a REROLL (an explicit
-      // "Different arrangement") also surfaces a notice; an unchanged Edit→Generate is silent.
-      //
-      // The same argument applies to the CONSTRAINTS and their report: a rules-only edit can
-      // easily reproduce the same edges (requiring a pair the generator already chose), and
-      // keeping the old ones would export the wrong rules and show a stale report. So they are
-      // adopted alongside settings — carried over, not re-laid-out.
+      // An identical graph is kept BY REFERENCE, so GraphCanvas sees the same `edges` identity
+      // and does not re-lay-out. Settings, constraints and report are still adopted from `next`,
+      // unconditionally: they can change while the edges do not, and keeping the old ones exports
+      // the wrong rules and shows a stale report.
       if (cur && sameStrings(cur.names, next.names) && sameEdges(cur.edges, next.edges)) {
-        // Adopt all three unconditionally. The `changed` predicate tested only settings and
-        // constraints while the branch also adopted `report`, so a freshly measured report was
-        // DISCARDED whenever the regenerated graph came back byte-identical with the same rules
-        // — which is exactly the common reroll case. Predicting which of the adopted fields
-        // changed is a second, silently narrower copy of the adoption list; the object identity
-        // of `cur.edges` is what protects against a re-layout, and that is preserved either way.
         setView({
           ...cur,
           settings: next.settings,

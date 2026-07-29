@@ -105,11 +105,8 @@ const roundsInData = new Set(findings.map((f) => `${f.target}#${f.round}`));
 const roundsMapped = new Set(fixCommits.map((c) => `${c.target}#${c.round}`));
 const unmapped = [...roundsInData].filter((r) => !roundsMapped.has(r)).sort();
 
-/**
- * Base rate: of the non-test product lines in the tree a round reviewed, what share
- * did THIS loop's earlier fixes author? A finding landing on such a line by chance
- * is not self-induction, so this is what the rate has to beat.
- */
+/** Of the non-test product lines in the tree a round reviewed, the share THIS loop's earlier fixes
+ *  authored — the chance rate the observed rate has to beat. */
 function baseRate(tree, target, earlier, flags) {
   const dir = target.startsWith("lib") ? "lib/src" : "app/src";
   const files = (tryGit("ls-tree", "-r", "--name-only", tree, "--", dir) ?? "")
@@ -137,9 +134,8 @@ for (const cfg of CONFIGS) {
   let unknown = 0;
   const attributed = [];
   const classifiableByRound = new Map();
-  // Severity matters more than the pooled rate: a self-induced BLOCKING finding is
-  // the loop breaking its own code, while a self-induced nit is the loop tidying up
-  // after itself. Pooling them hides which one is happening.
+  // A self-induced BLOCKING finding is the loop breaking its own code; a self-induced nit is the
+  // loop tidying up after itself. The pooled rate hides which one is happening.
   const bySeverity = {};
 
   for (const f of findings) {
@@ -187,15 +183,10 @@ for (const cfg of CONFIGS) {
 const primary = results.find((r) => r.config === "-w -M -C") ?? results[0];
 
 /**
- * The base rate is computed PER ROUND and weighted by that round's classifiable findings, not once
- * on the final tree.
- *
- * Taking it from the last tree compares each finding against the wrong null: fix-authored code
- * accumulates monotonically, so the end-of-run share (36.1% here) is the largest it ever is, while
- * a round-3 finding was drawn from a tree that was ~2% fix-authored. Dividing a run-averaged
- * observed rate by an end-of-run chance rate produced a lift BELOW 1 — the loop appearing to avoid
- * its own code — which is an artifact of the mismatch, not a result. The matched null is the mean
- * chance rate over the trees the findings were actually drawn from.
+ * The base rate MUST be per round, weighted by that round's classifiable findings. Fix-authored code
+ * accumulates monotonically, so an end-of-run share is the largest it ever is while an early-round
+ * finding was drawn from a nearly fix-free tree; dividing by the final tree's rate produced a lift
+ * below 1 — the loop appearing to avoid its own code — which was an artifact, not a result.
  */
 const perRound = new Map();
 for (const c of fixCommits) {

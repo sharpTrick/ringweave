@@ -6,8 +6,6 @@ import LayoutToggle from "../src/panels/LayoutToggle";
 
 afterEach(cleanup);
 
-// Class: LAYOUT_MODES is the load-bearing source of selectable layouts — the toggle renders
-// exactly one control per mode, so adding a mode there genuinely opens the UI (not just a comment).
 describe("LayoutToggle is driven by LAYOUT_MODES", () => {
   it("renders exactly one button per mode, title-cased, with the active one marked", () => {
     render(<LayoutToggle layout="ring" onChange={() => {}} />);
@@ -25,7 +23,6 @@ describe("LayoutToggle is driven by LAYOUT_MODES", () => {
     for (const active of LAYOUT_MODES) {
       cleanup();
       render(<LayoutToggle layout={active} onChange={() => {}} />);
-      // exactly the active mode's button reports pressed; the others report unpressed.
       const pressed = screen.getAllByRole("button", { pressed: true });
       expect(pressed).toHaveLength(1);
       expect(pressed[0].textContent).toBe(active[0].toUpperCase() + active.slice(1));

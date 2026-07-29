@@ -15,9 +15,6 @@ describe("buddyLabel unit", () => {
   });
 });
 
-// Class: the on-screen buddy list and the printed slips must render the SAME projection for
-// every person — a divergent separator/empty-glyph would silently disagree. Both now route
-// through buddyLabel; this pins them to it, including the isolated (0-buddy) case.
 describe("BuddyList and Slips render identical buddy cells (via buddyLabel)", () => {
   it("agree with buddyLabel for every person, incl. an isolated one", () => {
     const view = importGraph({ version: 1, people: [0, 1, 2, 3].map((id) => ({ id, name: `P${id}` })), edges: [[0, 1], [1, 2], [2, 0]] });

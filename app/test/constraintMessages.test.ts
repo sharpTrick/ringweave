@@ -1,14 +1,6 @@
 /**
- * All twelve core infeasibility reasons, worded for a person.
- *
- * The point of the structured `Reason` type is that the app never has to parse
- * the core's prose, and this is the test that keeps that honest: the sample table
- * is typed `Record<Reason["code"], Reason>`, so a new variant in the core fails
- * the typecheck here until it has copy of its own. Without that, a new reason
- * would fall through and reach a user as nothing at all.
- *
- * Two of the twelve carry an index that is deliberately out of range, so they are
- * checked specifically for not rendering "undefined".
+ * `SAMPLES` is typed `Record<Reason["code"], Reason>` so that a new reason variant in the core
+ * fails the typecheck here until it has copy of its own, rather than reaching a user as nothing.
  */
 import { describe, it, expect } from "vitest";
 import { Constraints, validateDetailed, type Reason } from "ringweave";
@@ -58,8 +50,8 @@ describe("describeReasons covers every core reason", () => {
   });
 
   it("does not index the roster with an out-of-range person", () => {
-    // `unknown-person` carries an index that is out of range BY DEFINITION — that is
-    // what it reports. Naive substitution would render "undefined references…".
+    // `unknown-person` carries an index that is out of range BY DEFINITION, so naive substitution
+    // would render "undefined references…".
     const text = describeReasons([SAMPLES["unknown-person"]], NAMES)[0];
     expect(text).not.toMatch(/undefined/);
     expect(text).toMatch(/isn't in this roster/);

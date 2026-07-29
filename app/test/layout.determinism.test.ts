@@ -35,13 +35,10 @@ describe("layout determinism", () => {
     expect(pts).toEqual(ringLayout(n)); // exact ring fallback, not a settled sim
   });
 
-  // Class: an IN-RANGE force settle (n <= FORCE_MAX_N) must not freeze the main thread. Ticks
-  // scale down with n so O(n · ticks) stays bounded — a fixed 300 ticks froze ~1.5 s at n=1000.
   it("scales ticks down with n so the settle stays cheap (full ticks only for small graphs)", () => {
     expect(forceIters(30)).toBe(300); // small: full settle
     expect(forceIters(120)).toBe(300); // at the knee: still full
     expect(forceIters(1000)).toBeLessThan(300); // large: scaled down
-    // monotonic non-increasing past the knee, and never below the floor
     for (const n of [200, 500, 750, 1000]) {
       expect(forceIters(n)).toBeGreaterThanOrEqual(40);
       expect(forceIters(n)).toBeLessThanOrEqual(forceIters(n - 100));
@@ -49,20 +46,8 @@ describe("layout determinism", () => {
   });
 
   it("keeps the modelled settle cost bounded across the whole in-range band", () => {
-    // This asserted `performance.now()` deltas under 700 ms, which measures the MACHINE, not
-    // the code: under concurrent load on a 4-core container it reported 752 ms and failed,
-    // then passed in isolation seconds later. A timing assertion in a unit suite says only
-    // "this box was fast enough today", and a flake here reads exactly like a regression in
-    // whatever change is being reviewed — the same false signal a stray probe file produces.
-    //
-    // The real invariant is the one the comment above states: the settle is O(n · ticks) and
-    // ticks scale down past the knee, so the PRODUCT stays bounded. That is a pure function
-    // of n, so it is deterministic, machine-independent, and actually the property that keeps
-    // the main thread responsive.
-    // Past the knee, ticks are either the scaled value (so the product holds near the knee's
-    // product) or the floor (so the product is n · FORCE_MIN_TICKS). The floor is what makes
-    // the larger of the two the real ceiling — the product is NOT simply bounded by the knee,
-    // and asserting that it was is how this first got written wrong.
+    // The ceiling is n · FORCE_MIN_TICKS, not the knee's product: past the knee ticks are either
+    // the scaled value or the floor, and the floor is the larger of the two.
     const ceiling = FORCE_MAX_N * FORCE_MIN_TICKS;
     for (const n of [130, 250, 500, 750, FORCE_MAX_N]) {
       expect(forceIters(n) * n).toBeLessThanOrEqual(ceiling);
@@ -70,9 +55,8 @@ describe("layout determinism", () => {
     // Load-bearing: without the tick scaling the product at the ceiling would be n · 300,
     // which busts the bound by 7.5x. So the assertion above can actually fail.
     expect(FORCE_MAX_N * 300).toBeGreaterThan(ceiling);
-    // And it still has to RUN — a bounded model of an exploding function is worthless. The
-    // wall-clock ceiling here is deliberately loose: it catches a hang or a return to fixed
-    // ticks, and cannot fail because a neighbouring process got busy.
+    // The wall-clock ceiling is deliberately loose: it catches a hang or a return to fixed ticks
+    // and cannot fail because a neighbouring process got busy.
     for (const n of [250, FORCE_MAX_N]) {
       for (const m of [0, n]) {
         const edges: [number, number][] = Array.from({ length: m }, (_, i) => [i, (i + 1) % n]);
@@ -94,10 +78,8 @@ describe("layout determinism", () => {
     expect(pts).toEqual(ringLayout(n)); // beyond any in-app graph -> ring, not a frozen sim
   });
 
-  // Class: the force view must be available for EVERY graph the app can generate — including the
-  // densest corner (n = ceiling, k = BUDDY_MAX), which has n·BUDDY_MAX/2 = 6000 edges and which
-  // the old 4000 cap silently dropped to ring. A real k=12 generation at n=1000 takes ~30s, so
-  // stand in a synthetic 12-regular circulant with the SAME edge count to pin the cap boundary.
+  // A synthetic 12-regular circulant stands in for a real k=12 generation at n=1000, which is far
+  // too slow to run here.
   it("does NOT fall back for a graph at the densest generatable edge count (n=MAX_ROSTER_N, 12-regular)", () => {
     const n = FORCE_MAX_N;
     const edges: [number, number][] = [];

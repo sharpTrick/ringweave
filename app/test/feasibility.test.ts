@@ -4,7 +4,6 @@ import { feasibility } from "../src/io/feasibility";
 import { BUDDY_MAX, BUDDY_MIN, MAX_ROSTER_N } from "../src/model";
 
 describe("feasibility", () => {
-  // Class: settings the core rejects/caps must be blocked in the UI, not thrown from the core.
   const cases: Array<{ n: number; k: number; canGenerate: boolean; why: string }> = [
     { n: 30, k: 4, canGenerate: true, why: "normal even product" },
     { n: 200, k: 6, canGenerate: true, why: "n far above k+1" },
@@ -46,18 +45,14 @@ describe("feasibility", () => {
 
 describe("the generate gate asks the core rather than mirroring its budget", () => {
   it("agrees with the core at every (n, k) the UI can express", () => {
-    // The app promised `canGenerate` for its whole advertised rectangle from its own constants,
-    // and that promise held only because the densest corner — n=1000, k=12 — lands on the core's
-    // MAX_GREEDY_WORK by EXACTLY zero margin. Nothing tested the coincidence, and one constant
-    // edit in either package would have enabled a button for a configuration the library throws
-    // on. Asserted as agreement with the core's own predicate, over the whole rectangle.
+    // The densest corner — n=1000, k=12 — lands on the core's MAX_GREEDY_WORK by exactly zero
+    // margin, so one constant edit in either package would enable a button the library throws on.
     for (let n = 2; n <= MAX_ROSTER_N; n += 7) {
       for (let k = BUDDY_MIN; k <= BUDDY_MAX; k++) {
         if (n < k + 1) continue;
         expect(feasibility(n, k).canGenerate).toBe(coreCanGenerate(n, k));
       }
     }
-    // ...and the corner itself, named, because it is the one with no margin.
     expect(coreCanGenerate(MAX_ROSTER_N, BUDDY_MAX)).toBe(true);
     expect(feasibility(MAX_ROSTER_N, BUDDY_MAX).canGenerate).toBe(true);
     // One person past the app's ceiling is refused by the app's own policy, in its own words.

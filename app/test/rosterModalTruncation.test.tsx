@@ -19,9 +19,8 @@ const renderModal = () =>
     />,
   );
 
-// Class: an over-limit paste must ALWAYS produce a visible truncation notice — including the
-// gap where fewer than MAX_NAMES distinct names hide the name-cap warning and capText's pre-cap
-// hides parseRoster's char-warning. Both shapes below must notify.
+// Two ways an over-limit paste can hide its notice: fewer than MAX_NAMES distinct names hides
+// the name-cap warning, and capText's pre-cap hides parseRoster's char warning. Both must notify.
 describe("RosterModal surfaces truncation both ways", () => {
   it("a >MAX_PARSE_CHARS paste with few distinct names still shows a char-truncation notice", () => {
     renderModal();
@@ -43,8 +42,6 @@ describe("RosterModal surfaces truncation both ways", () => {
     expect(screen.queryByText(/characters were kept|maximum/i)).toBeNull();
   });
 
-  // Class: a transient notice must not outlive the text it described — EVERY text-replacing action
-  // (type, try-example, file read) clears it, not only the path that raised it.
   const raiseTruncation = () => {
     fireEvent.change(screen.getByLabelText("Roster names"), { target: { value: "x".repeat(MAX_PARSE_CHARS + 5000) } });
     expect(screen.getByText(/characters were kept/i)).toBeTruthy();

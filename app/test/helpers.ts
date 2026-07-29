@@ -1,10 +1,6 @@
 /**
- * Shared test helpers.
- *
- * `generateResult` routes through the worker's own `runGeneration` rather than
- * calling `buildBuddyGraph` and hand-shaping the payload: the normalization from
- * a core result to the protocol's `GraphResult` is real logic, and a test that
- * bypasses it would keep passing if that normalization broke.
+ * `generateResult` routes through the worker's own `runGeneration` rather than hand-shaping a
+ * payload, so that a break in that normalization fails the tests instead of being bypassed.
  */
 import { runGeneration } from "../src/worker/generate";
 import type { GenerateOptions, GenerateRequest, GraphResult } from "../src/worker/protocol";

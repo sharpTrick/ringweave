@@ -6,8 +6,8 @@ import { autoPolishEnabled } from "ringweave";
 import type { GraphResult } from "../src/worker/protocol";
 import { generateResult } from "./helpers";
 
-// Drive useBuddyGraph without a real Worker: a controllable stand-in for
-// useGenerationWorker whose state the test mutates, then rerenders to fire the effect.
+// A controllable stand-in for useGenerationWorker: the test mutates its state, then rerenders
+// to fire the effect.
 const hooks = vi.hoisted(() => {
   const state: {
     status: "idle" | "running" | "done" | "error" | "refused";
@@ -15,9 +15,8 @@ const hooks = vi.hoisted(() => {
     error: string | null;
     refusals: never[];
   } = { status: "idle", result: null, error: null, refusals: [] };
-  // Typed by its ARGS, not inferred from the stub body: an untyped mock's
-  // `mock.calls` is an empty tuple, so reading calls[0][0] is a type error and the
-  // only escape is a cast that asserts a shape nobody checked.
+  // Typed by its ARGS: an untyped mock's `mock.calls` is an empty tuple, so reading calls[0][0]
+  // is a type error whose only escape is a cast asserting an unchecked shape.
   const generate = vi.fn<(req: { options: { polish: unknown } }) => void>(() => {
     state.status = "running";
   });
@@ -136,8 +135,6 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view?.names).toEqual(roster);
   });
 
-  // Class: an idempotent (identical-edges) generate under CHANGED settings must still adopt the
-  // new settings so export/UI aren't stale — while reusing the laid-out edges (no re-layout).
   it.each([
     ["seed", { buddies: 4, polish: "auto", seed: 2 } as const],
     ["minSeparation", { buddies: 4, polish: "auto", seed: 1, minSeparation: 6 } as const],
@@ -165,11 +162,6 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view!.edges).toBe(priorEdges); // same reference -> no re-layout/animation
   });
 
-  // Parameterized over k, and asking the CORE where the boundary is rather than mirroring
-  // it. The previous version hardcoded the app's own POLISH_MAX_N at k=4, which is why a
-  // k-blind constant survived: the real gate is k-dependent, so at k=12 this downgrade was
-  // not happening anywhere near where it should — an explicit polish=true at n=100 was
-  // dispatched in full, which is the expensive direction of the same drift.
   it("never DISPATCHES polish=true for a configuration the core would not auto-polish", () => {
     const { result } = renderHook(() => useBuddyGraph());
     const firstRefused = (k: number) => {

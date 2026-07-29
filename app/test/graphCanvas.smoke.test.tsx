@@ -3,8 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildBuddyGraph } from "ringweave";
 import GraphCanvas from "../src/graph/GraphCanvas";
 
-// SSR render smoke: effects (matchMedia / rAF / d3-zoom) don't fire, so this exercises
-// the pure render path — a node per person and a line per edge in the ring layout.
+// SSR render: effects (matchMedia / rAF / d3-zoom) do not fire, so this covers the pure render
+// path only.
 describe("GraphCanvas smoke", () => {
   it("renders an SVG with a node per person and a line per edge", () => {
     const r = buildBuddyGraph(12, 4, { seed: 1, polish: false }); // render smoke; polish irrelevant

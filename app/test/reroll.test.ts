@@ -29,8 +29,6 @@ describe("reroll gate messages (rerollBlockReason)", () => {
 });
 
 describe("reroll seed stays within [0, SEED_MAX] (nextRerollSeed)", () => {
-  // Class: the stored/dispatched reroll seed must always honor the range the import path also
-  // clamps to — never overflow past float-safe integers, always advance to a distinct value.
   it("advances by one below the ceiling and wraps to 0 at it", () => {
     for (const seed of [0, 1, SEED_MAX - 2, SEED_MAX - 1]) {
       const next = nextRerollSeed(seed);
@@ -66,44 +64,24 @@ describe("core reroll behavior (why post-hoc detection is needed)", () => {
     expect(d.edges).toEqual(c.edges);
   });
 
-  // The app no longer mirrors the core's cap as a literal — it calls the core's own
-  // `autoPolishEnabled`. So the property to pin is no longer "120 is the boundary" but
-  // "the predicate the reroll copy is derived from agrees with what the builder does",
-  // AT EVERY k. The old test pinned k=4 only, which is exactly why a k-blind literal
-  // survived: 120 is right at k=4 and wrong at every other k the UI offers.
   it("the predicate reroll copy is derived from agrees with the builder, at every k", () => {
-    // Asserted against `autoPolishEnabled`, which IS the builder's gate exported (the builder
-    // calls the same `resolveWantPolish`), not against `result.polished`. The two `.polished`
-    // assertions that used to sit here were a proxy resting on that flag meaning "the stage
-    // executed"; it now means "the returned graph differs from the unpolished one", which at
-    // `polishIters: 1` is false even where the gate fired. Comparing the copy to the gate
-    // function compares it to one predicate rather than to a symptom of it.
+    // Asserted against `autoPolishEnabled` (the builder's own gate) rather than `result.polished`:
+    // that flag means "the returned graph differs from the unpolished one", which is false even
+    // where the gate fired.
     for (const k of [2, 3, 4, 6, 12]) {
       const boundary = tooLargeToVary(k);
       expect(autoPolishEnabled(boundary - 1, k)).toBe(true);
       expect(autoPolishEnabled(boundary, k)).toBe(false);
-      // And the user-facing copy follows the same predicate, so it can never claim a
-      // roster is "too large to shuffle" that the builder would in fact polish.
       const settings = { ...DEFAULT_SETTINGS, buddies: k, polish: "auto" as const };
       expect(rerollBlockReason(boundary - 1, settings)).toBeNull();
       expect(rerollBlockReason(boundary, settings)).toMatch(/too large/i);
     }
   });
 
-  it("the k-blind literal it replaced would have been wrong here", { timeout: 60_000 }, () => {
-    // The regression this closes, stated as a fact about the old constant: 120 was the
-    // cap, and at k=3 the core polishes well past it — so the app refused to dispatch a
-    // reroll that would have worked.
+  it("polishes at k=3 past the old 120 cap, so a reroll there is not blocked", { timeout: 60_000 }, () => {
     expect(autoPolishEnabled(125, 3)).toBe(true);
-    // A reduced iteration count, because the claim is that the seed reaches the RNG at all —
-    // not that a full budget was spent. Two default-budget builds here cost 36 s; 1500 is 3 s
-    // and still diverges.
-    //
-    // The number is load-bearing and has moved once: at 300 the two seeds converge to the same
-    // graph (the plateau this file's other tests are about), and 1000 stopped diverging when
-    // the anneal calibration started being charged against the loop allowance — up to 100
-    // sweeps that were previously free. That is the budget getting more honest, not a
-    // regression, and the default-budget output is byte-identical either way.
+    // 1500 iterations rather than the default budget: at 300 and at 1000 the two seeds converge,
+    // so a smaller number would make the divergence assertion pass vacuously.
     const a = buildBuddyGraph(125, 3, { seed: 1, polishIters: 1500 });
     const b = buildBuddyGraph(125, 3, { seed: 2, polishIters: 1500 });
     expect(a.polished).toBe(true);
