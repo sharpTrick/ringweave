@@ -117,8 +117,8 @@ describe("usePathFinder", () => {
 
   it("produces the BFS shortest path", () => {
     const { result } = renderHook(() => usePathFinder(graph));
-    act(() => result.current.start(0));
-    act(() => { result.current.complete(3); });
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(3); });
     const route = result.current.route as number[];
     expect(route[0]).toBe(0);
     expect(route[route.length - 1]).toBe(3);
@@ -127,11 +127,11 @@ describe("usePathFinder", () => {
 
   it("draws the same line whichever end is picked first, read from that end", () => {
     const { result: a } = renderHook(() => usePathFinder(graph));
-    act(() => a.current.start(0));
-    act(() => { a.current.complete(3); });
+    act(() => a.current.toggle(0));
+    act(() => { a.current.retarget(3); });
     const { result: b } = renderHook(() => usePathFinder(graph));
-    act(() => b.current.start(3));
-    act(() => { b.current.complete(0); });
+    act(() => b.current.toggle(3));
+    act(() => { b.current.retarget(0); });
     // Same line: identical as a sequence once orientation is removed.
     expect(a.current.route).toEqual([...b.current.route!].reverse());
     expect(a.current.route![0]).toBe(0);
@@ -141,32 +141,66 @@ describe("usePathFinder", () => {
   it("reports no chain rather than an empty route", () => {
     const split = graphOf(4, [[0, 1], [2, 3]]);
     const { result } = renderHook(() => usePathFinder(split));
-    act(() => result.current.start(0));
-    act(() => { result.current.complete(2); });
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(2); });
     expect(result.current.route).toBeNull();
     expect(result.current.unreachable).toBe(true);
   });
 
-  it("ignores a second pick that is the same person", () => {
+  it("treats picking the source again as clearing the target, not as navigating", () => {
     const { result } = renderHook(() => usePathFinder(graph));
-    act(() => result.current.start(2));
-    let consumed = true;
-    act(() => { consumed = result.current.complete(2); });
-    expect(consumed).toBe(false);
-    expect(result.current.from).toBe(2); // still waiting
+    act(() => result.current.toggle(2));
+    let consumed = false;
+    // Consumed, because the mode is on: a click inside a mode belongs to the mode. What it
+    // cannot do is draw a zero-length route from someone to themselves.
+    act(() => { consumed = result.current.retarget(2); });
+    expect(consumed).toBe(true);
+    expect(result.current.pending).toBe(2);
+    expect(result.current.route).toBeNull();
+  });
+
+  it("re-targets on every later pick while the mode is on", () => {
+    const { result } = renderHook(() => usePathFinder(graph));
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(3); });
+    expect(result.current.route).toEqual([0, 1, 2, 3]);
+    // The second pick MOVES the far end. Before this was a mode it was ignored, and the route
+    // stayed on whoever was picked first while the graph still rendered as if a route were live.
+    act(() => { result.current.retarget(1); });
+    expect(result.current.route).toEqual([0, 1]);
+    expect(result.current.source).toBe(0);
+  });
+
+  it("leaves the mode when the same person's toggle is pressed again", () => {
+    const { result } = renderHook(() => usePathFinder(graph));
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(3); });
+    expect(result.current.active).toBe(true);
+    act(() => result.current.toggle(0));
+    expect(result.current.active).toBe(false);
+    expect(result.current.route).toBeNull();
+  });
+
+  it("moves the source when a different person's toggle is pressed", () => {
+    const { result } = renderHook(() => usePathFinder(graph));
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(3); });
+    act(() => result.current.toggle(2));
+    expect(result.current.source).toBe(2);
+    expect(result.current.route).toBeNull(); // the old target does not carry over
   });
 
   it("does not consume a selection when no route is being drawn", () => {
     const { result } = renderHook(() => usePathFinder(graph));
     let consumed = true;
-    act(() => { consumed = result.current.complete(4); });
+    act(() => { consumed = result.current.retarget(4); });
     expect(consumed).toBe(false);
   });
 
   it("clears back to nothing", () => {
     const { result } = renderHook(() => usePathFinder(graph));
-    act(() => result.current.start(0));
-    act(() => { result.current.complete(2); });
+    act(() => result.current.toggle(0));
+    act(() => { result.current.retarget(2); });
     expect(result.current.active).toBe(true);
     act(() => result.current.clear());
     expect(result.current.active).toBe(false);

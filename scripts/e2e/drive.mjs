@@ -130,6 +130,40 @@ const routeEdges = await page.$$eval("line.edge.route", (ls) => ls.length);
 const hops = Number((steps.match(/(\d+) step/) ?? [])[1]);
 check("the lit chain has exactly one edge per step", routeEdges === hops, `${routeEdges} lit vs ${hops} steps`);
 
+// The path widget re-renders the whole graph, so it has to be reachable from the control that
+// armed it. It used to sit in the opposite corner of the viewport, which read as nothing having
+// happened. Only a browser can answer "is it above" — DOM order alone does not settle it.
+{
+  const boxes = await page.evaluate(() => {
+    const r = document.querySelector("#route")?.getBoundingClientRect();
+    const pp = document.querySelector("#person")?.getBoundingClientRect();
+    return r && pp ? { routeTop: r.top, personTop: pp.top, dx: Math.abs(r.left - pp.left) } : null;
+  });
+  check("the path widget renders above the person card", 
+    boxes !== null && boxes.routeTop < boxes.personTop && boxes.dx < 2,
+    boxes ? `route ${Math.round(boxes.routeTop)} vs person ${Math.round(boxes.personTop)}` : "(missing)");
+}
+
+// A MODE, not a two-click gesture: while the toggle is on, picking someone else moves the far end
+// of the chain rather than navigating away from it.
+{
+  await page.getByLabel("Find a person").fill("ben");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#route .rt-chain");
+  const retargeted = (await page.locator("#route .rt-chain").textContent()) ?? "";
+  check("a later pick re-targets the route instead of leaving the mode",
+    retargeted.includes("John Smith") && retargeted.includes("Ben Carter"), retargeted);
+  const pressed = await page.getAttribute("#person button[aria-pressed]", "aria-pressed");
+  check("the path button reads as pressed while the mode is on", pressed === "true", String(pressed));
+  await page.click("#person button[aria-pressed]");
+  check("pressing the toggle again leaves the mode", (await page.locator("#route").count()) === 0);
+  // Back into the mode for the Escape checks below, which are about clearing a live route.
+  await page.click("#person button[aria-pressed]");
+  await page.getByLabel("Find a person").fill("lena");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#route .rt-chain");
+}
+
 await page.locator("g.node").first().hover();
 const afterHover = await page.$$eval("line.edge.route", (ls) => ls.length);
 check("hovering does not destroy the route", afterHover === routeEdges);
@@ -217,6 +251,40 @@ check("export carries the rules",
 
   check("phone: no page errors", mobErrors.length === 0, mobErrors.slice(0, 2).join(" | "));
   await phone.close();
+}
+
+// Back walks a TRAIL. Jumping to someone the current card does not list has no relation to the
+// card behind it, so the trail restarts rather than offering to return to a stranger.
+//
+// Runs on a REGENERATED k=2 roster, and that is not incidental: at k=4 every one of these twelve
+// people is a chip on every card, so there is no stranger to jump to and the check would pass by
+// never exercising the rule. A 12-cycle puts seven people out of reach of any card.
+{
+  await page.getByText("Edit people").click();
+  const fewer = page.getByLabel(/^fewer buddies/);
+  while (Number(await page.locator(".stepper .val").textContent()) > 2) await fewer.click();
+  await page.getByText("Generate buddy graph").click();
+  await generationSettles(page);
+
+  await page.getByLabel("Find a person").fill("jsmi");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#person");
+  await page.locator("#person .pp-chips .personchip").first().click();
+  check("Back is offered after a step along the card", await page.getByText("← Back").isVisible());
+
+  const shown = await page.$$eval("#person .pp-chips .personchip", (bs) => bs.map((b) => b.textContent));
+  const here = await page.locator("#person h2").textContent();
+  const stranger = ROSTER.find((n) => n !== here && !shown.includes(n));
+  if (stranger === undefined) {
+    check("a jump off the card starts a new trail", false, "every person is a chip — no stranger exists");
+  } else {
+    await page.getByLabel("Find a person").fill(stranger);
+    await page.keyboard.press("Enter");
+    const jumped = await page.locator("#person h2").textContent();
+    const stillOffered = await page.getByText("← Back").count();
+    check("a jump off the card starts a new trail",
+      jumped === stranger && stillOffered === 0, `${jumped}, back x${stillOffered}`);
+  }
 }
 
 check("no page errors or console errors", errors.length === 0, errors.slice(0, 3).join(" | "));

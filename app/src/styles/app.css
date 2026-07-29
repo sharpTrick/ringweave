@@ -127,8 +127,13 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .search-row.on, .search-row:hover { background: rgba(255, 255, 255, 0.06); }
 .search-empty { padding: 8px; font-size: 12px; color: var(--ink-faint); }
 
-/* F8 person explorer card. Sits above the buddy panel, which it explains. */
-#person { position: absolute; top: 14px; right: 314px; width: 250px; z-index: 6; padding: 14px 15px; }
+/* Path and person cards share one column, left of the buddy panel. Flow order inside it IS the
+   visual order, so the JSX decides which sits on top; height is content-driven so the column
+   covers no graph it is not drawing on. */
+#sidecol { position: absolute; top: 14px; right: 314px; width: 250px; z-index: 6; display: flex; flex-direction: column; gap: 10px; }
+
+/* F8 person explorer card. */
+#person { padding: 14px 15px; }
 .pp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pp-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .pp-acts { display: flex; gap: 5px; }
@@ -143,7 +148,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .pp-reach { margin: 12px 0 0; font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
 
 /* F10 route panel + route emphasis. */
-#route { position: absolute; left: 18px; bottom: 168px; width: 240px; z-index: 6; padding: 12px 14px; }
+#route { padding: 12px 14px; }
 .rt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rt-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
 .rt-body { margin: 10px 0 0; font-size: 12px; color: var(--ink-dim); line-height: 1.6; }
@@ -159,6 +164,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .chipbtn { font-size: 11px; color: var(--ink-dim); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 9px; cursor: pointer; background: none; }
 .chipbtn:hover { color: var(--ink); border-color: var(--cool); }
 .chipbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.chipbtn[aria-pressed="true"] { color: var(--bg); background: var(--warm); border-color: var(--warm); }
 .bp-list { flex: 1; overflow: auto; padding: 6px 8px; }
 .brow { padding: 9px; border-radius: 9px; cursor: pointer; transition: background 0.12s; border: none; background: none; width: 100%; text-align: left; display: block; }
 .brow:hover, .brow.sel { background: rgba(255, 255, 255, 0.05); }

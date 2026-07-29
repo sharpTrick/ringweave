@@ -15,6 +15,7 @@ import PathPanel from "./panels/PathPanel";
 import Slips from "./panels/Slips";
 import Notice from "./panels/Notice";
 import { useNotice } from "./state/useNotice";
+import { isShownRelated } from "./neighborhood";
 import { useExplorerHistory } from "./state/useExplorerHistory";
 import { useGraph } from "./state/useGraph";
 import { useEscape } from "./state/useEscape";
@@ -63,7 +64,12 @@ export default function App() {
   });
   const { names, settings, rows: constraintRows } = draft;
   const [layout, setLayout] = useState<LayoutMode>("ring");
-  const explorer = useExplorerHistory();
+  // A selection that is not one of the chips on the card in front of you starts a new trail —
+  // see `useExplorerHistory`. The hook holds the latest predicate in a ref and calls it only
+  // during a select, so reading `view` here cannot go stale.
+  const explorer = useExplorerHistory((from, to) =>
+    view !== null && isShownRelated(view.buddies, from, to),
+  );
   // Guard the index against the view it will be read with. `resetSelection` runs BEFORE
   // `bg.generate` and generation is asynchronous, so a selection can survive into a shorter
   // replacement view — where `PersonPanel` hands an out-of-range index to `eccentricity`, whose
@@ -117,7 +123,7 @@ export default function App() {
   // Stable identity, because `BuddyList` and `Slips` are memoized and a fresh arrow each render
   // would defeat both. Destructured so the dependency list names plain identifiers: the lint rule
   // cannot see that a member expression like `path.complete` is itself stable.
-  const completePath = path.complete;
+  const completePath = path.retarget;
   const selectPerson = explorer.select;
   const setSelected = useCallback(
     (i: number | null) => {
@@ -289,29 +295,35 @@ export default function App() {
                   else — reorder these and focus starts jumping across the viewport. Top row
                   left-to-right, then the bottom-left stack downward, then the metrics band. */}
               <LayoutToggle layout={layout} onChange={setLayout} />
-              {selected !== null && (
-                <PersonPanel
-                  view={view}
-                  graph={graph}
-                  index={selected}
-                  canGoBack={explorer.canGoBack}
-                  onSelect={setSelected}
-                  onBack={explorer.back}
-                  onClose={() => setSelected(null)}
-                  onFindPath={() => path.start(selected)}
-                />
-              )}
+              {/* One column, path ABOVE the person card. The path widget re-renders the whole
+                  graph, so it has to be visible from the control that arms it — parked in the
+                  opposite corner, it read as nothing having happened. */}
+              <div id="sidecol">
+                {path.active && (
+                  <PathPanel
+                    view={view}
+                    from={path.pending}
+                    route={path.route}
+                    unreachable={path.unreachable}
+                    onSelect={setSelected}
+                    onClear={path.clear}
+                  />
+                )}
+                {selected !== null && (
+                  <PersonPanel
+                    view={view}
+                    graph={graph}
+                    index={selected}
+                    canGoBack={explorer.canGoBack}
+                    onSelect={setSelected}
+                    onBack={explorer.back}
+                    onClose={() => setSelected(null)}
+                    pathFrom={path.source === selected}
+                    onFindPath={() => path.toggle(selected)}
+                  />
+                )}
+              </div>
               <BuddyList view={view} selected={selected} onSelect={setSelected} />
-              {path.active && (
-                <PathPanel
-                  view={view}
-                  from={path.from}
-                  route={path.route}
-                  unreachable={path.unreachable}
-                  onSelect={(i) => explorer.select(i)}
-                  onClear={path.clear}
-                />
-              )}
               <PersonSearch names={view.names} onSelect={setSelected} />
               <div className="hint">Hover a person to light their buddies</div>
               <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />
@@ -347,7 +359,7 @@ export default function App() {
       </div>
       {/* The path finder's SPOKEN half, always mounted for the same reason. */}
       <div className="sr-live" role="status" aria-live="polite">
-        {view ? pathStatusText(view, path.from, path.route, path.unreachable) : ""}
+        {view ? pathStatusText(view, path.pending, path.route, path.unreachable) : ""}
       </div>
       {/* And the same for SELECTION, which otherwise announces nothing: the panel it opens
           precedes both controls in DOM order, so Tab has already gone past it. */}

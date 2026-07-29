@@ -31,7 +31,13 @@ const RING = fixture(
 function renderPanel(
   f: { view: GraphView; graph: Graph },
   index: number,
-  extra: Partial<{ canGoBack: boolean; onSelect: (i: number) => void; onBack: () => void }> = {},
+  extra: Partial<{
+    canGoBack: boolean;
+    onSelect: (i: number) => void;
+    onBack: () => void;
+    pathFrom: boolean;
+    onFindPath: () => void;
+  }> = {},
 ) {
   const onSelect = extra.onSelect ?? vi.fn();
   const onBack = extra.onBack ?? vi.fn();
@@ -44,7 +50,8 @@ function renderPanel(
       onSelect={onSelect}
       onBack={onBack}
       onClose={() => {}}
-      onFindPath={() => {}}
+      pathFrom={extra.pathFrom ?? false}
+      onFindPath={extra.onFindPath ?? (() => {})}
     />,
   );
   return { onSelect, onBack };
@@ -98,9 +105,12 @@ describe("PersonPanel", () => {
   });
 });
 
+/** Everything is a step, which is what the pre-existing cases below assume. */
+const ALL_RELATED = () => true;
+
 describe("useExplorerHistory", () => {
   it("walks forward and back through people", () => {
-    const { result } = renderHook(() => useExplorerHistory());
+    const { result } = renderHook(() => useExplorerHistory(ALL_RELATED));
     expect(result.current.current).toBeNull();
     expect(result.current.canGoBack).toBe(false);
 
@@ -118,7 +128,7 @@ describe("useExplorerHistory", () => {
   });
 
   it("does not push a re-selection of the person already shown", () => {
-    const { result } = renderHook(() => useExplorerHistory());
+    const { result } = renderHook(() => useExplorerHistory(ALL_RELATED));
     act(() => result.current.select(1));
     act(() => result.current.select(1));
     // Otherwise Back would appear enabled and then do nothing visible.
@@ -126,14 +136,14 @@ describe("useExplorerHistory", () => {
   });
 
   it("never goes back past the first person", () => {
-    const { result } = renderHook(() => useExplorerHistory());
+    const { result } = renderHook(() => useExplorerHistory(ALL_RELATED));
     act(() => result.current.select(3));
     act(() => result.current.back());
     expect(result.current.current).toBe(3);
   });
 
   it("clears the whole trail on deselect and on reset", () => {
-    const { result } = renderHook(() => useExplorerHistory());
+    const { result } = renderHook(() => useExplorerHistory(ALL_RELATED));
     act(() => result.current.select(1));
     act(() => result.current.select(2));
     act(() => result.current.select(null));
@@ -145,8 +155,35 @@ describe("useExplorerHistory", () => {
     expect(result.current.current).toBeNull();
   });
 
+  it("starts a new trail when the person picked is not on the current card", () => {
+    // Back is only meaningful along a trail the user walked. Jumping to someone the card in
+    // front of them does not list — by search, by tapping the graph, from the buddy list — has
+    // no relation to the card behind it, so Back would offer to return to an unrelated stranger.
+    const related = (from: number, to: number) => from === 0 && to === 1;
+    const { result } = renderHook(() => useExplorerHistory(related));
+    act(() => result.current.select(0));
+    act(() => result.current.select(1)); // a chip on 0's card
+    expect(result.current.canGoBack).toBe(true);
+
+    act(() => result.current.select(9)); // not on 1's card
+    expect(result.current.current).toBe(9);
+    expect(result.current.canGoBack).toBe(false);
+  });
+
+  it("keeps walking when each step is a chip on the card before it", () => {
+    // Non-vacuity for the case above: the same hook must still build a trail, or "no back stack"
+    // would pass by never having one.
+    const chain = (from: number, to: number) => to === from + 1;
+    const { result } = renderHook(() => useExplorerHistory(chain));
+    for (const i of [0, 1, 2, 3]) act(() => result.current.select(i));
+    expect(result.current.current).toBe(3);
+    act(() => result.current.back());
+    act(() => result.current.back());
+    expect(result.current.current).toBe(1);
+  });
+
   it("bounds the retained history", () => {
-    const { result } = renderHook(() => useExplorerHistory());
+    const { result } = renderHook(() => useExplorerHistory(ALL_RELATED));
     for (let i = 0; i < 120; i++) act(() => result.current.select(i));
     expect(result.current.current).toBe(119);
     let steps = 0;
