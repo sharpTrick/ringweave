@@ -206,11 +206,11 @@ export function importGraph(data: unknown): GraphView {
     // the parser untouched, exported, and was then refused by this function's own round-trip —
     // breaking the docblock's "round-trips identically with exportGraph" for a file the app
     // itself had just written.
-    const points = codePointsIfOver(p.name, MAX_NAME_CHARS);
-    if (points) {
-      throw new ImportError(
-        `A name is too long (${points.length} characters, the limit is ${MAX_NAME_CHARS}).`,
-      );
+    // The count is deliberately not reported: `codePointsIfOver` now stops at the limit rather
+    // than counting a whole 8 MB name to say how far over it is, and "over 120" is what the
+    // reader needs anyway.
+    if (codePointsIfOver(p.name, MAX_NAME_CHARS)) {
+      throw new ImportError(`A name is too long (over ${MAX_NAME_CHARS} characters).`);
     }
     // Edges reference people by position; a present-but-mismatched id would mislabel them.
     if (p.id !== undefined && p.id !== i) {
@@ -254,7 +254,11 @@ export function importGraph(data: unknown): GraphView {
       !Number.isInteger(a) || !Number.isInteger(b) ||
       a < 0 || b < 0 || a >= n || b >= n
     ) {
-      throw new ImportError(`Edge [${a}, ${b}] refers to someone outside 0..${n - 1}.`);
+      // Through `quote()` like every other interpolation of file content in this module — this
+      // was the last raw one, and it is not a small gap: an endpoint is an arbitrary JSON value,
+      // so a 7.9 MB string or a 1.3 M-element array became the error MESSAGE (9,288,931 chars
+      // measured, 170 MB heap), and only the sink clamp in useNotice kept it out of the DOM.
+      throw new ImportError(`Edge [${quote(a)}, ${quote(b)}] refers to someone outside 0..${n - 1}.`);
     }
     g.addEdge(a, b); // ignores self-loops and de-dupes symmetric entries
   }

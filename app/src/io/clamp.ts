@@ -43,8 +43,31 @@ export function clamp(x: number, lo: number, hi: number): number {
  */
 export function codePointsIfOver(text: string, max: number): string[] | null {
   if (text.length <= max) return null;
-  const points = Array.from(text);
-  return points.length > max ? points : null;
+  // BOUNDED at max+1, not `Array.from(text)`. Callers only ever need to know "is it over" and,
+  // if so, the first `max` points — and the inputs here are a whole file's worth: materializing
+  // every code point of a 9 MB value cost 161 ms and 170 MB to then keep 300 characters of it.
+  // One extra point is exactly enough to answer "over" without reading the rest.
+  const points: string[] = [];
+  for (const ch of text) {
+    points.push(ch);
+    if (points.length > max) return points;
+  }
+  return null;
+}
+
+/**
+ * `text` cut to at most `max` CODE POINTS, unchanged when it already fits.
+ *
+ * The bulk cap, as opposed to `clampText`'s display cap: no ellipsis, because this trims input
+ * before it is parsed rather than text on its way to a DOM node. The two bulk `MAX_PARSE_CHARS`
+ * cuts (the parser's and the roster editor's) were still slicing by code UNIT, so a file whose
+ * 500,000th unit is the high half of a surrogate pair produced an ill-formed name — and an
+ * unpaired surrogate is not in Cc/Cf/Zl/Zp, so every gate downstream accepted it. That is the
+ * same defect the per-NAME limit was fixed for one round earlier, still live two levels up.
+ */
+export function clampToPoints(text: string, max: number): string {
+  const points = codePointsIfOver(text, max);
+  return points ? points.slice(0, max).join("") : text;
 }
 
 /** Ellipsis-truncate to `max` characters. Returns the input untouched when it already fits. */

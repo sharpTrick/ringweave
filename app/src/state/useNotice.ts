@@ -1,7 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 import { clampText } from "../io/clamp";
 
-const AUTO_CLEAR_MS = 4000;
+/**
+ * How long a transient message stays up. Exported because it is the app's FLOOR for "long
+ * enough to read", not a detail of this hook: the buddy list's "Copied" confirmation had its
+ * own undocumented 1100 ms — a quarter of it, timed from AFTER an awaited clipboard write, with
+ * no dismiss affordance — so the one piece of feedback that action produces was the one most
+ * likely to be missed, and a screen reader could revert the region before announcing it.
+ */
+export const AUTO_CLEAR_MS = 4000;
 
 /**
  * Hard ceiling on any notice, applied at the SINK.

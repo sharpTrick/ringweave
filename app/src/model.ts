@@ -208,7 +208,7 @@ export function connectionSummary(m: Metrics): string {
   // yardstick with `degreeMax` alone meant the two panels stated different per-person buddy
   // counts for one graph whenever it was not regular — and the prose one was the count only
   // the best-connected person actually had.
-  const per = `${degreeLabel(m)} ${m.degreeMax === 1 && m.regular ? "buddy" : "buddies"} each`;
+  const per = buddiesEachLabel(m);
   if (qualityPercent(m) < WELL_LINKED_PCT) return `everyone's connected, but loosely linked for ${per}`;
   return `everyone's well-linked for ${per}`;
 }
@@ -251,6 +251,30 @@ export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
     regular, else a min–max range. Reflects the produced graph, not the target `k`. */
 export function degreeLabel(m: Metrics): string {
   return m.regular ? String(m.degreeMax) : `${m.degreeMin}–${m.degreeMax}`;
+}
+
+/**
+ * "4 buddies" / "1 buddy" — the number AND its noun, from one seam.
+ *
+ * `degreeLabel` made the NUMBER single-sourced after two panels disagreed about it; the noun
+ * beside it stayed copy-pasted, and the rail then hardcoded the plural while the connection
+ * caption and the shortfall line both pluralised correctly. A 2-person, 1-edge import read
+ * "2 people · 1 buddies each" next to "everyone's well-linked for 1 buddy each" — one graph,
+ * two panels, disagreeing about the same count. A seam for the number and none for the noun
+ * is half a seam.
+ */
+export function buddiesLabel(m: Metrics): string {
+  return `${degreeLabel(m)} ${m.regular && m.degreeMax === 1 ? "buddy" : "buddies"}`;
+}
+
+/** "4 buddies each" — the phrase the rail and the connection caption both render. */
+export function buddiesEachLabel(m: Metrics): string {
+  return `${buddiesLabel(m)} each`;
+}
+
+/** "person" / "people". The other noun the rail got wrong ("1 people"). */
+export function peopleNoun(n: number): string {
+  return n === 1 ? "person" : "people";
 }
 
 /**
@@ -337,8 +361,8 @@ export function pathStatusText(
   if (route !== null) {
     const steps = route.length - 1;
     // Clamped: a route's length is the graph's diameter, which an imported file controls, and
-    // this string goes straight into a permanently-mounted live region. The FOURTH sink of this
-    // shape — see io/clamp.ts for why they are now one helper rather than four.
+    // this string goes straight into a permanently-mounted live region. One of the three sinks
+    // io/clamp.ts names — see there for why they are one helper rather than three.
     const chain = clampList(route.map((i) => view.names[i]), ROUTE_NAMES_MAX, " → ");
     return `${chain} — ${steps} step${steps === 1 ? "" : "s"}`;
   }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { buddyLabel, type GraphView } from "../model";
 import { copyText, downloadBlob, neutralizeCell, toCsv } from "../io/download";
+import { AUTO_CLEAR_MS } from "../state/useNotice";
 
 interface Props {
   view: GraphView;
@@ -25,7 +26,8 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
     const ok = await copyText(text);
     if (ok) {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1100);
+      // The app's shared floor, not a local literal — see AUTO_CLEAR_MS.
+      setTimeout(() => setCopied(false), AUTO_CLEAR_MS);
     }
   };
 

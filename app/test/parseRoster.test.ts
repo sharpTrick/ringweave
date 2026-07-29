@@ -126,3 +126,30 @@ describe("what the parser emits, it must be able to re-parse", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+// `String.prototype.isWellFormed` is ES2024 and this package targets earlier, so the property is
+// spelled out: a surrogate code unit must be half of a pair, in the right order.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+describe("bulk truncation cuts where names are cut: by code point", () => {
+  it("never emits a name that is not well-formed UTF-16", () => {
+    // The per-NAME limit was fixed to cut by code point; the two BULK caps (this parser's
+    // MAX_PARSE_CHARS and the roster editor's) still sliced by code unit two levels up, so a
+    // paste whose 500,000th unit is the high half of a pair produced an ill-formed name — and
+    // an unpaired surrogate passes every gate downstream, reaching the DOM, the clipboard and
+    // the CSV, where UTF-8 encoding turns it into U+FFFD.
+    const filler = "ab\n".repeat(Math.ceil(MAX_PARSE_CHARS / 3));
+    const text = `${filler.slice(0, MAX_PARSE_CHARS - 1)}\u{1F600}tail`;
+    const { names } = parseRoster(text);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(name).not.toMatch(LONE_SURROGATE);
+  });
+
+  it("normalises a lone surrogate that arrived in the input itself", () => {
+    // Not only truncation: a hand-authored file can carry one. The tolerant authority replaces
+    // it (like every other hostile character class); importGraph refuses it.
+    const { names } = parseRoster("Ana\uD83D\nBen");
+    for (const name of names) expect(name).not.toMatch(LONE_SURROGATE);
+    expect(names).toContain("Ben");
+  });
+});

@@ -71,3 +71,19 @@ export type GenerateResponse =
   | { id: number; kind: "ok"; result: GraphResult }
   | { id: number; kind: "error"; error: string }
   | { id: number; kind: "refused"; refusals: Reason[] };
+
+/**
+ * Whether a request needs the constraint-aware builder.
+ *
+ * ONE predicate, over the wire shape, because there were two: the worker routed on
+ * `required.length === 0 && prohibited.length === 0` and the main thread picked its auto-polish
+ * budget from `ConstraintPair[].length > 0` — equivalent only because `splitPairs` preserves the
+ * total, on opposite sides of the structured-clone boundary, in different files, under different
+ * names for the same fact. They do not look like duplicates of each other, which is exactly what
+ * makes the next field (F9's priors) easy to add to one and miss in the other: routing a
+ * priors-only request through `buildBuddyGraph`, which never sees priors, would preserve nothing
+ * and report success.
+ */
+export function isConstrainedRequest(c: GenerateRequest["constraints"]): boolean {
+  return c.required.length > 0 || c.prohibited.length > 0;
+}

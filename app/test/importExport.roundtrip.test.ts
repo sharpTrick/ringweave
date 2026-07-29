@@ -331,6 +331,52 @@ describe("import: lossless round-trip and defaults", () => {
     expect(clampText("short", 10)).toBe("short");
   });
 
+  it("bounds every error message it can throw, whatever the file contains", () => {
+    // The module's own docblock says every interpolation of untrusted content goes through
+    // `quote()`. One did not: the malformed-edge message took the raw endpoints, which are
+    // arbitrary JSON — a 7.9 MB string, or an array that `${}` stringifies by joining every
+    // element (9,288,931 characters measured, 170 MB heap). Only the clamp at the DOM sink kept
+    // it off screen, and a producer-side bound the file claims to have is not a bound.
+    const huge = "A".repeat(200_000);
+    const list = Array.from({ length: 20_000 }, (_, i) => i);
+    for (const endpoint of [huge, list, { deep: huge }] as unknown[]) {
+      try {
+        importGraph({ version: 1, people: peopleOf(3), edges: [[endpoint, 0]] });
+        throw new Error("expected a refusal");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ImportError);
+        expect((err as Error).message.length).toBeLessThan(500);
+      }
+    }
+    // ...and the same for the over-long-name path, which used to count a whole 8 MB name to say
+    // how far over the limit it was.
+    try {
+      importGraph({ version: 1, people: [{ id: 0, name: huge }, ...peopleOf(3).slice(1)], edges: [] });
+      throw new Error("expected a refusal");
+    } catch (err) {
+      expect((err as Error).message.length).toBeLessThan(500);
+    }
+  });
+
+  it("refuses a name that is not well-formed UTF-16, however it got there", () => {
+    // A lone surrogate is not in Cc/Cf/Zl/Zp, so before `\p{Cs}` joined that class nothing here
+    // could see it: it round-trips through JSON but a Blob encodes it as U+FFFD, so the exported
+    // CSV and the exported JSON disagreed about the same person's name. Refused on this side,
+    // normalised on the parser's — the two authorities' usual split.
+    expect(() => importGraph({
+      version: 1,
+      people: [{ id: 0, name: "ab\uD83D" }, ...peopleOf(3).slice(1)],
+      edges: [],
+    })).toThrow(/name/i);
+    // The guard is about UNPAIRED surrogates only: a well-formed pair is one code point outside
+    // Cs, so every emoji still imports.
+    expect(() => importGraph({
+      version: 1,
+      people: [{ id: 0, name: "ab\u{1F600}" }, ...peopleOf(3).slice(1)],
+      edges: [],
+    })).not.toThrow();
+  });
+
   it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {
     const v = importGraph({ version: 1, people: peopleOf(4), edges: [[0, 1], [1, 2], [2, 3], [3, 0]] });
     expect(v.settings.seed).toBe(DEFAULT_SETTINGS.seed);

@@ -8,6 +8,7 @@ import {
 import { describeReasons } from "../io/constraintMessages";
 import ConstraintsEditor from "./ConstraintsEditor";
 import { MAX_PARSE_CHARS, charCapNotice, parseRoster } from "../io/parseRoster";
+import { clampToPoints } from "../io/clamp";
 import { feasibility } from "../io/feasibility";
 import { readFileText } from "../io/readFileText";
 import { SAMPLE_NAMES } from "../sample";
@@ -96,9 +97,9 @@ export default function RosterModal({
   // can't fire on the UI path (and the name-cap warning misses a <MAX_NAMES-distinct giant
   // paste), so we surface the truncation notice here — capText is the UI truncation authority.
   const capText = (s: string) => {
-    const over = s.length > MAX_PARSE_CHARS;
-    setInputCapped(over);
-    return over ? s.slice(0, MAX_PARSE_CHARS) : s;
+    const cut = clampToPoints(s, MAX_PARSE_CHARS);
+    setInputCapped(cut !== s);
+    return cut;
   };
 
   // The ONE way to replace the roster text. Clears the transient notices (a stale file-error or

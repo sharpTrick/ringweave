@@ -3,6 +3,7 @@ import { asplGap, buildBuddyGraph } from "ringweave";
 import { generateResult } from "./helpers";
 import {
   connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
+  buddiesLabel, buddiesEachLabel, peopleNoun,
   targetShortfall, type Metrics, type GraphView,
 } from "../src/model";
 
@@ -144,5 +145,36 @@ describe("every displayed buddy count comes from one seam", () => {
     const stated = /for (.+?) buddies each/.exec(connectionSummary(m))?.[1];
     expect(stated).toBe(label);
     expect(stated).not.toBe(String(m.degreeMax));
+  });
+});
+
+describe("every displayed count phrase agrees about its noun, too", () => {
+  // `degreeLabel` made the NUMBER single-sourced after two panels disagreed about it. The noun
+  // beside it stayed copy-pasted, and the rail then hardcoded both plurals: a 2-person, 1-edge
+  // import rendered "2 people · 1 buddies each" next to "everyone's well-linked for 1 buddy
+  // each" — one graph, two panels, disagreeing about the same count. A seam for the number and
+  // none for the noun is half a seam.
+  const oneEach: Metrics = {
+    aspl: 1, diameter: 1, girth: Infinity as unknown as number, quality: 1, connected: true,
+    largestComponentFraction: 1, regular: true, degreeMin: 1, degreeMax: 1,
+  };
+  const fourEach: Metrics = { ...oneEach, degreeMin: 4, degreeMax: 4 };
+  const range: Metrics = { ...oneEach, regular: false, degreeMin: 3, degreeMax: 4 };
+
+  it("uses the singular exactly when the count it qualifies is 1", () => {
+    expect(buddiesLabel(oneEach)).toBe("1 buddy");
+    expect(buddiesLabel(fourEach)).toBe("4 buddies");
+    // A range is never singular, whatever its endpoints.
+    expect(buddiesLabel(range)).toBe("3–4 buddies");
+    expect(peopleNoun(1)).toBe("person");
+    expect(peopleNoun(0)).toBe("people");
+    expect(peopleNoun(2)).toBe("people");
+  });
+
+  it("the caption and the rail render the same phrase for the same graph", () => {
+    // Both go through the seam, so this cannot be satisfied by two strings that happen to agree.
+    for (const m of [oneEach, fourEach, range]) {
+      expect(connectionSummary(m)).toContain(buddiesEachLabel(m));
+    }
   });
 });

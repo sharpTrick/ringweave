@@ -19,6 +19,7 @@ import {
   type ConstrainedBuddyResult,
 } from "ringweave";
 import { joinPairs, toConstraints } from "../constraints";
+import { isConstrainedRequest } from "./protocol";
 import type { GenerateRequest, GenerateResponse, GraphResult } from "./protocol";
 
 /** Rebuild a core Graph from an edge list, so girth can be measured off-thread. */
@@ -86,7 +87,7 @@ function fromConstrained(n: number, r: ConstrainedBuddyResult): GraphResult {
 export function runGeneration(req: GenerateRequest): GenerateResponse {
   const { id, n, k, options, constraints } = req;
   try {
-    if (constraints.required.length === 0 && constraints.prohibited.length === 0) {
+    if (!isConstrainedRequest(constraints)) {
       return { id, kind: "ok", result: fromUnconstrained(buildBuddyGraph(n, k, options)) };
     }
 

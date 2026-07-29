@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { viewFromResult, type GraphView, type Settings } from "../model";
 import { autoPolishEnabled } from "ringweave";
 import { splitPairs, type ConstraintPair } from "../constraints";
+import { isConstrainedRequest } from "../worker/protocol";
 import { useGenerationWorker } from "./useGenerationWorker";
 
 function sameStrings(a: string[], b: string[]): boolean {
@@ -105,8 +106,13 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     // POLISH_MAX_N` was k-blind, so at k=12 it happily dispatched an explicit polish=true
     // at n=100 — well past the point the budget declines — which is the expensive
     // direction of the same drift.
+    // The SAME predicate the worker routes on, over the same wire shape, computed once and used
+    // for both — see `isConstrainedRequest`. Asking `constraints.length > 0` here was a second,
+    // structurally different way to decide one fact, and the budget it picks is only correct if
+    // it agrees with the builder that actually runs.
+    const wire = splitPairs(constraints);
     const wouldAutoPolish = autoPolishEnabled(names.length, settings.buddies, {
-      constrained: constraints.length > 0,
+      constrained: isConstrainedRequest(wire),
     });
     const polish = settings.polish === true && !wouldAutoPolish ? "auto" : settings.polish;
     genGenerate({
@@ -117,7 +123,7 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
         polish,
         seed: settings.seed,
       },
-      constraints: splitPairs(constraints),
+      constraints: wire,
     });
   }, [genGenerate]);
 

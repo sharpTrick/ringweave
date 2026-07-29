@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_SETTINGS, degreeLabel, isOptimal, nextRerollSeed, pathStatusText, rerollBlockReason,
+  DEFAULT_SETTINGS, buddiesEachLabel, isOptimal, peopleNoun, nextRerollSeed, pathStatusText, rerollBlockReason,
   selectionStatusText, targetShortfall, type GraphView, type Settings,
 } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
@@ -234,16 +234,22 @@ export default function App() {
     // no graph. There are exactly two dispatch sites, and now both do this — which is what makes
     // the array that resolves a `Reason.person` the same array that was generated from.
     //
-    // ...and NOT the settings, which is where the previous version of this got it wrong twice.
-    // `names` and the rule rows are COPIED FROM THE VIEW verbatim, so committing them cannot
-    // make App disagree with the graph on screen. The seed is the one value this path
-    // SYNTHESISES (`nextRerollSeed`), and it only becomes true if the reroll succeeds — so
-    // writing it here left the Advanced → Seed field showing a seed the displayed graph was not
-    // built with, contradicting the file `exportGraph` writes, for every non-success outcome:
-    // cancel, error, refusal, supersession. The adoption effect above already takes the advanced
-    // seed from `view.settings` when — and only when — a view actually arrives. One deletion
-    // closes all four outcomes; a branch per outcome would not have.
+    // ALL THREE FROM THE VIEW, and `view.settings` rather than `s`. Three rounds argued over
+    // these lines and each answer was closer than the last, because there are two different
+    // things here and only one of them is a copy:
+    //   - `names` and the rule rows are COPIED from the view verbatim, so committing them is
+    //     always safe. Not committing them was the refusal-names-the-wrong-roster bug.
+    //   - `settings` is a copy too EXCEPT for the seed, which this path SYNTHESISES with
+    //     `nextRerollSeed` and which only becomes true if the reroll succeeds. Committing `s`
+    //     left the Advanced → Seed field showing a seed the displayed graph was not built with,
+    //     contradicting the file `exportGraph` writes.
+    // Committing NOTHING was the over-correction: `s`'s non-seed fields ARE `view.settings`, so
+    // dropping all of `settings` left a buddy count from an abandoned edit beside a roster just
+    // re-committed from the view — a reopened dialog with Generate DISABLED and a feasibility
+    // note that is false of the graph on screen. Committing `view.settings` keeps the seed out
+    // and the split provenance with it.
     setNames(view.names);
+    setSettings(view.settings);
     setConstraintRows(toNamedPairs(view.constraints, view.names));
     bg.generate(view.names, s, view.constraints, { reroll: true }); // identical result -> notice
   };
@@ -332,7 +338,7 @@ export default function App() {
               <div id="rail" className="glass">
                 <div className="rail-lbl">This roster</div>
                 <div className="rail-big tabnum">{view.names.length}</div>
-                <div className="rail-sub">people · {degreeLabel(view.metrics)} buddies each</div>
+                <div className="rail-sub">{peopleNoun(view.names.length)} · {buddiesEachLabel(view.metrics)}</div>
                 <div className="rail-btns">
                   <button className="btn btn-warm" onClick={handleReroll}>↻ Different arrangement</button>
                   <button className="btn btn-ghost" onClick={() => setModalOpen(true)}>Edit people</button>

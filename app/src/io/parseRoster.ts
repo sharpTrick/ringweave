@@ -1,5 +1,5 @@
 import { MAX_ROSTER_N } from "../model";
-import { clampList, codePointsIfOver } from "./clamp";
+import { clampList, clampToPoints, codePointsIfOver } from "./clamp";
 
 export interface ParsedRoster {
   names: string[];
@@ -49,8 +49,14 @@ const TOKEN = /[^\n,]+/g;
  *
  * `parseRoster` normalizes these to spaces (it is the tolerant authority); `importGraph`
  * refuses them (it refuses everything it cannot round-trip). Same class, opposite policy.
+ *
+ * `\p{Cs}` is UNPAIRED surrogates only: with the `u` flag the class matches code POINTS, and a
+ * well-formed pair is one non-Cs code point, so every emoji passes untouched. A lone surrogate
+ * is an ill-formed string that no other guard here can see — it is not a control, format or
+ * separator character — and it round-trips through JSON but becomes U+FFFD when a Blob encodes
+ * it as UTF-8, so the exported CSV and the exported JSON disagree about the same person's name.
  */
-export const NAME_HOSTILE_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+export const NAME_HOSTILE_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu;
 const CONTROL_CHARS = NAME_HOSTILE_CHARS;
 
 /** THE character-truncation notice — shared so the parser's own warning and the RosterModal UI
@@ -71,11 +77,10 @@ export function charCapNotice(): string {
 export function parseRoster(raw: string): ParsedRoster {
   const warnings: string[] = [];
 
-  let text = raw;
-  if (text.length > MAX_PARSE_CHARS) {
-    text = text.slice(0, MAX_PARSE_CHARS);
-    warnings.push(charCapNotice());
-  }
+  // By CODE POINT, like every other cut in this file — `slice` here would split a surrogate
+  // pair straddling the cap and emit an ill-formed name that nothing downstream rejects.
+  const text = clampToPoints(raw, MAX_PARSE_CHARS);
+  if (text !== raw) warnings.push(charCapNotice());
 
   const keptByKey = new Map<string, string>(); // case-insensitive key -> first-kept display name
   const names: string[] = [];

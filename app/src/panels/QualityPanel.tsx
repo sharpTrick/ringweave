@@ -1,5 +1,5 @@
 import {
-  connectionSummary, constraintSummary, degreeLabel, qualityPercent, targetShortfall,
+  buddiesLabel, connectionSummary, constraintSummary, qualityPercent, targetShortfall,
   type GraphView,
 } from "../model";
 
@@ -58,8 +58,7 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
               whenever the graph is not regular, and disagreed with the two panels beside it. The
               caption had exactly this defect fixed one round earlier; this line was added in that
               same commit and reintroduced it. */}
-          Each person has {degreeLabel(view.metrics)}{" "}
-          {view.metrics.regular && view.metrics.degreeMax === 1 ? "buddy" : "buddies"}, not the{" "}
+          Each person has {buddiesLabel(view.metrics)}, not the{" "}
           {shortfall.asked} in Settings.
         </div>
       )}
