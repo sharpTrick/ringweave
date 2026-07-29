@@ -1,5 +1,5 @@
 import {
-  buddiesLabel, connectionSummary, constraintSummary, qualityPercent, targetShortfall,
+  buddiesLabel, connectionSummary, constraintSummary, qualityPercent, separationShortfall, targetShortfall,
   type GraphView,
 } from "../model";
 
@@ -21,6 +21,7 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
   const q = qualityPercent(m); // same rounded value the caption thresholds on
   const rules = constraintSummary(view);
   const shortfall = targetShortfall(view);
+  const separation = separationShortfall(view);
   return (
     <section id="metrics" className="glass" aria-label="Connection quality">
       <div className="metric">
@@ -60,6 +61,16 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
               same commit and reintroduced it. */}
           Each person has {buddiesLabel(view.metrics)}, not the{" "}
           {shortfall.asked} in Settings.
+        </div>
+      )}
+      {separation && (
+        // The same disclosure as the buddy-count line above, in the same words and the same
+        // place, because it is the same defect: a Settings value shown as if it were delivered.
+        // Worded about the GRAPH for the same reason too — an imported graph has no request
+        // behind it, and the sentence is still true of what is on screen.
+        <div className="rules-line">
+          Buddies are {separation.got} {separation.got === 1 ? "step" : "steps"} apart, not the{" "}
+          {separation.asked} in Settings.
         </div>
       )}
       {rules && <div className="rules-line">{rules}</div>}

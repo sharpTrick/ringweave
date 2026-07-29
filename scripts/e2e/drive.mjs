@@ -92,7 +92,11 @@ await page.getByLabel("Rule 2, kind").selectOption("prohibited");
 await page.getByText("Generate buddy graph").click();
 await generationSettles(page);
 
-const rulesLine = await page.locator(".rules-line").textContent();
+// `.rules-line` is the class the quality panel uses for EVERY disclosure line — the buddy
+// count shortfall, the separation shortfall, and the constraint summary — so the locator
+// has to name which one. Reading "the first .rules-line" would silently follow whichever
+// disclosure happens to render first.
+const rulesLine = await page.locator(".rules-line", { hasText: /buddy rule/ }).textContent();
 check("constrained generation reports its rules", /all 2 buddy rules satisfied/.test(rulesLine ?? ""), rulesLine ?? "(none)");
 
 // The rules must actually hold in the rendered graph, not just in the caption.

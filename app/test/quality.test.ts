@@ -3,7 +3,7 @@ import { asplGap, buildBuddyGraph } from "ringweave";
 import { generateResult } from "./helpers";
 import {
   connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
-  buddiesLabel, buddiesEachLabel, peopleNoun,
+  buddiesLabel, buddiesEachLabel, peopleNoun, separationShortfall, SEPARATION_DEFAULT,
   targetShortfall, type Metrics, type GraphView,
 } from "../src/model";
 
@@ -176,5 +176,42 @@ describe("every displayed count phrase agrees about its noun, too", () => {
     for (const m of [oneEach, fourEach, range]) {
       expect(connectionSummary(m)).toContain(buddiesEachLabel(m));
     }
+  });
+});
+
+describe("a Settings value shown as delivered is disclosed when it was not", () => {
+  // `targetShortfall` closed this for the buddy COUNT; the minimum separation had the identical
+  // gap and no disclosure. At k=4 the default request of 5 is delivered as 3 at n=12, 20 and 30,
+  // and `{minSeparation: 12}` and `{minSeparation: 5}` produce the identical graph — so the
+  // control looked inert and the export recorded a target the graph does not meet.
+  const viewAt = (n: number, k: number, asked?: number): GraphView =>
+    viewFromResult(
+      Array.from({ length: n }, (_, i) => `P${i}`),
+      { ...DEFAULT_SETTINGS, buddies: k, minSeparation: asked, polish: false },
+      [],
+      generateResult(n, k, { seed: 12345, polish: false, minSeparation: asked }),
+    );
+
+  it("names the delivered separation whenever it falls short of the request", () => {
+    let disclosed = 0;
+    for (const n of [12, 20, 30]) {
+      const view = viewAt(n, 4);
+      const short = separationShortfall(view);
+      // Derived from girth, which is what the core's own postcondition ties separation to.
+      expect(view.metrics.girth).not.toBeNull();
+      expect(short).not.toBeNull();
+      expect(short!.asked).toBe(SEPARATION_DEFAULT);
+      expect(short!.got).toBe(view.metrics.girth! - 1);
+      expect(short!.got).toBeLessThan(short!.asked);
+      disclosed++;
+    }
+    expect(disclosed).toBe(3);
+  });
+
+  it("says nothing when the request was met", () => {
+    // Ask for less than the graph delivers and the line must not appear — a disclosure that
+    // always fires is not a disclosure.
+    const view = viewAt(20, 4, 2);
+    expect(separationShortfall(view)).toBeNull();
   });
 });

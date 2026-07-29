@@ -321,6 +321,31 @@ export function targetShortfall(view: GraphView): { asked: number; got: number }
 }
 
 /**
+ * How far short of the requested MINIMUM SEPARATION the delivered graph fell, or null when it
+ * met it — the sibling of `targetShortfall`, and the same gap one setting over.
+ *
+ * The Advanced panel showed the number the user ASKED for while the core routinely demotes it,
+ * and nothing disclosed the difference: at k=4 the default request of 5 is delivered as 3 at
+ * n=12, 20 and 30, and `{minSeparation: 12}` and `{minSeparation: 5}` produce the identical
+ * graph — so the control looked inert and the export recorded a target the graph does not meet.
+ *
+ * DERIVED FROM `girth`, which already crosses the worker boundary, rather than carrying the
+ * core's `finalMinSeparation` across as a new field: separation IS `girth - 1` (the core's own
+ * postcondition, and the property its tests pin), so a second channel for the same fact would be
+ * a second thing to keep in step. It also works on the constrained path, whose builder ignores
+ * the option entirely and reports no target at all, and on an imported graph, which has no
+ * builder behind it.
+ *
+ * `girth === null` means acyclic — no cycle to measure, separation unbounded, nothing short.
+ */
+export function separationShortfall(view: GraphView): { asked: number; got: number } | null {
+  if (view.metrics.girth === null) return null;
+  const asked = view.settings.minSeparation ?? SEPARATION_DEFAULT;
+  const got = view.metrics.girth - 1;
+  return got < asked ? { asked, got } : null;
+}
+
+/**
  * What a screen reader is told when a person is selected.
  *
  * Selecting someone from the buddy list or a search result is the app's headline task, and it

@@ -59,10 +59,12 @@ import { Graph, MAX_ROSTER } from "./graph.js";
 import {
   DEFAULT_MIN_SEPARATION,
   MAX_CONSTRAINED_N,
+  MAX_GREEDY_WORK,
   MAX_POLISH_WORK,
+  greedyWork,
   polishWork,
 } from "./budgets.js";
-import { ringGreedy } from "./greedy.js";
+import { MAX_CACHED_N, ringGreedy } from "./greedy.js";
 import { checkSeed, isSeed } from "./rng.js";
 import { polish, DEFAULT_POLISH_ITERS } from "./polish.js";
 import {
@@ -525,6 +527,34 @@ function resolveWantPolish(
  * Exporting a number would have re-created the same problem one release later. The
  * gate is a function of (n, k, which builder), so the export is the function.
  */
+/**
+ * Whether `buildBuddyGraph` will generate this configuration rather than throw — the gate
+ * itself, exported, the sibling of {@link autoPolishEnabled} and for the same reason.
+ *
+ * The app's pre-flight promised "you can generate this" for its whole advertised rectangle
+ * (n <= 1000, k in [2, 12]) from its own constants, and that promise was true only because the
+ * densest corner lands on `MAX_GREEDY_WORK` by exactly zero margin: `greedyWork(1000, 12)` is
+ * 1.5e10 and the budget is 1.5e10. One constant edit in either package — a roster cap of 1001,
+ * a buddy cap of 13, or a tightened budget here — would have had the UI enable Generate for a
+ * configuration this package throws on, surfacing as a raw library string. That is the same
+ * shape as the k-blind polish-cap literal `autoPolishEnabled` replaced above, and exporting the NUMBER
+ * would recreate it one release later.
+ *
+ * Covers what is predictable BEFORE the run: the argument domain, the memory cap, and the work
+ * budget. It cannot cover `repairDegrees`' runtime counter, which by construction only knows
+ * what it has already spent — that path is bounded, not predicted, and says so.
+ */
+export function canGenerate(n: number, k: number): boolean {
+  return (
+    Number.isInteger(n) &&
+    Number.isInteger(k) &&
+    n >= 0 &&
+    k >= 2 &&
+    n <= MAX_CACHED_N &&
+    greedyWork(n, k) <= MAX_GREEDY_WORK
+  );
+}
+
 export function autoPolishEnabled(
   n: number,
   k: number,

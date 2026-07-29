@@ -1,3 +1,4 @@
+import { canGenerate } from "ringweave";
 import { MAX_ROSTER_N } from "../model";
 
 /** Above this, generation is noticeably slow; warn as a preflight (not a blocker). Module-local:
@@ -34,6 +35,21 @@ export function feasibility(n: number, k: number): Feasibility {
     return {
       canGenerate: false,
       messages: [`That's ${n} people — the most this tool generates for is ${MAX_ROSTER_N}.`],
+    };
+  }
+  // ASK THE CORE, don't mirror its budget. Everything above is the app's OWN policy — its
+  // advertised roster ceiling and its plain-language wording — but "will generation actually
+  // run" is the core's arithmetic, and this function used to promise it for the whole
+  // (n <= 1000, k in [2, 12]) rectangle on the strength of the constants alone. That held only
+  // because the densest corner sits on `MAX_GREEDY_WORK` by exactly zero margin, which nothing
+  // tested: one constant edit in either package and the button would enable a configuration the
+  // library throws on, surfacing as a raw error string. Same shape as the k-blind polish-cap
+  // literal `autoPolishEnabled` replaced (see model.ts); this was the last app-side gate still
+  // predicting a core budget instead of asking it.
+  if (!canGenerate(n, k)) {
+    return {
+      canGenerate: false,
+      messages: [`${n} people with ${k} buddies each is too big to arrange — use fewer of either.`],
     };
   }
 

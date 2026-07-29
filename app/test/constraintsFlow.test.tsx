@@ -184,6 +184,35 @@ describe("a row still being typed is not a broken rule", () => {
     renderModal();
     addRule();
     setRow(1, "Alice", "Nobody");
-    expect(screen.getByText(/isn't in this roster/)).toBeTruthy();
+    // The AGGREGATE note, specifically: each flagged field now also carries its own per-row
+    // reason, so a bare text match finds two things and would pass on either.
+    expect(screen.getByText(/buddy rule.* names? someone who isn't in this roster/)).toBeTruthy();
+  });
+});
+
+describe("a flagged rule row carries its own reason", () => {
+  it("points the flagged field at a description that names the person", () => {
+    // `aria-invalid` says a control is wrong and nothing more. The only explanation was a COUNT
+    // in the shared note stack ("2 buddy rules name someone who isn't in this roster"), which
+    // never says WHICH row — so a screen-reader user tabbing several rules heard "invalid, edit
+    // text, Rule 2, second person" and had to cross-reference an aggregate elsewhere in the DOM.
+    // The buddies stepper already carries its own state in its label for the same reason.
+    renderModal();
+    addRule();
+    setRow(1, "Alice", "Zoe");
+
+    const flagged = screen.getByLabelText("Rule 1, second person");
+    expect(flagged.getAttribute("aria-invalid")).toBe("true");
+    // The NAME is unchanged — that is the control's identity, and it must not move as the user
+    // types. The reason rides on the description, which is the part allowed to vary.
+    const describedBy = flagged.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const description = document.getElementById(describedBy!);
+    expect(description?.textContent).toMatch(/Zoe.*isn't in this roster/);
+
+    // The matched field points at nothing — a reason on every field explains nothing.
+    const ok = screen.getByLabelText("Rule 1, first person");
+    expect(ok.getAttribute("aria-invalid")).toBeNull();
+    expect(ok.getAttribute("aria-describedby")).toBeNull();
   });
 });
