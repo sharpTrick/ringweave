@@ -191,18 +191,6 @@ export const MAX_POLISH_WORK = 865_280_000;
 const POLISH_ITER_OVERHEAD = 64;
 
 /**
- * Absolute ceiling on polish iterations, independent of the work budget.
- *
- * The work budget alone cannot bound the small-n case: as n·m falls, the
- * affordable iteration count rises without limit, and the fixed per-iteration
- * cost then dominates a number the model thinks is cheap. This ceiling is simply
- * the documented default, which makes `polishIters` an option that can only ask
- * for LESS work than the default — never more. Nothing in this repo asks for
- * more, and a knob that can only reduce cost cannot be turned into a hang.
- */
-const MAX_POLISH_ITERS = 20_000;
-
-/**
  * The iteration count polish may actually run, given the graph it was handed.
  *
  * THE ONE enforcement point, called from inside `polish` and `polishConstrained`
@@ -223,11 +211,22 @@ export function boundedPolishIterations(
   requested: number | undefined,
   fallback: number,
 ): number {
-  const asked = Number.isInteger(requested) && (requested as number) >= 0 ? (requested as number) : fallback;
+  // CLAMPED TO THE DEFAULT, which is what makes `polishIters` a knob that can only ask for LESS
+  // work — the property the previous version of this asserted in a comment and did not enforce.
+  // It bounded `asked` by a single constant (20,000) equal to the UNCONSTRAINED default, so on
+  // the constrained path, whose default is 8,000, a caller-supplied 20,000 bought 2.5x the
+  // iterations: `buildConstrainedBuddyGraph(150, 4, cons)` measured 11.71 s by default and
+  // 18.98 s with `polishIters: 20000`. Not a hang — `MAX_POLISH_WORK` still bounds it — but the
+  // stated invariant was false, and the constant chosen to make it true could not, because it
+  // was one number for two defaults. Clamping to the caller's own `fallback` makes it true for
+  // every path, including any added later, and retires the constant.
+  const asked = Number.isInteger(requested) && (requested as number) >= 0
+    ? Math.min(requested as number, fallback)
+    : fallback;
   // The overhead term also guarantees a positive divisor when m is 0.
   const perIteration = POLISH_ITER_OVERHEAD + n * (n + m);
   // The budget LEFT after the fixed sweeps, not the whole budget — see `loopBudget`.
-  return Math.min(asked, Math.floor(loopBudget(n, m) / perIteration), MAX_POLISH_ITERS);
+  return Math.min(asked, Math.floor(loopBudget(n, m) / perIteration));
 }
 
 /**

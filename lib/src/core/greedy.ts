@@ -37,6 +37,21 @@ export interface GreedyOptions {
   repair?: boolean;
 }
 
+/**
+ * Build a ~k-regular graph on `n` people: a ring seed, then greedily join the pair that is
+ * farthest apart and least connected, maintaining an all-pairs distance cache incrementally.
+ * RNG-free, so the same (n, k, opts) always yields the same edge set — byte-identical to the
+ * Python reference `gen_c_cached.ring_greedy_cached`.
+ *
+ * THROWS rather than refuses (it has no report channel): on `k < 2` (the ring seed floors every
+ * degree at 2 — use `buildConstrainedBuddyGraph` below that), on a malformed `k`/`mind`, and on
+ * a roster past `MAX_CACHED_N` or `MAX_GREEDY_WORK`.
+ *
+ * Naming, because the two generation paths differ and a reader meets one of them first:
+ * `opts.mind` here and `minSeparation` on the constrained path are THE SAME CONCEPT — this
+ * spelling mirrors the Python reference's kwarg, that one reads better in a public option bag.
+ * `lib/CLAUDE.md`'s vocabulary section calls them aliases, not different knobs.
+ */
 export function ringGreedy(
   n: number,
   k: number,
@@ -98,9 +113,11 @@ export function ringGreedy(
   for (let s = 0; s < n; s++) {
     const d = bfsDistances(g, s);
     const base = s * n;
+    // The diagonal needs no separate pass: `bfsDistances` sets `d[s] = 0` before its queue loop,
+    // and `0 >= 0` takes the left branch, so `dist[s*n + s]` is already 0 here. A second loop
+    // setting it again read as defending against something, with nothing named.
     for (let t = 0; t < n; t++) dist[base + t] = d[t] >= 0 ? d[t] : INF;
   }
-  for (let i = 0; i < n; i++) dist[i * n + i] = 0;
 
   let curMind = Math.min(mind, Math.floor(n / 2));
 

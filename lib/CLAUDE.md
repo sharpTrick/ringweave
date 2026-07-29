@@ -89,6 +89,18 @@ Surfaced by review, deliberately deferred (not silently ignored):
   substitute is `paths.props.test.ts`'s `path.length - 1 === bfsDistances(g,s)[t]`, which checks the
   new code against the mirrored function rather than against another TS BFS. Revisit only if path
   choice ever feeds generation.
+- **`ConstrainedBuddyResult` cannot be narrowed by the type system, and `edges.length` is the
+  tempting wrong check.** On a refusal the shape is fully populated — `edges` empty, `buddies` one
+  EMPTY list per person, metrics as placeholders — so `if (result.edges.length > 0)` silently
+  mishandles a refused-but-well-formed input, while `buddies[i].length === 0` is indistinguishable
+  from a person who genuinely has no buddies. The docblock says to read `report.refusals` first and
+  every caller in this repo does. **Deferred, not fixed:** the only fix that makes the compiler
+  enforce it is a discriminated union with a literal tag (e.g. `refused: true | false`), because
+  `refusals.length === 0` is not a narrowing predicate — and that is a breaking change to the
+  public API, mirrored in `reference-python`, for a misuse with no live instance. An exported
+  `wasAccepted(result)` helper was considered and rejected: it renames the same check without
+  making the type system enforce anything, which is indirection, not a guard. If the union is ever
+  built, add the tag at `refusedResult` and the success return together, in one commit.
 - **A polish swap trace would NOT reconstruct the graph polish returns, and F11 must not assume
   it does.** `PROJECT_PLAN.md`'s F11 (construction replay) is core work because `edgeList()` only
   gives a canonical sort, not a causal order. `ringGreedy` and `repairDegrees` are easy — they add

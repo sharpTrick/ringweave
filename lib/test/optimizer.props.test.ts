@@ -393,6 +393,26 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
 
+  it("never lets an ITERATION option ask for more work than omitting it", () => {
+    // The enforcement point's own comment claimed `polishIters` is "an option that can only ask
+    // for LESS work than the default — never more", and concluded from that "a knob that can only
+    // reduce cost cannot be turned into a hang". It bounded the request by ONE constant equal to
+    // the UNCONSTRAINED default, so on the constrained path — default 8000 — a caller-supplied
+    // 20000 bought 2.5x the iterations, measured end to end as 11.71 s -> 18.98 s. Not a hang, but
+    // the invariant the ceiling existed to establish was false, and one number cannot make it true
+    // for two defaults.
+    for (const fallback of [8_000, 20_000]) {
+      for (const [n, m] of [[30, 60], [60, 120], [120, 240], [1000, 6000]] as const) {
+        const omitted = boundedPolishIterations(n, m, undefined, fallback);
+        for (const asked of [0, 1, 999, 8_000, 20_000, 1e6, 2 ** 31]) {
+          expect(boundedPolishIterations(n, m, asked, fallback)).toBeLessThanOrEqual(omitted);
+        }
+        // ...and it is not vacuous: a SMALLER request is still honoured, which is the knob's job.
+        expect(boundedPolishIterations(n, m, 10, fallback)).toBe(Math.min(10, omitted));
+      }
+    }
+  });
+
   it("never admits a polish call that cannot afford a single iteration", () => {
     // The two gates split one budget: the size check charges the fixed all-pairs sweeps and the
     // iteration count is derived from what is LEFT. That stopped them summing past the constant
