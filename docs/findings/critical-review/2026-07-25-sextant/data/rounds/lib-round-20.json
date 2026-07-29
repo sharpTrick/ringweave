@@ -1,5 +1,5 @@
 {
-  "target": "lib/src (the ringweave core)",
+  "target": "lib/src",
   "round": 20,
   "modelOverride": null,
   "converged": false,

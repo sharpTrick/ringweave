@@ -64,16 +64,42 @@ function blameLine(rev, file, line, flags) {
 
 // --- this loop's fix commits, discovered from git -------------------------------
 const log = git("log", "--format=%H%x09%s", "HEAD");
+/**
+ * THREE subject shapes, because the run's own commit style drifted and pretending it did not is
+ * how this instrument silently lost 34 of its 40 fix commits. It matched only the first shape, so
+ * every finding from round 6 onward blamed to a commit it did not recognise as a fix and landed in
+ * `unknown` — an oracle reporting 23.3% off six rounds of a forty-round loop. The regexes are
+ * ugly; a regex that matches what the history actually says beats a tidy one that matches what it
+ * ought to have said. Every shape is asserted against the real log by the coverage check below.
+ *
+ *   "Review round 5 (lib/src): ..."       rounds lib 1-5, app 1
+ *   "lib round 19: ..." / "app round 20"  one target, most of the run
+ *   "Rounds lib-13 and app-11: ..."       two targets closed in one commit ("Review rounds …" too)
+ */
 const fixCommits = [];
+const addFix = (sha, round, target, subject) => fixCommits.push({ sha, round, target, subject });
 for (const line of log.split("\n")) {
-  const [sha, subject] = line.split("\t");
-  const m = /^Review round (\d+) \(([^)]+)\)/.exec(subject ?? "");
-  if (m) fixCommits.push({ sha, round: Number(m[1]), target: m[2], subject });
+  const [sha, subject = ""] = line.split("\t");
+  let m = /^Review round (\d+) \(([^)]+)\)/.exec(subject);
+  if (m) {
+    addFix(sha, Number(m[1]), m[2], subject);
+    continue;
+  }
+  m = /^(lib|app) round (\d+)\b/.exec(subject);
+  if (m) {
+    addFix(sha, Number(m[2]), `${m[1]}/src`, subject);
+    continue;
+  }
+  m = /^(?:Review r|R)ounds (lib|app)-(\d+) and (lib|app)-(\d+)\b/.exec(subject);
+  if (m) {
+    addFix(sha, Number(m[2]), `${m[1]}/src`, subject);
+    addFix(sha, Number(m[4]), `${m[3]}/src`, subject);
+  }
 }
 fixCommits.reverse(); // oldest first
 
 if (fixCommits.length === 0) {
-  console.error("self-induction: no fix commits found (expected subjects like \"Review round 1 (lib/src)\")");
+  console.error("self-induction: no fix commits found (expected subjects like \"lib round 7: …\")");
   process.exit(1);
 }
 
@@ -91,6 +117,16 @@ if (!existsSync(findingsPath)) {
   process.exit(1);
 }
 const findings = JSON.parse(readFileSync(findingsPath, "utf8"));
+
+/**
+ * COVERAGE, checked rather than assumed. A round whose fix commit this script cannot find has all
+ * of its findings silently routed to `unknown`, which reads as caution and is actually blindness —
+ * the failure that made the first run of this report quote a rate off six of forty rounds. An
+ * unmapped round is printed, not tolerated in silence.
+ */
+const roundsInData = new Set(findings.map((f) => `${f.target}#${f.round}`));
+const roundsMapped = new Set(fixCommits.map((c) => `${c.target}#${c.round}`));
+const unmapped = [...roundsInData].filter((r) => !roundsMapped.has(r)).sort();
 
 /**
  * Base rate: of the non-test product lines in the tree a round reviewed, what share
@@ -123,6 +159,7 @@ for (const cfg of CONFIGS) {
   let preexisting = 0;
   let unknown = 0;
   const attributed = [];
+  const classifiableByRound = new Map();
   // Severity matters more than the pooled rate: a self-induced BLOCKING finding is
   // the loop breaking its own code, while a self-induced nit is the loop tidying up
   // after itself. Pooling them hides which one is happening.
@@ -145,6 +182,7 @@ for (const cfg of CONFIGS) {
       continue;
     }
     const bucket = (bySeverity[f.severity] ??= { selfInduced: 0, preexisting: 0 });
+    classifiableByRound.set(key, (classifiableByRound.get(key) ?? 0) + 1);
     if (earlier.has(blamed.sha)) {
       selfInduced++;
       bucket.selfInduced++;
@@ -165,20 +203,57 @@ for (const cfg of CONFIGS) {
     rate: classifiable ? selfInduced / classifiable : null,
     bySeverity,
     attributed,
+    classifiableByRound,
   });
 }
 
-// Base rate on the LAST round's reviewed tree, where the most fix code exists.
-const last = fixCommits[fixCommits.length - 1];
-const lastTree = reviewedTree.get(`${last.target}#${last.round}`);
-const earlierThanLast = new Set(
-  fixCommits.filter((c) => c.target === last.target && c.round < last.round).map((c) => c.sha),
-);
-const base = lastTree && earlierThanLast.size > 0
-  ? baseRate(lastTree, last.target, earlierThanLast, ["-w", "-M", "-C"])
-  : { total: 0, mine: 0, rate: 0 };
-
 const primary = results.find((r) => r.config === "-w -M -C") ?? results[0];
+
+/**
+ * The base rate is computed PER ROUND and weighted by that round's classifiable findings, not once
+ * on the final tree.
+ *
+ * Taking it from the last tree compares each finding against the wrong null: fix-authored code
+ * accumulates monotonically, so the end-of-run share (36.1% here) is the largest it ever is, while
+ * a round-3 finding was drawn from a tree that was ~2% fix-authored. Dividing a run-averaged
+ * observed rate by an end-of-run chance rate produced a lift BELOW 1 — the loop appearing to avoid
+ * its own code — which is an artifact of the mismatch, not a result. The matched null is the mean
+ * chance rate over the trees the findings were actually drawn from.
+ */
+const perRound = new Map();
+for (const c of fixCommits) {
+  const key = `${c.target}#${c.round}`;
+  if (perRound.has(key)) continue;
+  const tree = reviewedTree.get(key);
+  const earlier = new Set(
+    fixCommits.filter((x) => x.target === c.target && x.round < c.round).map((x) => x.sha),
+  );
+  perRound.set(
+    key,
+    tree && earlier.size > 0
+      ? baseRate(tree, c.target, earlier, ["-w", "-M", "-C"])
+      : { total: 0, mine: 0, rate: 0 },
+  );
+}
+const weighed = primary.classifiableByRound;
+let weightedRate = 0;
+let weightTotal = 0;
+let baseLines = 0;
+let baseMine = 0;
+for (const [key, n] of weighed) {
+  const b = perRound.get(key);
+  if (!b) continue;
+  weightedRate += b.rate * n;
+  weightTotal += n;
+  baseLines += b.total;
+  baseMine += b.mine;
+}
+const base = {
+  total: baseLines,
+  mine: baseMine,
+  rate: weightTotal ? weightedRate / weightTotal : 0,
+  perRound: Object.fromEntries([...perRound].map(([k, v]) => [k, Number(v.rate.toFixed(4))])),
+};
 const report = {
   note:
     "E2 on Sextant's own loop. Rounds are blamed against the tree their critics reviewed (the fix " +
@@ -187,8 +262,9 @@ const report = {
     "fraction is not.",
   fixCommits: fixCommits.map((c) => ({ round: c.round, target: c.target, sha: c.sha.slice(0, 7) })),
   findings: findings.length,
+  unmappedRounds: unmapped,
   primary: { config: primary.config, selfInduced: primary.selfInduced, preexisting: primary.preexisting, unknown: primary.unknown, rate: primary.rate },
-  baseRate: { tree: lastTree?.slice(0, 7) ?? null, ...base },
+  baseRate: { weighting: "per-round, weighted by that round's classifiable findings", ...base },
   lift: primary.rate && base.rate ? primary.rate / base.rate : null,
   bySeverity: Object.fromEntries(
     Object.entries(primary.bySeverity).map(([sev, v]) => [
@@ -203,8 +279,11 @@ const report = {
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify(report, null, 2));
 } else {
-  console.log(`fix commits: ${fixCommits.map((c) => `${c.target} r${c.round}`).join(", ")}`);
+  console.log(`fix commits: ${fixCommits.length} (${new Set(fixCommits.map((c) => c.sha)).size} distinct)`);
   console.log(`findings: ${findings.length}`);
+  if (unmapped.length > 0) {
+    console.log(`UNMAPPED ROUNDS (their findings can only land in unknown): ${unmapped.join(", ")}`);
+  }
   console.log(`\nprimary (${primary.config}):`);
   console.log(`  self-induced ${primary.selfInduced}  pre-existing ${primary.preexisting}  unknown ${primary.unknown}`);
   console.log(`  rate over classifiable: ${primary.rate === null ? "n/a" : (primary.rate * 100).toFixed(1) + "%"}`);

@@ -316,6 +316,313 @@
     "toolCalls": 211
   },
   {
+    "round": 10,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 4,
+    "totalFindings": 5,
+    "files": [
+      "app/src/io/parseRoster.ts",
+      "app/src/model.ts",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "utf16-truncation-splits-surrogate-pair",
+      "stale-comment-type-name",
+      "live-region-hidden-by-inert",
+      "focus-lost-no-commit"
+    ],
+    "subagentTokens": 667738,
+    "agents": 6,
+    "toolCalls": 253
+  },
+  {
+    "round": 11,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 5,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 7,
+    "files": [
+      "app/src/io/importGraph.ts",
+      "app/src/io/clamp.ts",
+      "app/src/constraints.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/state/useFocusRescue.ts"
+    ],
+    "classes": [
+      "round-trip-contract-break",
+      "malformed-string-at-display-sink",
+      "seam-shape-mismatch",
+      "unresolved-extension-preconditions",
+      "focus-rescue-scope-gap"
+    ],
+    "subagentTokens": 627434,
+    "agents": 6,
+    "toolCalls": 201
+  },
+  {
+    "round": 12,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 2,
+    "plausible": 2,
+    "themes": 7,
+    "totalFindings": 10,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/constraints.ts",
+      "lib/src/core/index.ts",
+      "app/src/io/importGraph.ts",
+      "app/src/panels/PersonSearch.tsx"
+    ],
+    "classes": [
+      "refusal-message-names-wrong-roster",
+      "cap-sized-for-wrong-producer",
+      "fraction-only-report-cant-source-a-count-based-ui-string",
+      "fragile-dom-coupling",
+      "ambiguous-historical-comment",
+      "live-region-remounts-with-its-first-text",
+      "unchecked-degree-minimum",
+      "truncated-list-no-count-affordance"
+    ],
+    "subagentTokens": 673175,
+    "agents": 6,
+    "toolCalls": 186
+  },
+  {
+    "round": 13,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 7,
+    "totalFindings": 7,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/search.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/panels/PersonPanel.tsx",
+      "app/src/state/useGenerationWorker.ts"
+    ],
+    "classes": [
+      "dispatch-time-settings-drift",
+      "unit-mismatch-code-point-vs-code-unit",
+      "ambiguous-comment-tense",
+      "silently-drifting-clamping-logic",
+      "defensive-index-bounds-check-split-across-modules",
+      "missing-initial-focus",
+      "public-api-has-two-error-paths"
+    ],
+    "subagentTokens": 499146,
+    "agents": 5,
+    "toolCalls": 157
+  },
+  {
+    "round": 14,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 7,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 7,
+    "totalFindings": 8,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/io/importGraph.ts",
+      "app/src/io/parseRoster.ts",
+      "app/src/worker/generate.ts",
+      "app/src/model.ts",
+      "app/src/panels/BuddyList.tsx",
+      "app/src/constraints.ts"
+    ],
+    "classes": [
+      "dispatch-state-partial-commit",
+      "displayed-count-plural-disagreement",
+      "unbounded-interpolation-of-untrusted-value",
+      "code-unit-truncation-emits-lone-surrogate",
+      "duplicated-predicate",
+      "false-comment",
+      "transient-live-region-underbudgeted",
+      "scale-mismatch-cap"
+    ],
+    "subagentTokens": 684032,
+    "agents": 6,
+    "toolCalls": 251
+  },
+  {
+    "round": 15,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 10,
+    "blocking": 2,
+    "deferrals": 3,
+    "plausible": 1,
+    "themes": 5,
+    "totalFindings": 14,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/state/useBuddyGraph.ts",
+      "app/src/worker/protocol.ts",
+      "app/src/graph/GraphCanvas.tsx",
+      "app/src/neighborhood.ts",
+      "app/src/constraints.ts",
+      "app/src/panels/PersonPanel.tsx",
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/panels/BuddyList.tsx"
+    ],
+    "classes": [
+      "silent-row-deletion-on-reroll",
+      "stored-setting-does-not-describe-the-graph",
+      "extension-seam-no-caller",
+      "misleading-name",
+      "fragile-logic-pattern",
+      "implicit-ordering",
+      "seam-for-unbuilt",
+      "silent-bounded-control",
+      "no-repeat-announcement",
+      "easy-to-misuse-surface"
+    ],
+    "subagentTokens": 672171,
+    "agents": 6,
+    "toolCalls": 193
+  },
+  {
+    "round": 16,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 5,
+    "files": [
+      "app/src/panels/BuddyList.tsx",
+      "lib/src/core/index.ts",
+      "app/src/state/usePathFinder.ts",
+      "app/src/panels/ConstraintsEditor.tsx"
+    ],
+    "classes": [
+      "stale-timer-clobbers-newer-feedback",
+      "missing-core-export-for-committed-follow-on",
+      "false-comment",
+      "self-disabling-control-blurs-focus"
+    ],
+    "subagentTokens": 705650,
+    "agents": 6,
+    "toolCalls": 247
+  },
+  {
+    "round": 17,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 1,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 1,
+    "totalFindings": 1,
+    "files": [
+      "app/src/styles/app.css"
+    ],
+    "classes": [
+      "live-region-removed-from-a11y-tree-by-css"
+    ],
+    "subagentTokens": 481121,
+    "agents": 4,
+    "toolCalls": 171
+  },
+  {
+    "round": 18,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 2,
+    "totalFindings": 3,
+    "files": [
+      "app/src/panels/SettingsControls.tsx",
+      "app/src/io/feasibility.ts",
+      "app/src/panels/ConstraintsEditor.tsx"
+    ],
+    "classes": [
+      "requested-target-shown-as-delivered",
+      "gate-mirrors-a-core-budget-instead-of-asking-it",
+      "missing-error-description"
+    ],
+    "subagentTokens": 565753,
+    "agents": 5,
+    "toolCalls": 200
+  },
+  {
+    "round": 19,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 4,
+    "totalFindings": 4,
+    "files": [
+      "app/src/model.ts",
+      "app/src/io/readFileText.ts",
+      "app/src/App.tsx",
+      "app/src/state/useFocusRescue.ts"
+    ],
+    "classes": [
+      "inert-setting-reported-as-unmet-request",
+      "pre-parse-gate-bounds-bytes-not-shape",
+      "hover-state-rerenders-unrelated-panels",
+      "inert-focus-race"
+    ],
+    "subagentTokens": 765868,
+    "agents": 6,
+    "toolCalls": 254
+  },
+  {
+    "round": 20,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 3,
+    "totalFindings": 4,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/panels/BuddyList.tsx",
+      "app/src/io/download.ts"
+    ],
+    "classes": [
+      "stale-dispatch-copy",
+      "silent-failure-no-feedback",
+      "missing-outcome-announcement",
+      "object-url-revoked-too-early"
+    ],
+    "subagentTokens": 725748,
+    "agents": 6,
+    "toolCalls": 213
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -646,5 +953,239 @@
     "subagentTokens": 444077,
     "agents": 5,
     "toolCalls": 143
+  },
+  {
+    "round": 12,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 6,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/budgets.ts",
+      "lib/src/core/bounds.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "work-budget-undercharges-its-own-path",
+      "oracle-divergence-unpinned-by-fixtures",
+      "work-budget-undercounts-actual-cost",
+      "unverified-cost-calibration",
+      "misplaced-comment",
+      "seam-with-no-caller",
+      "subtle-invariant-unstated"
+    ],
+    "subagentTokens": 486182,
+    "agents": 5,
+    "toolCalls": 151
+  },
+  {
+    "round": 13,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 4,
+    "totalFindings": 6,
+    "files": [
+      "lib/src/core/rng.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "silently-coerced-option",
+      "modelled-work-budget-undercharges-real-cost",
+      "seam-with-no-caller",
+      "missing-abstraction"
+    ],
+    "subagentTokens": 525969,
+    "agents": 5,
+    "toolCalls": 170
+  },
+  {
+    "round": 14,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 0,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 5,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/constraints.ts",
+      "lib/src/core/budgets.ts",
+      "lib/src/core/polish.ts",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "unbounded-work-before-gate",
+      "gate-admits-work-that-cannot-produce-a-result",
+      "unexercised-ocp-seam",
+      "return-value-divergence",
+      "false-comment",
+      "misleading-comment"
+    ],
+    "subagentTokens": 518610,
+    "agents": 5,
+    "toolCalls": 162
+  },
+  {
+    "round": 15,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 5,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 5,
+    "totalFindings": 6,
+    "files": [
+      "lib/src/core/budgets.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/greedy.ts",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "work-budget-knob-raises-cost-above-default",
+      "unbounded-work-before-any-size-gate",
+      "redundant-code-undocumented",
+      "vocabulary-aliasing-underdocumented",
+      "easy-to-misuse-return-shape"
+    ],
+    "subagentTokens": 529723,
+    "agents": 5,
+    "toolCalls": 149
+  },
+  {
+    "round": 16,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 2,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 2,
+    "totalFindings": 2,
+    "files": [
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "no-op-reported-as-work",
+      "false-comment-prose"
+    ],
+    "subagentTokens": 570844,
+    "agents": 5,
+    "toolCalls": 185
+  },
+  {
+    "round": 17,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 4,
+    "blocking": 3,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 3,
+    "totalFindings": 4,
+    "files": [
+      "lib/src/core/index.ts",
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/polish.ts"
+    ],
+    "classes": [
+      "reported-fact-disagrees-with-artifact",
+      "broken-connectivity-guarantee",
+      "public-contract-contradicted-by-implementation",
+      "flag-reports-intent-not-work"
+    ],
+    "subagentTokens": 488625,
+    "agents": 5,
+    "toolCalls": 143
+  },
+  {
+    "round": 18,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 1,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 1,
+    "totalFindings": 1,
+    "files": [
+      "lib/src/core/budgets.ts"
+    ],
+    "classes": [
+      "cost-model-omits-input-dimension"
+    ],
+    "subagentTokens": 530690,
+    "agents": 4,
+    "toolCalls": 155
+  },
+  {
+    "round": 19,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 0,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 5,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/constraints.ts",
+      "lib/src/core/graph.ts",
+      "docs/PROJECT_PLAN.md",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "oracle-message-parity-gap",
+      "unguarded-public-index",
+      "unbounded-refusal-list",
+      "ungated-quadratic-materialization",
+      "stale-plan-vs-implementation",
+      "misleading-name"
+    ],
+    "subagentTokens": 582016,
+    "agents": 5,
+    "toolCalls": 162
+  },
+  {
+    "round": 20,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 7,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 6,
+    "totalFindings": 8,
+    "files": [
+      "lib/src/core/constrainedGreedy.ts",
+      "lib/src/core/constraints.ts",
+      "lib/src/core/budgets.ts",
+      "lib/src/core/polish.ts",
+      "lib/src/core/index.ts"
+    ],
+    "classes": [
+      "avoidable-fragmentation",
+      "order-dependent-output",
+      "unmodelled-cost-dimension",
+      "false-comment-complexity-claim",
+      "semantic-coupling-no-abstraction",
+      "self-documenting-name-vs-concept-alias",
+      "unbuilt-seam-no-caller"
+    ],
+    "subagentTokens": 532750,
+    "agents": 5,
+    "toolCalls": 147
   }
 ]
