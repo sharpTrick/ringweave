@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  DEFAULT_SETTINGS, buddiesEachLabel, isOptimal, peopleNoun, nextRerollSeed, pathStatusText, rerollBlockReason,
-  selectionStatusText, targetShortfall, type GraphView, type Settings,
+  DEFAULT_SETTINGS, buddiesEachLabel, connectionSummary, peopleNoun, nextRerollSeed, pathStatusText, rerollBlockReason,
+  meetsEverySetting, selectionStatusText, type GraphView, type Settings,
 } from "./model";
 import { useBuddyGraph } from "./state/useBuddyGraph";
 import GraphCanvas, { type LayoutMode } from "./graph/GraphCanvas";
@@ -34,12 +34,14 @@ const EMPTY_EDGES: [number, number][] = [];
 
 export default function App() {
   const { notice, flash, show, clear } = useNotice();
-  // A re-roll that regenerates a byte-identical graph is a no-op; explain it rather than
-  // silently doing nothing. `isOptimal` alone said "already optimal" to someone who asked for 4
-  // buddies and got 3 — true of the graph, not an answer to the question they asked.
+  // A re-roll that regenerates a byte-identical graph is a no-op; explain it rather than silently
+  // doing nothing. "Optimal" has to mean every disclosure the quality panel is making is clear,
+  // not just the buddy count: at 12 people with the stock settings the graph sits exactly on the
+  // Moore bound while the panel says "Buddies are 3 steps apart, not the 5 in Settings", and the
+  // toast called that optimal.
   const bg = useBuddyGraph((kept) =>
     flash(
-      isOptimal(kept.metrics) && targetShortfall(kept) === null
+      meetsEverySetting(kept)
         ? "That's already an optimal arrangement — a re-roll can't improve it."
         : "Couldn't find a different arrangement — this is what the current settings produce.",
     ),
@@ -353,7 +355,14 @@ export default function App() {
           the accessibility tree BEFORE its text changes for the change to register. The scrim
           itself stays conditional: an empty one would swallow clicks. */}
       <div className="busy-live" role="status" aria-live="polite">
-        {bg.status === "running" ? "Generating…" : ""}
+        {/* A region going EMPTY is not reliably announced, so a run that reported "Generating…"
+            and then fell silent left a screen-reader user with no way to know it had finished
+            short of tabbing back to the metrics and re-reading them. */}
+        {bg.status === "running"
+          ? "Generating…"
+          : view !== null
+            ? `Arrangement ready — ${connectionSummary(view.metrics)}`
+            : ""}
       </div>
       {/* The path finder's SPOKEN half, always mounted for the same reason. */}
       <div className="sr-live" role="status" aria-live="polite">

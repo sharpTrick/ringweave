@@ -113,6 +113,25 @@ token-swap; M2 ships the mock-faithful dark theme only.
   carries structured `Reason`s rather than prose so the UI can name people. Both builders normalize
   into one `GraphResult` payload instead of `viewFromResult` growing a constrained sibling — one
   producer, no branch on which generator ran.
+- **F12 ("what-if resilience", `PROJECT_PLAN.md:143`, M4) has one trap, and the app already
+  contains the pattern that walks into it.** `importGraph.ts` is the only precedent for computing
+  connectivity app-side (`new Graph(n)` + `addEdge` + `allPairsSummary`/`largestComponentFraction`),
+  so "simulate X leaving" will be written by copying it — and `Graph` has no vertex removal, so the
+  natural move is to drop the leaver's edges and keep `n`. That answers a different question:
+  `largestComponentFraction` divides by `g.n`, so an isolated vertex counts as a component of the
+  population. Verified against `lib/dist` on a 5-ring, isolating person 2 in place reports
+  `connected: false, largestComponentFraction: 0.8`; the real answer — do the four remaining people
+  stay connected to each other — is `true, 1`, reproduced by remapping the survivors into a fresh
+  `Graph(4)`. Build it that way: a new graph of size n-1 with survivors remapped to `0..n-2`.
+- **`resolveNamedPairs`'s `dropped` counts more than its docblock claims.** The field is documented
+  as "rows that produced no pair for any reason", and the arithmetic (`named.length - pairs.length`)
+  also counts DUPLICATES — two rows naming the same pair yield `dropped: 1` although both resolved
+  and the modal tells the user the rule "will only be applied once". No caller reads it today
+  (`RosterModal` reports the causes separately), which is why this is deferred rather than fixed:
+  the honest options are to compute `unmatched + selfPair + incomplete` or to delete the field, and
+  picking between them wants a caller. Do not simply reword the doc to match the arithmetic — "rows
+  that produced no pair" is what a caller would want; the number is what is wrong.
+
 - **CSV constraint import is DEFERRED.** F7's acceptance names "import from JSON/CSV"
   (`PROJECT_PLAN.md:97`); JSON round-trips (rules are in the file schema, written on export and
   validated on import) and CSV is not built. Recorded here rather than dropped, per the rule that a

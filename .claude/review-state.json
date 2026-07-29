@@ -2,7 +2,7 @@
   "app/src": {
     "critic-correctness": {
       "nothingFoundStreak": 0,
-      "lastRound": 21
+      "lastRound": 22
     },
     "critic-security": {
       "nothingFoundStreak": 2,
@@ -10,15 +10,15 @@
     },
     "critic-solid": {
       "nothingFoundStreak": 0,
-      "lastRound": 21
+      "lastRound": 22
     },
     "critic-maintainability": {
       "nothingFoundStreak": 0,
-      "lastRound": 21
+      "lastRound": 22
     },
     "critic-interaction": {
       "nothingFoundStreak": 0,
-      "lastRound": 21
+      "lastRound": 22
     }
   },
   "lib/src": {

@@ -89,7 +89,23 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
             </select>
             <button
               className="rule-del"
-              onClick={() => onChange(pairs.filter((_, j) => j !== i))}
+              onClick={(e) => {
+                // Move focus to a SURVIVING row before the removal, so no timing is involved: the
+                // node is still mounted, and removing a different one cannot blur it. The
+                // app-global rescue is a net for removals nobody anticipated, and letting it catch
+                // this one throws a keyboard user from the middle of the rule list back to the
+                // roster field at the top of the dialog.
+                // The row ABOVE, never the row below: rows are keyed by index, so removing row i
+                // re-renders every later row's data into the node before it, and the "next" node
+                // is the one that disappears. Row 0 has nothing above it, so it hands focus to the
+                // add control, which is always mounted.
+                const rules = e.currentTarget.closest(".rules");
+                const keep = i > 0
+                  ? rules?.querySelectorAll<HTMLElement>(".rule-del")[i - 1]
+                  : rules?.querySelector<HTMLElement>(".rule-acts .linklike");
+                keep?.focus({ preventScroll: true });
+                onChange(pairs.filter((_, j) => j !== i));
+              }}
               aria-label={`Remove rule ${i + 1}`}
             >
               ×

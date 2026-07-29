@@ -206,9 +206,19 @@ describe("constraintSummary", () => {
   });
 
   it("says satisfied only when the report says zero violations", () => {
-    const clean = { reqViolations: 0, prohViolations: 0, connected: true, largestComponentFraction: 1, refusals: [], priorsKeptFraction: null };
-    expect(constraintSummary(view(clean))).toMatch(/satisfied/);
-    for (const broken of [{ ...clean, reqViolations: 1 }, { ...clean, prohViolations: 1 }]) {
+    // `satisfied` is DERIVED, not hand-set: a mock that can disagree with its own violation
+    // counts tests the summary against a report the core would never produce.
+    const report = (reqViolations: number, prohViolations: number) => ({
+      reqViolations,
+      prohViolations,
+      satisfied: reqViolations + prohViolations === 0,
+      connected: true,
+      largestComponentFraction: 1,
+      refusals: [],
+      priorsKeptFraction: null,
+    });
+    expect(constraintSummary(view(report(0, 0)))).toMatch(/satisfied/);
+    for (const broken of [report(1, 0), report(0, 1)]) {
       const text = constraintSummary(view(broken)) ?? "";
       expect(text).not.toMatch(/satisfied/);
       expect(text).toMatch(/couldn.t be met/);

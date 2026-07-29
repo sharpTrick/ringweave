@@ -499,7 +499,15 @@ describe("focus survives a panel closing itself", () => {
     expectRescued(document.activeElement);
   });
 
-  it("rescues focus when a DESCENDANT's own state removes the focused element", async () => {
+  it("leaves focus inside the dialog when a DESCENDANT's own state removes the focused element", async () => {
+    // The removal is owned by `RosterModal`'s state, so `App` never re-renders — the case that
+    // sank the third attempt at this hook. It is now caught TWICE: `ConstraintsEditor` hands focus
+    // to a surviving row before removing, and the app-global rescue stands behind that. So this
+    // asserts the property both mechanisms owe (focus stays in the dialog, never on <body>) rather
+    // than naming the anchor, which would pin whichever one happened to win.
+    //
+    // The global mechanism itself is exercised directly in `focusRescue.test.tsx`, driven without
+    // App so its timing conditions can be reached deliberately.
     render(<App />);
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: "Ana\nBen\nChen\nDee\nEli" },
@@ -510,11 +518,8 @@ describe("focus survives a panel closing itself", () => {
     remove.focus();
     expect(document.activeElement).toBe(remove);
     fireEvent.click(remove);
-    // Awaited: a MutationObserver delivers on the microtask after the batch, which is what lets
-    // it see React's remove-then-insert sequences settled.
     await waitFor(() => expect(document.activeElement).not.toBe(document.body));
-    // The roster field is the landing spot while the dialog owns the screen.
-    expect(document.activeElement).toBe(screen.getByLabelText("Roster names"));
+    expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
   });
 
   it("leaves focus alone when Escape is pressed from outside the panel", () => {

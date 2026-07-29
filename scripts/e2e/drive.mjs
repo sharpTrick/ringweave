@@ -198,6 +198,23 @@ check("export carries the rules",
   check("closing the person panel keeps focus somewhere usable", landed !== "body", landed);
 }
 
+// A reroll inerts `#app` around the very button that was pressed, and the UA blurs it. Only a
+// browser can settle this: jsdom does not implement inert's focus effects, and the mutation that
+// applies `inert` is delivered while focus is still ON the button — the UA blurs it afterwards and
+// `inert` is gone by the next mutation, so no observer callback ever sees both.
+{
+  const reroll = page.getByText("Different arrangement");
+  await reroll.focus();
+  await reroll.click();
+  await generationSettles(page);
+  const landed = await page.evaluate(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body) return "body";
+    return a.closest("#app") ? "" : a.tagName;
+  });
+  check("a reroll leaves focus reachable, not on <body>", landed === "", landed);
+}
+
 // A focus rescue that lands in a text field raises the soft keyboard and scrolls the viewport to it
 // — invisible on a desktop viewport, hence the touch-enabled context. The oracle is a PROPERTY of
 // the focused element, "does it accept typing": jsdom can say where focus went, not that a keyboard

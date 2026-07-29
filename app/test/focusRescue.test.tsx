@@ -56,6 +56,27 @@ describe("useFocusRescue", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it("rescues when the focused element is made inert rather than removed", async () => {
+    // The UA blurs to <body> the moment an ancestor turns inert, and the element is still in the
+    // document — so a rescue keyed on removal alone declines and focus stays stranded. Measured in
+    // Chromium: pressing "Different arrangement" left activeElement on <body> for the rest of the
+    // session, because the reroll button lives inside the `#app` that the run inerts.
+    const box = document.createElement("div");
+    document.body.appendChild(box);
+    const anchor = addButton("anchor");
+    const victim = document.createElement("button");
+    box.appendChild(victim);
+    mount(() => anchor);
+    victim.focus();
+    expect(document.activeElement).toBe(victim);
+
+    act(() => {
+      box.setAttribute("inert", "");
+      victim.blur(); // what the UA does synchronously when an ancestor becomes inert
+    });
+    await waitFor(() => expect(document.activeElement).toBe(anchor));
+  });
+
   it("retries on a later mutation when no anchor was available at the removal", async () => {
     let anchor: HTMLElement | null = null;
     const victim = addButton("victim");

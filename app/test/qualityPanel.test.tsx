@@ -4,8 +4,8 @@ import { render, screen, cleanup } from "@testing-library/react";
 import QualityPanel from "../src/panels/QualityPanel";
 import { generateResult } from "./helpers";
 import {
-  connectionSummary, constraintSummary, qualityPercent, separationShortfall, targetShortfall,
-  viewFromResult, DEFAULT_SETTINGS, type GraphView,
+  connectionSummary, constraintSummary, isOptimal, meetsEverySetting, qualityPercent,
+  separationShortfall, targetShortfall, viewFromResult, DEFAULT_SETTINGS, type GraphView,
 } from "../src/model";
 import type { ConstraintPair } from "../src/constraints";
 
@@ -76,5 +76,30 @@ describe("QualityPanel", () => {
     const described = gauge.getAttribute("aria-label") ?? gauge.textContent ?? "";
     expect(described).toMatch(/quality/i);
     expect(described).toMatch(/%|percent/i);
+  });
+});
+
+describe("the reroll toast agrees with the panel beside it", () => {
+  it("calls nothing optimal while the panel discloses a shortfall", { timeout: 120_000 }, () => {
+    // Asserts the APP'S predicate, not a copy of it. The first version of this test spelled the
+    // condition out again and was therefore a tautology — it passed with the defect fully
+    // restored, because mutating `App.tsx` could not reach it.
+    let disclosing = 0;
+    for (let k = 2; k <= 4; k++) {
+      for (let n = k + 1; n <= 16; n++) {
+        const v = view(n, k);
+        if (targetShortfall(v) === null && separationShortfall(v) === null) continue;
+        disclosing++;
+        expect(meetsEverySetting(v), `n=${n} k=${k} discloses a shortfall`).toBe(false);
+      }
+    }
+    // NON-VACUITY, in both directions: the sweep must contain views that disclose something, and
+    // it must contain the shape that fooled the old predicate — optimal, no buddy-count
+    // shortfall, but a separation shortfall the panel is printing.
+    expect(disclosing).toBeGreaterThan(0);
+    const witness = view(12, 4);
+    expect(isOptimal(witness.metrics)).toBe(true);
+    expect(targetShortfall(witness)).toBeNull();
+    expect(separationShortfall(witness)).not.toBeNull();
   });
 });

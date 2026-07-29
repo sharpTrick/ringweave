@@ -117,6 +117,18 @@ export function isOptimal(m: Metrics): boolean {
 }
 
 /**
+ * Whether the graph on screen meets EVERY target the quality panel discloses — the question the
+ * identical-reroll toast is really asking.
+ *
+ * Named here rather than spelled out at the call site so the toast and the panel cannot answer it
+ * with different predicates: `isOptimal` alone once said "already optimal" over a panel reading
+ * "Buddies are 3 steps apart, not the 5 in Settings".
+ */
+export function meetsEverySetting(view: GraphView): boolean {
+  return isOptimal(view.metrics) && targetShortfall(view) === null && separationShortfall(view) === null;
+}
+
+/**
  * The buddy-rule outcome line, or null when there are no rules to report on.
  *
  * A null report means NOT MEASURED, never "satisfied" — import rehydrates edges without

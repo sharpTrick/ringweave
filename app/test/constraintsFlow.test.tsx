@@ -184,3 +184,33 @@ describe("a flagged rule row carries its own reason", () => {
     expect(ok.getAttribute("aria-describedby")).toBeNull();
   });
 });
+
+describe("removing a rule row keeps focus in the rule list", () => {
+  it("moves focus to the row that takes the removed one's place", () => {
+    // The app-global focus rescue is a net for removals nobody anticipated; letting it catch this
+    // one throws a keyboard user from the middle of the rule list to the roster field at the top
+    // of the dialog. Reported by review after being reproduced against the real App.
+    renderModal();
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
+    for (let i = 0; i < 3; i++) addRule();
+    const second = screen.getByLabelText("Remove rule 2");
+    second.focus();
+    fireEvent.click(second);
+    expect(screen.queryByLabelText("Remove rule 3")).toBeNull();
+    const landed = document.activeElement as HTMLElement;
+    expect(landed.className).toContain("rule-del");
+    expect(landed.getAttribute("aria-label")).toBe("Remove rule 1");
+  });
+
+  it("stays in the list when the FIRST rule is removed, where there is no row above", () => {
+    renderModal();
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
+    for (let i = 0; i < 2; i++) addRule();
+    const first = screen.getByLabelText("Remove rule 1");
+    first.focus();
+    fireEvent.click(first);
+    // No row above to hand to, so the always-mounted add control takes it — still inside the rule
+    // block, which is the property that matters.
+    expect(document.activeElement).toBe(screen.getByText("+ Add a buddy rule"));
+  });
+});
