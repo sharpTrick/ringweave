@@ -274,10 +274,19 @@ const FIXED_POLISH_SWEEPS = 3;
 
 export function checkPolishSize(n: number, m: number): void {
   const fixed = FIXED_POLISH_SWEEPS * n * (n + m);
-  if (fixed > MAX_POLISH_WORK) {
+  // ONE question, not two. The gate used to ask only whether the fixed sweeps fit the budget,
+  // which left a band — n·(n+m) in (2.16e8, 2.88e8] — where they fit and nothing was left over,
+  // so the call was ADMITTED, paid three all-pairs sweeps and two graph copies, and returned its
+  // input byte-for-byte: `polish(ring(11000))` spends 6.68 s to report `iters: 0`, and
+  // `polishConstrained`'s return value carries no iteration count at all, so there is nothing in
+  // it to tell the caller the pass did not happen. Asking whether the loop can afford a single
+  // iteration subsumes the old check (fixed > budget ⇒ nothing left ⇒ refused) rather than adding
+  // to it, and it cannot refuse a configuration the loop would have accepted: by construction the
+  // loop would have run zero times.
+  if (loopBudget(n, m) < POLISH_ITER_OVERHEAD + n * (n + m)) {
     throw new Error(
-      `graph too large to polish: the fixed all-pairs sweeps cost ${fixed} against a budget ` +
-        `of ${MAX_POLISH_WORK} (n=${n}, m=${m}) — reduce the roster or skip polish`,
+      `graph too large to polish: the fixed all-pairs sweeps cost ${fixed} of a ${MAX_POLISH_WORK} ` +
+        `budget, leaving nothing for the loop (n=${n}, m=${m}) — reduce the roster or skip polish`,
     );
   }
 }

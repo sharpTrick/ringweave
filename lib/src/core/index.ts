@@ -282,8 +282,10 @@ export interface ConstraintReport {
 
 /**
  * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is
- * non-empty the input was refused: `buddies`/`edges` are empty and the metric
- * fields are placeholders — read `report` first.
+ * non-empty the input was refused: `edges` is empty, `buddies` holds one EMPTY list per
+ * person (so `buddies.length` is still the roster size, not 0), and the metric fields are
+ * placeholders — read `report` first. The shape is kept so a caller can index by person
+ * without branching; `buddies.length` is therefore not a "did this succeed" test.
  *
  * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}):
  * Moore's bound assumes a k-regular target, which constrained graphs only
@@ -367,8 +369,13 @@ export function buildConstrainedBuddyGraph(
     // passed straight through and `polishConstrained`'s new sign check threw out of the one entry
     // point whose documented contract is that it REFUSES rather than throws — and only at the
     // roster sizes where auto-polish happens to run, so the contract broke as a function of n.
-    // Normalising to 0 rather than refusing matches how every other bad option value is treated
-    // here (a non-finite polishIters, a NaN minSeparation): the option is ignored, not fatal.
+    // Normalising to 0 rather than refusing is what this entry point does with a bad option
+    // value generally — it refuses INPUTS, never options. The siblings reach the same outcome by
+    // different routes, and the difference is worth naming rather than implying one rule: a
+    // non-finite `polishIters` falls back to the default inside `boundedPolishIterations`, and
+    // `minSeparation` is passed through to `constrainedGreedy`, which does not act on a
+    // non-integer floor. Only `priorWeight` is normalised HERE, because only it is read twice
+    // (by the optimizer and by the report) and they must not disagree.
     priorWeight =
       active.priorHard || !(Number.isFinite(requested) && requested >= 0) ? 0 : requested;
     // polishConstrained returns the lowest-energy graph it saw, never worse

@@ -89,6 +89,20 @@ Surfaced by review, deliberately deferred (not silently ignored):
   substitute is `paths.props.test.ts`'s `path.length - 1 === bfsDistances(g,s)[t]`, which checks the
   new code against the mirrored function rather than against another TS BFS. Revisit only if path
   choice ever feeds generation.
+- **A polish swap trace would NOT reconstruct the graph polish returns, and F11 must not assume
+  it does.** `PROJECT_PLAN.md`'s F11 (construction replay) is core work because `edgeList()` only
+  gives a canonical sort, not a causal order. `ringGreedy` and `repairDegrees` are easy — they add
+  edges in an order that IS the returned graph. `polish`/`polishConstrained` are not: the live
+  graph `g` keeps advancing after `best` was last captured, because Metropolis accepts
+  non-improving moves that mutate `g` and never touch `best`, and the functions return `best`.
+  So replaying every applied swap in loop order rebuilds the FINAL `g`, which is a different graph
+  — and `PolishResult.iters` is the total loop count, not the index at which `best` was taken, so
+  nothing in the return value names the prefix that would rebuild it (`polishConstrained` returns a
+  bare `Graph` and carries no run metrics at all). **Deferred, not fixed:** the fix is an integer
+  already implicitly known at `best = g.copy()`, but F11 has no caller and adding a field for it now
+  is the speculative-seam anti-pattern `REVIEW_PROTOCOL.md` lists. Record it here so whoever builds
+  F11 adds `bestAtIter` (or truncates the trace) at that moment rather than discovering the
+  divergence from a replay that silently produces the wrong graph.
 - **Generation cost scales as n²·min(k,n-1):** `constrainedGreedy` runs one BFS (~O(n)) per edge
   added and adds ~n·min(k,n-1)/2 edges (n=500,k=4 ≈ 120 ms; n=5000,k=4 ≈ 13 s; the dense corner
   n=500,k=499 ≈ 89 s). Two caps bound it, both in `graph.ts` and enforced as a refusal in `validate`

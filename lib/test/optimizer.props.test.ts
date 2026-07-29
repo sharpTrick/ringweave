@@ -393,6 +393,38 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
 
+  it("never admits a polish call that cannot afford a single iteration", () => {
+    // The two gates split one budget: the size check charges the fixed all-pairs sweeps and the
+    // iteration count is derived from what is LEFT. That stopped them summing past the constant
+    // they both cite, but nothing asked whether anything remained — so a band existed where the
+    // sweeps fit and the loop got zero, and the call was accepted, paid three sweeps and two
+    // graph copies, and returned its input byte-for-byte. Measured: `polish(ring(11000))` spent
+    // 6.68 s to report `iters: 0`, and `polishConstrained`'s return value has no iteration count
+    // at all, so nothing in it distinguishes that from a pass that worked.
+    //
+    // Asserted as the PROPERTY over the whole accept-set, not at the two n values that happen to
+    // straddle the band: for every shape the size gate admits, the loop must afford >= 1.
+    for (let n = 200; n <= 14_000; n += 137) {
+      for (const m of [n, 2 * n, (n * 3) / 2]) {
+        let admitted = true;
+        try {
+          checkPolishSize(n, Math.round(m));
+        } catch {
+          admitted = false;
+        }
+        if (admitted) {
+          expect(boundedPolishIterations(n, Math.round(m), 20_000, 20_000)).toBeGreaterThanOrEqual(1);
+        }
+      }
+    }
+    // And the band itself is now refused rather than run: ring(11000) is n·(n+m) = 2.42e8, whose
+    // fixed sweeps (7.26e8) fit the 8.65e8 budget with less than one iteration left over.
+    expect(() => polish(ring(11_000), { maxIters: 20_000 })).toThrow(/leaving nothing for the loop/);
+    // ...while the shape just below it still runs, so this did not quietly shrink the accept-set
+    // beyond the calls that could not have done anything.
+    expect(() => polish(ring(9500), { maxIters: 1 })).not.toThrow();
+  });
+
   it("charges the FIXED sweeps too, so the two gates cannot sum past the budget", () => {
     // checkPolishSize and boundedPolishIterations each measured against the WHOLE budget,
     // so a graph that just fit the size gate was then granted a full budget of loop
