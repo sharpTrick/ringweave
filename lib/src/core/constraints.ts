@@ -219,7 +219,7 @@ export function formatReason(r: Reason): string {
     case "self-pair":
       return `person ${num(r.person)} cannot be paired with themselves`;
     case "too-many-invalid-constraints":
-      return `${num(r.count)} constraints are invalid — only the first few are listed`;
+      return `${num(r.count)} constraints are invalid — only some are listed`;
     case "roster-too-large-constrained":
       return `roster size ${num(r.n)} exceeds the constrained maximum of ${num(r.max)} (generation is O(n²))`;
     case "buddy-count-invalid":
@@ -368,7 +368,6 @@ export function validate(cons: Constraints, k: number): string[] {
 const MAX_STRUCTURAL_REASONS = 16;
 
 function structuralReasons(cons: Constraints): Reason[] {
-  const errs: Reason[] = [];
   let invalid = 0;
   const n = cons.n;
   if (!Number.isInteger(n) || n < 0) {
@@ -381,9 +380,34 @@ function structuralReasons(cons: Constraints): Reason[] {
 
   // Counted always, listed up to the cap: the total stays exact while the allocation does not
   // grow with it.
+  //
+  // WHICH ones are listed is the alphabetically smallest DISTINCT messages, not the first ones
+  // encountered. `requiredPairs()` and its siblings iterate their `Set`s in insertion order, and
+  // the Python mirror iterates its sets in hash order, so "the first 16" made a refusal's text a
+  // function of how the caller happened to build the constraint set — different for a forward
+  // versus a reversed build in TS, and different again in Python, which breaks the message parity
+  // this module is otherwise held to. `normalize` already sorts the survivors by rendered text;
+  // this only moves that same order one step earlier, to where it decides MEMBERSHIP rather than
+  // just presentation. All the strings involved are ASCII, so the two languages agree.
+  //
+  // Deduping here rather than leaving it to `normalize` is a strict improvement as well: a
+  // thousand copies of one fault used to fill all 16 slots and then dedupe down to a single
+  // listed reason. The cost is one `formatReason` per invalid pair, measured at 222 ms for four
+  // million — the figure in the docblock above is for RETAINING and sorting that many, not for
+  // building one at a time and dropping it.
+  // One structure, kept sorted, at most MAX_STRUCTURAL_REASONS long — so the insertion scan is
+  // also the duplicate check, and the whole thing is bounded by construction rather than trimmed
+  // afterwards.
+  const listed: { text: string; reason: Reason }[] = [];
   const note = (r: Reason) => {
     invalid++;
-    if (errs.length < MAX_STRUCTURAL_REASONS) errs.push(r);
+    const text = formatReason(r);
+    if (listed.length === MAX_STRUCTURAL_REASONS && text >= listed[listed.length - 1].text) return;
+    let at = 0;
+    while (at < listed.length && listed[at].text < text) at++;
+    if (listed[at]?.text === text) return;
+    listed.splice(at, 0, { text, reason: r });
+    if (listed.length > MAX_STRUCTURAL_REASONS) listed.pop();
   };
   const scan = (pairs: [number, number][]) => {
     for (const [a, b] of pairs) {
@@ -398,6 +422,7 @@ function structuralReasons(cons: Constraints): Reason[] {
   scan(cons.requiredPairs());
   scan(cons.prohibitedPairs());
   scan(cons.priorPairs());
+  const errs: Reason[] = listed.map((e) => e.reason);
   if (invalid > errs.length) errs.push({ code: "too-many-invalid-constraints", count: invalid });
   return errs;
 }

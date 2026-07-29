@@ -24,19 +24,19 @@
   "lib/src": {
     "critic-correctness": {
       "nothingFoundStreak": 0,
-      "lastRound": 19
+      "lastRound": 20
     },
     "critic-security": {
       "nothingFoundStreak": 0,
-      "lastRound": 19
+      "lastRound": 20
     },
     "critic-solid": {
-      "nothingFoundStreak": 5,
-      "lastRound": 19
+      "nothingFoundStreak": 6,
+      "lastRound": 20
     },
     "critic-maintainability": {
       "nothingFoundStreak": 0,
-      "lastRound": 19
+      "lastRound": 20
     },
     "critic-interaction": {
       "nothingFoundStreak": 5,

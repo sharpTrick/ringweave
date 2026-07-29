@@ -173,10 +173,23 @@ def _structural_errors(cons):
 
     # Counted always, listed up to the cap. The list used to be unbounded in both work and
     # output; see MAX_STRUCTURAL_REASONS in the TS port for the measurements.
+    # WHICH messages survive the cap is the alphabetically smallest DISTINCT ones, not the first
+    # encountered: this mirror iterates its sets in hash order and the TS port iterates its Sets
+    # in insertion order, so "the first 16" made a refusal's text a function of how the constraint
+    # set was built, breaking the message parity the two are held to. Deduping here also stops a
+    # thousand copies of one fault from filling every slot.
     def note(msg):
         counted[0] += 1
-        if len(errs) < MAX_STRUCTURAL_REASONS:
-            errs.append(msg)
+        if len(errs) == MAX_STRUCTURAL_REASONS and msg >= errs[-1]:
+            return
+        at = 0
+        while at < len(errs) and errs[at] < msg:
+            at += 1
+        if at < len(errs) and errs[at] == msg:
+            return
+        errs.insert(at, msg)
+        if len(errs) > MAX_STRUCTURAL_REASONS:
+            errs.pop()
 
     def scan(pairs):
         for (a, b) in pairs:
@@ -190,7 +203,7 @@ def _structural_errors(cons):
     scan(cons.prohibited)
     scan(cons.priors)
     if counted[0] > len(errs):
-        errs.append(f"{counted[0]} constraints are invalid — only the first few are listed")
+        errs.append(f"{counted[0]} constraints are invalid — only some are listed")
     return errs
 
 

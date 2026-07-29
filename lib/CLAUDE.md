@@ -135,9 +135,29 @@ Surfaced by review, deliberately deferred (not silently ignored):
   column (thousands sharing one label) is slow/heap-heavy, and at tens of millions of pairs the
   `Set` construction itself throws before `validate` can refuse it. A `NaN` tag value never groups
   (`NaN !== NaN`), silently inverting `prohibit_same`. Sanitize + size-check tags when F6 lands.
-- **Polish is O(n·m) per iteration** — `polish`/`polishConstrained` recompute the full all-pairs
-  summary every swap, so they are impractical much past a few hundred vertices (why auto-polish is
-  capped at n≤120 in `index.ts`). Needs incremental/sampled energy for larger n.
+- **Polish is O(n·(n+m)) per iteration, plus one probe per weighed prior** — `polish` /
+  `polishConstrained` recompute the full all-pairs summary every swap, so they are impractical much
+  past a few hundred vertices (why auto-polish is gated by `MAX_POLISH_WORK` in `index.ts`). NOT
+  O(n·m): `allPairsSummary` fills an `Int32Array(n)` and accumulates n-wide per source however few
+  edges exist, so that reading under-charges a sparse graph by the whole n² term. The prior term is
+  the third cost centre and was invisible to the budget until round 20 — `constrainedMeasure`
+  re-counts every prior pair on every measurement, and `buildConstrainedBuddyGraph` turns that on by
+  itself whenever any prior exists, which measured 3.99 s → 17.58 s at n=268 with no refusal.
+  `polishIterationCost` is now the single definition all three gates share. Needs incremental /
+  sampled energy for larger n.
+- **A residual class of avoidable fragmentation survives at k=2, and it needs a different fix.**
+  `repairConnectivity` now rewires in two stages — a degree-preserving double edge swap, then a
+  single-degree relocation (`stealSlot`) for a component a swap cannot reach. Exhaustively over
+  every feasible prohibition set at small n, avoidable splits (ones where a connected graph exists
+  at the same k under the same prohibitions) fell from 48/728 to **16/728** at n=5,k=2 and to zero
+  at n=4,k=2, n=4,k=3 and n=5,k=3. What remains is the shape where the surviving component is a
+  TREE: every edge is a bridge, so nothing is droppable, and no single rewiring merges anything.
+  Witness: n=5, k=2, prohibiting (0,1),(1,3),(1,4),(3,4) — completion builds 0-2, 0-3, 1-2 and
+  strands person 4, while the path 1-2-3-0-4 is legal. Reaching it means changing the COMPLETION
+  ORDER (visiting deficient vertices by scarcity of legal partners rather than by degree), which
+  changes every constrained output and so has to go through `reference-python` and a fixture
+  regeneration first — the same reason the polish-gate discontinuity above is still open. Deferred
+  rather than done inside a review round for that reason, not because the class is closed.
 - **`girth` (and the other exported all-pairs metrics) are O(n²)** and uncapped — deliberately, since
   they are pure diagnostics run on a `Graph` the caller already built (n bounded by `MAX_ROSTER`), not
   generation entry points fed untrusted `(n,k,constraints)`. The generators that *are* the untrusted

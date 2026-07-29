@@ -183,18 +183,10 @@ export function polishConstrained(
   checkInputSatisfiesConstraints(input, cons);
 
   const rng = new RNG(opts.seed ?? 0);
-  // A size cap as well as the work cap below. `boundedPolishIterations` cannot
-  // reach the all-pairs sweeps and graph copies this function pays outside its
-  // loop, so `polishConstrained(ring(30000), cons, { iters: 0 })` — priced at zero
-  // iterations — still ran for 48 s.
   // `degrees()` rather than `edgeList()`: the same m, without allocating m two-element arrays
   // and sorting them, so the REFUSAL path no longer pays O(m log m) time and O(m) memory for a
   // graph it is about to reject. `polish` already derives it this way.
   const m = input.degrees().reduce((a, b) => a + b, 0) / 2;
-  checkPolishSize(input.n, m);
-  // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
-  // exported public API and a wrapper clamp does not apply to a direct caller.
-  const iters = boundedPolishIterations(input.n, m, opts.iters, DEFAULT_CONSTRAINED_POLISH_ITERS);
   // Finiteness-checked like `iters`, and for the same reason. A NaN weight
   // poisons every energy comparison — `next.energy < current` is false for all
   // NaN — so the pass ran its full iteration budget of O(n·m) re-measurements and
@@ -209,6 +201,29 @@ export function polishConstrained(
     throw new Error(`prior weight ${opts.priorWeight} must be a non-negative finite number`);
   }
   const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;
+  // The two budget gates need the RESOLVED weight, so they sit below it rather than above.
+  // `constrainedMeasure` re-counts every prior pair on every measurement, which is a third
+  // dimension of the per-iteration cost — and one this pass turns on by itself, since
+  // `buildConstrainedBuddyGraph` resolves a non-zero weight whenever any prior exists. Measured
+  // at n=268, k=1 (the densest shape the auto-polish gate admits): 3.99 s with no priors,
+  // 17.58 s with all 35,778 pairs as priors, and no refusal in between. At weight 0 the penalty
+  // is never built and the probes never happen, so a configuration that costs nothing is charged
+  // nothing.
+  const weighedPriors = priorWeight === 0 ? 0 : cons.priorCount;
+  // A size cap as well as the work cap below. `boundedPolishIterations` cannot
+  // reach the all-pairs sweeps and graph copies this function pays outside its
+  // loop, so `polishConstrained(ring(30000), cons, { iters: 0 })` — priced at zero
+  // iterations — still ran for 48 s.
+  checkPolishSize(input.n, m, weighedPriors);
+  // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
+  // exported public API and a wrapper clamp does not apply to a direct caller.
+  const iters = boundedPolishIterations(
+    input.n,
+    m,
+    weighedPriors,
+    opts.iters,
+    DEFAULT_CONSTRAINED_POLISH_ITERS,
+  );
   const measure = constrainedMeasure(cons, priorWeight);
   const breaksConstraint = (s: Swap) => swapBreaksConstraint(s, cons);
 
@@ -364,8 +379,8 @@ function choosePartner(candidates: number[], dist: Int32Array, g: Graph): number
  * This used to be the last word on connectivity, and its comment said residual disconnection
  * "means the roster cannot be connected within k buddies each" — a claim about the caller's
  * input that was really a limit of this function. `repairConnectivity` runs after it and can
- * rewire; what survives BOTH is disconnection no single constraint-preserving double edge swap
- * can remove.
+ * rewire; what survives BOTH is disconnection no single constraint-preserving rewiring can
+ * remove.
  */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion
@@ -429,7 +444,11 @@ function edgeKey(n: number, a: number, b: number): number {
 }
 
 /**
- * Merge components with degree-preserving, constraint-preserving double edge swaps.
+ * Merge components by REWIRING, in two stages of increasing concession: a degree-preserving
+ * double edge swap (`swapJoin`) first, and only when that finds nothing, a move that relocates a
+ * single degree (`stealSlot`). Both preserve the hard constraints and the edge count; neither can
+ * exceed k. What survives BOTH is disconnection no single constraint-preserving rewiring can
+ * remove within the budget.
  *
  * `joinAnyComponents` needs BOTH endpoints under k, so a component whose whole boundary is
  * saturated cannot be joined however many legal pairs exist elsewhere — and the comment that
@@ -452,38 +471,50 @@ function edgeKey(n: number, a: number, b: number): number {
  * roster the caller supplied.
  */
 function repairConnectivity(g: Graph, cons: Constraints, k: number): void {
-  void k; // degrees are PRESERVED by a swap, so the cap needs no re-check here
-  let budget = 8 * (g.n + 2 * g.numEdges()) + 64;
+  // A SHARED mutable cell, not a threaded return value. Each helper stops when it hits zero and
+  // reports only whether it moved, so a failed search cannot hand the next one a budget it has
+  // already spent — which is what "charged across the WHOLE repair" means.
+  const budget = { left: 8 * (g.n + 2 * g.numEdges()) + 64 };
   for (let pass = 0; pass < g.n; pass++) {
     const comps = connectedComponents(g);
     if (comps.length <= 1) return;
-    const spent = swapJoin(g, comps, cons, bridges(g), budget);
-    if (spent === null) return;
-    budget = spent;
+    const bridged = bridges(g);
+    if (swapJoin(g, comps, cons, bridged, budget)) continue;
+    // A swap needs one droppable edge from EACH component, so a component with no edges at
+    // all — a single stranded person — is beyond it however much slack the rest of the graph
+    // has. `stealSlot` is tried second because it MOVES a degree rather than preserving every
+    // one, which is the strictly larger concession; it is only reached once the cheaper repair
+    // has found nothing.
+    if (!stealSlot(g, comps, cons, bridged, k, budget)) return;
   }
 }
 
-/** One merging swap, or null when none was found (or the budget ran out). Returns what is left. */
+/** Edges of the graph bucketed by the component their lower endpoint belongs to. */
+function edgesByComponent(g: Graph, comps: number[][]): [number, number][][] {
+  const owner = new Int32Array(g.n);
+  comps.forEach((comp, ci) => comp.forEach((v) => { owner[v] = ci; }));
+  const per: [number, number][][] = comps.map(() => []);
+  for (const [a, b] of g.edgeList()) per[owner[a]].push([a, b]);
+  return per;
+}
+
+/** True when one merging swap was applied; false when none was found or the budget ran out. */
 function swapJoin(
   g: Graph,
   comps: number[][],
   cons: Constraints,
   bridged: Set<number>,
-  budget: number,
-): number | null {
-  const owner = new Int32Array(g.n);
-  comps.forEach((comp, ci) => comp.forEach((v) => { owner[v] = ci; }));
-  const per: [number, number][][] = comps.map(() => []);
-  for (const [a, b] of g.edgeList()) per[owner[a]].push([a, b]);
-  let left = budget;
+  budget: { left: number },
+): boolean {
+  const per = edgesByComponent(g, comps);
   for (let i = 0; i < comps.length; i++) {
     for (let j = i + 1; j < comps.length; j++) {
       for (const [a, b] of per[i]) {
         if (cons.isRequired(a, b)) continue;
         for (const [c, d] of per[j]) {
           if (cons.isRequired(c, d)) continue;
-          if (left <= 0) return null;
-          left--;
+          if (budget.left <= 0) return false;
+          budget.left--;
           if (bridged.has(edgeKey(g.n, a, b)) && bridged.has(edgeKey(g.n, c, d))) continue;
           for (const [x, y] of [[c, d], [d, c]] as const) {
             if (a === x || b === y) continue;
@@ -493,13 +524,65 @@ function swapJoin(
             g.removeEdge(c, d);
             g.addEdge(a, x);
             g.addEdge(b, y);
-            return left;
+            return true;
           }
         }
       }
     }
   }
-  return null;
+  return false;
+}
+
+/**
+ * Join two components by MOVING a degree: drop a non-bridge edge (a,b) inside one component and
+ * spend the freed slot on an under-k vertex u in another.
+ *
+ * Why this exists on top of `swapJoin`. A double edge swap needs a droppable edge in EACH of the
+ * two components, so it cannot touch a component that has no edges — exactly the shape a
+ * saturated boundary produces at small k. Witness: n=4, k=2, prohibiting (1,3) and (2,3).
+ * `validate` accepts it, completion builds the triangle 0-1-2 and leaves person 3 alone with no
+ * legal partner (0 is full, 1 and 2 are prohibited), `forceConnect` cannot add and `swapJoin` has
+ * nothing to swap — so the result reported `connected: false` with a largest-component fraction of
+ * 0.75, while `0-1, 0-3, 1-2` is a connected graph at the same k under the same prohibitions.
+ *
+ * Dropping a NON-BRIDGE (a,b) leaves a and b connected to each other, so the only component change
+ * is the merge. Edge COUNT is preserved — one removed, one added; what moves is a single degree,
+ * from the dropped endpoint to u. That is a real concession (the result is less regular than the
+ * input), and it is why this runs only after `swapJoin`, which concedes nothing, has failed.
+ *
+ * Deterministic and RNG-free like the rest of this generator: components ascending, vertices
+ * ascending, edges in `edgeList()`'s sorted order, so the first legal move is a function of the
+ * graph alone.
+ */
+function stealSlot(
+  g: Graph,
+  comps: number[][],
+  cons: Constraints,
+  bridged: Set<number>,
+  k: number,
+  budget: { left: number },
+): boolean {
+  const per = edgesByComponent(g, comps);
+  for (let i = 0; i < comps.length; i++) {
+    for (const u of [...comps[i]].sort((a, b) => a - b)) {
+      if (g.degree(u) >= k) continue;
+      for (let j = 0; j < comps.length; j++) {
+        if (j === i) continue;
+        for (const [a, b] of per[j]) {
+          if (cons.isRequired(a, b) || bridged.has(edgeKey(g.n, a, b))) continue;
+          if (budget.left <= 0) return false;
+          budget.left--;
+          for (const keep of [a, b]) {
+            if (cons.isProhibited(u, keep) || g.hasEdge(u, keep)) continue;
+            g.removeEdge(a, b);
+            g.addEdge(u, keep);
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /** Add one legal edge bridging two distinct components; true if one was added. */
@@ -681,9 +764,14 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
 
 // --- postconditions (dev-mode only) -----------------------------------------
 // Compiled out of production bundles where `process` is absent, so they never
-// cost the hot path. NOTE: a new hard-constraint kind must be enforced in
-// legalEdge (used by both completion and forceConnect), swapBreaksConstraint,
-// AND asserted here — keep the three in sync. A genuinely new constraint
+// cost the hot path. NOTE: a new hard-constraint kind must be enforced at every
+// site that touches an edge — `legalEdge` (used by completion and forceConnect),
+// `swapBreaksConstraint`, `swapJoin` and `stealSlot` — AND asserted here. The
+// coupling is one of COVERAGE, not of logic (a site that only ADDS an edge can
+// only create a prohibited one; a site that rewires can also drop a required
+// one), which is why there is no shared abstraction and instead a mechanical
+// guard: `test/constraintSync.test.ts` reads this file and fails when the sites
+// and the postcondition stop agreeing. A genuinely new constraint
 // *category* (not a new tag policy — those only emit required/prohibited pairs
 // already handled) would also need reporting in index.ts buildReport.
 const CONTRACTS_ENABLED =

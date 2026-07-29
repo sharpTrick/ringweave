@@ -555,6 +555,28 @@ describe("connectivity is repaired by rewiring, not only by adding", () => {
     expect(built.report.largestComponentFraction).toBe(1);
   });
 
+  it("connects a stranded person by MOVING a degree when no swap is available", () => {
+    // The sibling shape the swap repair could not reach, and the reason it could not: a double
+    // edge swap needs a droppable edge in EACH component, so a component of one person — who has
+    // no edges at all — is beyond it however much slack the rest of the graph has.
+    const cons = new Constraints(4);
+    cons.prohibit(1, 3);
+    cons.prohibit(2, 3);
+    expect(validate(cons, 2)).toEqual([]); // feasible, so the split was on us
+    // 0-1, 0-3, 1-2 is a connected graph at the same k under the same prohibitions; the
+    // generator returned the triangle 0-1-2 and left person 3 alone, reporting connected:false
+    // with a largest-component fraction of 0.75 and no refusal.
+    const built = buildConstrainedBuddyGraph(4, 2, cons, { polish: false });
+    expect(built.report.connected).toBe(true);
+    expect(built.report.largestComponentFraction).toBe(1);
+    for (const [a, b] of built.edges) expect(cons.isProhibited(a, b)).toBe(false);
+    const g = constrainedGreedy(4, 2, cons);
+    expect(Math.max(...g.degrees())).toBeLessThanOrEqual(2);
+    // Edge COUNT is preserved by the move — one dropped, one added — so this is a rewiring,
+    // not a retreat to a sparser graph.
+    expect(g.numEdges()).toBe(3);
+  });
+
   it("leaves no split that a single constraint-preserving swap could have merged", () => {
     // The property, brute-forced: for every feasible input in the sweep whose result is still
     // disconnected, no degree-preserving double edge swap that keeps the hard constraints

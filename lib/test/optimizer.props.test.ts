@@ -291,7 +291,7 @@ describe("iteration budgets are validated before becoming loop bounds", () => {
  * magnitude.
  */
 describe("MAX_POLISH_WORK cannot be stepped around", () => {
-  const workOf = (n: number, k: number, iters: number) => polishWork(n, k, iters);
+  const workOf = (n: number, k: number, iters: number) => polishWork(n, k, 0, iters);
 
   // Honouring the request means actually running it, and running it costs one
   // budget — so this needs a wall-clock allowance, like its sibling below.
@@ -318,7 +318,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // Bounded, not merely finite: 1e15 iterations would never have returned.
     expect(elapsed).toBeLessThan(90_000);
     // And it is the SAME run as asking for exactly what the budget affords.
-    const afforded = Math.floor(MAX_POLISH_WORK / polishWork(120, 12, 1));
+    const afforded = Math.floor(MAX_POLISH_WORK / polishWork(120, 12, 0, 1));
     expect(afforded).toBeLessThan(20000); // the clamp really does bind here
     expect(buildBuddyGraph(120, 12, { polish: true, polishIters: afforded }).edges).toEqual(huge.edges);
   });
@@ -340,7 +340,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // The clamp is a no-op wherever auto-polish runs today: min(requested, afforded)
     // is the requested value by construction.
     for (const [n, k] of [[30, 4], [60, 4], [120, 4]] as const) {
-      const afforded = Math.floor(MAX_POLISH_WORK / polishWork(n, k, 1));
+      const afforded = Math.floor(MAX_POLISH_WORK / polishWork(n, k, 0, 1));
       expect(afforded).toBeGreaterThanOrEqual(20000);
     }
   });
@@ -350,8 +350,8 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // the divisor zero (which would afford Infinity iterations), and it stops a
     // tiny graph from being modelled as nearly free. Before it existed,
     // buildBuddyGraph(3, 2, { polishIters: 1e9 }) ran for 35.7 SECONDS.
-    expect(polishWork(5, 0, 1)).toBeGreaterThan(0);
-    expect(polishWork(3, 2, 1)).toBeGreaterThan(0);
+    expect(polishWork(5, 0, 0, 1)).toBeGreaterThan(0);
+    expect(polishWork(3, 2, 0, 1)).toBeGreaterThan(0);
     expect(() => buildConstrainedBuddyGraph(5, 0, new Constraints(5), { polish: true })).not.toThrow();
   });
 
@@ -401,7 +401,7 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
 
     // And the cap must not have closed anything the loop would have accepted. The
     // constrained path documents n=5000 as its ceiling, so that has to still pass.
-    expect(() => checkPolishSize(5000, 10000)).not.toThrow();
+    expect(() => checkPolishSize(5000, 10000, 0)).not.toThrow();
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
 
@@ -487,12 +487,12 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     // for two defaults.
     for (const fallback of [8_000, 20_000]) {
       for (const [n, m] of [[30, 60], [60, 120], [120, 240], [1000, 6000]] as const) {
-        const omitted = boundedPolishIterations(n, m, undefined, fallback);
+        const omitted = boundedPolishIterations(n, m, 0, undefined, fallback);
         for (const asked of [0, 1, 999, 8_000, 20_000, 1e6, 2 ** 31]) {
-          expect(boundedPolishIterations(n, m, asked, fallback)).toBeLessThanOrEqual(omitted);
+          expect(boundedPolishIterations(n, m, 0, asked, fallback)).toBeLessThanOrEqual(omitted);
         }
         // ...and it is not vacuous: a SMALLER request is still honoured, which is the knob's job.
-        expect(boundedPolishIterations(n, m, 10, fallback)).toBe(Math.min(10, omitted));
+        expect(boundedPolishIterations(n, m, 0, 10, fallback)).toBe(Math.min(10, omitted));
       }
     }
   });
@@ -512,12 +512,12 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
       for (const m of [n, 2 * n, (n * 3) / 2]) {
         let admitted = true;
         try {
-          checkPolishSize(n, Math.round(m));
+          checkPolishSize(n, Math.round(m), 0);
         } catch {
           admitted = false;
         }
         if (admitted) {
-          expect(boundedPolishIterations(n, Math.round(m), 20_000, 20_000)).toBeGreaterThanOrEqual(1);
+          expect(boundedPolishIterations(n, Math.round(m), 0, 20_000, 20_000)).toBeGreaterThanOrEqual(1);
         }
       }
     }
@@ -539,10 +539,48 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     const bigN = 16000;
     const bigM = bigN;
     if (sweep(bigN, bigM) * 3 <= MAX_POLISH_WORK) {
-      expect(boundedPolishIterations(bigN, bigM, 20_000, 20_000)).toBe(0);
+      expect(boundedPolishIterations(bigN, bigM, 0, 20_000, 20_000)).toBe(0);
     }
     // And a small roster is untouched — the fix must not quietly shrink normal budgets.
-    expect(boundedPolishIterations(20, 40, 20_000, 20_000)).toBe(20_000);
+    expect(boundedPolishIterations(20, 40, 0, 20_000, 20_000)).toBe(20_000);
+  });
+
+  it("charges the PRIOR probes, the third per-iteration cost centre", { timeout: 120_000 }, () => {
+    // Same class as the prohibited-pair dimension `constrainedWork` was missing: the estimator
+    // was (n, m)-only while `constrainedMeasure` re-counts every prior pair on every measurement,
+    // and `buildConstrainedBuddyGraph` turns that on by ITSELF — it resolves `priorWeight` to the
+    // default whenever any prior exists. Measured at n=268, k=1 (the densest shape the auto-polish
+    // gate admits, which is why it is the shape here): 3.99 s with no priors, 17.58 s with all
+    // 35,778 pairs as priors, a 4.4x overrun of a budget that returned no refusal.
+    //
+    // Stated as the MONOTONICITY invariant rather than a wall-clock threshold, because the
+    // threshold would be a machine measurement and the invariant is what the budget promises:
+    // adding priors can only move a configuration toward refusal, never away from it.
+    const n = 268;
+    for (const priors of [0, 1_000, 9_034, 35_778]) {
+      expect(polishWork(n, 1, priors, 8_000)).toBeGreaterThanOrEqual(polishWork(n, 1, 0, 8_000));
+      expect(boundedPolishIterations(n, 134, priors, 8_000, 8_000)).toBeLessThanOrEqual(
+        boundedPolishIterations(n, 134, 0, 8_000, 8_000),
+      );
+    }
+    // Strictly, not merely weakly: a dimension charged at zero is a dimension still missing.
+    expect(polishWork(n, 1, 1, 8_000)).toBeGreaterThan(polishWork(n, 1, 0, 8_000));
+    expect(boundedPolishIterations(n, 134, 35_778, 8_000, 8_000)).toBeLessThan(
+      boundedPolishIterations(n, 134, 0, 8_000, 8_000),
+    );
+    // Charged only when the priors are WEIGHED. At weight 0 `constrainedMeasure` never builds the
+    // penalty and the probes never happen, so a configuration that costs nothing must not be
+    // refused — otherwise the fix for an overrun becomes a false refusal.
+    const cons = new Constraints(n);
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) cons.addPrior(a, b);
+    const off = buildConstrainedBuddyGraph(n, 1, cons, { priorWeight: 0 });
+    expect(off.report.refusals).toEqual([]);
+    // ...and with the weight on, the pass is BOUNDED rather than skipped when polish is asked for
+    // explicitly: the clamp cuts the iteration count instead of the gate cutting the pass.
+    const started = performance.now();
+    const on = buildConstrainedBuddyGraph(n, 1, cons, { polish: true });
+    expect(on.report.refusals).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(30_000);
   });
 
   it("keeps the work model non-zero, so the guard built on it is a guard", () => {

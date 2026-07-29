@@ -83,7 +83,19 @@ import {
 } from "./constrainedGreedy.js";
 
 export interface BuddyOptions {
-  /** Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5. */
+  /**
+   * Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5.
+   *
+   * The SAME concept the core spells `mind` internally and `reference-python` spells `mind` as a
+   * kwarg — an alias, not a second knob (`lib/CLAUDE.md`'s vocabulary section says so, and this
+   * is the call site where a reader meets both names within a few lines of each other:
+   * `buildBuddyGraph` reads `options.minSeparation` into a local `mind` and hands it to
+   * `ringGreedy`). The public surface keeps the spelled-out name because it is read by app
+   * authors; the internals keep the short one because it mirrors the oracle.
+   *
+   * Honoured on the UNCONSTRAINED path only. `ConstrainedBuddyOptions` accepts the same field and
+   * documents that it cannot change the output — see `choosePartner` in `constrainedGreedy.ts`.
+   */
   minSeparation?: number;
   /**
    * Run a fixed-seed polish pass to tighten ASPL. Default "auto": on when the
@@ -172,7 +184,8 @@ export function buildBuddyGraph(
   // where a contract broke as a function of n. This entry point throws on bad input (see the
   // doc comment above); its constrained sibling refuses, and normalises instead.
   const seed = checkSeed(options.seed ?? 12345);
-  const wantPolish = resolveWantPolish(options.polish, n, k, DEFAULT_POLISH_ITERS);
+  // 0 priors: this path runs `polish`, whose objective has no prior term.
+  const wantPolish = resolveWantPolish(options.polish, n, k, 0, DEFAULT_POLISH_ITERS);
 
   const { graph, finalMind } = ringGreedy(n, k, { mind, repair: true });
 
@@ -372,29 +385,47 @@ export function buildConstrainedBuddyGraph(
   // The full rule is at the `buildReport` call below; this only has to survive the branch.
   let priorWeight = 0;
   let priorsWeighed = false;
-  if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
-    // priorHard already promoted priors to required, so no soft penalty then.
-    // Finiteness-checked HERE, not only inside `polishConstrained`. Both places used to
-    // decide independently: the optimizer coerced a non-finite weight to 0 and never
-    // weighed the priors, while the report tested the RAW value against `!== 0`, found
-    // NaN !== 0 true, and published a `priorsKeptFraction` — the exact coincidental number
-    // that field's contract says must be null. Resolving once means the optimizer and the
-    // report cannot disagree about what was actually optimized.
-    const requested = options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0);
-    // The SAME predicate `polishConstrained` enforces, so this wrapper can never hand its callee
-    // a value the callee throws on. Only finiteness was normalized here, so a NEGATIVE weight
-    // passed straight through and `polishConstrained`'s new sign check threw out of the one entry
-    // point whose documented contract is that it REFUSES rather than throws — and only at the
-    // roster sizes where auto-polish happens to run, so the contract broke as a function of n.
-    // Normalising to 0 rather than refusing is what this entry point does with a bad option
-    // value generally — it refuses INPUTS, never options. The siblings reach the same outcome by
-    // different routes, and the difference is worth naming rather than implying one rule: a
-    // non-finite `polishIters` falls back to the default inside `boundedPolishIterations`, and
-    // `minSeparation` is passed through to `constrainedGreedy`, which does not act on a
-    // non-integer floor. Only `priorWeight` is normalised HERE, because only it is read twice
-    // (by the optimizer and by the report) and they must not disagree.
-    priorWeight =
-      active.priorHard || !(Number.isFinite(requested) && requested >= 0) ? 0 : requested;
+  // priorHard already promoted priors to required, so no soft penalty then.
+  // Finiteness-checked HERE, not only inside `polishConstrained`. Both places used to
+  // decide independently: the optimizer coerced a non-finite weight to 0 and never
+  // weighed the priors, while the report tested the RAW value against `!== 0`, found
+  // NaN !== 0 true, and published a `priorsKeptFraction` — the exact coincidental number
+  // that field's contract says must be null. Resolving once means the optimizer and the
+  // report cannot disagree about what was actually optimized.
+  //
+  // Resolved ABOVE the gate rather than inside it, since round 20: the auto-polish gate has to
+  // charge the prior probes the pass will actually pay for, and whether it pays any is exactly
+  // what this value decides. Nothing below the gate reads a different weight — `priorWeight` is
+  // assigned from it — so hoisting moves no decision, it only lets the estimator see one.
+  const requestedPriorWeight =
+    options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0);
+  //
+  // The SAME predicate `polishConstrained` enforces, so this wrapper can never hand its callee a
+  // value the callee throws on. Only finiteness was normalized once, so a NEGATIVE weight passed
+  // straight through and `polishConstrained`'s sign check threw out of the one entry point whose
+  // documented contract is that it REFUSES rather than throws — and only at the roster sizes where
+  // auto-polish happens to run, so the contract broke as a function of n. Normalising to 0 rather
+  // than refusing is what this entry point does with a bad option value generally — it refuses
+  // INPUTS, never options. The siblings reach the same outcome by different routes, and the
+  // difference is worth naming rather than implying one rule: a non-finite `polishIters` falls
+  // back to the default inside `boundedPolishIterations`, and `minSeparation` is passed through to
+  // `constrainedGreedy`, which does not act on a non-integer floor. Only `priorWeight` is
+  // normalised HERE, because only it is read three times — by the gate, by the optimizer and by
+  // the report — and they must not disagree.
+  const resolvedPriorWeight =
+    active.priorHard || !(Number.isFinite(requestedPriorWeight) && requestedPriorWeight >= 0)
+      ? 0
+      : requestedPriorWeight;
+  if (
+    resolveWantPolish(
+      options.polish,
+      n,
+      k,
+      resolvedPriorWeight === 0 ? 0 : active.priorCount,
+      DEFAULT_CONSTRAINED_POLISH_ITERS,
+    )
+  ) {
+    priorWeight = resolvedPriorWeight;
     // polishConstrained returns the lowest-energy graph it saw, never worse
     // than its input on the objective, so adopting it is always safe.
     // Normalised, not thrown, for the same reason `priorWeight` is: this entry point's contract
@@ -504,10 +535,11 @@ function resolveWantPolish(
   option: boolean | "auto" | undefined,
   n: number,
   k: number,
+  priorCount: number,
   defaultIters: number,
 ): boolean {
   if (option === undefined || option === "auto") {
-    return polishWork(n, k, defaultIters) <= MAX_POLISH_WORK;
+    return polishWork(n, k, priorCount, defaultIters) <= MAX_POLISH_WORK;
   }
   return option === true;
 }
@@ -564,6 +596,13 @@ export function autoPolishEnabled(
     "auto",
     n,
     k,
+    // 0, not a new `priorCount` option. Nothing in the tree would pass one: this is the question a
+    // UI asks about a roster it is offering a reroll for, and the app has no prior concept at all
+    // (F9 is deferred, and a grep for `addPrior` across `app/src` returns nothing). An option with
+    // no caller is the speculative-seam anti-pattern, so the gate answers for the prior-free case
+    // and grows the parameter when something needs it. `polishWork` underneath still REQUIRES the
+    // dimension, because defaulting it away is how it went missing.
+    0,
     opts.constrained ? DEFAULT_CONSTRAINED_POLISH_ITERS : DEFAULT_POLISH_ITERS,
   );
 }

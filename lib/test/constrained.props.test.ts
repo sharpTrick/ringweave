@@ -12,6 +12,7 @@ import {
   validate,
   constrainedGreedy,
   polishConstrained,
+  Graph,
 } from "../src/core/index.js";
 
 /** A feasible constraint scenario: sparse prohibited pairs + a required matching. */
@@ -162,5 +163,94 @@ describe("constrainedGreedy invariants over random feasible inputs", () => {
       }),
       { numRuns: 25 },
     );
+  });
+});
+
+// --- repair maximality ------------------------------------------------------
+
+/** Component id per vertex, by plain BFS — independent of the generator's Tarjan pass. */
+function componentOwner(g: Graph): number[] {
+  const owner = new Array<number>(g.n).fill(-1);
+  let next = 0;
+  for (let root = 0; root < g.n; root++) {
+    if (owner[root] !== -1) continue;
+    const queue = [root];
+    owner[root] = next;
+    while (queue.length > 0) {
+      const u = queue.pop() as number;
+      for (const v of g.adj[u]) {
+        if (owner[v] === -1) {
+          owner[v] = next;
+          queue.push(v);
+        }
+      }
+    }
+    next++;
+  }
+  return owner;
+}
+
+/** Naive bridge test: drop the edge, ask whether its endpoints are still together. */
+function isBridge(g: Graph, a: number, b: number): boolean {
+  const copy = g.copy();
+  copy.removeEdge(a, b);
+  return componentOwner(copy)[a] !== componentOwner(copy)[b];
+}
+
+/**
+ * The k=2 regime with heavy prohibitions — the ONLY regime that strands anyone. The scenario above
+ * (n in [10,40], k in [3,5], prohibited <= n/8) produces a connected graph on every run, so a
+ * maximality property asserted over it would be vacuously true; that is why this generator exists
+ * rather than a new property on the old one. The non-vacuity counter below is what keeps that
+ * honest if the generator ever drifts back to always-connected.
+ */
+const strandScenario = fc.integer({ min: 4, max: 8 }).chain((n) =>
+  fc.record({
+    n: fc.constant(n),
+    k: fc.constantFrom(2, 3),
+    prohibited: fc.uniqueArray(
+      fc
+        .tuple(fc.integer({ min: 0, max: n - 1 }), fc.integer({ min: 0, max: n - 1 }))
+        .filter(([a, b]) => a !== b),
+      { maxLength: n, selector: ([a, b]) => `${Math.min(a, b)},${Math.max(a, b)}` },
+    ),
+  }),
+);
+
+describe("constrainedGreedy leaves no repair on the table", () => {
+  it("no under-k person could be joined by re-pointing one droppable edge", () => {
+    let sawDisconnected = 0;
+    fc.assert(
+      fc.property(strandScenario, (s) => {
+        const cons = new Constraints(s.n);
+        for (const [a, b] of s.prohibited) cons.prohibit(a, b);
+        fc.pre(validate(cons, s.k).length === 0);
+
+        const g = constrainedGreedy(s.n, s.k, cons);
+        if (!isConnected(g)) sawDisconnected++;
+
+        // The invariant `stealSlot` establishes, checked from OUTSIDE with an independent
+        // component walk and a remove-and-retest bridge oracle: if a person still has a free
+        // slot, and some OTHER component holds an edge that is neither required nor a bridge,
+        // and that person may legally buddy either endpoint of it — then a merge was available
+        // and generation stopped early. That is precisely the state the n=4 witness was in.
+        const owner = componentOwner(g);
+        for (let u = 0; u < s.n; u++) {
+          if (g.degree(u) >= s.k) continue;
+          for (const [a, b] of g.edgeList()) {
+            if (owner[a] === owner[u]) continue;
+            if (cons.isRequired(a, b) || isBridge(g, a, b)) continue;
+            for (const keep of [a, b]) {
+              const available = !cons.isProhibited(u, keep) && !g.hasEdge(u, keep);
+              expect(available).toBe(false);
+            }
+          }
+        }
+      }),
+      { numRuns: 300 },
+    );
+    // NON-VACUITY. Without this the property above passes on a generator that never strands
+    // anyone, which is exactly what the pre-existing scenario does.
+    expect(sawDisconnected).toBeGreaterThan(0);
   });
 });

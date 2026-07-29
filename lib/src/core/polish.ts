@@ -1,8 +1,12 @@
 /**
  * Swap-polish: improve ASPL by degree-preserving double edge swaps (mechanics in
  * `swap.ts`). Deterministic given a seed (via RNG). Two modes: "hill" (accept
- * only improvements) and "anneal" (Metropolis). Cost is O(n·m) per iteration
- * (full re-measure), so it is impractical much past a few hundred vertices.
+ * only improvements) and "anneal" (Metropolis). Cost is O(n·(n+m)) per iteration —
+ * the `allPairsSummary` re-measure, which fills an `Int32Array(n)` and accumulates
+ * n-wide per source however few edges there are — so it is impractical much past a
+ * few hundred vertices. NOT O(n·m): that reading under-charges a sparse graph by the
+ * whole n² term, which is the mis-model `polishIterationCost` was corrected for, and
+ * this header was the last place still asserting it.
  *
  * No dev-mode postconditions here (unlike `polishConstrained`): swaps are
  * structurally degree-preserving and `best` is monotonically non-increasing on
@@ -76,7 +80,9 @@ export function polish(
   // inside `energy` is Theta(n·(n+m)) while `copy` is only O(n+m). Neither is reachable
   // by the iteration budget below, so a call priced at zero iterations still ran for
   // 160 s at n=40000.
-  checkPolishSize(input.n, input.degrees().reduce((a, b) => a + b, 0) / 2);
+  // `0` priors, always: the unconstrained pass has no prior term in its objective, so the
+  // per-iteration cost the constrained pass pays for them is not a cost this one has.
+  checkPolishSize(input.n, input.degrees().reduce((a, b) => a + b, 0) / 2, 0);
   const rng = new RNG(opts.seed ?? 12345);
   const g = input.copy();
   let edges = g.edgeList();
@@ -84,7 +90,7 @@ export function polish(
   // so a wrapper clamp is not a bound at all: `polish(ring(20), { maxIters:
   // Infinity })` used to never return, and `Infinity` is reachable from JSON
   // without an Infinity literal.
-  const maxIters = boundedPolishIterations(g.n, edges.length, opts.maxIters, DEFAULT_POLISH_ITERS);
+  const maxIters = boundedPolishIterations(g.n, edges.length, 0, opts.maxIters, DEFAULT_POLISH_ITERS);
   let curE = energy(g);
   let best = g.copy();
   let bestE = curE;

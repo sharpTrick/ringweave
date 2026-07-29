@@ -195,11 +195,20 @@ def _repair_connectivity(g, cons, k):
         comps = _components(g)
         if len(comps) <= 1:
             return
-        if not _swap_join(g, comps, proh, req, _bridges(g), budget):
+        bridges = _bridges(g)
+        if _swap_join(g, comps, proh, req, bridges, budget):
+            continue
+        # A swap needs one droppable edge from EACH component, so a component with no
+        # edges at all -- a single stranded person -- is beyond it however much slack
+        # the rest of the graph has. _steal_slot is tried second because it MOVES a
+        # degree rather than preserving every one, which is the strictly larger
+        # concession; it is only reached when the cheaper repair found nothing.
+        if not _steal_slot(g, comps, proh, req, bridges, k, budget):
             return
 
 
-def _swap_join(g, comps, proh, req, bridges, budget):
+def _edges_by_component(g, comps):
+    """Edges bucketed by the component their lower endpoint belongs to."""
     owner = {}
     for ci, comp in enumerate(comps):
         for v in comp:
@@ -207,6 +216,11 @@ def _swap_join(g, comps, proh, req, bridges, budget):
     per = [[] for _ in comps]
     for (a, b) in sorted(g.edge_list()):
         per[owner[a]].append((a, b))
+    return per
+
+
+def _swap_join(g, comps, proh, req, bridges, budget):
+    per = _edges_by_component(g, comps)
     for i in range(len(comps)):
         for j in range(i + 1, len(comps)):
             for (a, b) in per[i]:
@@ -232,6 +246,51 @@ def _swap_join(g, comps, proh, req, bridges, budget):
                         g.remove_edge(c, d)
                         g.add_edge(a, x)
                         g.add_edge(b, y)
+                        return True
+    return False
+
+
+def _steal_slot(g, comps, proh, req, bridges, k, budget):
+    """Join two components by MOVING a degree: drop a non-bridge edge (a,b) inside one
+    component and spend the freed slot on an under-k vertex u in another.
+
+    Why this exists on top of _swap_join. A double edge swap needs a droppable edge in
+    each of the two components, so it cannot touch a component that has no edges --
+    exactly the shape a saturated boundary produces at small k. Witness: n=4, k=2,
+    prohibiting (1,3) and (2,3). Completion builds the triangle 0-1-2 and leaves person
+    3 alone with no legal partner (0 is full, 1 and 2 are prohibited); _join_any cannot
+    add, _swap_join has nothing to swap, and the result reported connected=False with
+    largest-component 0.75 -- while 0-1, 0-3, 1-2 is a connected graph at the same k
+    under the same prohibitions.
+
+    Dropping non-bridge (a,b) keeps a and b connected to each other, so the only
+    component change is the merge. Edge COUNT is preserved (one removed, one added);
+    what moves is a single degree, from b to u. That is a real concession -- the result
+    is less regular than the input -- and it is why this runs only after _swap_join,
+    which concedes nothing, has failed.
+
+    Deterministic and RNG-free: components ascending, vertices ascending, edges in
+    sorted order, so the first legal move is a function of the graph alone.
+    """
+    per = _edges_by_component(g, comps)
+    for i in range(len(comps)):
+        for u in sorted(comps[i]):
+            if g.degree(u) >= k:
+                continue
+            for j in range(len(comps)):
+                if j == i:
+                    continue
+                for (a, b) in per[j]:
+                    if pair(a, b) in req or pair(a, b) in bridges:
+                        continue
+                    if budget[0] <= 0:
+                        return False
+                    budget[0] -= 1
+                    for keep in (a, b):
+                        if pair(u, keep) in proh or g.has_edge(u, keep):
+                            continue
+                        g.remove_edge(a, b)
+                        g.add_edge(u, keep)
                         return True
     return False
 

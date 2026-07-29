@@ -238,6 +238,7 @@ const POLISH_ITER_OVERHEAD = 64;
 export function boundedPolishIterations(
   n: number,
   m: number,
+  priorCount: number,
   requested: number | undefined,
   fallback: number,
 ): number {
@@ -254,25 +255,64 @@ export function boundedPolishIterations(
     ? Math.min(requested as number, fallback)
     : fallback;
   // The overhead term also guarantees a positive divisor when m is 0.
-  const perIteration = POLISH_ITER_OVERHEAD + n * (n + m);
+  const perIteration = polishIterationCost(n, m, priorCount);
   // The budget LEFT after the fixed sweeps, not the whole budget — see `loopBudget`.
   return Math.min(asked, Math.floor(loopBudget(n, m) / perIteration));
 }
 
 /**
- * Estimated polish cost: iterations × per-iteration work. The dominant term is
- * `allPairsSummary`, which is Theta(n·(n+m)) — NOT n·m: it allocates and fills an
- * `Int32Array(n)` and runs an n-wide accumulation per source regardless of how
- * few edges there are.
+ * Cost charged per WEIGHED prior pair, per iteration.
  *
- * Modelling it as n·m under-charged sparse graphs by the whole n² term, and the
- * gap is not academic: a 3000-vertex graph with 4 edges was afforded the full
- * 20,000 iterations, of which 2,000 took 67.6 s. `m` is estimated from (n, k) at
- * the gate, where the seed graph does not exist yet.
+ * `constrainedMeasure` re-counts every prior pair on every measurement (`countPresentEdges`),
+ * so the prior set is a third dimension of the per-iteration cost — invisible to a model built
+ * from (n, m) alone, and on by default: `buildConstrainedBuddyGraph` resolves `priorWeight` to
+ * `DEFAULT_PRIOR_WEIGHT` whenever any prior exists. Measured at n=268, k=1 — the densest shape
+ * the auto-polish gate still admits, which is why it is the calibration point:
+ *        0 priors  3.99 s          9,034 priors   6.34 s
+ *    1,813 priors  4.23 s         18,012 priors  10.50 s
+ *                                 35,778 priors  17.58 s   (all pairs)
+ * A 4.4x overrun of a budget that returned no refusal. Per probe the marginal rate RISES with
+ * the prior count (16.6 ns at 1.8k, 47.5 ns at 35.8k, against 4.63 ns for one unit of the
+ * n·(n+m) term), so as with `PROHIBITED_PROBE_COST` this is a FLOOR calibrated on the slowest
+ * observed rate — 10.3 units per prior, rounded up — not a model of the shape.
+ *
+ * Charged only when the priors are actually weighed: at `priorWeight` 0 `constrainedMeasure`
+ * never builds the penalty and the probes do not happen, so the callers pass 0 and a
+ * configuration that costs nothing is never refused. The unconstrained `polish` has no prior
+ * term at all and passes 0 always.
  */
-export function polishWork(n: number, k: number, iters: number): number {
+const PRIOR_PROBE_COST = 12;
+
+/**
+ * Cost of ONE polish iteration, in the units both budgets are expressed in.
+ *
+ * ONE definition, called from all three gates. It used to be spelled out separately in
+ * `polishWork`, `boundedPolishIterations` and `checkPolishSize`, which is how the prior-probe
+ * dimension came to be missing from all three at once — and worse, how it could have been added
+ * to two of them. A cost model duplicated three ways is a cost model that will disagree with
+ * itself.
+ *
+ * The dominant term is `allPairsSummary`, which is Theta(n·(n+m)) — NOT n·m: it allocates and
+ * fills an `Int32Array(n)` and runs an n-wide accumulation per source regardless of how few edges
+ * there are. Modelling it as n·m under-charged sparse graphs by the whole n² term, and the gap is
+ * not academic: a 3000-vertex graph with 4 edges was afforded the full 20,000 iterations, of which
+ * 2,000 took 67.6 s.
+ */
+function polishIterationCost(n: number, m: number, priorCount: number): number {
+  return POLISH_ITER_OVERHEAD + n * (n + m) + PRIOR_PROBE_COST * priorCount;
+}
+
+/**
+ * Estimated polish cost: iterations × per-iteration work.
+ *
+ * `m` is estimated from (n, k) at the gate, where the seed graph does not exist yet;
+ * `priorCount` is exact, because the caller holds the `Constraints`. It is REQUIRED rather than
+ * defaulted, for the same reason `constrainedWork`'s `prohibitedCount` is: an optional argument
+ * is how the dimension went missing the first time.
+ */
+export function polishWork(n: number, k: number, priorCount: number, iters: number): number {
   const m = (n * Math.min(k, Math.max(0, n - 1))) / 2;
-  return iters * (POLISH_ITER_OVERHEAD + n * (n + m));
+  return iters * polishIterationCost(n, m, priorCount);
 }
 
 /**
@@ -301,7 +341,7 @@ export function polishWork(n: number, k: number, iters: number): number {
  */
 const FIXED_POLISH_SWEEPS = 3;
 
-export function checkPolishSize(n: number, m: number): void {
+export function checkPolishSize(n: number, m: number, priorCount: number): void {
   const fixed = FIXED_POLISH_SWEEPS * n * (n + m);
   // ONE question, not two. The gate used to ask only whether the fixed sweeps fit the budget,
   // which left a band — n·(n+m) in (2.16e8, 2.88e8] — where they fit and nothing was left over,
@@ -312,7 +352,7 @@ export function checkPolishSize(n: number, m: number): void {
   // iteration subsumes the old check (fixed > budget ⇒ nothing left ⇒ refused) rather than adding
   // to it, and it cannot refuse a configuration the loop would have accepted: by construction the
   // loop would have run zero times.
-  if (loopBudget(n, m) < POLISH_ITER_OVERHEAD + n * (n + m)) {
+  if (loopBudget(n, m) < polishIterationCost(n, m, priorCount)) {
     throw new Error(
       `graph too large to polish: the fixed all-pairs sweeps cost ${fixed} of a ${MAX_POLISH_WORK} ` +
         `budget, leaving nothing for the loop (n=${n}, m=${m}) — reduce the roster or skip polish`,

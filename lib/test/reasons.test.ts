@@ -38,7 +38,7 @@ const SAMPLES: Record<Reason["code"], { reason: Reason; text: string }> = {
   },
   "too-many-invalid-constraints": {
     reason: { code: "too-many-invalid-constraints", count: 4000 },
-    text: "4000 constraints are invalid — only the first few are listed",
+    text: "4000 constraints are invalid — only some are listed",
   },
   "self-pair": {
     reason: { code: "self-pair", person: 2 },
@@ -242,5 +242,37 @@ describe("the structural reason list is bounded", () => {
     expect(validate(few, 4)).toEqual([
       "constraint references unknown person 99 (roster has 10)",
     ]);
+  });
+
+  it("lists the same reasons whatever order the constraint set was built in", () => {
+    // The cap has to choose WHICH reasons survive, and choosing "the first 16 encountered" made
+    // that choice a function of `Set` insertion order — so the same constraint SET, built
+    // forwards or backwards, refused with different text. The Python mirror iterates its sets in
+    // hash order and would have disagreed with both, which is the message parity this module is
+    // held to. Selecting the alphabetically smallest distinct messages is order-free.
+    const bad: [number, number][] = [];
+    for (let i = 0; i < 60; i++) bad.push([200 + i, 400 + i]);
+
+    const forward = new Constraints(10);
+    for (const [a, b] of bad) forward.prohibit(a, b);
+    const backward = new Constraints(10);
+    for (let i = bad.length - 1; i >= 0; i--) backward.prohibit(bad[i][1], bad[i][0]);
+    // A third order that interleaves the three pair kinds, since the scan reads them in sequence.
+    const mixed = new Constraints(10);
+    for (let i = 0; i < bad.length; i++) {
+      const [a, b] = bad[(i * 37) % bad.length];
+      if (i % 3 === 0) mixed.require(a, b);
+      else if (i % 3 === 1) mixed.prohibit(a, b);
+      else mixed.addPrior(a, b);
+    }
+
+    expect(validate(backward, 4)).toEqual(validate(forward, 4));
+    expect(validate(mixed, 4)).toEqual(validate(forward, 4));
+    // Non-vacuity: the cap must actually be biting, or all three agree trivially.
+    expect(validate(forward, 4).length).toBe(17); // 16 listed + the exact-count summary
+    // And the survivors are distinct, which "the first 16" did not guarantee: a thousand copies
+    // of one fault used to fill every slot and dedupe back down to a single listed reason.
+    const listed = validate(forward, 4).filter((t) => !/constraints are invalid/.test(t));
+    expect(new Set(listed).size).toBe(listed.length);
   });
 });
