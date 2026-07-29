@@ -37,8 +37,15 @@ the other places the project remembers things:
 - **`generation-cost-budgets.md`** — the sibling cost model: the unconstrained generator
   (`greedyWork`/`MAX_GREEDY_WORK`, the counted `MAX_REPAIR_WORK`) and every polish budget, with
   the calibration tables each constant is pinned to.
+- **`reported-metrics-and-the-polish-objective.md`** — the cases where a returned number did not
+  describe the returned graph: the flat disconnection penalty that made polish hill-climb into
+  fragmentation, the fragmentation guard's two halves, and the metrics/options that were scored
+  against the request rather than the result.
 - **`churn-priors-weight.md`** — the prior-weight sweep behind the honest F9 claim: how much
   of an existing buddy assignment survives a roster change, and at what ASPL cost.
+- **`app-performance-budgets.md`** — the front-end's own cost model: the hover-path render
+  budget behind each `React.memo`, the force-layout caps and tick scaling, and every input-size
+  gate on the import/parse surface, with the measurement each cap is calibrated against.
 - **`critical-review/`** — experiments on the *review mechanism itself* rather than on the
   graph algorithms: what the adversarial-review loop actually costs, what it finds, and what
   it manufactures. Has its own README and its own dating convention, because a process

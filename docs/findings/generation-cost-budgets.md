@@ -118,6 +118,14 @@ The two refused mid-range shapes are exactly the ones that broke the documented 
 Tightening below 1.5e10 refuses a configuration the product advertises; that is the constraint
 that fixes the value from below.
 
+**The margin between the product promise and this budget is exactly zero.** The app's pre-flight
+(`canGenerate`) promises "you can generate this" for its whole advertised rectangle —
+`n <= 1000`, `k` in [2, 12] — and that promise is true only because the densest corner lands on
+`MAX_GREEDY_WORK` by **zero margin**: `greedyWork(1000, 12)` is **1.5e10** and the budget is
+**1.5e10**. One constant edit in *either* package — a roster cap of 1001, a buddy cap of 13, or a
+tightened budget here — would have the UI enable Generate for a configuration this package
+throws on. The app must call `canGenerate`, never re-derive the rectangle from its own literals.
+
 ### Reconciled: the worst case this budget allows
 
 Earlier prose in `budgets.ts` read **"1e10 is therefore ~60 s worst case."** That sentence is
@@ -175,6 +183,27 @@ exits after **one** pass. A multi-pass model fitted to single-pass data, with a 
 the same shape, cannot catch itself. `repairDegrees(ring(36000), 4)` was admitted at 6.48e9 of
 a 6.6e9 budget and ran **239.5 s**.
 
+The three points model 4 was fitted to (all single-pass, deficit-driven, edgeless):
+
+| shape | measured |
+|---|---|
+| n=3000, k=4 | 0.25 s |
+| n=20000, k=2 | 10.7 s |
+| n=70000, k=2 | past two minutes |
+
+`greedyWork` is built from edges **added**; repair's cost is driven by the degree **deficit** it
+closes, so expressing one in the other's units was wrong however it was scaled — which is why the
+first two models failed in *opposite* directions, and why the accept-set is asserted from both
+sides.
+
+`repairDegrees` is also **public API**, and for a while it was the one generator with neither an
+argument guard nor a work budget: `repairDegrees(ring(400), 1e9)` **ran to completion in 5.6 s**
+(growth ~n^3.4) while `ringGreedy` refuses the identical (n, k), and `NaN`/`Infinity` were
+accepted silently — making `degree(v) < k` false everywhere, a **no-op reported as success**.
+(A later run of the same shape against the counter is the `ring(400, 1e9)` row below, refused
+after 2.4 s with 4.5 s to completion; the 5.6 s and 4.5 s completion figures are two measurements
+of the same unguarded call and differ by round, not by shape.)
+
 ### The three counted cost centres
 
 Units are real work. Dropping any one undercharges some shape without bound:
@@ -183,7 +212,10 @@ Units are real work. Dropping any one undercharges some shape without bound:
    which prices a k-regular graph. `k` is a **target**. For any graph whose real degrees exceed
    it, `n + n·k` undercharges without bound: a **2000-clique with 4000 leaves** (n=6000,
    m=2.0e6) charged **9.3e7 of a 1e9 budget — 9%** — while performing **8.0e9** real traversal
-   steps and running **32.8 s**.
+   steps and running **32.8 s**. The same dense-core/sparse-fringe shape at the smaller size used
+   in the suite charges **5600 against 1.44e6 real — a 257x undercharge**. Charging `n + 2m` is
+   what makes the shape reachable by the budget at all, and it needs no size cap beside it,
+   because the charge now *precedes* the sweep it prices.
 2. **Each sweep's candidate scan, at `under.length`** — a `hasEdge` Set probe per entry, which
    costs roughly **10x the BFS per element**. On an edgeless graph the BFS finds nothing to walk
    and the scan *is* the run: 20 000 sweeps over 20 000 candidates, **10.9 s** against a call
@@ -303,6 +335,26 @@ on the whole default path sat just below it. Measured with default options befor
 
 Density never participated, and cost **decreased** with n across the threshold.
 
+### The cutoff is k-dependent, so nobody may re-derive it as a literal
+
+`autoPolishEnabled` is the function that answers this; the app used to answer with its own
+`POLISH_MAX_N = 120` literal, correct only at k=4. The real cutoff moves with k:
+
+| k | largest n auto-polish still admits |
+|---|---|
+| 2 | 146 |
+| 3 | 131 |
+| 4 | **120** |
+| 12 | 78 |
+
+and is different again for the constrained builder. The literal disagreed with the function in
+**both** directions, and the disagreement reached users as a false *"this group is too large to
+shuffle"*. Call `autoPolishEnabled`; do not re-derive a number from it.
+
+**Where the gate declines on the constrained path:** above roughly **n≈190 at k=4**,
+`constrainedGreedy` never looks at priors at all — which is why `ConstraintReport.priorsKeptFraction`
+must be `null` there rather than reporting whatever fraction happened to survive by coincidence.
+
 ### Why this exact value
 
 Chosen to reproduce the old threshold **exactly at k=4** — the configuration every fixture and
@@ -326,6 +378,11 @@ boundary test depend on the k=4 boundary landing at exactly 120/121.
 
 This is the **gate only** — whether auto-polish runs at all. What it may then cost is enforced
 by `boundedPolishIterations` inside the primitives.
+
+**An explicit `polish: true` does not step around it.** Honouring the flag unbounded re-opened
+the exact 33 s case at (120, 12) the budget was introduced to close — one boolean, and the
+constant did not apply. The request is honoured *as a request*; the work it may cost is still
+capped. (At (120, 12), 20 000 iterations price at **1.73e9** under the model of the day.)
 
 **Honest residual:** this bounds the cost and makes the gate k-aware, but any on/off gate still
 has a discontinuity at its boundary — cost jumps from the budget to ~0 as n crosses it.
@@ -363,9 +420,11 @@ cite. The accept-set has to be defined by the **total**.
 (`loopBudget(n,m) < polishIterationCost(n,m,priorCount)` ⇒ throw)? Asking only whether the fixed
 sweeps *fit* left a band — `n·(n+m)` in **(2.16e8, 2.88e8]** — where they fit and nothing was
 left over, so the call was **admitted**, paid three all-pairs sweeps and two graph copies, and
-returned its input byte-for-byte. `polish(ring(11000))` (n·(n+m) = 2.42e8, inside the band)
-spends **6.68 s** to report `iters: 0`, and `polishConstrained`'s return value carries no
-iteration count at all, so nothing in it tells the caller the pass did not happen.
+returned its input byte-for-byte. `polish(ring(11000))` (n·(n+m) = 2.42e8, inside the band; its
+fixed sweeps cost **7.26e8 of the 8.65e8 budget**, leaving less than one iteration) spends
+**6.68 s** to report `iters: 0`, and `polishConstrained`'s return value carries no iteration
+count at all, so nothing in it tells the caller the pass did not happen. That band is now
+**refused** rather than run.
 
 The loop-affordability question **subsumes** the fixed-sweeps question (fixed > budget ⇒ nothing
 left ⇒ refused) rather than adding to it, and it cannot refuse a configuration the loop would
@@ -429,7 +488,9 @@ The calibration is **real work**, charged against the same budget as the loop, a
 **half** of it. Each trial is a full `energy()` — one `allPairsSummary`, the same cost as a loop
 iteration. Three corrections were needed to price it honestly:
 
-1. it ran **unconditionally**, so `{ maxIters: 0 }` still did 100 sweeps — **587 ms at n=300**;
+1. it ran **unconditionally**, so `{ maxIters: 0 }` still did 100 full O(n·m) energy evaluations
+   before the loop regardless of the budget — **587 ms at n=300, against 11 ms for the identical
+   call in `"hill"` mode**;
 2. bounded by `maxIters` but **not subtracted** from it, so the two gates together could spend
    twice the budget they both cite;
 3. subtracting it while still capping at `maxIters` made **any budget ≤ 100 vanish entirely

@@ -86,6 +86,13 @@ Surfaced by review, deliberately deferred (not silently ignored):
   boundary. Removing that means deriving the ITERATION COUNT from the budget instead of switching
   polish off — which changes every polished output and so has to go through `reference-python`
   and a fixture regeneration first.
+- **`autoPolishEnabled` hard-codes `priorCount` to 0, and F9 is what makes that wrong.** The
+  polish gate's cost model charges per *weighed* prior (`PRIOR_PROBE_COST`), but the gate is the
+  question a UI asks about a roster it is offering a reroll for, and the app has no prior concept
+  at all — a grep for `addPrior` across `app/src` returns nothing. An option with no caller is the
+  speculative-seam anti-pattern, so the gate answers for the prior-free case. **Deferred, not
+  fixed:** when F9 (priors in the UI) lands, `autoPolishEnabled` grows a `priorCount` parameter
+  and passes it through, or the gate under-charges every prior-bearing roster the UI offers.
 - **`shortestPath` / `eccentricity` are deliberately NOT mirrored in `reference-python/`,** and this
   is the one documented exception to the mirror rule above. The rule is conditional on changing an
   *algorithm*; these add none, they query `bfsDistances`, which is itself oracle-validated. More to
@@ -96,6 +103,19 @@ Surfaced by review, deliberately deferred (not silently ignored):
   substitute is `paths.props.test.ts`'s `path.length - 1 === bfsDistances(g,s)[t]`, which checks the
   new code against the mirrored function rather than against another TS BFS. Revisit only if path
   choice ever feeds generation.
+- **`minSeparation` on the constrained path is ACCEPTED AND IGNORED, and cannot be removed
+  without a breaking change.** `ConstrainedGreedyOptions.minSeparation` /
+  `ConstrainedBuddyOptions.minSeparation` change nothing about the output. `choosePartner` sorts
+  candidates by farness DESCENDING with unreachable at the top (`INFINITE_DISTANCE`), so
+  `candidates[0]` is always the farthest: a scan for "the first candidate at least
+  `minSeparation` away, falling back to the best available" returned `candidates[0]` on every
+  branch — if the maximum does not qualify, nothing else can. That dead scan is deleted rather
+  than kept as decoration, which leaves the option a documented no-op. It stays on the public
+  surface so the app's existing call site does not break, and both option types say they ignore
+  it. **Deferred, not fixed:** removing it is a breaking public-API change, mirrored in
+  `reference-python`, for a field no caller depends on for behaviour. Note the vocabulary trap —
+  `minSeparation` is the constrained path's spelling of `mind`, so a reader may reasonably expect
+  the unconstrained behaviour.
 - **`ConstrainedBuddyResult` cannot be narrowed by the type system, and `edges.length` is the
   tempting wrong check.** On a refusal the shape is fully populated — `edges` empty, `buddies` one
   EMPTY list per person, metrics as placeholders — so `if (result.edges.length > 0)` silently
@@ -152,6 +172,14 @@ Surfaced by review, deliberately deferred (not silently ignored):
   itself whenever any prior exists, which measured 3.99 s → 17.58 s at n=268 with no refusal.
   `polishIterationCost` is now the single definition all three gates share. Needs incremental /
   sampled energy for larger n.
+- **`polish` deliberately carries NO dev-mode postconditions, unlike `polishConstrained` — read
+  the asymmetry as a decision, not an oversight.** The unconstrained pass needs none by
+  construction: swaps are structurally degree-preserving, and `best` is monotonically
+  non-increasing on penalized ASPL, whose 10n disconnection term dominates any connected ASPL —
+  so a connected input can never end disconnected. `polishConstrained` has the checks because it
+  must also hold hard constraints it could break. If a future change makes `polish`'s swaps
+  anything other than degree-preserving, or weakens the penalty's dominance, this argument lapses
+  and the checks have to be added.
 - **A residual class of avoidable fragmentation survives at k=2, and it needs a different fix.**
   `repairConnectivity` now rewires in two stages — a degree-preserving double edge swap, then a
   single-degree relocation (`stealSlot`) for a component a swap cannot reach. Exhaustively over

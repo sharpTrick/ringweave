@@ -49,7 +49,9 @@ the shape *"<non-obvious fact> so that <consequence>"* — a reader who would ot
 this package that is mostly the a11y mechanisms (a live region must pre-exist its content; the
 setup dialog must be a sibling of `#app`, since `inert` cascades with no way to opt back in) and the
 input-surface ordering rules (a size gate runs *before* a parse). Everything else goes elsewhere:
-rationale to the commit message, measurements to `../docs/findings/`, limitations to the follow-ons
+rationale to the commit message, measurements to `../docs/findings/` — this package's are in
+[`app-performance-budgets.md`](../docs/findings/app-performance-budgets.md), which is where every
+render budget, layout cap and input-size gate below is calibrated — limitations to the follow-ons
 below, invariants to a test whose name states the claim.
 
 ## Architecture (respect)
@@ -124,6 +126,14 @@ token-swap; M2 ships the mock-faithful dark theme only.
   and this is recorded rather than fixed because the guard is only reachable through data that has
   already passed the stricter gate. It becomes live the moment any export path stops going through
   that gate. Surfaced by the comment sweep, where it had no home outside a source comment.
+- **`Metrics.girth` has no display, only an export slot and one derived consumer.** No panel renders
+  it; it is carried so the exported file's `meta.metrics` snapshot (F6) stays a full
+  characterization, and `separationShortfall` reads it to derive the *delivered* separation
+  (`girth - 1`, the core's own postcondition — a second field would be a channel that could
+  disagree). `null` means acyclic, i.e. separation is unbounded and nothing fell short; a consumer
+  that reads `null` as zero would report a shortfall on a forest. Surfacing girth directly is a UI
+  decision nobody has taken, not an oversight — but the field's own comment still says
+  "not displayed in M2", which understates the derived use added in M3.
 - **A constrained export records a `minSeparation` the graph can never meet.** `exportGraph` writes
   `settings.minSeparation` into the file whatever builder produced the graph, and the constrained
   path ignores that option entirely (`choosePartner` always takes the farthest legal partner), so a
@@ -160,6 +170,11 @@ token-swap; M2 ships the mock-faithful dark theme only.
   the UN-promoted set would call a rule set feasible that the builder then refuses. The worker
   now checks `report.refusals` after building instead of trusting its pre-check to be
   equivalent, so that trap fails loudly rather than rendering an edgeless graph as satisfied.
+  **A second hazard sits in the worker protocol's own shape:** `isConstrainedRequest` discriminates
+  on fields that do not look like duplicates of each other, which is exactly what makes the next
+  field easy to add to one request type and miss in the other. A priors-only request routed through
+  `buildBuddyGraph` — which never sees priors — would preserve nothing and report success. Adding
+  priors means widening the discriminator in the same change, not afterwards.
 - **The tag UI and the priors/`priorHard` toggle stay deferred.** Tags are P2 in `PROJECT_PLAN.md`
   and `lib/CLAUDE.md` documents two unfixed hazards in them (a dominant tag materializes O(n²)
   prohibited pairs; a `NaN` tag silently never groups). Priors are F9/M4. Neither has a caller.
@@ -177,7 +192,10 @@ token-swap; M2 ships the mock-faithful dark theme only.
   (0.52 / 1.02 / **1.32** × R) exceed the unit-circle frame `computeFit` builds from `FIT_MODES`
   alone, so the outer band **clips**; selecting focus with nothing selected is undefined (the mock
   silently focuses node 0); and `positionsFor` gains a parameter, touching every call site plus
-  `graphCanvasFit.test.ts`.
+  `graphCanvasFit.test.ts`. **One seam decision is settled in advance:** such a mode goes into
+  `LAYOUT_MODES` and `positionsFor` but deliberately **not** into `FIT_MODES` — folding
+  per-selection points into the frame would rescale the viewBox on every interaction, defeating the
+  fixed-frame invariant `graphCanvasFit.test.ts` pins.
 - **The force settle is synchronous and tick-scaled, not off-thread.** `forceLayout` runs a
   deterministic, n-scaled tick budget (`forceIters`) so the main-thread cost stays bounded
   (~200 ms at the n=1000 ceiling instead of ~1.5 s at a fixed 300 ticks), and `GraphCanvas`
