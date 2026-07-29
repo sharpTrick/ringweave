@@ -70,10 +70,8 @@ export default function App() {
   const explorer = useExplorerHistory((from, to) =>
     view !== null && isShownRelated(view.buddies, from, to),
   );
-  // Guard the index against the view it will be read with. `resetSelection` runs BEFORE
-  // `bg.generate` and generation is asynchronous, so a selection can survive into a shorter
-  // replacement view — where `PersonPanel` hands an out-of-range index to `eccentricity`, whose
-  // vertex guard throws.
+  // Guard the index against the view it will be read with, so that an index outliving its view
+  // cannot reach `eccentricity`, whose vertex guard throws with no error boundary above it.
   const rawSelected = explorer.current;
   const selected =
     rawSelected !== null && view !== null && rawSelected < view.names.length ? rawSelected : null;

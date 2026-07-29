@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, renderHook, act } from "@testing-library/react";
-import { Graph, bfsDistances, shortestPath } from "ringweave";
+import { Graph, bfsDistances, buildBuddyGraph, shortestPath } from "ringweave";
 import { buildHighlight, nodeClass, edgeClass } from "../src/graph/highlight";
 import { usePathFinder } from "../src/state/usePathFinder";
 import { useEscape } from "../src/state/useEscape";
@@ -123,6 +123,34 @@ describe("usePathFinder", () => {
     expect(route[0]).toBe(0);
     expect(route[route.length - 1]).toBe(3);
     expect(route.length - 1).toBe(bfsDistances(graph, 0)[3]);
+  });
+
+  it("draws the same line whichever end is picked first, over every reachable pair", () => {
+    // Quantified, because `shortestPath` really is direction-dependent: on the app's own graphs
+    // there are pairs whose route reversed is not the route back (n=12 k=3, 1<->10 gives
+    // [1,2,8,10] one way and [1,6,0,10] the other). One hand-picked pair on a 6-ring is symmetric
+    // by luck, so dropping the canonicalisation passed the whole suite.
+    const g = graphOf(12, buildBuddyGraph(12, 3, { seed: 12345 }).edges);
+    let asymmetric = 0;
+    for (let a = 0; a < 12; a++) {
+      for (let b = a + 1; b < 12; b++) {
+        const { result: fwd } = renderHook(() => usePathFinder(g));
+        act(() => fwd.current.toggle(a));
+        act(() => { fwd.current.retarget(b); });
+        const { result: rev } = renderHook(() => usePathFinder(g));
+        act(() => rev.current.toggle(b));
+        act(() => { rev.current.retarget(a); });
+        expect(fwd.current.route![0]).toBe(a);
+        expect(rev.current.route![0]).toBe(b);
+        expect(fwd.current.route).toEqual([...rev.current.route!].reverse());
+        if (shortestPath(g, a, b)!.join() !== [...shortestPath(g, b, a)!].reverse().join()) {
+          asymmetric++;
+        }
+      }
+    }
+    // NON-VACUITY: the property is only interesting where the underlying primitive disagrees with
+    // itself, and it would pass trivially on a graph where it never does.
+    expect(asymmetric).toBeGreaterThan(0);
   });
 
   it("draws the same line whichever end is picked first, read from that end", () => {

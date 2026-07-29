@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
 import { generateResult } from "./helpers";
 import {
-  connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
+  connectionSummary, constraintSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
   buddiesLabel, buddiesEachLabel, peopleNoun, separationShortfall, SEPARATION_DEFAULT,
   targetShortfall, type Metrics, type GraphView,
 } from "../src/model";
@@ -188,5 +188,34 @@ describe("a Settings value shown as delivered is disclosed when it was not", () 
     // A disclosure that always fires is not a disclosure.
     const view = viewAt(20, 4, 2);
     expect(separationShortfall(view)).toBeNull();
+  });
+});
+
+describe("constraintSummary", () => {
+  const RULES = [{ a: 0, b: 1, kind: "required" as const }];
+  const view = (report: GraphView["report"], constraints = RULES): GraphView => ({
+    ...viewFromResult(names(8), DEFAULT_SETTINGS, constraints, [], generateResult(8, 4)),
+    report,
+  });
+
+  it("never says satisfied when nothing measured the rules", () => {
+    // The disconnected-reads-as-optimal class, one field over: import rehydrates edges without
+    // running a builder, so `report` is null and the only honest answer is that nobody checked.
+    expect(constraintSummary(view(null))).not.toMatch(/satisfied/);
+    expect(constraintSummary(view(null))).toMatch(/not re-checked/);
+  });
+
+  it("says satisfied only when the report says zero violations", () => {
+    const clean = { reqViolations: 0, prohViolations: 0, connected: true, largestComponentFraction: 1, refusals: [], priorsKeptFraction: null };
+    expect(constraintSummary(view(clean))).toMatch(/satisfied/);
+    for (const broken of [{ ...clean, reqViolations: 1 }, { ...clean, prohViolations: 1 }]) {
+      const text = constraintSummary(view(broken)) ?? "";
+      expect(text).not.toMatch(/satisfied/);
+      expect(text).toMatch(/couldn.t be met/);
+    }
+  });
+
+  it("says nothing at all when there are no rules to report on", () => {
+    expect(constraintSummary(view(null, []))).toBeNull();
   });
 });

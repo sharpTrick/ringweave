@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, renderHook, act } from "@testing-library/react";
-import { Graph } from "ringweave";
+import { Graph, buildBuddyGraph } from "ringweave";
 import PersonPanel from "../src/panels/PersonPanel";
 import PersonSearch from "../src/panels/PersonSearch";
 import { useExplorerHistory } from "../src/state/useExplorerHistory";
+import { neighborhood, relatedChips, isShownRelated } from "../src/neighborhood";
 import { importGraph } from "../src/io/importGraph";
 import type { GraphView } from "../src/model";
 
@@ -102,6 +103,60 @@ describe("PersonPanel", () => {
     const { onBack } = renderPanel(RING, 0, { canGoBack: true });
     fireEvent.click(screen.getByText("← Back"));
     expect(onBack).toHaveBeenCalled();
+  });
+});
+
+describe("relatedChips projection", () => {
+  // What PersonPanel renders and what the back-stack rule tests must be one answer, so the
+  // projection's structural properties are pinned over every focus rather than one card.
+  // Dense enough that the two-step set OVERFLOWS the "+N more" cutoff. At k=4 it holds at most
+  // twelve people, the slice never binds, and a mutation of the cutoff passes untouched — which
+  // is exactly how it survived the first version of this test.
+  const BIG = fixture(
+    Array.from({ length: 60 }, (_, i) => `P${i}`),
+    buildBuddyGraph(60, 12, { seed: 12345, polish: false }).edges,
+  );
+
+  it("never lists the focused person as their own neighbour", () => {
+    for (let i = 0; i < BIG.view.names.length; i++) {
+      const { first, secondShown } = relatedChips(BIG.view.buddies, i);
+      expect(first).not.toContain(i);
+      expect(secondShown).not.toContain(i);
+      expect(isShownRelated(BIG.view.buddies, i, i)).toBe(false);
+    }
+  });
+
+  it("keeps the two buckets disjoint, so no chip renders twice", () => {
+    for (let i = 0; i < BIG.view.names.length; i++) {
+      const { first, secondShown } = relatedChips(BIG.view.buddies, i);
+      for (const v of secondShown) expect(first).not.toContain(v);
+    }
+  });
+
+  it("counts every two-step person exactly once across shown and hidden", () => {
+    let overflowed = 0;
+    for (let i = 0; i < BIG.view.names.length; i++) {
+      const { secondShown, secondHidden } = relatedChips(BIG.view.buddies, i);
+      const { second } = neighborhood(BIG.view.buddies, i);
+      expect(secondShown.length + secondHidden).toBe(second.size);
+      if (secondHidden > 0) overflowed++;
+    }
+    // NON-VACUITY: the sum is trivially right whenever nothing is hidden, so the cutoff has to
+    // actually bite somewhere or a mutation of it passes.
+    expect(overflowed).toBeGreaterThan(0);
+  });
+
+  it("agrees with what the card actually renders", () => {
+    // NON-VACUITY for the rule above: a projection that matched itself but not the DOM would
+    // still let the back-stack rule and the panel disagree, which is the defect it exists to stop.
+    const focus = 0;
+    const { first, secondShown } = relatedChips(BIG.view.buddies, focus);
+    renderPanel(BIG, focus);
+    const chips = screen.getAllByRole("button")
+      .map((b) => b.textContent)
+      .filter((t) => t !== null && BIG.view.names.includes(t));
+    for (const i of [...first, ...secondShown]) expect(chips).toContain(BIG.view.names[i]);
+    expect(chips.length).toBe(first.length + secondShown.length);
   });
 });
 

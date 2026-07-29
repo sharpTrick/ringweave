@@ -64,7 +64,7 @@ export function nextRerollSeed(seed: number): number {
 export interface Metrics {
   aspl: number | null;
   diameter: number | null;
-  girth: number | null; // export-only (meta.metrics); not displayed in M2; null for a forest
+  girth: number | null; // null for a forest; `separationShortfall` derives the displayed separation from it
   quality: number; // 0..1; 0 when disconnected
   connected: boolean;
   largestComponentFraction: number; // 1 when connected; else the largest group's share

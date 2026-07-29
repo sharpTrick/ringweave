@@ -156,6 +156,11 @@ token-swap; M2 ships the mock-faithful dark theme only.
   leave the import-time one on the old definition. Do it lib-first: export `buildReport` (or a
   renamed public equivalent taking `(g, cons, connected)`) and call it. `importExport.roundtrip.test.ts`
   pins `report` to null on import today and changes in the same commit.
+  **The fan-out is four files, not three** — a reviewer performed the wiring for real and traced
+  what it strands: with `importGraph` populating `report`, `model.ts`'s `report === null` branch in
+  `constraintSummary` becomes unreachable from live data and the docblock above it ("an imported
+  constrained file has no report") becomes false. `lib/src/core/index.ts`, `app/src/io/importGraph.ts`,
+  `app/test/importExport.roundtrip.test.ts` **and `app/src/model.ts`**, in one commit.
 - **F9's worker-protocol groundwork is DEFERRED, and named here so it is not rediscovered.**
   `GenerateRequest.constraints` carries only `{required, prohibited}` and `GenerateOptions` has
   no `priorWeight`/`priorHard`; `ConstraintPair` has no `prior` concept. A grep for

@@ -31,12 +31,17 @@ export default function QualityPanel({ view, onExport, onImport }: Props) {
       </div>
       <div className="sep" />
       <div className="metric">
+        {/* `title` is a pointer affordance, and the gauge is not focusable — so without the
+            `aria-label` the number reaches a screen reader as a bare integer with no unit and no
+            statement of what it measures. */}
         <div
           className="gauge"
+          role="img"
+          aria-label={`Connection quality ${q}%: how close to the theoretical best (Moore bound) this graph is. Zero when the group is split into disconnected sub-groups.`}
           style={{ background: `conic-gradient(var(--cool2) 0 ${q}%, var(--line) ${q}% 100%)` }}
           title="Connection quality: how close to the theoretical best (Moore bound) this graph is. Zero when the group is split into disconnected sub-groups."
         >
-          <div className="inner tabnum">{q}</div>
+          <div className="inner tabnum" aria-hidden="true">{q}</div>
         </div>
         <span className="l">{connectionSummary(m)}</span>
       </div>
