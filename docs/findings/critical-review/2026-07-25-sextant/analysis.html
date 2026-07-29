@@ -374,7 +374,42 @@
       was never built.
     </p>
 
-    <h3>7. The measurement apparatus needed reviewing too</h3>
+    <h3>7. It tripled the comment-to-code ratio, and no instrument saw it</h3>
+    <p>
+      Found by the repository's owner in one sentence, after forty rounds and five lenses had not
+      looked at it. Measured across <code>lib/src</code> + <code>app/src</code>:
+    </p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Point in history</th><th class="n">Code</th><th class="n">Comment</th><th class="n">Ratio</th></tr>
+    <tr><td>M2 baseline, before any review loop</td><td class="n">2,282</td><td class="n">537</td><td class="n">0.24</td></tr>
+    <tr><td>M3 features written, before the 40 rounds</td><td class="n">3,590</td><td class="n">1,384</td><td class="n">0.39</td></tr>
+    <tr><td>after the 40 rounds</td><td class="n">4,538</td><td class="n">3,166</td><td class="n hi">0.70</td></tr>
+  </table>
+  </div>
+  <div class="col">
+    <p>
+      <code>lib/src/core/budgets.ts</code> reached <strong>6.4 comment lines per line of code</strong>
+      — 313 lines of prose around 49 lines of arithmetic — and the largest single comment block in the
+      tree was 41 lines.
+    </p>
+    <p>
+      <strong>The mechanism is the loop, not a taste for explaining.</strong> Each round embedded the
+      case against a rejected alternative in the source so the <em>next</em> round would not
+      re-propose it. That is writing to critics: the review ends at merge, and the comment is read for
+      years by people who were never in the argument. It is E1's self-reference surfacing in an
+      artifact nobody thought to measure — invisible to every instrument either experiment built,
+      because it is not a finding, not a defect, not a token cost, and no lens files it.
+    </p>
+    <p>
+      Two facts make this the most uncomfortable entry on the page. It is <strong>label-free</strong>
+      — <code>git</code> answers it, no agent judges anything — so it could have been tracked from
+      round one for nothing. And it was found by a human reading a diff, in one sentence, after 21.7 M
+      tokens of adversarial review had not.
+    </p>
+
+    <h3>8. The measurement apparatus needed reviewing too</h3>
     <p>
       Two defects in the self-induction oracle were found only when it was pointed at the full 40-round
       dataset. It discovered fix commits by matching one commit-subject shape; the run's own subject
@@ -420,6 +455,12 @@
   <p class="lede">Four things that were knowably wrong at the time, not with the benefit of the result.</p>
   <div class="col">
     <ul class="tight">
+      <li><strong>The rationale for a fix should have gone in the commit message, never in a source
+        comment.</strong> The repository already said so — <code>lib/CLAUDE.md</code>'s quality bar
+        reads <em>"code is self-documenting; add a short comment only when the why is non-obvious"</em>
+        — and forty rounds went past it, tripling the ratio. A reviewer's job is to convince; the
+        author's is to adjudicate and record the decision where it belongs. Writing the argument into
+        the code was never the right medium and did not need a result to establish that.</li>
       <li><strong>The self-induction oracle should have asserted its own coverage from round one.</strong>
         It discovered fix commits by regex and never checked that every round in the dataset mapped to
         one. The check is four lines and it now prints any unmapped round. A silent
@@ -467,6 +508,12 @@
         acted on" from "filed, real, and deferred".</li>
       <li><strong>Would two consecutive clean rounds ever fire?</strong> Never observed, so the second
         confirming round — inherited from Ouroboros, where it did supply robustness — is untested here.</li>
+      <li><strong>What else did the method inflate in a dimension nothing measures?</strong> The
+        comment-density result is one instance of a class, and it was found by a human rather than by
+        any of the five lenses or six metric scripts. Abstraction count, indirection depth,
+        test-to-assertion ratio and public API surface are all label-free, all plausibly inflated by
+        the same pressure, and none of them were recorded. "What did the loop make worse where it
+        was not looking" is a question neither experiment asked.</li>
     </ul>
   </div>
 </section>
@@ -491,6 +538,10 @@
         <code>claude/m2-xapjhu</code>.</li>
       <li>Test counts: both suites executed at <code>544940f</code> (last M3 feature commit, before
         round 1) and at the final commit.</li>
+      <li>Comment-to-code: counted over <code>lib/src</code> + <code>app/src</code> at three refs
+        (<code>24b5dd6</code> M2 baseline, <code>544940f</code> pre-loop, final commit), by the same
+        line classifier at each. Block comments count every line; a trailing comment on a code line
+        counts as code, so the figures are a lower bound.</li>
     </ul>
 
     <h3>Interpretive — judgement, labelled as such</h3>

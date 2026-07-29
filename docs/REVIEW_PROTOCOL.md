@@ -118,6 +118,27 @@ robustness. Keep it.
   exists to collapse it. Ten agents once unanimously endorsed a non-existent OpenSSL vulnerability
   that a single empirical test killed. Confirmation routes to the invariant, the linter, the test
   suite, or the recall harness — never to a show of hands.
+- ❌ **Writing to the critics.** Do not defend a fix in a source comment, and do not pre-empt a
+  round by recording in the code why an alternative was rejected. A reviewer's job is to convince
+  you; yours is to **adjudicate** — decide, and put the decision in the commit message, where the
+  next round can argue with the record instead of with the codebase. Measured on this repository:
+  forty rounds took comment-to-code from **0.24 to 0.70**, one module reaching 6.4 comment lines per
+  line of code. The review ends at merge; the comment is read for years by people who were never in
+  the argument. `docs/COMMENT_STANDARD.md` is the bar a surviving comment must clear.
+
+## Adjudication
+
+A finding is not an instruction. Three outcomes are all legitimate and all are yours to record:
+
+| verdict | what you owe |
+| --- | --- |
+| **taken** | the fix, its guard test, and the theme's sibling named |
+| **not taken — wrong** | one line in the commit message saying why the finding does not hold |
+| **not taken — outweighed** | one line naming the factor it loses to (a determinism contract, an oracle-parity obligation, a measured cost) |
+
+The second and third are not failures of the loop; refusing them is. An agent that fixes every
+finding because a finding arrived is grading itself on throughput, and the record of a rejected
+suggestion belongs beside the change that rejected it — not inside the function it was about.
 
 ## Convergence is computed, not judged
 

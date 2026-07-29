@@ -42,6 +42,16 @@ the a11y linter cannot see statically — keyboard reachability *across* compone
 dead ends, live-region announcement, reduced motion, and the error/empty paths. Keep `npm test`
 green at the end of every round.
 
+## Comments
+
+[`../docs/COMMENT_STANDARD.md`](../docs/COMMENT_STANDARD.md) is the rule. A comment survives only in
+the shape *"<non-obvious fact> so that <consequence>"* — a reader who would otherwise do harm. In
+this package that is mostly the a11y mechanisms (a live region must pre-exist its content; the
+setup dialog must be a sibling of `#app`, since `inert` cascades with no way to opt back in) and the
+input-surface ordering rules (a size gate runs *before* a parse). Everything else goes elsewhere:
+rationale to the commit message, measurements to `../docs/findings/`, limitations to the follow-ons
+below, invariants to a test whose name states the claim.
+
 ## Architecture (respect)
 
 - **The UI never reimplements math.** Every metric and every edge comes from `ringweave`

@@ -9,53 +9,32 @@ interface Props {
   onSelect: (i: number) => void;
 }
 
-/** F3: the always-available, non-graph interface — a Name → buddies table with copy
-    and CSV export. Clicking a row selects that person in the graph. */
-/** What a successful copy announces. One string, so the emptied/refilled pair cannot drift. */
 const COPIED_MESSAGE = "Buddy list copied to the clipboard.";
 
-/** What a FAILED copy announces — and it names the way out, since the button gives none. */
+/** Names the way out, because the failed button gives none. */
 const COPY_FAILED_MESSAGE = "Couldn't copy to the clipboard — use CSV instead.";
 
 /**
- * MEMOIZED for the same measured reason as `Slips`: a hover transition over the graph rewrote
- * App-level state this component does not read, and re-rendered all n rows — ~70 ms at the import
- * ceiling, per transition, per node crossed. The memo only pays if `onSelect` is stable, which is
- * why App's `setSelected` is a `useCallback`.
+ * Memoized: a hover rewrites App state this component does not read. The memo holds only while
+ * `onSelect` is stable, which is why App's `setSelected` is a `useCallback`.
  */
 function BuddyListInner({ view, selected, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
-  // The live region's text, held separately from `copied` so it can be emptied and refilled —
-  // see copyAll. The button's own label still reads from `copied`.
   const [announced, setAnnounced] = useState("");
-  // The confirmation's pending timers. A NEWER PRESS WINS: without this, each press scheduled its
-  // own teardown and none cancelled the previous, so an earlier press's 4 s timer cleared a later
-  // press's confirmation — press at 0 s and again at 3 s, and the label reverts at 4.2 s, 1.2 s
-  // into a window that should have run to 7 s. `useNotice.flash` already implements exactly this
-  // guard for the toast; these are the app's two auto-clearing confirmations and now both have it.
-  // Clearing them on unmount also stops a resolved clipboard write from setting state on a
-  // component that is gone.
+  // A newer press wins: unless the pending timers are cleared, an earlier press's timer clears a
+  // later press's confirmation. Cleared on unmount too, so a resolved clipboard write cannot set
+  // state on a gone component.
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const copyAll = async () => {
-    // Each line starts with a name, so a hostile name (`=HYPERLINK(...)`) pasted into a
-    // spreadsheet cell would be a live formula — neutralize the leading name the same way
-    // toCsv neutralizes every cell, so both spreadsheet-bound sinks share one guard. The buddy
-    // half reuses buddyLabel (the one projection) so the copy can't diverge from the on-screen
-    // list on separator/empty glyph.
+    // Each line starts with a name, and a name pasted into a spreadsheet cell is a live formula
+    // (`=HYPERLINK(...)`), so it is neutralized exactly as toCsv neutralizes every cell.
     const text = view.names
       .map((name, i) => `${neutralizeCell(name)}: ${buddyLabel(view, i)}`)
       .join("\n");
     const ok = await copyText(text);
     if (!ok) {
-      // THE FAILURE PATH EXISTS AND WAS SILENT. `copyText` resolves false whenever the clipboard
-      // write rejects — insecure context, permission denied, no Clipboard API, focus not in the
-      // document at write time — and only the true branch did anything, so a press produced no
-      // label change, no live-region text and no toast. A screen-reader user heard nothing at
-      // all and had no way to learn that CSV is the way out. Same emptied-then-refilled pattern
-      // as the success message, so a repeated failed press is announced again rather than
-      // setting an identical string.
       timers.current.forEach(clearTimeout);
       setCopied(false);
       setAnnounced("");
@@ -67,18 +46,12 @@ function BuddyListInner({ view, selected, onSelect }: Props) {
     }
     if (ok) {
       setCopied(true);
-      // EMPTIED, THEN REFILLED, in two commits. A live region announces a CHANGE, and pressing
-      // Copy again inside the window below sets the identical string — no DOM mutation, so the
-      // second press is silent, which is exactly the press a user makes when unsure the first
-      // registered (the clipboard write is awaited and there is no other synchronous feedback).
-      // The two setStates are in different tasks, so this is two commits and two mutations, not
-      // one batch: a fix that cannot be observed to have happened is not a fix, and this one is
-      // asserted by watching the region rather than by reading the final markup.
+      // Emptied, then refilled in a separate task: a live region announces a CHANGE, so a second
+      // press that re-sets the identical string mutates nothing and is silent.
       timers.current.forEach(clearTimeout);
       setAnnounced("");
       timers.current = [
         setTimeout(() => setAnnounced(COPIED_MESSAGE), 0),
-        // The app's shared floor, not a local literal — see AUTO_CLEAR_MS.
         setTimeout(() => {
           setCopied(false);
           setAnnounced("");
@@ -99,9 +72,8 @@ function BuddyListInner({ view, selected, onSelect }: Props) {
         <h2>Buddy list</h2>
         <div className="bp-acts">
           <button className="chipbtn" onClick={copyAll}>{copied ? "Copied" : "Copy"}</button>
-          {/* The label swap is the ONLY confirmation that the copy worked, and a label change on
-              the focused control is not reliably announced. Every other transient feedback in the
-              app has a live region; this one did not. Mounted always, filled conditionally. */}
+          {/* A label change on the focused button is not reliably announced, so the result goes
+              through a region that is mounted always and filled conditionally. */}
           <span className="sr-live" role="status" aria-live="polite">{announced}</span>
           <button className="chipbtn" onClick={exportCsv}>CSV</button>
         </div>
@@ -111,9 +83,7 @@ function BuddyListInner({ view, selected, onSelect }: Props) {
           <button
             key={i}
             className={"brow" + (selected === i ? " sel" : "")}
-            // The row is visibly highlighted when selected (.brow.sel), and that state was
-            // conveyed by colour alone — LayoutToggle already uses aria-pressed for the
-            // identical "which of these is active" pattern.
+            // Selection is otherwise conveyed by colour alone (.brow.sel).
             aria-current={selected === i || undefined}
             onClick={() => onSelect(i)}
           >

@@ -13,9 +13,8 @@
 import { MAX_ROSTER } from "./graph.js";
 import { MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork } from "./budgets.js";
 
-// Pairs live as normalized "min,max" string keys (JS Set compares by reference).
-// The keys are held privately so every stored pair is guaranteed canonical — an
-// un-normalized key can never reach the legality checks that look pairs up.
+// Normalized "min,max" string keys (a JS `Set` compares objects by reference), held privately so
+// an un-normalized key can never reach the legality checks that look pairs up.
 function pairKey(a: number, b: number): string {
   return a < b ? `${a},${b}` : `${b},${a}`;
 }
@@ -30,8 +29,8 @@ function pairsOf(set: Set<string>): [number, number][] {
 }
 
 function degreeOf(n: number, pairs: [number, number][]): number[] {
-  // Guard the allocation so a directly-constructed Constraints with a malformed n
-  // (bypassing validate) gets a clear message, not a native RangeError.
+  // Guard the allocation, so a `Constraints` built directly with a malformed n gets a clear
+  // message rather than a native RangeError.
   if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
     throw new Error(`roster size ${n} is not a valid count`);
   }
@@ -53,8 +52,8 @@ export class Constraints {
   #required = new Set<string>();
   #prohibited = new Set<string>();
   #priors = new Set<string>();
-  // A plain boolean with no canonicalization invariant to protect, so it stays
-  // public (unlike the pair sets); toggling it promotes priors to required.
+  // Promotes priors to required — but only `buildConstrainedBuddyGraph` acts on it, so `validate`
+  // and the primitives accept inputs the builder would refuse (see `validateDetailed`).
   priorHard = false;
 
   constructor(n: number) {
@@ -104,12 +103,8 @@ export class Constraints {
     policy: TagPolicy = "prohibit_same",
   ): Constraints {
     const c = new Constraints(n);
-    // `?? null` rather than a length check, because the length check was not the
-    // whole nullish story: an in-range hole or an explicit `undefined` returned
-    // `undefined`, and `undefined === undefined` made every pair of UNGROUPED
-    // people compare equal and get prohibited — the exact inverse of the documented
-    // "never grouped" contract. The Python reference tests `is not None`, which
-    // covers both, so this was a port defect. Subsumes the range branch too.
+    // `?? null` and not a length check: a hole or an explicit `undefined` compares equal to every
+    // other, which would prohibit every pair of UNGROUPED people — the inverse of the contract.
     const tagOf = (i: number): Tag => tags[i] ?? null;
     switch (policy) {
       case "prohibit_same":
@@ -127,8 +122,8 @@ export class Constraints {
   }
 
   merge(other: Constraints): this {
-    // TS-only fail-fast (the Python reference has no size check) — a mismatch
-    // would otherwise surface as an out-of-range pair at a later call site.
+    // TS-only fail-fast (the Python reference has no size check): a mismatch would otherwise
+    // surface as an out-of-range pair at a much later call site.
     if (other.n !== this.n) {
       throw new Error(`cannot merge constraints for ${other.n} people into ${this.n}`);
     }
@@ -161,15 +156,11 @@ export class Constraints {
 }
 
 /**
- * A machine-readable infeasibility reason. Every variant names the people it
- * concerns as roster **indices**, so a caller with a roster can say "Alice"
- * instead of "person 4" without parsing prose.
+ * A machine-readable infeasibility reason; people are named as roster indices, so a caller can
+ * substitute names without parsing prose.
  *
- * `person` on `unknown-person` is deliberately typed as a plain number and may be
- * out of range, non-integer or NaN — that IS what is being reported. A formatter
- * with names in hand must not index a roster with it blindly (`names[x]` would
- * render "undefined references unknown person"); `formatReason` shows the raw
- * value, and so should any UI.
+ * `person` on `unknown-person` may be out of range, non-integer or NaN — that IS what is being
+ * reported, so a formatter must show the raw value rather than index a roster with it.
  */
 export type Reason =
   | { code: "roster-invalid"; n: number }
@@ -187,19 +178,9 @@ export type Reason =
   | { code: "prohibited-splits-group"; person: number };
 
 /**
- * The one place a `Reason` becomes prose. `validate` is exactly this mapped over
- * `validateDetailed`, so these strings are the authoritative wording and stay
- * byte-identical to the Python reference's.
- */
-/**
- * How a number appears in a message, so the TS and Python renderings cannot disagree.
- *
- * `formatReason`'s docblock claims byte-identity with `reference-python`'s `format_reason`, and
- * raw interpolation broke it on exactly the values these reasons are documented to CARRY:
- * `${NaN}` is "NaN" in JS and "nan" in Python, `${Infinity}` is "Infinity" against "inf". A
- * 3,000-case differential fuzz matched 2,993 messages byte-for-byte and every one of the 7
- * mismatches was this class — invisible to the suite, which only ever uses finite values.
- * Python's spelling wins because the oracle is the spec.
+ * Renders a number as Python spells it ("nan", "inf"), not as JS does ("NaN", "Infinity") — raw
+ * interpolation breaks `formatReason`'s byte-identity with the reference on exactly the values
+ * these reasons are documented to carry.
  */
 function num(x: number): string {
   if (Number.isNaN(x)) return "nan";
@@ -208,6 +189,10 @@ function num(x: number): string {
   return String(x);
 }
 
+/**
+ * The one place a `Reason` becomes prose. These strings must stay byte-identical to
+ * `reference-python`'s `format_reason` — the oracle and `constrained.test.ts` both pin them.
+ */
 export function formatReason(r: Reason): string {
   switch (r.code) {
     case "roster-invalid":
@@ -252,33 +237,18 @@ function normalize(reasons: Reason[]): Reason[] {
 }
 
 /**
- * Structured infeasibility reasons (empty = feasible). These are the cases where
- * NO valid graph exists; everything else is handled by sacrificing regularity.
- * Sorted and deduplicated by rendered text.
+ * Structured infeasibility reasons (empty = feasible), sorted and deduplicated by rendered text.
+ * These are the cases where NO valid graph exists; everything else is handled by sacrificing
+ * regularity. The primary implementation; {@link validate} is its formatter.
  *
- * This is the primary implementation and {@link validate} is its formatter — not
- * the other way round. A UI that needs to name people would otherwise have to
- * parse `validate`'s prose, which is brittle in a specific way: only 6 of the 12
- * messages name a person at all, and two carry an index that is deliberately out
- * of range.
- *
- * No Python mirror is needed: `validate`'s strings are unchanged, so the message
- * parity this module is held to is preserved by construction.
+ * Does NOT consider `priorHard`: only `buildConstrainedBuddyGraph` promotes priors, and it does
+ * so before validating — so this and the primitives accept inputs that entry point refuses.
  */
-// DOES NOT consider `priorHard`. Promotion of priors to required happens in
-// `buildConstrainedBuddyGraph`, which calls `withHardPriors` BEFORE validating — so the safe
-// entry point is consistent, and a direct caller of this function or of the primitives is not.
-// Fixing it here would mean promoting inside the validator, which `reference-python` does not do
-// (its `prior_hard` is declared and unused), so it would trade oracle parity for a consistency
-// no live caller needs: nothing in this repo sets `priorHard`, and F9 — the feature that would —
-// is deferred. Recorded in lib/CLAUDE.md rather than papered over with a comment that claims
-// this is the whole gate.
 export function validateDetailed(cons: Constraints, k: number): Reason[] {
   const structural = structuralReasons(cons);
   if (structural.length > 0) return normalize(structural);
 
-  // Roster too large for the O(n²) constrained path (rationale on MAX_CONSTRAINED_N
-  // in budgets.ts); refuse before the O(n²) connectivity walk and generation.
+  // Refuse before the O(n²) connectivity walk below (rationale in budgets.ts).
   if (cons.n > MAX_CONSTRAINED_N) {
     return [
       { code: "roster-too-large-constrained", n: cons.n, max: MAX_CONSTRAINED_N },
@@ -289,9 +259,8 @@ export function validateDetailed(cons: Constraints, k: number): Reason[] {
     return [{ code: "buddy-count-invalid", k }];
   }
 
-  // Dense k blows generation up past the n-cap (rationale on MAX_CONSTRAINED_WORK
-  // in budgets.ts); refuse when the estimated work exceeds the budget. Mirrored as a
-  // throw in constrainedGreedy's checkWellFormed.
+  // Dense k blows generation up past the n-cap (rationale in budgets.ts). Mirrored as a throw in
+  // constrainedGreedy's `checkWellFormed` — keep the two in step.
   if (constrainedWork(cons.n, k, cons.prohibitedCount) > MAX_CONSTRAINED_WORK) {
     return [{ code: "work-too-large", n: cons.n, k }];
   }
@@ -318,55 +287,37 @@ export function validateDetailed(cons: Constraints, k: number): Reason[] {
     if (allowed < reqd[v]) {
       errs.push({ code: "required-within-prohibited", person: v });
     }
-    // only a real problem when people actually need buddies (k > 0)
     if (allowed <= 0 && n > 1 && k > 0) {
       errs.push({ code: "prohibited-from-everyone", person: v });
     }
   }
 
-  // Connectivity feasibility: if prohibited pairs split the roster so some people
-  // can never be linked to the rest (even ignoring degree caps), no connected
-  // buddy graph exists. Degree-budget shortfalls are not refused here — they are
-  // handled by sacrificing regularity and surface as report.connected === false.
+  // Only prohibition-induced splits are refused. Degree-budget shortfalls are not — they are
+  // handled by sacrificing regularity and surface as `report.connected === false`.
   if (k > 0 && n > 1) errs.push(...connectivityReasons(cons));
 
   return normalize(errs);
 }
 
 /**
- * Human-readable infeasibility reasons (empty = feasible), sorted and
- * deduplicated, mirroring the Python reference. The formatter over
- * {@link validateDetailed} — this is the wording contract, and it is what
- * `constrained.test.ts`'s message tests and `reference-python` both pin.
+ * Human-readable infeasibility reasons (empty = feasible). The formatter over
+ * {@link validateDetailed}; its strings are the wording contract pinned by the Python reference.
  */
 export function validate(cons: Constraints, k: number): string[] {
   return validateDetailed(cons, k).map(formatReason);
 }
 
 /**
- * Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
- * Mirrored as throws in constrainedGreedy's `checkConstraintIds` for direct
- * callers that skip validate, and in reference-python `_structural_errors`.
- */
-/**
- * How many distinct structural faults are listed before the rest are summarised.
- *
- * The list used to be unbounded in BOTH work and output: two `Reason` objects per malformed
- * pair, then `normalize` built a Map of all of them and SORTED it, then `validate` mapped
- * `formatReason` over the survivors again. Measured on a ten-person roster with a million
- * out-of-range prohibited pairs: `validateDetailed` returned 2,000,000 reasons in 5.0 s and grew
- * RSS from 197 MB to 925 MB, and `validate` spent a further 7.9 s producing 2,000,000 strings.
- * At four million pairs the process died inside `validate` with a V8 out-of-memory — i.e. the
- * function whose documented contract is that it REFUSES rather than throws, threw.
- *
- * The scan itself stays O(P) and that is unavoidable: it matches the Set the caller already
- * built. What disappears is the 5x memory amplification, the O(P log P) string sort and the
- * unbounded return array. Nothing the app can express is affected — it caps at 200 pairs — but
- * `lib/` ships standalone and `validateDetailed` has a live MAIN-THREAD caller that renders
- * whatever array it returns.
+ * How many distinct structural faults are listed before the rest are summarised. Bounded because
+ * an unbounded list ran `validate` — whose contract is to REFUSE, not throw — out of memory on a
+ * few million invalid pairs.
  */
 const MAX_STRUCTURAL_REASONS = 16;
 
+/**
+ * Ill-formed roster size or constraint endpoints (unknown ids, self-pairs). Mirrored as throws in
+ * constrainedGreedy's `checkConstraintIds` and in reference-python `_structural_errors`.
+ */
 function structuralReasons(cons: Constraints): Reason[] {
   let invalid = 0;
   const n = cons.n;
@@ -378,26 +329,11 @@ function structuralReasons(cons: Constraints): Reason[] {
     return [{ code: "roster-too-large", n, max: MAX_ROSTER }];
   }
 
-  // Counted always, listed up to the cap: the total stays exact while the allocation does not
-  // grow with it.
-  //
-  // WHICH ones are listed is the alphabetically smallest DISTINCT messages, not the first ones
-  // encountered. `requiredPairs()` and its siblings iterate their `Set`s in insertion order, and
-  // the Python mirror iterates its sets in hash order, so "the first 16" made a refusal's text a
-  // function of how the caller happened to build the constraint set — different for a forward
-  // versus a reversed build in TS, and different again in Python, which breaks the message parity
-  // this module is otherwise held to. `normalize` already sorts the survivors by rendered text;
-  // this only moves that same order one step earlier, to where it decides MEMBERSHIP rather than
-  // just presentation. All the strings involved are ASCII, so the two languages agree.
-  //
-  // Deduping here rather than leaving it to `normalize` is a strict improvement as well: a
-  // thousand copies of one fault used to fill all 16 slots and then dedupe down to a single
-  // listed reason. The cost is one `formatReason` per invalid pair, measured at 222 ms for four
-  // million — the figure in the docblock above is for RETAINING and sorting that many, not for
-  // building one at a time and dropping it.
-  // One structure, kept sorted, at most MAX_STRUCTURAL_REASONS long — so the insertion scan is
-  // also the duplicate check, and the whole thing is bounded by construction rather than trimmed
-  // afterwards.
+  // Counted always, listed up to the cap, and WHICH ones are listed is the alphabetically
+  // smallest DISTINCT messages rather than the first encountered: `Set` iteration is insertion
+  // order in TS and hash order in the Python mirror, so "the first 16" would make a refusal's
+  // text depend on how the caller built the set and break message parity. ASCII throughout, so
+  // both languages sort alike.
   const listed: { text: string; reason: Reason }[] = [];
   const note = (r: Reason) => {
     invalid++;
@@ -428,13 +364,11 @@ function structuralReasons(cons: Constraints): Reason[] {
 }
 
 /**
- * Refuse when the allowed-pairs graph (all non-prohibited pairs) is itself
- * disconnected — then no edge selection can ever connect everyone. A necessary
- * condition only; degree-budget infeasibility is handled elsewhere.
+ * Refuse when the allowed-pairs graph is itself disconnected — no edge selection can then connect
+ * everyone. A necessary condition only; degree-budget infeasibility is handled elsewhere.
  */
 function connectivityReasons(cons: Constraints): Reason[] {
-  // With nothing prohibited the allowed graph is complete, hence connected —
-  // skip the O(n^2) walk (the common case, and keeps validate cheap at scale).
+  // Nothing prohibited ⇒ the allowed graph is complete, so skip the O(n²) walk in the common case.
   if (cons.prohibitedCount === 0) return [];
   const n = cons.n;
   const seen = new Uint8Array(n);

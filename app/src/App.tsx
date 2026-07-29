@@ -33,14 +33,11 @@ const EMPTY_EDGES: [number, number][] = [];
 
 export default function App() {
   const { notice, flash, show, clear } = useNotice();
-  // A re-roll that regenerates a byte-identical graph (small unique / polish-converged) is a
-  // no-op; explain it rather than silently doing nothing. Word it from the KEPT graph's actual
-  // quality so it never claims "best" over a gauge showing < 100%.
+  // A re-roll that regenerates a byte-identical graph is a no-op; explain it rather than
+  // silently doing nothing. `isOptimal` alone said "already optimal" to someone who asked for 4
+  // buddies and got 3 — true of the graph, not an answer to the question they asked.
   const bg = useBuddyGraph((kept) =>
     flash(
-      // `isOptimal` alone said "already optimal" to someone who asked for 4 buddies and got 3
-      // — true of the graph, and not the answer to the question they asked. When the target
-      // was missed, the honest line is the one that points at the settings.
       isOptimal(kept.metrics) && targetShortfall(kept) === null
         ? "That's already an optimal arrangement — a re-roll can't improve it."
         : "Couldn't find a different arrangement — this is what the current settings produce.",
@@ -53,19 +50,11 @@ export default function App() {
   // never outlives the attempt it describes.
   const [reopenReason, setReopenReason] = useState<string | null>(null);
   /**
-   * WHAT THE EDITOR REOPENS SHOWING — one object, not three states, and that is the whole point.
+   * WHAT THE EDITOR REOPENS SHOWING — one object, not three states: these three describe ONE
+   * generation, and one setter makes writing two of the three inexpressible.
    *
-   * These three describe ONE generation together, and three separately-written copies is a
-   * defect this loop closed three times before removing the copies: the seed a graph was not
-   * built with (round 13), the roster a refusal was worded from (round 15), and the rule rows a
-   * reroll left behind (round 20). Each fix added a writer to a site that had forgotten one; the
-   * instruction "remember to write all three" failed twice, so it is gone. There is now one
-   * setter, and every dispatch site calls it with a whole triple — writing two of three is not
-   * expressible.
-   *
-   * `rows` are the rules AS TYPED (name-keyed), never rebuilt from `view.constraints`: index
-   * pairs are what SURVIVED resolution, so rebuilding deletes the unresolved rows the editor
-   * contracts to keep and flag. They travel on the view for the same reason the roster does.
+   * `rows` are the rules AS TYPED, never rebuilt from `view.constraints`: index pairs are what
+   * SURVIVED resolution, so rebuilding deletes the unresolved rows the editor contracts to keep.
    */
   const [draft, setDraft] = useState<{ names: string[]; settings: Settings; rows: NamedPair[] }>({
     names: [],
@@ -74,58 +63,34 @@ export default function App() {
   });
   const { names, settings, rows: constraintRows } = draft;
   const [layout, setLayout] = useState<LayoutMode>("ring");
-  // Selection carries a back stack: in the explorer every name is a link, so
-  // "where was I" is part of the model rather than something the user re-derives.
   const explorer = useExplorerHistory();
-  // Guard the index against the view it will be read with. `resetSelection` runs
-  // BEFORE `bg.generate`, and generation is asynchronous — so a person selected
-  // while "Generating…" was showing survived into the replacement view. If the new
-  // roster is shorter, PersonPanel then hands an out-of-range index to
-  // `eccentricity`, whose own vertex guard throws. Reading through this makes the
-  // pair consistent by construction rather than by ordering luck.
+  // Guard the index against the view it will be read with. `resetSelection` runs BEFORE
+  // `bg.generate` and generation is asynchronous, so a selection can survive into a shorter
+  // replacement view — where `PersonPanel` hands an out-of-range index to `eccentricity`, whose
+  // vertex guard throws.
   const rawSelected = explorer.current;
   const selected =
     rawSelected !== null && view !== null && rawSelected < view.names.length ? rawSelected : null;
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
-  // The stable place focus goes when a panel removes itself.
-  //
-  // It was the search input, chosen because it is mounted for the whole life of a view. That is
-  // true and it was the wrong property to choose on: an input is a CARET, and putting one under a
-  // user who did not ask for it opens the soft keyboard and scrolls the viewport to it on every
-  // phone. Reported from a phone against this branch — finishing a generation raised the keyboard.
-  //
-  // `<main>` carries `tabIndex={-1}` so it can receive a programmatic rescue while staying out of
-  // the tab order, which is the standard landing spot for exactly this: the next Tab continues
-  // from the top of the content rather than the top of the document, and nothing is typed into.
+  // The stable place focus goes when a panel removes itself. NOT an input: a caret placed under
+  // a user who did not ask for it opens the soft keyboard and scrolls the viewport on every
+  // phone. `<main tabIndex={-1}>` takes a programmatic rescue while staying out of the tab order.
   const mainRef = useRef<HTMLElement>(null);
 
-  // ONE rescue for the whole app, at the commit boundary — see useFocusRescue. There is
-  // deliberately no per-call-site helper: two rounds of review found the call sites that had
-  // been missed, because "remember to call the helper" is not a mechanism.
-  //
-  // The anchor is resolved lazily at rescue time, not captured: which element is on screen
-  // depends on whether a graph exists yet, and the modal's roster field is the only landing
-  // spot during a first generation.
+  // ONE rescue for the whole app, at the commit boundary — see useFocusRescue. The anchor is
+  // resolved lazily rather than captured: which element is on screen depends on whether a graph
+  // exists yet and whether the dialog is up.
   useFocusRescue(() => {
-    // `??` was not enough, and the reason is the OTHER fix from the same round. Opening the
-    // roster editor makes `#app` inert in the same commit, and everything inside it — `<main>`
-    // included — is still mounted but silently unfocusable, and `??` never falls through for a
-    // non-null value. Focus stayed on <body> with the dialog open, which is the case the rescue
-    // exists for.
-    //
-    // Ask whether the candidate can actually take focus, not whether it exists.
+    // Ask whether a candidate can TAKE focus, not whether it exists: opening the roster editor
+    // makes `#app` inert in the same commit, so `<main>` is still mounted but unfocusable and
+    // `??` would never fall through it.
     const reachable = (el: HTMLElement | null | undefined) =>
       el && !el.closest("[inert]") ? el : null;
-    // Three candidates, because there is a state where the first two are both unavailable: on
-    // the FIRST generation the roster field unmounts with the modal while #app is still inert
-    // behind the busy overlay. The overlay's own Cancel button is the only focusable thing on
-    // screen at that moment, and it is outside #app.
-    //
-    // The roster field IS a text input and stays second on purpose: it is the landing spot only
-    // when the setup dialog is the whole accessible document, where putting the caret in the
-    // first field is what the user came to do rather than something done to them.
+    // Three candidates: on the FIRST generation the roster field unmounts with the modal while
+    // #app is still inert behind the busy overlay, leaving the overlay's own Cancel — outside
+    // #app — the only focusable thing on screen.
     return (
       reachable(mainRef.current) ??
       reachable(document.querySelector<HTMLElement>(`[aria-label="${ROSTER_FIELD_LABEL}"]`)) ??
@@ -133,14 +98,9 @@ export default function App() {
     );
   });
 
-  // Re-sync the editor's settings from the graph that is actually on screen, whenever a new one
-  // is adopted. Three consecutive rounds argued about this one line and each answer was half
-  // right: reading `view.settings` directly (r7) made ONE dialog input view-derived while its
-  // neighbours stayed dispatch-derived; reverting to `settings` (r8) made them consistent but
-  // left the Advanced → Seed field showing a seed that does not produce the displayed graph,
-  // because a reroll advances the seed on the view only. Adopting into the single `settings`
-  // state is the answer both critics actually recommended: one copy, consistent with the roster
-  // text and rule rows beside it, and never stale.
+  // Adopt the graph that is actually on screen into the SAME state the editor reads, so all
+  // three inputs share one source: a reroll advances the seed on the view only, so a
+  // dispatch-derived Seed field would show a seed that does not produce the displayed graph.
   useEffect(() => {
     if (view) setDraft({ names: view.names, settings: view.settings, rows: view.rows });
   }, [view]);
@@ -151,17 +111,12 @@ export default function App() {
   const path = usePathFinder(graph);
 
   /**
-   * The ONE way a person becomes selected, from any surface — the graph, the buddy
-   * list, a search result, an explorer chip. While a route is being drawn, the next
-   * pick completes it instead of navigating; routing that through a single seam is
-   * what keeps "pick the second person" working from every one of those places.
+   * The ONE way a person becomes selected, from any surface. While a route is being drawn the
+   * next pick completes it instead of navigating.
    */
-  // STABLE IDENTITY, because `BuddyList` and `Slips` are memoized and a fresh arrow each render
-  // would defeat both. `path.complete` and `explorer.select` are themselves stable (`useCallback`
-  // in their hooks), so this closes over nothing that changes per render.
-  // Destructured so the dependency list names plain identifiers: the lint rule cannot see that
-  // `path.complete` and `explorer.select` are themselves stable, and a member expression in a
-  // dep array is exactly the shape it refuses to reason about.
+  // Stable identity, because `BuddyList` and `Slips` are memoized and a fresh arrow each render
+  // would defeat both. Destructured so the dependency list names plain identifiers: the lint rule
+  // cannot see that a member expression like `path.complete` is itself stable.
   const completePath = path.complete;
   const selectPerson = explorer.select;
   const setSelected = useCallback(
@@ -172,10 +127,9 @@ export default function App() {
     [completePath, selectPerson],
   );
 
-  // Escape clears the path first, then the selection — most-transient first, so one
-  // press never throws away more than the user meant. Suspended while the roster
-  // modal is open: it has no Escape handling of its own, and clearing state behind
-  // an open dialog is invisible.
+  // Path first, then selection — most-transient first, so one press never throws away more than
+  // the user meant. Suspended while the roster modal is open: clearing state behind a dialog is
+  // invisible.
   useEscape(() => {
     if (path.active) path.clear();
     else explorer.select(null);
@@ -183,20 +137,14 @@ export default function App() {
 
   useEffect(() => {
     if (bg.status === "refused") {
-      // A refusal is not a failure: the rules simply admit no graph. Reopen the editor
-      // so the user is next to the controls that caused it — the reasons name people,
-      // and the roster modal is where those people are edited.
       // Into the DIALOG, not the toast: the toast is inert while the dialog is open, and inert
       // removes it from the accessibility tree, so a message shown there in the same commit that
       // opens this was never announced.
       setReopenReason(describeReasons(bg.refusals, names)[0] ?? "Those buddy rules can't all be met.");
       setModalOpen(true);
     } else if (bg.status === "error") {
-      // Recovery must not hinge on the message being non-empty: a "" error would otherwise skip
-      // BOTH the toast and the reopen. Always surface something and, on a first-generation failure
-      // (no view, no running overlay), reopen the setup modal so the user is never stranded.
-      // Same split: if the dialog is about to open, the message goes INTO it; otherwise there is
-      // no dialog to be contained by and the toast is both visible and announced.
+      // Never hinge recovery on the message being non-empty: a "" error would otherwise skip
+      // BOTH the toast and the reopen. Same dialog/toast split as above.
       if (!view) {
         setReopenReason(bg.error || "Generation failed.");
         setModalOpen(true);
@@ -230,58 +178,31 @@ export default function App() {
   };
 
   const handleReroll = () => {
-    // EVERYTHING here comes from `view`, never from `names`/`settings`/`constraints`.
-    // Those three are committed when a generation is DISPATCHED, while `view` only
-    // advances when one SUCCEEDS — so after a cancelled, errored or refused attempt
-    // they describe a roster that was never built. Reading them made "↻ Different
-    // arrangement", whose entire promise is a different arrangement OF THE GRAPH ON
-    // SCREEN, silently replace it with a different roster, and computed the
-    // feasibility and block-reason preflight against the wrong n as well.
+    // EVERYTHING here comes from `view`, never the draft: the draft is committed when a
+    // generation is DISPATCHED and `view` only advances when one SUCCEEDS, so after a cancelled,
+    // errored or refused attempt the draft describes a roster that was never built — and this
+    // button's promise is a different arrangement OF THE GRAPH ON SCREEN.
     if (!view) return;
-    // Advance the seed within its declared range [0, SEED_MAX] (nextRerollSeed) so a stored
-    // seed always honors the contract and can't drift past float-safe integer range.
     const s = { ...view.settings, seed: nextRerollSeed(view.settings.seed) };
     const feas = feasibility(view.names.length, s.buddies);
     if (!feas.canGenerate) {
       flash(feas.messages[0] ?? "Can't re-arrange this roster — use “Edit people” to adjust it.");
       return;
     }
-    // Cheap pre-hoc gate for the cases we can predict (the core would not polish this
-    // configuration / polish is off) with actionable copy. The uniquely-determined or
-    // polish-converged plateau is caught post-hoc by the identical-reroll callback above.
+    // Cheap pre-hoc gate for the cases we can predict; the polish-converged plateau is caught
+    // post-hoc by the identical-reroll callback above.
     const reason = rerollBlockReason(view.names.length, s, view.constraints.length > 0);
     if (reason) {
       flash(reason);
       return;
     }
     resetSelection();
-    // EVERY DISPATCH COMMITS ITS DISPATCH. These three are App's dispatch-time copies: they are
-    // what the reopened editor shows and what words a refusal, and both of those describe the
-    // generation that was actually SENT. `handleGenerate` committed them and this path did not,
-    // so after a superseded Edit→Generate the two disagreed: the reroll correctly sent the view's
-    // roster while the refusal was worded against the abandoned edit's, naming a person who is in
-    // no graph. There are exactly two dispatch sites, and now both do this — which is what makes
-    // the array that resolves a `Reason.person` the same array that was generated from.
-    //
-    // COMMIT WHAT IS A COPY, SYNTHESISE NOTHING, AND REBUILD NOTHING. Four rounds argued over
-    // these lines, and the reason it took four is that the three pieces of state look alike and
-    // are not:
-    //   - `names` is a COPY: `view.names` is exactly what `parseRoster` emitted, so writing it
-    //     back cannot lose anything. Not writing it was the refusal-names-the-wrong-roster bug.
-    //   - `settings` is a copy too EXCEPT the seed, which this path SYNTHESISES with
-    //     `nextRerollSeed` and which only becomes true if the reroll succeeds. Committing `s`
-    //     showed a seed the displayed graph was not built with; committing nothing left a buddy
-    //     count from an abandoned edit beside a roster re-committed from the view. `view.settings`
-    //     is the copy, without the synthesised part.
-    //   - the rule ROWS are NOT a copy and are not written here at all. `view.constraints` is
-    //     resolved INDEX pairs; rebuilding rows from them silently deleted every row that had not
-    //     resolved — one naming somebody no longer in the roster, one half-typed, a duplicate —
-    //     which is the exact index-reconstruction `RosterModal`'s `rules` prop documents as
-    //     forbidden and the editor's "kept and flagged, never deleted" contract forbids. Nothing
-    //     needs writing: a reroll changes neither the roster nor the rules, and `constraintRows`
-    //     already holds what the user submitted.
+    // EVERY DISPATCH COMMITS ITS DISPATCH, so the array that resolves a `Reason.person` is the
+    // array that was generated from. `view.settings` and not `s`: the synthesised seed only
+    // becomes true if this reroll succeeds. `view.rows` and never rows rebuilt from
+    // `view.constraints`, which would delete every row that did not resolve.
     setDraft({ names: view.names, settings: view.settings, rows: view.rows });
-    bg.generate(view.names, s, view.constraints, view.rows, { reroll: true }); // identical -> notice
+    bg.generate(view.names, s, view.constraints, view.rows, { reroll: true });
   };
 
   const cancelGeneration = () => {
@@ -309,9 +230,8 @@ export default function App() {
       // Size-gate the read BEFORE parsing: importGraph's caps operate on the parsed
       // object and can't bound a giant JSON.parse that precedes them.
       const text = await readFileText(file);
-      // Shape before parse, the same gate-before-the-work discipline importGraph follows
-      // internally: `JSON.parse` allocates per node, and 8 MB of pathological JSON blocks this
-      // thread for ~1.8 s and ~238 MB before importGraph gets to reject it in 0 ms.
+      // Shape before parse for the same reason: `JSON.parse` allocates per node, so a
+      // pathological file blocks this thread for seconds before importGraph can reject it.
       checkJsonShape(text);
       applyImported(importGraph(JSON.parse(text)));
     } catch (err) {
@@ -321,26 +241,13 @@ export default function App() {
 
   return (
     <>
-      {/* `inert` while an overlay owns the screen, so Tab cannot walk out of an
-          aria-modal dialog into the graph, the buddy list and the export buttons
-          behind it. One attribute does what a focus trap would, and the browser
-          enforces it.
+      {/* `inert` while an overlay owns the screen, so Tab cannot walk out of an aria-modal
+          dialog into the graph, the buddy list and the export buttons behind it.
 
-          THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS. `inert`
-          cascades to every descendant with no way to opt back in. They are siblings
-          below, and `appErrorRecovery.test.tsx` asserts the containment.
-
-          (History, since it is why the rule is shouted: an earlier version of this
-          comment claimed the same thing while the JSX rendered RosterModal inside
-          <main> in here. `modalOpen` starts `true`, so the entire first paint — the
-          dialog included — was unreachable by keyboard and absent from the
-          accessibility tree. The comment described the design, the JSX did something
-          else, and nothing checked. That is what the test is for.)
-
-          The busy overlay is in the same position for the same reason, and it also
-          closes a hole the mouse-blocking scrim never did: while "Generating…" is up,
-          the buddy-list rows and search box behind it stayed focusable and
-          Enter-activatable. */}
+          THE OVERLAYS MUST BE SIBLINGS OF THIS DIV, NOT DESCENDANTS: `inert` cascades to every
+          descendant with no way to opt back in, and `modalOpen` starts `true`, so a dialog
+          nested in here is unreachable on the entire first paint.
+          `appErrorRecovery.test.tsx` asserts the containment. */}
       <div id="app" inert={modalOpen || bg.status === "running"}>
         <header>
           <div className="brand">
@@ -377,13 +284,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* DOM ORDER FOLLOWS THE VISUAL LAYOUT, deliberately. Every panel here is
-                  absolutely positioned by app.css, so JSX order and reading order are
-                  independent — and they had diverged: Tab went rail -> toggle -> search
-                  (bottom-left) -> person (top-right) -> route (bottom-left, ABOVE search)
-                  -> buddies (top-right), jumping the viewport four times. Sighted keyboard
-                  users track focus spatially, so the order below is top row left-to-right,
-                  then the bottom-left stack downward, then the metrics band. */}
+              {/* DOM ORDER FOLLOWS THE VISUAL LAYOUT, deliberately: every panel here is
+                  absolutely positioned by app.css, so JSX order is the tab order and nothing
+                  else — reorder these and focus starts jumping across the viewport. Top row
+                  left-to-right, then the bottom-left stack downward, then the metrics band. */}
               <LayoutToggle layout={layout} onChange={setLayout} />
               {selected !== null && (
                 <PersonPanel
@@ -417,17 +321,9 @@ export default function App() {
         </main>
       </div>
 
-      {/* Outside `#app` — see the inert comment above. Both are `position: fixed` so
-          they cover the viewport rather than only <main>'s box, which additionally
-          fixes the narrow-window case where `main { overflow: auto }` let content
-          scroll out from under the scrim. */}
-      {/* All three RosterModal inputs are DISPATCH-time: the roster text, the rule rows and the
-          settings are what the user last submitted, which is what an editor should reopen showing.
-          Last round `settings` was switched to `view?.settings ?? settings` to fix a seed drift —
-          but that drift's real cause was a pre-emptive setSettings in handleReroll, removed in the
-          same round. Changing the source as well made one input view-derived while its two
-          neighbours stayed dispatch-derived, so the dialog contradicted itself. Two fixes for one
-          bug, and the second one was the defect. */}
+      {/* Outside `#app` — see the inert comment above. Both are `position: fixed` so they cover
+          the viewport rather than only <main>'s box, which also stops content scrolling out
+          from under the scrim in a narrow window. */}
       {modalOpen && (
         <RosterModal
           initialText={names.join("\n")}
@@ -443,25 +339,18 @@ export default function App() {
         />
       )}
 
-      {/* The REGION is always mounted; only its contents change. A live region has to exist
-          in the accessibility tree BEFORE its text changes for the change to register as a
-          change — Notice.tsx documents exactly this and keeps its own region permanent, and
-          three regions in this app were still mounting together with their first text. The
-          scrim itself stays conditional: it is a visual element, and an empty one would
-          swallow clicks. */}
+      {/* The REGION is always mounted; only its contents change. A live region has to exist in
+          the accessibility tree BEFORE its text changes for the change to register. The scrim
+          itself stays conditional: an empty one would swallow clicks. */}
       <div className="busy-live" role="status" aria-live="polite">
         {bg.status === "running" ? "Generating…" : ""}
       </div>
-      {/* The path finder's SPOKEN half, mounted for the whole life of a view while the visible
-          panel stays conditional. Same reason as the busy region above. */}
+      {/* The path finder's SPOKEN half, always mounted for the same reason. */}
       <div className="sr-live" role="status" aria-live="polite">
         {view ? pathStatusText(view, path.from, path.route, path.unreachable) : ""}
       </div>
-      {/* And the same for SELECTION. Choosing a person from the buddy list or a search result is
-          the app's headline task and announced nothing: the panel it opens precedes both controls
-          in DOM order — deliberately, so the DOM follows the visual layout — so Tab had already
-          gone past it, and reaching it meant Shift+Tab through several stops with nothing on
-          screen saying so. Announcing the outcome resolves that without re-litigating the order. */}
+      {/* And the same for SELECTION, which otherwise announces nothing: the panel it opens
+          precedes both controls in DOM order, so Tab has already gone past it. */}
       <div className="sr-live" role="status" aria-live="polite">
         {view ? selectionStatusText(view, selected) : ""}
       </div>
@@ -489,11 +378,9 @@ export default function App() {
       />
 
       {/* Inert while the dialog is open. The toast lives OUTSIDE #app (it has to — #app is what
-          gets inert), and it contains a real button, so it was the one focusable thing Tab could
-          reach from inside an aria-modal dialog. That is precisely the containment `inert` was
-          added to provide, leaking through the one element the containment could not cover.
-          Nothing is lost: the message is announced by its own role="status" and the dialog that
-          reopened with it is the actionable surface. */}
+          gets inert) and contains a real button, so it was the one focusable thing Tab could
+          reach out of an aria-modal dialog. Nothing is lost: its own role="status" still
+          announces the message. */}
       <div inert={modalOpen}>
         <Notice message={notice} onDismiss={clear} />
       </div>

@@ -6,15 +6,7 @@ import type { GraphView } from "../model";
 interface Props {
   view: GraphView;
   graph: Graph;
-  /**
-   * Who is being explored. Selection only — never hover; see the note below.
-   *
-   * PRECONDITION, and the caller owns it: `0 <= index < view.names.length`. It is not
-   * re-checked here because App already derives it that way against the view it renders with
-   * (a selection made during a generation can outlive a shorter replacement roster), and a
-   * second guard in a second module is a second thing to keep in step. `eccentricity` throws
-   * on an out-of-range vertex, so a violation is loud rather than silently wrong.
-   */
+  /** PRECONDITION the caller owns, unchecked here: `0 <= index < view.names.length`. */
   index: number;
   canGoBack: boolean;
   onSelect: (index: number) => void;
@@ -23,20 +15,11 @@ interface Props {
   onFindPath: () => void;
 }
 
-/** Cap on second-degree chips before collapsing to a count. */
 const SECOND_LIMIT = 24;
 
 /**
- * F8's node explorer: who this person's buddies are, who is two steps away, and
- * how far the furthest person is.
- *
- * Rendered from SELECTION ONLY, never from hover. The graph canvas deliberately
- * uses `hovered ?? selected` for its highlight, but a card that re-renders on
- * mouse-move would make its own back stack meaningless — every name you moved the
- * pointer across would look like somewhere you had been.
- *
- * Every name here is a real `<button>` that navigates, which is F8's acceptance
- * criterion and also the reason the whole feature is reachable without a mouse.
+ * Rendered from SELECTION only, never hover: a card that re-rendered on mouse-move would make its
+ * own back stack meaningless.
  */
 export default function PersonPanel({
   view, graph, index, canGoBack, onSelect, onBack, onClose, onFindPath,
@@ -45,7 +28,6 @@ export default function PersonPanel({
     () => neighborhood(view.buddies, index),
     [view.buddies, index],
   );
-  // O(n + m), and only on a selection change — not on hover.
   const reach = useMemo(() => eccentricity(graph, index), [graph, index]);
 
   const sorted = (set: Set<number>) => Array.from(set).sort((a, b) => a - b);

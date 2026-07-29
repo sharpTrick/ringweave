@@ -6,79 +6,49 @@ export interface ParsedRoster {
   warnings: string[];
 }
 
-// Bounds so a multi-MB paste (which bypasses the file-size gate) can't freeze the
-// synchronous parse that re-runs on every keystroke. MAX_NAMES matches the app's
-// generation ceiling; the scan STOPS once that many distinct names are found, so the
-// common case is O(kept names). The char cap bounds the degenerate all-duplicates case
-// (where the name cap is never reached).
+// A multi-MB paste bypasses the file-size gate, and this parse re-runs on every keystroke, so
+// both totals are bounded here. The char cap covers the degenerate all-duplicates input, where
+// the name cap is never reached.
 export const MAX_PARSE_CHARS = 500_000;
 export const MAX_NAMES = MAX_ROSTER_N;
-/**
- * Longest a single name may be.
- *
- * The two existing caps bound only TOTALS — all the text, and how many names — so the
- * product (one name's length) x (how many places it is rendered) was unbounded. One
- * 480,000-character name inside a half-megabyte file is the buddy label of every other
- * person, and `buddyLabel` is called once per person by the on-screen list, the printed
- * slips and the CSV export: 480 MB of DOM text from a file that passes every gate.
- *
- * 120 is far past any real name (the longest verified human name on record is ~747
- * characters, and that is a curiosity rather than a roster entry) and still bounds the
- * worst case to MAX_NAMES x (BUDDY_MAX + 1) x MAX_NAME_CHARS, which is a few megabytes.
- */
+/** Longest a single name may be. The other two caps bound only totals, so without this one name
+    can be half a megabyte and is then the buddy label of every other person — rendered once each
+    by the on-screen list, the printed slips and the CSV export. */
 export const MAX_NAME_CHARS = 120;
 
 /** How many de-duplicated names a warning names before it says "and N more". */
 const WARNING_NAME_LIMIT = 10;
 
 const TOKEN = /[^\n,]+/g;
-// Unicode control (Cc) and format (Cf) characters. They are not line/comma delimiters here,
-// so they'd otherwise survive inside a name and later act as a cell/row delimiter when the
-// roster is pasted into a spreadsheet (a formula-injection vector) — normalized to spaces
-// below. Categories rather than a hand-written C0+DEL range: that range missed the whole C1
-// block and every format character, including the bidi overrides that can visually reverse a
-// name. `importGraph` refuses the same set; this side, being the tolerant one, normalizes.
 /**
- * THE character class both name authorities use — defined once here and imported by
- * `importGraph`, because two copies of a security-relevant class is how the last gap
- * happened: the previous version was a hand-written C0+DEL range in both files, and
- * widening it to \p{Cc}\p{Cf} still missed U+2028 LINE SEPARATOR and U+2029 PARAGRAPH
- * SEPARATOR — categories Zl and Zp, but both ECMAScript LineTerminators and both mandatory
- * forced line breaks in CSS, so they break a name across lines in the buddy list and the
- * printed slips exactly like the characters the guard was written for.
+ * THE character class both name authorities use — one copy, imported by `importGraph`, so the
+ * two cannot drift. `parseRoster` normalizes these to spaces; `importGraph` refuses them.
  *
- * `parseRoster` normalizes these to spaces (it is the tolerant authority); `importGraph`
- * refuses them (it refuses everything it cannot round-trip). Same class, opposite policy.
- *
- * `\p{Cs}` is UNPAIRED surrogates only: with the `u` flag the class matches code POINTS, and a
- * well-formed pair is one non-Cs code point, so every emoji passes untouched. A lone surrogate
- * is an ill-formed string that no other guard here can see — it is not a control, format or
- * separator character — and it round-trips through JSON but becomes U+FFFD when a Blob encodes
- * it as UTF-8, so the exported CSV and the exported JSON disagree about the same person's name.
+ * Not just C0+DEL: Zl/Zp (U+2028, U+2029) are ECMAScript LineTerminators and forced CSS line
+ * breaks, so they break a name across lines in the buddy list and the printed slips, and none of
+ * these are delimiters here, so they survive into a pasted spreadsheet cell as an injection
+ * vector. `\p{Cs}` matches UNPAIRED surrogates only under `u` (emoji pass untouched); a lone
+ * surrogate survives JSON but becomes U+FFFD when a Blob encodes UTF-8, so the exported CSV and
+ * JSON would disagree about the same name.
  */
 export const NAME_HOSTILE_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu;
 const CONTROL_CHARS = NAME_HOSTILE_CHARS;
 
-/** THE character-truncation notice — shared so the parser's own warning and the RosterModal UI
-    can't drift in wording. (In the app, RosterModal pre-caps to MAX_PARSE_CHARS and shows this
-    itself; parseRoster's warning below is the same notice for DIRECT API callers.) */
+/** THE character-truncation notice — shared so the parser's warning and RosterModal's can't
+    drift in wording. */
 export function charCapNotice(): string {
   return `That's a lot of text — only the first ${MAX_PARSE_CHARS.toLocaleString()} characters were kept.`;
 }
 
 /**
- * Tolerant roster parse: split on newlines and commas, trim, drop blank tokens.
- * Duplicates (case-insensitive) are kept once (first occurrence wins) and FLAGGED in
- * `warnings` — never silently dropped (F1 acceptance: "duplicates flagged not dropped").
- * Pathologically large input is truncated (with `charCapNotice()`) rather than parsed unbounded.
- * NOTE: the app UI pre-caps upstream (RosterModal), so this char-cap branch is reached only by
- * DIRECT callers; the roster editor shows its own (identical) notice.
+ * Tolerant roster parse: split on newlines and commas, trim, drop blank tokens. Anything the
+ * parser changes (truncation, de-duplication) is reported in `warnings`, never applied silently.
  */
 export function parseRoster(raw: string): ParsedRoster {
   const warnings: string[] = [];
 
-  // By CODE POINT, like every other cut in this file — `slice` here would split a surrogate
-  // pair straddling the cap and emit an ill-formed name that nothing downstream rejects.
+  // By CODE POINT, like every other cut in this file: `slice` would split a surrogate pair
+  // straddling the cap and emit an ill-formed name that nothing downstream rejects.
   const text = clampToPoints(raw, MAX_PARSE_CHARS);
   if (text !== raw) warnings.push(charCapNotice());
 
@@ -91,49 +61,35 @@ export function parseRoster(raw: string): ParsedRoster {
   TOKEN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TOKEN.exec(text)) !== null) {
-    // Neutralize embedded control chars to spaces (the roster editor is tolerant, so we
-    // normalize rather than reject; import refuses them outright) before trimming.
+    // Neutralize control chars to spaces BEFORE trimming, so a name that is nothing but them
+    // becomes blank and is dropped rather than kept as whitespace.
     const raw = match[0].replace(CONTROL_CHARS, " ").trim();
     if (!raw) continue; // blank tokens are never "lost", so they never trip the cap warning
-    // Truncate rather than drop, matching this parser's tolerant contract — and warn, so
-    // the change is never silent. Import REFUSES an over-long name instead; the two
-    // authorities differ deliberately, and the round-trip check in importGraph is what
-    // keeps them from disagreeing about any name that gets through.
-    // Trim AGAIN after truncating: slicing mid-string can leave a trailing space, and a name
-    // ending in whitespace is one this parser will not reproduce on a second pass and that
-    // `importGraph` refuses outright — the output would fail its own round-trip contract.
-    // By CODE POINT, not code unit — see `codePointsIfOver`, which is this rule extracted after
-    // review found the app's other two character limits still counting UTF-16 units.
+    // By CODE POINT, not code unit. Trim AGAIN after truncating: slicing can leave a trailing
+    // space, and a name ending in whitespace is one this parser won't reproduce on a second pass
+    // and `importGraph` refuses outright.
     const points = codePointsIfOver(raw, MAX_NAME_CHARS);
     const token = points ? points.slice(0, MAX_NAME_CHARS).join("").trim() : raw;
-    // Keyed on the EMITTED name, not the pre-truncation one. Last round this was moved to `raw`
-    // to stop two different people merging when their first 120 characters match — a real
-    // concern, and the wrong resolution: `importGraph` requires every emitted name to be unique
-    // case-insensitively, so two rows that truncate to the same display name CANNOT both be
-    // emitted. Keying on `raw` let them, producing a roster this parser's own consumer rejects.
-    // Treating them as duplicates is the only outcome that satisfies the contract, and the
-    // de-dupe warning already names what happened.
+    // Keyed on the EMITTED name, not the pre-truncation one: `importGraph` requires every emitted
+    // name to be unique case-insensitively, so keying on `raw` emits two rows its own consumer
+    // then rejects.
     const key = token.toLowerCase();
     if (keptByKey.has(key)) {
-      // A duplicate isn't lost either. Count it toward the de-dupe warning only while we're
-      // still keeping names; a duplicate seen AFTER the cap is simply ignored (nothing dropped).
-      // Keyed on the case-insensitive KEY so mixed-casing copies of one person (Alice/alice/ALICE)
-      // count as extra copies of that ONE person, not as distinct duplicated names.
+      // Counted only while names are still being kept: a duplicate seen after the cap dropped
+      // nothing. Keyed on the case-insensitive KEY so Alice/alice count as one person's copies.
       if (names.length < MAX_NAMES) extras.set(key, (extras.get(key) ?? 0) + 1);
       continue;
     }
-    // A genuinely-new name. If we're already full, THIS is the first real name the cap drops —
-    // flag truncation and stop (so the warning only fires when a distinct name is actually lost,
-    // not when the overflow was blanks/duplicates), keeping work proportional to kept names.
+    // Flagged here, at the first distinct name the cap actually loses, so the warning doesn't
+    // fire for an overflow of blanks or duplicates.
     if (names.length >= MAX_NAMES) {
       capped = true;
       break;
     }
     keptByKey.set(key, token);
     names.push(token);
-    // Counted only for a name actually KEPT, and only once per person. Counting inside the scan
-    // charged every duplicate copy and even names the MAX_NAMES cap then dropped, so the warning
-    // could claim to have shortened more names than the roster contains.
+    // Counted only for a name actually KEPT: counting earlier charges duplicate copies and names
+    // the cap then drops, so the warning claims more shortened names than the roster contains.
     if (token !== raw) longNames++;
   }
 
@@ -148,11 +104,8 @@ export function parseRoster(raw: string): ParsedRoster {
   }
   if (extras.size > 0) {
     const dropped = [...extras.values()].reduce((a, b) => a + b, 0);
-    // List each de-duplicated person once, by the casing we KEPT (first occurrence) — but at
-    // most WARNING_NAME_LIMIT of them. `extras` is bounded only by MAX_NAMES-1 and each name by
-    // MAX_NAME_CHARS, so enumerating all of them produced a ~122 KB warning string that
-    // RosterModal renders as a single DOM text node inside the dialog. Same shape as the
-    // "+N more" the person panel already uses for its chips.
+    // Capped: `extras` is bounded only by MAX_NAMES-1 and each name by MAX_NAME_CHARS, so naming
+    // them all makes a six-figure warning string that RosterModal renders as one DOM text node.
     const list = clampList([...extras.keys()].map((k) => keptByKey.get(k)!), WARNING_NAME_LIMIT);
     warnings.push(
       `Removed ${dropped} duplicate ${dropped === 1 ? "entry" : "entries"} (${list}). Each person appears once.`,

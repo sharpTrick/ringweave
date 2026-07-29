@@ -7,11 +7,8 @@ function canonical(e: [number, number]): [number, number] {
   return e[0] <= e[1] ? [e[0], e[1]] : [e[1], e[0]];
 }
 
-/**
- * Serialize a GraphView to the file schema. Edges are canonicalized (u<v) and sorted;
- * metrics are already Infinity->null (normalized in `model.ts`), so `JSON.stringify`
- * can't silently corrupt them.
- */
+/** Serialize a GraphView to the file schema. Metrics are already Infinity->null (normalized in
+    `model.ts`), so `JSON.stringify` can't silently corrupt them. */
 export function exportGraph(view: GraphView): BuddyGraphFile {
   const edges = view.edges
     .map(canonical)
@@ -19,8 +16,8 @@ export function exportGraph(view: GraphView): BuddyGraphFile {
   return {
     version: 1,
     people: view.names.map((name, id) => ({ id, name })),
-    // Real rules now, not the M2 placeholder: a file that omitted them would lose
-    // the user's constraints on the next import and silently regenerate without them.
+    // Omitting these would lose the user's rules on the next import and silently regenerate
+    // without them.
     constraints: splitPairs(view.constraints),
     edges,
     settings: {

@@ -78,7 +78,27 @@ study, **104 of 110** plausible-looking patches were semantically equivalent to 
 functionality-deleting edit — deletion is the easiest way to make a test go green. If the fix
 removes a behaviour, that must be the *intent*, stated in the commit message, not a side effect.
 
-## 7. Leave no residue
+## 7. Adjudicate the finding; do not argue with it in the source
+
+A reviewer's job is to convince you. Yours is to decide. A finding can be right, wrong, or right in
+isolation and outweighed by something else — and all three of those are your call to make and
+record. What you may not do is pre-empt the next round by writing the argument into the code.
+
+**The rationale for a fix goes in the commit message. Never in a comment.** Measured on this
+repository: forty rounds of review took comment-to-code from **0.24 to 0.70**, and one module
+reached 6.4 comment lines per line of code, because each round's fix embedded the case against a
+rejected alternative in the source so the *next* round would not re-propose it. That is writing to
+critics. The review ends when the change merges; the comment is read for years by people who were
+never in the argument.
+
+If you expect a later round to re-raise something you decided against, say so in the commit
+message — *"round N proposed X; not taken, because Y"* — and let the next round argue with the
+record rather than with a paragraph wedged into a function. If it re-raises anyway, adjudicate
+again. That is cheaper than the alternative and it leaves the source alone.
+
+`docs/COMMENT_STANDARD.md` is the rule a surviving comment has to meet.
+
+## 8. Leave no residue
 
 A fix that falsifies a comment, orphans an export, or strands a constant must clean up in the same
 commit. Run `npm run lint` at the repo root before committing; the entire hygiene theme of the
@@ -91,5 +111,7 @@ measured run was fix residue.
 - [ ] no abstraction was added without a live caller
 - [ ] the sibling case is named, and fixed or explicitly deferred
 - [ ] no functionality was silently deleted
+- [ ] the diff adds no comment that fails `docs/COMMENT_STANDARD.md`; the reasoning is in the
+      commit message instead
 - [ ] `npm run lint` and `npm test` are green
 - [ ] the fix is reviewed under `fix-review` — which may only shrink it

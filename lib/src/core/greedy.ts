@@ -1,11 +1,10 @@
 /**
- * Ring-greedy generation with an incrementally maintained all-pairs distance
- * matrix (the cached variant). Deterministic: no RNG. Produces byte-identical
- * edge sets to the Python reference `gen_c_cached.ring_greedy_cached`.
+ * Ring-greedy generation with an incrementally maintained all-pairs distance matrix.
+ * RNG-free, so the edge set is byte-identical to the Python reference
+ * `gen_c_cached.ring_greedy_cached` — change reference-python/ first.
  *
- * Algorithm (Patrick Sharp). Incremental-distance caching applied to it:
- * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
- * shortest-path identity is classical (see CONCEPT_LINEAGE).
+ * Algorithm: Patrick Sharp; incremental-distance caching with Claude (Anthropic), 2026.
+ * See CONCEPT_LINEAGE.
  */
 import { Graph, ring } from "./graph.js";
 import {
@@ -13,9 +12,8 @@ import {
 } from "./budgets.js";
 import { bfsDistances } from "./metrics.js";
 
-// Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
-// ints capped well below the typed-array limit). Far tighter than MAX_ROSTER,
-// which bounds only the O(n) structures (Graph adjacency, the constrained path).
+// MEMORY bound on ringGreedy's n×n distance matrix (~100 MB here), far tighter than
+// MAX_ROSTER, which bounds only the O(n) structures.
 export const MAX_CACHED_N = 5000;
 
 export interface GreedyResult {
@@ -27,8 +25,7 @@ export interface GreedyResult {
 export interface GreedyOptions {
   /**
    * Minimum degrees of separation to aim for. Default 5, clamped to floor(n/2).
-   * `mind` mirrors the Python reference kwarg; the constrained path spells the
-   * same concept `minSeparation`.
+   * The same concept the constrained path spells `minSeparation` — an alias, not another knob.
    */
   mind?: number;
   /** When no pair is `mind` apart, shrink the target by 1 and retry rather than stop. Default true. */
@@ -39,89 +36,61 @@ export interface GreedyOptions {
 
 /**
  * Build a ~k-regular graph on `n` people: a ring seed, then greedily join the pair that is
- * farthest apart and least connected, maintaining an all-pairs distance cache incrementally.
- * RNG-free, so the same (n, k, opts) always yields the same edge set — byte-identical to the
- * Python reference `gen_c_cached.ring_greedy_cached`.
+ * farthest apart and least connected.
  *
- * THROWS rather than refuses (it has no report channel): on `k < 2` (the ring seed floors every
- * degree at 2 — use `buildConstrainedBuddyGraph` below that), on a malformed `k`/`mind`, and on
- * a roster past `MAX_CACHED_N` or `MAX_GREEDY_WORK`.
- *
- * Naming, because the two generation paths differ and a reader meets one of them first:
- * `opts.mind` here and `minSeparation` on the constrained path are THE SAME CONCEPT — this
- * spelling mirrors the Python reference's kwarg, that one reads better in a public option bag.
- * `lib/CLAUDE.md`'s vocabulary section calls them aliases, not different knobs.
+ * THROWS rather than refuses (it has no report channel): on `k < 2`, on a malformed `k`/`mind`,
+ * and past `MAX_CACHED_N` or `MAX_GREEDY_WORK`.
  */
 export function ringGreedy(
   n: number,
   k: number,
   opts: GreedyOptions = {},
 ): GreedyResult {
-  // k must be a real number: `deg >= NaN` is always false, silently disabling the
-  // degree-cap logic in findPair. (The ring seed still gives every vertex degree
-  // 2, so this path targets ~k, not a hard cap — unlike the constrained path.)
+  // `deg >= NaN` is always false, so an unchecked `k` silently disables findPair's degree cap.
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
-  // Same reasoning as `k`, and it was the one numeric option left unchecked: `mind`
-  // reaches `ecc < curMind`, and every comparison against NaN is false — so a NaN
-  // separation target silently disables the separation logic and produces a DIFFERENT
-  // graph, not an ignored option. It then propagates out as `finalMinSeparation`, so the
-  // result reports a target that was never applied.
+  // Likewise `ecc < curMind`: a NaN target builds a DIFFERENT graph rather than ignoring an
+  // option, and still propagates out as `finalMinSeparation`.
   const requestedMind = opts.mind ?? DEFAULT_MIN_SEPARATION;
   if (!Number.isInteger(requestedMind) || requestedMind < 0) {
     throw new Error(`minimum separation ${requestedMind} must be a non-negative integer`);
   }
-  // The ring seed gives every vertex degree 2 and completion only ADDS edges, so
-  // ringGreedy structurally cannot honor k < 2 — it would silently return a
-  // 2-regular graph. Refuse and point to the constrained path, which builds the
-  // empty graph (k=0) / matching (k=1) correctly.
   if (k < 2) {
     throw new Error(
       `ringGreedy needs k >= 2 (its ring seed floors degree at 2); for k < 2 use buildConstrainedBuddyGraph`,
     );
   }
-  // ringGreedy allocates a flat n×n distance cache (O(n²) memory, and completion
-  // is ~O(n³) time), so it is capped far tighter than MAX_ROSTER — beyond ~a few
-  // thousand the Int32Array allocation would throw a native RangeError. Refuse
-  // with a clear message; a malformed n (non-integer/negative) is left to ring()
-  // → the Graph ctor for the canonical "must be an integer" message.
+  // Both size guards are conditioned on `Number.isInteger(n)` so that a malformed n falls
+  // through to ring() → the Graph ctor for the canonical "must be an integer" message.
   if (Number.isInteger(n) && n > MAX_CACHED_N) {
     throw new Error(
       `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
     );
   }
-  // MAX_CACHED_N is a MEMORY bound and says so; this is the TIME bound it does not
-  // provide. Without it, (1000, 999) — which `validate` refuses outright on the
-  // constrained path — ran for over 22 minutes without returning. Same shape as
-  // MAX_CONSTRAINED_WORK, different constant: see MAX_GREEDY_WORK on why the two
-  // budgets are deliberately not shared.
+  // MAX_CACHED_N bounds MEMORY; this is the TIME bound it does not provide. Each path needs both.
   if (Number.isInteger(n) && Number.isInteger(k) && greedyWork(n, k) > MAX_GREEDY_WORK) {
     throw new Error(
       `roster size ${n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
     );
   }
-  const mind = requestedMind; // validated above
+  const mind = requestedMind;
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 
-  const g = ring(n); // throws on a non-integer/negative n
+  const g = ring(n);
   const INF = n + 5;
 
-  // Flat n*n distance matrix; dist[i*n + j].
   const dist = new Int32Array(n * n).fill(INF);
   for (let s = 0; s < n; s++) {
     const d = bfsDistances(g, s);
     const base = s * n;
-    // The diagonal needs no separate pass: `bfsDistances` sets `d[s] = 0` before its queue loop,
-    // and `0 >= 0` takes the left branch, so `dist[s*n + s]` is already 0 here. A second loop
-    // setting it again read as defending against something, with nothing named.
     for (let t = 0; t < n; t++) dist[base + t] = d[t] >= 0 ? d[t] : INF;
   }
 
   let curMind = Math.min(mind, Math.floor(n / 2));
 
-  // Incremental update: inserting edge (u,v) can only shorten distances.
+  // Inserting (u,v) can only shorten distances, so the cache is repaired rather than rebuilt:
   // new[i,j] = min(old[i,j], old[i,u]+1+old[v,j], old[i,v]+1+old[u,j])
   const updateAfterEdge = (u: number, v: number): void => {
     for (let i = 0; i < n; i++) {
@@ -146,7 +115,6 @@ export function ringGreedy(
   };
 
   const findPair = (): [number, number] | null => {
-    // best key = (neMax, neMin, -ecc, -perim, va, vb); smaller wins lexicographically
     let best: number[] | null = null;
     let bestVa = -1;
     let bestVb = -1;
@@ -154,7 +122,6 @@ export function ringGreedy(
       const vaNe = g.degree(va);
       if (vaNe >= k) continue;
       const rowVa = va * n;
-      // eccentricity over finite entries
       let ecc = 0;
       for (let t = 0; t < n; t++) {
         const d = dist[rowVa + t];
@@ -162,7 +129,7 @@ export function ringGreedy(
       }
       if (ecc < curMind) continue;
       for (let vb = va + 1; vb < n; vb++) {
-        if (dist[rowVa + vb] !== ecc) continue; // only the farthest set
+        if (dist[rowVa + vb] !== ecc) continue;
         const vbNe = g.degree(vb);
         if (vbNe >= k) continue;
         if (g.hasEdge(va, vb)) continue;
@@ -188,8 +155,8 @@ export function ringGreedy(
   for (;;) {
     const pair = findPair();
     if (pair === null) {
-      // Floor demotion at 3: below that the target is smaller than any cycle, so
-      // relaxing it buys nothing (mirrors the Python reference).
+      // Demotion floors at 3: below that the target is smaller than any cycle, so relaxing it
+      // buys nothing (mirrors the Python reference).
       if (demote && curMind > 3) {
         curMind -= 1;
         continue;
@@ -206,7 +173,6 @@ export function ringGreedy(
   return { graph: g, finalMind: curMind };
 }
 
-/** Lexicographic comparison of equal-length numeric tuples: a < b ? */
 function lexLess(a: number[], b: number[]): boolean {
   for (let i = 0; i < a.length; i++) {
     if (a[i] < b[i]) return true;
@@ -217,13 +183,8 @@ function lexLess(a: number[], b: number[]): boolean {
 
 /**
  * Greedily connect lowest-degree vertices at least `minDist` apart to close degree gaps.
- * Deterministic; mirrors Python `_repair_degrees` including its stable ordering and
- * first-max selection.
- *
- * EXPORTED public API, and it was the one generator with neither an argument guard nor a work
- * budget: `repairDegrees(ring(400), 1e9)` ran to completion while `ringGreedy` refuses the
- * identical (n, k), and `NaN`/`Infinity` were accepted silently, making `degree(v) < k` false
- * everywhere — a no-op reported as success.
+ * RNG-free; mirrors Python `_repair_degrees` including its stable ordering and first-max
+ * selection. Throws once the work counter below passes `MAX_REPAIR_WORK`.
  */
 
 export function repairDegrees(g: Graph, k: number, minDist = 3): void {
@@ -231,68 +192,27 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
   if (!Number.isInteger(minDist) || minDist < 0) {
-    // Same silent-no-op class as `k` and `mind`: `distv[v] < minDist` is false for every NaN,
-    // so a NaN floor disables the separation constraint and builds a DIFFERENT graph rather
-    // than ignoring an option.
+    // `distv[v] < minDist` is false for every NaN, so a NaN floor drops the separation
+    // constraint and builds a DIFFERENT graph rather than ignoring an option.
     throw new Error(`minimum separation ${minDist} must be a non-negative integer`);
   }
-  // COUNTED, NOT PREDICTED. Four successive models of this function's cost were wrong, each in a
-  // different direction, and the reason is that repair's cost depends on graph STRUCTURE in a way
-  // no function of (n, k, deficit) captures: a pass ends when one vertex is successfully paired,
-  // so the number of `bfsDistances` sweeps per pass is anywhere from 1 to the number of
-  // under-degree vertices, depending on which of them happen to be far enough apart.
-  //
-  // The models, and how each failed:
-  //   1. reuse `greedyWork`            — prices EDGES ADDED, a quantity repair does not spend
-  //   2. scale `greedyWork` by 4       — same wrong quantity, scaled
-  //   3. under-count x passes x sweep   — true worst case, so loose it REFUSED a 35 ms call
-  //   4. passes x sweep                — tracked my three measurements and admitted a 239 s call
-  //
-  // Model 4's failure is the instructive one: all three points I calibrated it against were
-  // EDGELESS graphs, where every candidate is unreachable, so `distv[v] < minDist` rejects
-  // everything and the loop exits after ONE pass. I fitted a multi-pass model to single-pass data
-  // and my guard test used the same shape, so it could not catch it. Review did:
-  // `repairDegrees(ring(36000), 4)` was admitted at 6.48e9 of a 6.6e9 budget and ran 239.5 s.
-  //
-  // A counter cannot be wrong about the shape. It charges the work actually done, so the budget
-  // means what it says whatever the graph looks like, and no future structure can evade it.
-  // BOTH cost centres, because the first version of this counter charged only the sweeps and
-  // still admitted `ring(36000, 4)`: every pass also rebuilds the under-degree list (O(n)) and
-  // sorts it (O(n log n)), and at 36,000 passes that dominates. Counting one of two centres is
-  // the same class of error as modelling the wrong quantity — just harder to notice, because the
-  // number it produces looks like a measurement.
-  //
-  // And the unit price is MEASURED too, which is the half the first counter got wrong. It priced
-  // a sweep at `n + n·k` — the cost of a graph that is k-regular, not the cost of the graph in
-  // hand. `k` is a TARGET; `bfsDistances` walks the adjacency that actually exists, at `n + 2m`.
-  // For any graph whose real degrees exceed k the estimate undercharges without bound, so the
-  // budget stopped binding exactly where the graph was most expensive: a 2000-clique with 4000
-  // leaves (n=6000, m=2.0e6) charged 9.3e7 of a 1e9 budget — 9% — while performing 8.0e9 real
-  // traversal steps and running 32.8 s. Counting passes but modelling their price is the same
-  // error as modelling the pass count, one level down.
-  //
-  // THREE cost centres, not two. Correcting the sweep price exposed the third: each sweep also
-  // scans every candidate in `under` (a `hasEdge` Set probe per entry), which is uncharged and,
-  // per element, roughly ten times what the BFS costs. On an edgeless graph the BFS finds nothing
-  // to walk and that scan IS the run — 20,000 sweeps over 20,000 candidates, 10.9 s of a call the
-  // sweep charge alone priced at 0.33 s. `under.length` is the exact scan length (there is no
-  // early exit), so it is counted, not estimated, like the two centres beside it.
+  // COUNTED, NOT PREDICTED: repair's cost depends on graph STRUCTURE, and four successive
+  // (n, k, deficit) models were each wrong in a different direction. All THREE cost centres are
+  // charged — sweeps, per-pass rebuild+sort, per-sweep candidate scan — each exposed by a graph
+  // shape the other two could not see.
   let work = 0;
 
   let changed = true;
   while (changed) {
     changed = false;
-    // under-degree vertices, ascending vertex order, stable-sorted by degree
     const under: number[] = [];
     for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
     if (under.length < 2) break;
-    under.sort((x, y) => g.degree(x) - g.degree(y)); // stable in ES2019+
-    // Recomputed per pass, not hoisted: a pass ends the moment it adds an edge, so `m` is
-    // constant WITHIN a pass and grows between them. `numEdges()` is itself O(n), the same order
-    // as the rebuild scan beside it.
+    // Stable (ES2019+): Python parity depends on ties keeping ascending vertex order.
+    under.sort((x, y) => g.degree(x) - g.degree(y));
+    // Per pass, not hoisted: a pass ends the moment it adds an edge, so `m` is constant WITHIN a
+    // pass and grows between them.
     const sweepCost = g.n + 2 * g.numEdges();
-    // The rebuild scan and the sort, charged per pass. At 36,000 passes this is the dominant
-    // term, and leaving it uncounted is what let a 239 s call through.
     work += g.n + under.length * Math.log2(Math.max(2, under.length));
     if (work > MAX_REPAIR_WORK) {
       throw new Error(
@@ -309,7 +229,6 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
         );
       }
       const distv = bfsDistances(g, va);
-      // candidates in `under` order (degree-sorted, stable ascending v)
       let vb = -1;
       let bestDist = -1;
       for (const v of under) {
@@ -318,7 +237,7 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
         if (g.hasEdge(va, v)) continue;
         if (distv[v] < minDist) continue;
         if (distv[v] > bestDist) {
-          bestDist = distv[v]; // first-max: strict > keeps the first
+          bestDist = distv[v]; // strict `>` keeps the first max, as Python does
           vb = v;
         }
       }

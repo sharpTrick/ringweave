@@ -1,19 +1,17 @@
 /**
- * Deterministic seeded RNG (mulberry32). Same seed -> same sequence, so any
- * pipeline using it (polish) is reproducible within JS. This does NOT match
- * Python's RNG — cross-language identity is only claimed for the deterministic
- * generators (greedy, repair), which use no randomness.
+ * Deterministic seeded RNG (mulberry32): same seed, same sequence, so polish is reproducible
+ * within JS. It does NOT match Python's RNG — cross-language identity is claimed only for the
+ * RNG-free generators.
  */
 
 /** Exclusive upper bound on a seed: mulberry32's state is a uint32. */
 const SEED_MAX = 2 ** 32;
 
-/** Whether `seed` names a distinct RNG stream rather than aliasing onto another one. */
+/** Whether `seed` names a distinct stream rather than aliasing onto another one. */
 export function isSeed(seed: number): boolean {
   return Number.isInteger(seed) && seed >= 0 && seed < SEED_MAX;
 }
 
-/** `seed` if it is a valid seed; throws otherwise. */
 export function checkSeed(seed: number): number {
   if (!isSeed(seed)) {
     throw new Error(`seed ${seed} must be an integer in [0, ${SEED_MAX})`);
@@ -25,12 +23,9 @@ export class RNG {
   private state: number;
 
   constructor(seed: number) {
-    // VALIDATED, NOT COERCED. `seed >>> 0` accepted every number and mapped a great many of
-    // them onto the same stream: `0.9`, `-0`, `NaN` and `2**32` all became 0, and `s` and
-    // `s + 2**32` were indistinguishable. Seed is the app's "give me a different arrangement"
-    // control, so aliasing is a silent refusal of the only request the user made — and it was
-    // the one numeric option in the core still coerced rather than checked, while `k`, `mind`,
-    // `minDist`, `polishIters` and `priorWeight` all throw or fall back explicitly.
+    // Validated, not coerced: `seed >>> 0` maps `0.9`, `-0`, `NaN`, `2**32` and `s + 2**32` all
+    // onto some other seed's stream, silently refusing the different arrangement the user asked
+    // for.
     this.state = checkSeed(seed);
   }
 

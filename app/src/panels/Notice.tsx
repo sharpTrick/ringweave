@@ -1,14 +1,8 @@
 /**
- * A dismissable transient toast (import errors, gate refusals). It also auto-clears — see
- * `useNotice`.
+ * A dismissable transient toast.
  *
- * Two a11y constraints shape this markup, both surfaced by the hygiene linter:
- * - The dismiss affordance is a real `<button>`, not a click handler on a `<div>`, so it is
- *   reachable and operable without a mouse. "Everything works from the panels; keyboard-navigable"
- *   is non-negotiable (see app/CLAUDE.md), and a mouse-only dismiss broke it.
- * - The `role="status"` region stays mounted even with no message, so assistive tech announces a
- *   *content change* in a region it is already watching. Unmounting the region and remounting it
- *   with text is announced far less reliably.
+ * The `role="status"` region stays mounted with no message, so a later message is announced as a
+ * content change; a region remounted together with its text is not reliably announced.
  */
 export default function Notice({
   message,

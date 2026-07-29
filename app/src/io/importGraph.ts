@@ -15,42 +15,22 @@ import type { BuddyGraphFile } from "./schema";
 /** Thrown with a plain-language reason when a file can't be imported. */
 export class ImportError extends Error {}
 
-/** C0 control chars + DEL — illegal inside a name (non-global so .test() is stateless). */
-// The shared class, from parseRoster — see NAME_HOSTILE_CHARS for why it is defined once.
-// A fresh RegExp because the shared one carries the `g` flag, and `test` on a global regex
-// advances lastIndex between calls, so every other name in a roster would be skipped.
+// A fresh RegExp: the shared class carries `g`, and `test` on a global regex advances lastIndex
+// between calls, so every other name in a roster would be skipped.
 const CONTROL_CHARS_TEST = new RegExp(NAME_HOSTILE_CHARS.source, "u");
 
-/**
- * Import bounds. The core's pure metric functions (`allPairsSummary`/`girth`) are UNCAPPED
- * and re-measure the file on the main thread, and the graph view also LAYS OUT and RENDERS
- * every edge synchronously. So both node count AND density must be bounded:
- * - `MAX_IMPORT_N` caps the O(n^2) metric baseline.
- * - the density cap (avg degree <= BUDDY_MAX) keeps edge-scaling work in check — the force
- *   layout is O(m)/tick and the SVG renders one <line> per edge, so a near-complete graph
- *   (K430 ≈ 92k edges) would freeze layout+render even though its BFS cost is modest.
- * A buddy graph has at most BUDDY_MAX buddies each, so `2·m <= BUDDY_MAX·n` is the natural
- * ceiling; anything denser isn't a buddy graph and is refused with a plain-language error.
- * A rejected file costs an arithmetic check (the oversized *file* is stopped earlier by the
- * byte-size gate in readFileText, before it is parsed).
- *
- * The node cap equals the generation ceiling (a re-rollable import shouldn't display more
- * than the app can generate), which also holds the worst-case synchronous re-measure
- * (`allPairsSummary`+`girth`) to a few hundred ms rather than over a second.
- */
+/** Node cap for import. The core's metrics are uncapped and re-measured synchronously on the
+    main thread, so this must not exceed the generation ceiling; density is capped separately
+    in `importGraph` because layout and render scale with edges, not nodes. */
 export const MAX_IMPORT_N = MAX_ROSTER_N;
 
 function sanitizeInt(value: unknown, lo: number, hi: number, fallback: number): number {
   return Number.isInteger(value) ? clamp(value as number, lo, hi) : fallback;
 }
 
-/** Sanitize the settings block: values come from arbitrary JSON. `buddies` and
-    `minSeparation` are STORED on the view and handed to the core by any later reroll — the
-    import itself rehydrates edges and never generates, so they are not used now, which is
-    exactly why they have to be bounded now. Both are
-    CLAMPED to the UI range [BUDDY_MIN, BUDDY_MAX] — an untrusted file must not inject a value
-    the stepper can't express (a star import's near-n degree fallback — up to MAX_IMPORT_N-1,
-    e.g. 999 — or a declared minSeparation of 1e9) and drive generation out of range. */
+/** Clamp the settings block to the UI range. `buddies`/`minSeparation` are unused by import
+    (it rehydrates edges and never generates) but are STORED and handed to the core by any later
+    reroll, so an unbounded file value would drive generation out of range then. */
 function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBuddies: number): Settings {
   const declared = s && Number.isInteger(s.buddies) && s.buddies >= BUDDY_MIN ? s.buddies : fallbackBuddies;
   return {
@@ -64,27 +44,17 @@ function sanitizeSettings(s: BuddyGraphFile["settings"] | undefined, fallbackBud
 /**
  * Validate and rehydrate the constraint block.
  *
- * Refuses rather than skipping bad pairs. Every other malformed input in this file
- * throws, and switching constraints alone to lenient accept-with-skips would be
- * inconsistent inside one function — worse, it would silently change the rules a
- * user gets back from the rules they saved, which is the same silent-partial
- * failure the constraints feature exists to avoid.
- *
- * A pair that is both required and prohibited is refused here too. It is a
- * semantic contradiction the core would refuse at generation time anyway, and an
- * imported graph that renders fine but can never be regenerated is a worse place
- * to discover it. The app cannot produce such a file: a view only ever carries the
- * rules a successful generation ran under.
+ * Refuses rather than skipping bad pairs, so a user is never handed back a different rule set
+ * than they saved. A pair that is both required and prohibited is refused here rather than at the
+ * next generation, so a graph that renders but can never be regenerated isn't found later.
  */
 function readConstraints(
   block: BuddyGraphFile["constraints"] | undefined,
   n: number,
 ): ConstraintPair[] {
   if (block === undefined) return [];
-  // `Array.isArray` as well: an array satisfies `typeof === "object"` and is not null, so a
-  // `"constraints": [...]` block passed the guard, both `.required` and `.prohibited` read as
-  // undefined, and the file imported with its rules SILENTLY DROPPED instead of refused. A shape
-  // guard that accepts the wrong shape and then finds nothing in it fails open.
+  // `Array.isArray` as well: an array passes the object guard, so `"constraints": [...]` would
+  // read as no rules at all and import with them SILENTLY DROPPED instead of refused.
   if (typeof block !== "object" || block === null || Array.isArray(block)) {
     throw new ImportError("That file's buddy rules aren't in the expected shape.");
   }
@@ -117,8 +87,7 @@ function readConstraints(
     if (seen.has(pairKey(p))) throw new ImportError("That file lists the same buddy rule twice.");
     seen.add(pairKey(p));
   }
-  // Same two people under both kinds: the keys differ (kind is part of the key), so
-  // this needs its own pass over the un-kinded pair.
+  // Kind is part of `pairKey`, so the same two people under both kinds needs its own pass.
   const unkinded = new Set<string>();
   for (const p of pairs) {
     const key = p.a <= p.b ? `${p.a},${p.b}` : `${p.b},${p.a}`;
@@ -130,28 +99,12 @@ function readConstraints(
   return pairs;
 }
 
-/**
- * Rehydrate a GraphView from a file WITHOUT regenerating — the edges are in the file.
- * A `Graph` is rebuilt and metrics are recomputed with the core's own functions
- * (`allPairsSummary`/`girth`/`largestComponentFraction`), so imported (incl. hand-edited)
- * files are honestly re-measured — quality reflects the ACTUAL degree and connectivity, not
- * the declared `settings`. Round-trips identically with `exportGraph`. Dimensions and density
- * are bounded up front so an oversized/dense file fails fast instead of freezing the tab.
- */
-/**
- * Every interpolation of untrusted file content goes through this.
- *
- * `ImportError.message` is rendered straight into the DOM as the sole child of the
- * toast, so an unbounded interpolation turns the whole 8 MB file budget into one text
- * node: `{"version":"AAAA…"}` with a 7.9-million-character version string produced a
- * 7.9-million-character toast. Bounding it at the SINK (useNotice) as well is belt and
- * braces; bounding it here is what keeps the message readable.
- */
+/** Every interpolation of untrusted file content goes through this: `ImportError.message` is
+    rendered straight into the DOM, so an unbounded interpolation becomes an unbounded text node. */
 function quote(value: unknown, max = 80): string {
-  // Bounds the INPUT, not the output. Serializing first and slicing after still pays a
-  // full JSON.stringify of the untrusted value to produce 80 characters — and on a deeply
-  // nested value it throws a RangeError that escapes importGraph as something other than
-  // an ImportError, so the caller's "Couldn't import that file" path never runs.
+  // Bounds the INPUT, not the output: stringify-then-slice still pays a full `JSON.stringify` of
+  // the untrusted value, and on a deeply nested one throws a RangeError that escapes as something
+  // other than an ImportError, so the caller's "Couldn't import that file" path never runs.
   if (typeof value === "string") return JSON.stringify(clampText(value, max));
   if (value === null || typeof value === "number" || typeof value === "boolean") {
     return String(value);
@@ -160,6 +113,9 @@ function quote(value: unknown, max = 80): string {
   return typeof value === "object" ? "an object" : typeof value;
 }
 
+/** Rehydrate a GraphView from a file WITHOUT regenerating: metrics are re-measured from the
+    file's own edges, so quality reflects the actual graph rather than the declared `settings`.
+    Size and density are bounded before any per-element work. */
 export function importGraph(data: unknown): GraphView {
   if (typeof data !== "object" || data === null) {
     throw new ImportError("That file isn't a BuddyGraph JSON object.");
@@ -177,13 +133,13 @@ export function importGraph(data: unknown): GraphView {
   if (!Array.isArray(f.edges)) {
     throw new ImportError("That file has no edges list.");
   }
-  // Density: a buddy graph has avg degree <= BUDDY_MAX, i.e. 2·m <= BUDDY_MAX·n. Anything
-  // denser would freeze layout/render, so it's refused (not a buddy graph).
+  // Density gate: layout is O(m)/tick and the SVG renders one <line> per edge, so a graph denser
+  // than a buddy graph (2·m <= BUDDY_MAX·n) would freeze the tab rather than merely render badly.
   if (2 * f.edges.length > BUDDY_MAX * f.people.length) {
     throw new ImportError(`That file has too many edges for ${f.people.length} people — it's denser than a buddy graph.`);
   }
-  // Bound the pair count BEFORE any per-pair work, and before `validate`'s O(n²)
-  // prohibited-pair connectivity walk could ever be reached on a later generate.
+  // Before any per-pair work, and before a later generate could reach `validate`'s O(n²)
+  // prohibited-pair walk.
   const declaredPairs =
     (f.constraints?.required?.length ?? 0) + (f.constraints?.prohibited?.length ?? 0);
   if (declaredPairs > MAX_CONSTRAINT_PAIRS) {
@@ -195,20 +151,12 @@ export function importGraph(data: unknown): GraphView {
     if (!p || typeof p.name !== "string") {
       throw new ImportError(`Person at position ${i} is missing a name.`);
     }
-    // Per-NAME length, checked before any message can interpolate the name and before the
-    // collective-length check below. The existing gates bound only totals, so one name could
-    // be half a megabyte: it then becomes the buddy label of everyone adjacent to it, and
-    // BuddyList, Slips and the CSV export each materialize that. A 512 KB file reached 480 MB
-    // of DOM text and ~1 GB RSS. Refused rather than truncated because import refuses
-    // everything else it cannot round-trip; parseRoster, the tolerant authority, truncates.
-    // In CODE POINTS, the unit `parseRoster` truncates in. Measuring in UTF-16 units made this
-    // gate stricter than the parser that feeds it, so a roster of 61 emoji-bearing names passed
-    // the parser untouched, exported, and was then refused by this function's own round-trip —
-    // breaking the docblock's "round-trips identically with exportGraph" for a file the app
-    // itself had just written.
-    // The count is deliberately not reported: `codePointsIfOver` now stops at the limit rather
-    // than counting a whole 8 MB name to say how far over it is, and "over 120" is what the
-    // reader needs anyway.
+    // Per-NAME length: the other gates bound only totals, so one name can be half a megabyte and
+    // is then the buddy label of everyone adjacent to it. Checked before any message can
+    // interpolate the name and before the collective-length check below. In CODE POINTS, the unit
+    // `parseRoster` truncates in — measuring UTF-16 units makes this stricter than the parser that
+    // feeds it and refuses files this app itself just exported. The count is not reported so that
+    // `codePointsIfOver` can stop at the limit instead of scanning a whole 8 MB name.
     if (codePointsIfOver(p.name, MAX_NAME_CHARS)) {
       throw new ImportError(`A name is too long (over ${MAX_NAME_CHARS} characters).`);
     }
@@ -219,22 +167,16 @@ export function importGraph(data: unknown): GraphView {
     return p.name;
   });
 
-  // A name with an embedded control character (tab/CR/…) is a spreadsheet formula-injection
-  // vector: it isn't a comma/newline delimiter here, so it survives into the buddy list/CSV/
-  // clipboard and then splits a pasted line into a cell/row whose next field can be a live
-  // formula. Refuse it outright at the import authority (the roster editor normalizes such
-  // chars to spaces, so this also enforces round-trip stability). Checked before the length/
-  // round-trip checks so the reason names the real cause.
+  // A control character is not a delimiter here, so it survives into the buddy list/CSV/clipboard
+  // and then splits a pasted line into a cell whose next field can be a live formula. Checked
+  // before the round-trip check below so the error names the real cause.
   if (names.some((x) => CONTROL_CHARS_TEST.test(x))) {
     throw new ImportError("A name contains a tab, line break, or other control character — remove it and try again.");
   }
 
-  // Names must survive the roster editor unchanged: `parseRoster` (comma/newline delimited)
-  // trims, drops blanks, and de-dupes case-insensitively, so an empty/whitespace-only/
-  // comma/newline/duplicate name would silently vanish or split on an Edit→regenerate,
-  // shifting every downstream buddy label. Make the parser the authority — refuse anything
-  // it wouldn't round-trip. Check total length FIRST so an over-long (but otherwise valid)
-  // roster gets a size reason, not a misleading commas/uniqueness one.
+  // `parseRoster` trims, drops blanks and de-dupes case-insensitively, so a name it would not
+  // reproduce vanishes or splits on an Edit→regenerate and shifts every downstream buddy label.
+  // Total length FIRST, so an over-long roster gets a size reason and not a misleading one.
   const joined = names.join("\n");
   if (joined.length > MAX_PARSE_CHARS) {
     throw new ImportError("Those names are collectively too long to import.");
@@ -254,20 +196,16 @@ export function importGraph(data: unknown): GraphView {
       !Number.isInteger(a) || !Number.isInteger(b) ||
       a < 0 || b < 0 || a >= n || b >= n
     ) {
-      // Through `quote()` like every other interpolation of file content in this module — this
-      // was the last raw one, and it is not a small gap: an endpoint is an arbitrary JSON value,
-      // so a 7.9 MB string or a 1.3 M-element array became the error MESSAGE (9,288,931 chars
-      // measured, 170 MB heap), and only the sink clamp in useNotice kept it out of the DOM.
+      // Through `quote()`: an endpoint is an arbitrary JSON value, so a raw interpolation puts a
+      // multi-megabyte string or array into the error message.
       throw new ImportError(`Edge [${quote(a)}, ${quote(b)}] refers to someone outside 0..${n - 1}.`);
     }
     g.addEdge(a, b); // ignores self-loops and de-dupes symmetric entries
   }
 
-  // Per-VERTEX degree, not just average density. The density gate above compares
-  // 2m <= BUDDY_MAX*n — an AVERAGE — so a star graph with one hub of degree n-1 passes it
-  // trivially (at n=1000 that is 2*999 <= 12*1000). `neighborhood.ts` states outright that
-  // "degree is capped at BUDDY_MAX = 12", which was false on this path, and the hub's name
-  // becomes every leaf's buddy label. Checked before the O(n^2) allPairsSummary below.
+  // Per-VERTEX degree, not just the average the density gate checks: a star graph with one hub of
+  // degree n-1 passes that trivially, and `neighborhood.ts` relies on degree <= BUDDY_MAX.
+  // Checked before the O(n^2) allPairsSummary below.
   const [degreeMin, degreeMax] = degreeExtent(g.degrees());
   if (degreeMax > BUDDY_MAX) {
     throw new ImportError(
@@ -287,14 +225,12 @@ export function importGraph(data: unknown): GraphView {
     buddies,
     settings,
     constraints,
-    // Derived here and ONLY here: a file carries index pairs and no typed rows, so there is
-    // nothing to lose by rebuilding them — which is exactly why `toNamedPairs` is documented as
-    // single-call-site. Everywhere else the rows are what SURVIVED nothing, and rebuilding them
-    // from indices deletes the ones the editor promises to keep.
+    // Rebuilt here and ONLY here: a file carries index pairs and no typed rows. Everywhere else
+    // the rows are what survived, and rebuilding them from indices deletes the ones the editor
+    // promises to keep.
     rows: toNamedPairs(constraints, names),
-    // Import rehydrates edges rather than regenerating, so no builder ran and there is
-    // no constraint report to show. Null means "not measured" and the panel says so —
-    // it must never be read as "all rules satisfied".
+    // No builder ran, so there is nothing to report. Null means "not measured" and must never be
+    // read as "all rules satisfied".
     report: null,
     metrics: assembleMetrics(n, {
       aspl: summary.aspl,

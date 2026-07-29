@@ -1,24 +1,17 @@
 /**
- * Constrained buddy-graph generation (algorithm B) plus constraint-preserving
- * polish. Both guarantee the hard constraints — required edges are present,
- * prohibited edges never are, and no vertex exceeds k buddies — while minimizing
- * average shortest path length, with an optional soft penalty that preserves
- * prior buddies across churn.
+ * Constrained buddy-graph generation (algorithm B) plus constraint-preserving polish. Both
+ * guarantee the hard constraints: required edges present, prohibited edges absent, no vertex
+ * above k.
  *
- * `constrainedGreedy` is RNG-free and deterministic. `polishConstrained` uses
- * the seeded RNG, so it is reproducible within JS for a given seed. Validated
- * against the Python reference on invariants and aggregate metrics rather than
- * byte-for-byte structure.
+ * `constrainedGreedy` is RNG-free; `polishConstrained` uses only the seeded RNG — keep it that
+ * way, or the determinism contract breaks.
  *
- * Unlike `ringGreedy`, completion has no `demote` step and no separation target at
- * all: `choosePartner` always takes the farthest legal partner. `minSeparation` is
- * accepted on the options for call-site compatibility and cannot change the
- * output — see `choosePartner`.
+ * Python-first: change `reference-python/` and regenerate fixtures before touching these
+ * algorithms, or the oracle silently stops being an oracle.
  *
- * These are low-level primitives; the safe entry point is
- * `buildConstrainedBuddyGraph`, which runs `validate` first. Called directly
- * they throw a clear error on malformed input (out-of-range ids, bad k,
- * required-degree over k) but otherwise assume feasibility.
+ * Low-level primitives: the safe entry point is `buildConstrainedBuddyGraph`, which runs
+ * `validate` first. Called directly they throw on malformed input but otherwise assume
+ * feasibility.
  */
 import { Graph } from "./graph.js";
 import {
@@ -40,11 +33,8 @@ import { RNG } from "./rng.js";
 import { Constraints } from "./constraints.js";
 import { Swap, proposeSwap, applySwap, revertSwap } from "./swap.js";
 
-// Unreachable vertices score as 1e9 — effectively infinity for graph distances,
-// which never exceed n-1 — so completion prefers joining disconnected pieces
-// before shortening already-connected ones. Not `Infinity` itself: this value is
-// arithmetic on, and a real Infinity would make every comparison between two
-// unreachable candidates a tie.
+// Not `Infinity`: this value is arithmetic on, and a real Infinity would make every comparison
+// between two unreachable candidates a tie. 1e9 beats any real distance (which never exceeds n-1).
 const INFINITE_DISTANCE = 1e9;
 
 /** True when u–v may legally be added: distinct, absent, allowed, both under k. */
@@ -53,26 +43,22 @@ type EdgePredicate = (u: number, v: number) => boolean;
 interface Measured {
   energy: number;
   connected: boolean;
-  /** Number of connected components. */
   components: number;
-  /** Size of the largest component. Count alone is too weak — see the guard. */
+  /** Size of the largest component — the swap guard needs it as well as `components`. */
   largest: number;
 }
 
 export interface ConstrainedGreedyOptions {
   /**
-   * ACCEPTED AND IGNORED. Completion maximises separation greedily rather than
-   * aiming at a value, so this cannot change the output — see `choosePartner` for
-   * the proof. Kept for call-site compatibility; removing it is a breaking change.
+   * Accepted and IGNORED: completion always takes the farthest legal partner, so this cannot
+   * change the output (see `choosePartner`). Kept because removing it is a breaking change.
    */
   minSeparation?: number;
 }
 
 /**
- * Documented default iteration budget for the constrained pass. Exported for the
- * same reason as `DEFAULT_POLISH_ITERS`: the auto-polish gate in
- * `buildConstrainedBuddyGraph` models it, and two declarations cannot be kept in
- * step by hoping.
+ * Default iteration budget. Exported because the auto-polish gate in
+ * `buildConstrainedBuddyGraph` models this value; the two cannot be kept in step by hoping.
  */
 export const DEFAULT_CONSTRAINED_POLISH_ITERS = 8000;
 
@@ -86,19 +72,14 @@ export interface PolishConstrainedOptions {
 }
 
 /**
- * Lay required edges first (never removed), greedily complete toward degree k
- * while honoring prohibited pairs and maximising separation greedily, then
- * force-connect leftover components without exceeding k. Sacrifices regularity
- * and, when the degree budget won't allow it, connectivity — never a hard
- * constraint.
+ * Lay required edges first (never removed), greedily complete toward degree k while honoring
+ * prohibited pairs, then connect leftover components without exceeding k. Sacrifices regularity
+ * and, when the degree budget won't allow it, connectivity — never a hard constraint.
  */
 export function constrainedGreedy(
   n: number,
   k: number,
   cons: Constraints,
-  // Accepted and unused: `minSeparation` is its only field and completion cannot
-  // act on it (see `choosePartner`). Named with a leading underscore so the
-  // unused-parameter rule confirms that rather than being suppressed.
   _opts: ConstrainedGreedyOptions = {},
 ): Graph {
   checkWellFormed(n, k, cons);
@@ -108,15 +89,10 @@ export function constrainedGreedy(
 
   for (const [a, b] of cons.requiredPairs()) g.addEdge(a, b);
 
-  // Most-deficient vertex connects to its farthest legal partner. A vertex with
-  // no legal partner is skipped, not fatal — one stuck person must not starve
-  // the rest. A stuck vertex stays stuck (completion only ever saturates
-  // partners, never frees one), so we mark it once and never rescan it — that
-  // is what keeps the loop from going cubic on many-stuck inputs.
+  // Completion only ever saturates partners, never frees one, so a stuck vertex stays stuck:
+  // marking it once and never rescanning is what keeps this loop from going cubic.
   const stuck = new Uint8Array(n);
-  // The real exits are below: no deficient vertices left, or extendOne finds no
-  // legal edge. This cap is a defensive backstop that should never bind — at most
-  // n*k/2 edges are ever added, so 6*n*k is comfortably above any real run.
+  // A backstop that should never bind — the real exits are the two breaks below.
   const completionCap = n * k * 6;
   for (let step = 0; step < completionCap; step++) {
     const under = deficientVertices(g, k, stuck);
@@ -134,89 +110,56 @@ export function constrainedGreedy(
 }
 
 /**
- * Constraint-preserving swap polish: degree-preserving double edge swaps that
- * never break a required edge, create a prohibited one, or leave the roster in more
- * pieces than it arrived in — keeping only strictly-improving moves. The objective
- * is ASPL (with a large disconnection penalty) plus an optional
- * prior-preservation penalty for churn.
- *
- * Reports what it did alongside the graph. It used to return the graph alone, with a comment
- * saying run-level metrics come from the caller's report — and that was the hole: the caller
- * could only infer whether a pass had happened from its own decision to CALL, so `polishIters: 0`
- * produced `polished: true` over an untouched graph and a `priorsKeptFraction` measuring nothing.
- * A fact about what a pass did has to come from the pass.
+ * What a `polishConstrained` pass did, reported by the pass — a caller cannot infer it from its
+ * own decision to call.
  */
 export interface PolishConstrainedResult {
   graph: Graph;
   /**
-   * Accept/reject decisions actually taken — swaps proposed, applied and measured.
-   *
-   * Not the iteration BUDGET: the loop breaks immediately on a graph with fewer than two edges,
-   * and an iteration that finds no legal swap weighs nothing. Both are cases where a budget of
-   * 8,000 and a real count of 0 differ, and both are reachable without passing an option.
-   *
-   * NOT the same quantity as `PolishResult.iters`, which counts loop PASSES — an earlier version
-   * of this comment claimed it was. What the priors gate needs is this one: a pass that took a
-   * decision weighed the priors, whether or not any move was accepted.
+   * Accept/reject decisions actually taken, NOT the iteration budget and not `PolishResult.iters`
+   * (which counts loop passes): 0 is reachable without passing an option.
    */
   decisions: number;
-  /**
-   * Whether the returned graph differs from the input — see `PolishResult.changed`, which this
-   * mirrors. `decisions > 0` means the pass DID something; this means it CHANGED something, and
-   * the two are different claims. `polished` is the second.
-   */
+  /** Whether the graph CHANGED, which `decisions > 0` (the pass DID something) does not imply. */
   changed: boolean;
 }
 
+/**
+ * Constraint-preserving swap polish: degree-preserving double edge swaps that never break a
+ * required edge, create a prohibited one, or leave the roster in more pieces than it arrived in.
+ * Keeps only strictly-improving moves; objective is ASPL plus an optional prior-preservation
+ * penalty.
+ */
 export function polishConstrained(
   input: Graph,
   cons: Constraints,
   opts: PolishConstrainedOptions = {},
 ): PolishConstrainedResult {
   checkConstraintIds(input.n, cons);
-  // ALWAYS-ON, not a dev-mode postcondition. This pass only ever SWAPS edges, so it
-  // cannot repair an input that already violates the constraints — yet the module header
-  // promises both functions guarantee them. The only check was the postcondition at the
-  // end, which is compiled out in production (so a violating input came back unflagged)
-  // and in dev blamed this function for its caller's defect. A precondition names the
-  // right culprit, and it is O(#constraints) — the same class as the id check above.
+  // A PRECONDITION, not the dev-mode postcondition below: this pass only swaps, so it cannot
+  // repair a violating input, and the postcondition is compiled out in production (where such an
+  // input came back unflagged) and blames this function for its caller's defect in dev.
   checkInputSatisfiesConstraints(input, cons);
 
   const rng = new RNG(opts.seed ?? 0);
-  // `degrees()` rather than `edgeList()`: the same m, without allocating m two-element arrays
-  // and sorting them, so the REFUSAL path no longer pays O(m log m) time and O(m) memory for a
-  // graph it is about to reject. `polish` already derives it this way.
+  // `degrees()` rather than `edgeList()`, so the REFUSAL path below does not pay O(m log m) time
+  // and O(m) memory for a graph it is about to reject.
   const m = input.degrees().reduce((a, b) => a + b, 0) / 2;
-  // Finiteness-checked like `iters`, and for the same reason. A NaN weight
-  // poisons every energy comparison — `next.energy < current` is false for all
-  // NaN — so the pass ran its full iteration budget of O(n·m) re-measurements and
-  // returned the input unchanged while reporting `polished: true`. Silent no-ops
-  // are worse than refusals.
-  // Sign-checked as well as finiteness-checked. `constrainedMeasure` subtracts
-  // `priorWeight * priorsKept`, so a NEGATIVE weight makes breaking a prior an IMPROVEMENT —
-  // the objective actively works against the option's stated purpose. This is the knob F9's
-  // "preserve current buddies" toggle drives, so the inversion would arrive with a feature
-  // whose whole point it reverses.
+  // NaN poisons every energy comparison (`next.energy < current` is false for all NaN), so the
+  // pass would burn its whole budget and report success over an untouched graph; a NEGATIVE
+  // weight makes breaking a prior an improvement, inverting the option it implements.
   if (opts.priorWeight !== undefined && !(Number.isFinite(opts.priorWeight) && opts.priorWeight >= 0)) {
     throw new Error(`prior weight ${opts.priorWeight} must be a non-negative finite number`);
   }
   const priorWeight = Number.isFinite(opts.priorWeight) ? (opts.priorWeight as number) : 0;
-  // The two budget gates need the RESOLVED weight, so they sit below it rather than above.
-  // `constrainedMeasure` re-counts every prior pair on every measurement, which is a third
-  // dimension of the per-iteration cost — and one this pass turns on by itself, since
-  // `buildConstrainedBuddyGraph` resolves a non-zero weight whenever any prior exists. Measured
-  // at n=268, k=1 (the densest shape the auto-polish gate admits): 3.99 s with no priors,
-  // 17.58 s with all 35,778 pairs as priors, and no refusal in between. At weight 0 the penalty
-  // is never built and the probes never happen, so a configuration that costs nothing is charged
-  // nothing.
+  // The gates below need the RESOLVED weight: re-counting priors every measurement is a third
+  // cost dimension, and at weight 0 the penalty is never built, so it is charged nothing.
   const weighedPriors = priorWeight === 0 ? 0 : cons.priorCount;
-  // A size cap as well as the work cap below. `boundedPolishIterations` cannot
-  // reach the all-pairs sweeps and graph copies this function pays outside its
-  // loop, so `polishConstrained(ring(30000), cons, { iters: 0 })` — priced at zero
-  // iterations — still ran for 48 s.
+  // A size cap as well as the work cap: `boundedPolishIterations` cannot reach the all-pairs
+  // sweeps and graph copies paid outside the loop, so even `iters: 0` is not free.
   checkPolishSize(input.n, m, weighedPriors);
-  // Bound the loop here, not in `buildConstrainedBuddyGraph`: this function is
-  // exported public API and a wrapper clamp does not apply to a direct caller.
+  // Bound the loop here, not in `buildConstrainedBuddyGraph`: this is public API and a wrapper
+  // clamp does not apply to a direct caller.
   const iters = boundedPolishIterations(
     input.n,
     m,
@@ -247,18 +190,10 @@ export function polishConstrained(
     applySwap(g, swap);
     const next = measure(g);
     decisions++;
-    // Never trade connectivity away, however large the prior weight, and never
-    // shrink the biggest group. BOTH quantities are needed: component count alone
-    // is too weak, because a swap that splits the largest group while merging two
-    // small ones leaves the count flat and passes — it was reachable at the
-    // library's own DEFAULT_PRIOR_WEIGHT of 2. Largest-size alone is also too
-    // weak, since splitting a small component leaves the largest untouched. The
-    // two together are the same pair the unconstrained pass's property tests
-    // assert, so both passes are now held to one invariant.
-    //
-    // This guard does not depend on relative weights, which is why it exists on
-    // top of penalizedAspl's charge for unreachable pairs: the prior term is added
-    // above that charge and could outweigh it.
+    // BOTH quantities: component count alone passes a swap that splits the largest group while
+    // merging two small ones; largest-size alone misses a small component splitting. Needed on
+    // top of `penalizedAspl`'s unreachable-pair charge because the prior term is added above it
+    // and can outweigh it.
     if (next.components > startComponents || next.largest < startLargest) {
       revertSwap(g, swap);
       continue;
@@ -300,8 +235,8 @@ function deficientVertices(g: Graph, k: number, stuck: Uint8Array): number[] {
 }
 
 /**
- * Add one edge from the first vertex that has a legal partner. Vertices found to
- * have none are marked permanently stuck (see the invariant at the call site).
+ * Add one edge from the first vertex that has a legal partner. A vertex with none is marked
+ * permanently stuck, not treated as fatal — one stuck person must not starve the rest.
  */
 function extendOne(
   g: Graph,
@@ -324,24 +259,9 @@ function extendOne(
 }
 
 /**
- * Prefer the farthest reachable (or unreachable) partner, then lower degree, then
- * lower index. Completion MAXIMISES separation greedily; it does not aim at a
- * target value.
- *
- * There used to be a second pass here that scanned for the first candidate at
- * least `minSeparation` away, "falling back to the best available when none qualify".
- * That scan was provably a no-op and it is deleted rather than kept as decoration:
- * candidates are sorted by farness DESCENDING, and unreachable sorts to the top
- * (INFINITE_DISTANCE), so `candidates[0]` is always the farthest. If it qualifies
- * the scan returns it immediately; if it does not, nothing else can either — it is
- * the maximum — and the fallback returns `candidates[0]` anyway. Every branch
- * returned the same vertex.
- *
- * Consequence, stated because it is a public option behaving as a no-op:
- * `minSeparation` cannot change the output of the constrained path. It is still
- * ACCEPTED on `ConstrainedGreedyOptions`/`ConstrainedBuddyOptions` so the app's
- * existing call does not break, and both are documented as ignoring it. Removing
- * it from the public surface is a breaking change and a tracked follow-on.
+ * Farthest reachable-or-unreachable partner, then lower degree, then lower index. Completion
+ * MAXIMISES separation; it never aims at a target, which is why `minSeparation` cannot change
+ * the output of the constrained path.
  */
 function choosePartner(candidates: number[], dist: Int32Array, g: Graph): number {
   const farness = (v: number) =>
@@ -359,28 +279,11 @@ function choosePartner(candidates: number[], dist: Int32Array, g: Graph): number
 }
 
 /**
- * Force-connect leftover components under the degree cap: repeatedly add any legal
- * (non-prohibited, both-under-k) cross-component edge until one component remains
- * or no legal edge exists. Connectivity outranks girth and regularity, but never
- * exceed k. Residual disconnection is honest — the roster cannot be connected
- * within k buddies each, and it surfaces as report.connected.
+ * Join components by ADDING a legal cross-component edge, both endpoints under k.
  *
- * In practice this is an inert backstop: completion (above) exits only once every
- * under-k vertex is stuck — has no legal partner at all — and a stuck vertex never
- * regains one, so completion's output is legal-edge-maximal (no addable legal edge
- * remains, cross-component or otherwise) and this loop adds nothing. That
- * maximality is asserted as a property in constrained.props.test.ts. Retained for
- * parity with the reference and to keep the connectivity guarantee if completion's
+ * Inert in practice — completion already leaves no addable legal edge (asserted in
+ * constrained.props.test.ts). Kept for parity with the reference and in case completion's
  * termination is ever weakened.
- */
-/**
- * Join components by ADDING a legal cross-component edge, while both endpoints are under k.
- *
- * This used to be the last word on connectivity, and its comment said residual disconnection
- * "means the roster cannot be connected within k buddies each" — a claim about the caller's
- * input that was really a limit of this function. `repairConnectivity` runs after it and can
- * rewire; what survives BOTH is disconnection no single constraint-preserving rewiring can
- * remove.
  */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion
@@ -395,14 +298,12 @@ function forceConnect(g: Graph, cons: Constraints, k: number): void {
 /**
  * Edges whose removal disconnects their component, keyed as `min * n + max`.
  *
- * Needed because a double edge swap between two components merges them IFF at least one of the
- * two dropped edges is NOT a bridge. If both are bridges, dropping them splits both components
- * and the two new edges reconnect the halves crosswise into two pieces again — the count does
- * not fall. That makes this an exact test, so the repair never applies a swap speculatively and
- * measures afterwards.
+ * A double edge swap merges two components IFF at least one dropped edge is NOT a bridge — with
+ * two bridges the new edges reconnect the halves crosswise and the count does not fall. Exact,
+ * so the repair never swaps speculatively and measures afterwards.
  *
- * Iterative Tarjan. Bridges are a property of the GRAPH, not of the traversal, so the adjacency
- * `Set`'s insertion order cannot make this differ from the Python mirror.
+ * Bridges are a property of the GRAPH, not the traversal, so adjacency `Set` insertion order
+ * cannot make this differ from the Python mirror.
  */
 function bridges(g: Graph): Set<number> {
   const disc = new Int32Array(g.n).fill(-1);
@@ -444,47 +345,26 @@ function edgeKey(n: number, a: number, b: number): number {
 }
 
 /**
- * Merge components by REWIRING, in two stages of increasing concession: a degree-preserving
- * double edge swap (`swapJoin`) first, and only when that finds nothing, a move that relocates a
- * single degree (`stealSlot`). Both preserve the hard constraints and the edge count; neither can
- * exceed k. What survives BOTH is disconnection no single constraint-preserving rewiring can
- * remove within the budget.
+ * Merge components by REWIRING: a degree-preserving double edge swap (`swapJoin`) first, then a
+ * single-degree relocation (`stealSlot`). Addition alone cannot reach a component whose whole
+ * boundary is saturated, though such a component is often one swap away — a swap frees the
+ * degree it spends.
  *
- * `joinAnyComponents` needs BOTH endpoints under k, so a component whose whole boundary is
- * saturated cannot be joined however many legal pairs exist elsewhere — and the comment that
- * used to sit at the end of this generator claimed residual disconnection "means the roster
- * cannot be connected within k buddies each", which is false. Witness: n=7, k=2, prohibiting
- * (3,5) and (3,4). `validate` accepts it, completion leaves {0,1,2,3,6} and {4,5} with every
- * vertex at its degree cap, and the 7-cycle 0-1-2-3-6-4-5-0 is a connected graph at the same k
- * under the same prohibitions — one double edge swap away. A swap reaches it where an addition
- * cannot, because it frees the degree it spends.
+ * RNG-free and insertion-order independent: components ascending, edges in `edgeList()`'s sorted
+ * order, so the first legal rewiring is a function of the graph alone.
  *
- * Deterministic and RNG-free like the rest of this generator: components are visited in
- * ascending-minimum-vertex order (`connectedComponents` scans vertices ascending) and edges in
- * `edgeList()`'s sorted order, so the first legal rewiring is a function of the graph alone.
- *
- * BOUNDED, and the bound is part of the contract. Each pass costs O(n + m) for the
- * component/bridge scan plus at most the remaining candidate-pair budget, which is charged
- * across the WHOLE repair so a pathological input cannot make this quadratic in m. If the budget
- * runs out the graph is returned as it stands, and residual disconnection then means "no legal
- * rewiring was found within the budget" — which is what this says, rather than a claim about the
- * roster the caller supplied.
+ * Budget-bounded, and that is part of the contract: residual disconnection means "no legal
+ * rewiring found within the budget", not that the roster is infeasible at k.
  */
 function repairConnectivity(g: Graph, cons: Constraints, k: number): void {
-  // A SHARED mutable cell, not a threaded return value. Each helper stops when it hits zero and
-  // reports only whether it moved, so a failed search cannot hand the next one a budget it has
-  // already spent — which is what "charged across the WHOLE repair" means.
+  // A SHARED cell, so a failed search cannot hand the next one a budget it has already spent.
   const budget = { left: 8 * (g.n + 2 * g.numEdges()) + 64 };
   for (let pass = 0; pass < g.n; pass++) {
     const comps = connectedComponents(g);
     if (comps.length <= 1) return;
     const bridged = bridges(g);
     if (swapJoin(g, comps, cons, bridged, budget)) continue;
-    // A swap needs one droppable edge from EACH component, so a component with no edges at
-    // all — a single stranded person — is beyond it however much slack the rest of the graph
-    // has. `stealSlot` is tried second because it MOVES a degree rather than preserving every
-    // one, which is the strictly larger concession; it is only reached once the cheaper repair
-    // has found nothing.
+    // Second because it MOVES a degree, the larger concession; reached only when the swap fails.
     if (!stealSlot(g, comps, cons, bridged, k, budget)) return;
   }
 }
@@ -534,25 +414,15 @@ function swapJoin(
 }
 
 /**
- * Join two components by MOVING a degree: drop a non-bridge edge (a,b) inside one component and
- * spend the freed slot on an under-k vertex u in another.
+ * Join two components by MOVING a degree: drop a non-bridge edge (a,b) in one component and spend
+ * the freed slot on an under-k vertex u in another.
  *
- * Why this exists on top of `swapJoin`. A double edge swap needs a droppable edge in EACH of the
- * two components, so it cannot touch a component that has no edges — exactly the shape a
- * saturated boundary produces at small k. Witness: n=4, k=2, prohibiting (1,3) and (2,3).
- * `validate` accepts it, completion builds the triangle 0-1-2 and leaves person 3 alone with no
- * legal partner (0 is full, 1 and 2 are prohibited), `forceConnect` cannot add and `swapJoin` has
- * nothing to swap — so the result reported `connected: false` with a largest-component fraction of
- * 0.75, while `0-1, 0-3, 1-2` is a connected graph at the same k under the same prohibitions.
+ * Exists because a swap needs a droppable edge in EACH component. Witness: n=4, k=2, prohibiting
+ * (1,3) and (2,3) — completion builds triangle 0-1-2 and strands person 3, which no swap can
+ * reach, yet `0-1, 0-3, 1-2` is connected at the same k under the same prohibitions.
  *
- * Dropping a NON-BRIDGE (a,b) leaves a and b connected to each other, so the only component change
- * is the merge. Edge COUNT is preserved — one removed, one added; what moves is a single degree,
- * from the dropped endpoint to u. That is a real concession (the result is less regular than the
- * input), and it is why this runs only after `swapJoin`, which concedes nothing, has failed.
- *
- * Deterministic and RNG-free like the rest of this generator: components ascending, vertices
- * ascending, edges in `edgeList()`'s sorted order, so the first legal move is a function of the
- * graph alone.
+ * Dropping a NON-BRIDGE keeps a and b connected, so the only component change is the merge.
+ * RNG-free: components, vertices and edges all scanned in ascending order.
  */
 function stealSlot(
   g: Graph,
@@ -621,8 +491,6 @@ function constrainedMeasure(
     if (usePriorPenalty) {
       energy += priorWeight * (priors.length - countPresentEdges(g, priors));
     }
-    // Both quantities come from one O(n+m) walk, beside the O(n·(n+m)) sweep just
-    // performed — free at this scale.
     const comps = connectedComponents(g);
     let largest = 0;
     for (const c of comps) if (c.length > largest) largest = c.length;
@@ -641,27 +509,10 @@ function swapBreaksConstraint(s: Swap, cons: Constraints): boolean {
 }
 
 // --- preconditions (always-on) ----------------------------------------------
-// These make the documented hard guarantees hold in production too, turning a
-// direct-call contract violation into a clear error instead of a cryptic crash
-// or a silent degree-cap breach. Cheap: O(#constraints), off the hot path.
+// Always-on so the documented hard guarantees hold in production too, where the postconditions
+// below are compiled out. O(#constraints), off the hot path.
 
-// Throw-on-first mirror of constraints.ts `structuralReasons` (which collects
-// reasons for validate); keep the two checks in step.
-//
-// "In step" means the CONTENT of the id check, not its precedence. `validateDetailed`
-// returns structural reasons before it looks at the size/work caps, while
-// `checkWellFormed` below checks the caps first and calls this afterwards — so an
-// input that is both oversized AND structurally invalid gets a different FIRST
-// diagnosis depending on which entry point is asked. Both diagnoses are true and
-// both refuse; only the ordering differs, and it is stated here rather than left
-// for a reader to infer from the word "mirror".
-/**
- * The hard constraints must already hold on the graph handed to a swap-only pass.
- *
- * (The mirroring note that used to sit here belongs to `checkConstraintIds` below, which checks
- * constraint STRUCTURE against the Python reference; this one checks graph STATE and has no
- * Python counterpart, because the Python port has no equivalent precondition.)
- */
+/** The hard constraints must already hold on the graph handed to a swap-only pass. */
 function checkInputSatisfiesConstraints(g: Graph, cons: Constraints): void {
   for (const [a, b] of cons.requiredPairs()) {
     if (!g.hasEdge(a, b)) {
@@ -681,6 +532,11 @@ function checkInputSatisfiesConstraints(g: Graph, cons: Constraints): void {
   }
 }
 
+/**
+ * Throw-on-first mirror of `structuralReasons` in constraints.ts and of `_structural_errors` in
+ * reference-python; keep the three in step (content, not precedence — the entry points differ in
+ * which fault they name first).
+ */
 function checkConstraintIds(n: number, cons: Constraints): void {
   const outOfRange = (a: number, b: number) =>
     !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n;
@@ -704,25 +560,9 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
   if (!Number.isInteger(n) || n < 0) {
     throw new Error(`roster size ${n} is not a valid count — call validate() first`);
   }
-  // AFTER the validity check, deliberately: `NaN !== NaN` is true, so checking the
-  // disagreement first reported "roster size NaN does not match the constraints (built for
-  // NaN)" — technically accurate and useless, when the real problem is that NaN is not a
-  // count. Order the messages so the most fundamental fault is the one named.
-  //
-  // The disagreement itself: endpoints were validated against the parameter `n` while the
-  // required-degree vector came from `cons.requiredDegree()`, sized by `cons.n`. With
-  // cons.n < n the vector had holes at exactly the vertices being checked, `undefined > k`
-  // was false, and the documented "required-degree over k" refusal never fired — so this
-  // returned a graph exceeding k, in production, with the dev-mode postcondition compiled
-  // out. `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce the rule; this
-  // primitive was the one public entry point that did not.
-  // The required/prohibited OVERLAP, checked here rather than only by the dev-mode
-  // postcondition. `legalEdge` refuses prohibited pairs, but required edges are laid down
-  // BEFORE it runs, so a pair that is both goes straight into the graph — and the only thing
-  // that caught it was `assertHardConstraints`, which is compiled out when NODE_ENV is
-  // "production". The library's headline guarantee ("prohibited edges never are") was therefore
-  // enforced only in development. `validate` refuses this input; the primitive now throws for
-  // the same reason, which is the split the module header already documents.
+  // Required∩prohibited, checked here and not only by the dev-mode postcondition: required edges
+  // are laid down BEFORE `legalEdge` runs, so in production such a pair reaches the graph
+  // unflagged and the headline "prohibited edges never are" guarantee fails.
   for (const [a, b] of cons.requiredPairs()) {
     if (cons.isProhibited(a, b)) {
       throw new Error(
@@ -730,13 +570,14 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
       );
     }
   }
+  // After the n-validity check, deliberately: `NaN !== NaN`, so checking the mismatch first
+  // reports "roster size NaN does not match the constraints (built for NaN)" and buries the fault.
   if (n !== cons.n) {
     throw new Error(
       `roster size ${n} does not match the constraints (built for ${cons.n}) — call validate() first`,
     );
   }
-  // O(n²) generation; refuse an oversized roster before the k-check, mirroring
-  // validate's order (rationale on MAX_CONSTRAINED_N in budgets.ts).
+  // Before the k-check, mirroring `validateDetailed`'s order (rationale in budgets.ts).
   if (n > MAX_CONSTRAINED_N) {
     throw new Error(
       `roster size ${n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} — call validate() first`,
@@ -763,17 +604,12 @@ function checkWellFormed(n: number, k: number, cons: Constraints): void {
 }
 
 // --- postconditions (dev-mode only) -----------------------------------------
-// Compiled out of production bundles where `process` is absent, so they never
-// cost the hot path. NOTE: a new hard-constraint kind must be enforced at every
-// site that touches an edge — `legalEdge` (used by completion and forceConnect),
-// `swapBreaksConstraint`, `swapJoin` and `stealSlot` — AND asserted here. The
-// coupling is one of COVERAGE, not of logic (a site that only ADDS an edge can
-// only create a prohibited one; a site that rewires can also drop a required
-// one), which is why there is no shared abstraction and instead a mechanical
-// guard: `test/constraintSync.test.ts` reads this file and fails when the sites
-// and the postcondition stop agreeing. A genuinely new constraint
-// *category* (not a new tag policy — those only emit required/prohibited pairs
-// already handled) would also need reporting in index.ts buildReport.
+// Compiled out of production bundles where `process` is absent.
+//
+// A new hard-constraint KIND must be enforced at every edge-touching site — `legalEdge`,
+// `swapBreaksConstraint`, `swapJoin`, `stealSlot` — AND asserted here; `test/constraintSync.test.ts`
+// reads this file and fails when they stop agreeing. A new constraint CATEGORY also needs
+// reporting in index.ts `buildReport`.
 const CONTRACTS_ENABLED =
   typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
 

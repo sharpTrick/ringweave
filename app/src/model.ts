@@ -10,14 +10,13 @@ import { clamp, clampList } from "./io/clamp";
 
 /** Generation settings surfaced in the UI (mirrors the core's BuddyOptions + k). */
 export interface Settings {
-  buddies: number; // k — the generation target (used by generate/reroll)
+  buddies: number; // the core's `k`
   minSeparation?: number;
   polish: boolean | "auto";
   seed: number;
 }
 
-/** Default polish RNG seed — matches the core's default; the single source so the app's
-    generate default and the import fallback can't drift apart. */
+/** Default polish RNG seed — matches the core's default. */
 export const DEFAULT_SEED = 12345;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,48 +25,26 @@ export const DEFAULT_SETTINGS: Settings = {
   seed: DEFAULT_SEED,
 };
 
-/** Buddies-per-person range the UI supports — the single source of truth for the
-    settings stepper AND the import clamp, so they can't diverge. */
+/** Buddies-per-person range the UI supports — shared by the settings stepper and the import
+    clamp, so they can't diverge. */
 export const BUDDY_MIN = 2;
 export const BUDDY_MAX = 12;
 
-/** Minimum-separation range the UI supports. A DISTINCT concept from buddy count (it
-    happens to share bounds today), kept separate so the two knobs evolve independently. */
+/** Minimum-separation range. Shares bounds with the buddy range by coincidence, not by rule. */
 export const SEPARATION_MIN = 2;
 export const SEPARATION_MAX = 12;
 
-/** The default minimum separation, surfaced when the field is unset and used as the fallback
-    for an invalid imported value — mirrors the core's `DEFAULT_MIN_SEPARATION` so both Settings
-    producers (the settings panel and import) agree on one default instead of drifting (the
-    panel showing 5 while an invalid import silently fell back to SEPARATION_MIN). It is an
-    IN-RANGE fallback, so it's clamped to [SEPARATION_MIN, SEPARATION_MAX]: if the core ever moves
-    its default outside the UI range, this stays a value the stepper can express (guarded by a
-    model invariant test) rather than silently feeding an out-of-range value to a reroll. */
+/** The default minimum separation, mirroring the core's. Clamped into the UI range so a core
+    default outside it stays a value the stepper can express rather than reaching a reroll. */
 export const SEPARATION_DEFAULT = clamp(DEFAULT_MIN_SEPARATION, SEPARATION_MIN, SEPARATION_MAX);
 
-/** Largest roster the app will GENERATE. Unconstrained generation is ~O(n²·k); past this it
-    runs tens of seconds even off-thread, so the roster parser truncates and feasibility refuses
-    above it. Import is capped to the SAME ceiling (MAX_IMPORT_N = MAX_ROSTER_N in importGraph.ts),
-    because import re-measures synchronously on the main thread — allowing more would reintroduce
-    an O(n²) freeze on load. */
+/** Largest roster the app will GENERATE. Import is capped to the SAME ceiling
+    (MAX_IMPORT_N in importGraph.ts), because import re-measures synchronously on the main
+    thread. */
 export const MAX_ROSTER_N = 1000;
 
-/**
- * Whether a seed bump can vary this configuration at all — asked of the CORE, not
- * predicted here.
- *
- * This used to be `POLISH_MAX_N = 120`, a literal mirroring the core's auto-polish
- * gate. The core's gate is not a flat n: it compares modelled polish work against a
- * budget, so the real cutoff is k-dependent (146 at k=2, 131 at k=3, 120 at k=4, 78
- * at k=12) and different again for the constrained builder. 120 was correct only at
- * k=4 — the one value the boundary test pinned — and it disagreed in BOTH directions
- * everywhere else. Above 120 at k<4 the app refused to dispatch at all, telling the
- * user "this group is too large to shuffle" about a roster the core would happily
- * polish into a different arrangement.
- *
- * Exporting the core's *number* would have re-created the same drift one release
- * later, so the core exports the *predicate* and this asks it.
- */
+/** Whether a seed bump can vary this configuration — asked of the CORE. The gate is k-dependent
+    and differs per builder, so a mirrored constant here is wrong away from one k. */
 function seedCanVary(n: number, settings: Settings, constrained: boolean): boolean {
   return autoPolishEnabled(n, settings.buddies, { constrained });
 }
@@ -76,27 +53,19 @@ function seedCanVary(n: number, settings: Settings, constrained: boolean): boole
     precision (integers past 2^53 don't). */
 export const SEED_MAX = 2 ** 31 - 1;
 
-/** The next reroll seed, kept within the declared [0, SEED_MAX] range — advance by one, or wrap
-    to 0 at the ceiling. The single source of the reroll increment so the stored seed can never
-    drift past the range the import path also clamps to. */
 export function nextRerollSeed(seed: number): number {
   return seed >= SEED_MAX ? 0 : seed + 1;
 }
 
 /**
- * The graph's measured metrics. Most feed the UI: `aspl`/`diameter`/`quality` in QualityPanel,
- * `regular`/`degreeMin`/`degreeMax` the rail's buddy-count label, `connected`/
- * `largestComponentFraction`/`quality` the connection caption. `aspl`/`diameter` are
- * averaged/maxed over REACHABLE pairs only, so they are `null` when the graph is disconnected or
- * trivial (n<=1). `girth` is NOT shown anywhere in the M2 UI — it is carried through only to the
- * exported file's `meta.metrics` snapshot (F6), so the schema stays a full characterization; it
- * is `null` for a forest.
+ * The graph's measured metrics. `aspl`/`diameter` are averaged/maxed over REACHABLE pairs only,
+ * so they are `null` when the graph is disconnected or trivial (n<=1).
  */
 export interface Metrics {
   aspl: number | null;
   diameter: number | null;
-  girth: number | null; // export-only (meta.metrics); not displayed in M2
-  quality: number; // 0..1; 0 when disconnected (there is no whole-group closeness to score)
+  girth: number | null; // export-only (meta.metrics); not displayed in M2; null for a forest
+  quality: number; // 0..1; 0 when disconnected
   connected: boolean;
   largestComponentFraction: number; // 1 when connected; else the largest group's share
   regular: boolean;
@@ -104,29 +73,25 @@ export interface Metrics {
   degreeMax: number;
 }
 
-/** Clamp an ASPL gap to a 0..1 quality score (1 = provably optimal). */
 function clampQuality(gap: number): number {
   return clamp(1 - gap, 0, 1);
 }
 
 /**
- * quality = clamp01(1 - asplGap): the core's Moore-gap. THE single scorer — `assembleMetrics`
- * calls this, so there is one implementation behind the displayed number. A non-finite ASPL
- * (no reachable pairs: edgeless / n<=1) scores 0, not "optimal" — otherwise `asplGap`'s "no
- * valid Moore bound => gap 0" would collapse to quality 1. This alone does not catch a
- * disconnected-but-edged graph (finite reachable-pairs mean); `assembleMetrics` gates that
- * on `connected`.
+ * quality = clamp01(1 - asplGap). A non-finite ASPL (no reachable pairs) scores 0, not
+ * "optimal" — otherwise `asplGap`'s "no valid Moore bound => gap 0" would collapse to quality 1.
+ * Does not catch a disconnected-but-edged graph; `assembleMetrics` gates that on `connected`.
  */
 export function quality(aspl: number, n: number, k: number): number {
   return Number.isFinite(aspl) ? clampQuality(asplGap(aspl, n, k)) : 0;
 }
 
-/** Normalize a non-finite metric to null (Infinity for no reachable pairs). */
 function finiteOrNull(x: number): number | null {
   return Number.isFinite(x) ? x : null;
 }
 
-/** Min and max of a degree sequence, loop-based (avoids arg-spread limits). */
+/** Min and max of a degree sequence, loop-based so a roster-sized array can't hit the
+    argument-spread limit. */
 export function degreeExtent(degrees: number[]): [number, number] {
   if (degrees.length === 0) return [0, 0];
   let lo = degrees[0];
@@ -138,18 +103,15 @@ export function degreeExtent(degrees: number[]): [number, number] {
   return [lo, hi];
 }
 
-/** THE displayed quality number — the integer percentage the gauge shows. Both the gauge and the
-    connection caption derive from this ONE rounded value, so a score can't render (say) "50" with
-    "loosely linked" while a hair above renders "50" with "well-linked" (a rounding-vs-threshold
-    straddle). */
+/** THE displayed quality number. Both the gauge and the connection caption must derive from this
+    ONE rounded value, or a score can straddle rounding and threshold and render "50" with two
+    different captions. */
 export function qualityPercent(m: Metrics): number {
   return Math.round(m.quality * 100);
 }
 
-/** Whether the graph is PROVABLY optimal (quality exactly 1 = zero Moore gap). Deliberately the
-    exact score, NOT `qualityPercent(m) === 100`: a 99.6% graph rounds to a gauge of 100 but a
-    reroll could still improve it, so the "already optimal" copy must not fire there. The single
-    seam for the optimality claim, beside qualityPercent, so all quality-derived copy agrees. */
+/** Whether the graph is PROVABLY optimal. The exact score, NOT `qualityPercent(m) === 100`: a
+    99.6% graph rounds to a gauge of 100 but a reroll could still improve it. */
 export function isOptimal(m: Metrics): boolean {
   return m.quality === 1;
 }
@@ -157,14 +119,8 @@ export function isOptimal(m: Metrics): boolean {
 /**
  * The buddy-rule outcome line, or null when there are no rules to report on.
  *
- * Deliberately distinct from `connectionSummary`: connectivity and rule
- * satisfaction are different claims, and folding them together is how "the graph
- * is split into three groups" ends up rendering as a clean tick.
- *
- * A null report means NOT MEASURED, never "satisfied". Import rehydrates edges
- * without regenerating, so an imported constrained file has no report — and
- * showing it as satisfied would be exactly the disconnected-reads-as-optimal
- * class this app already guards elsewhere.
+ * A null report means NOT MEASURED, never "satisfied" — import rehydrates edges without
+ * regenerating, so an imported constrained file has no report.
  */
 export function constraintSummary(view: GraphView): string | null {
   const total = view.constraints.length;
@@ -177,37 +133,25 @@ export function constraintSummary(view: GraphView): string | null {
   return `${broken} of ${rules} couldn't be met`;
 }
 
-/** Gauge percentage at/above which a connected graph reads as "well-linked" rather than "loosely". */
 const WELL_LINKED_PCT = 50;
 
 /**
  * The one place that turns metrics into the connection caption, so the words can never
- * contradict the gauge: a disconnected graph never says "well-linked" (and its shown
- * largest-group % is floored below 100), a connected-but-poor graph says "loosely linked",
- * and a roster too small to score (no reachable pairs) says so instead of "well-linked".
- * Thresholds on the SAME rounded percent the gauge displays (qualityPercent).
+ * contradict the gauge. Thresholds run on the SAME rounded percent the gauge displays
+ * (`qualityPercent`).
  */
 export function connectionSummary(m: Metrics): string {
   if (!m.connected) {
-    // Clamped at BOTH ends. The Math.min(99, …) guard stopped a nearly-whole graph
-    // reading as "100% are in the largest group" while disconnected; the floor had the
-    // mirror-image problem, reporting "0% are in the largest group" for a badly shattered
-    // roster whose largest group is non-empty by definition. Same one-line symmetry.
+    // Clamped at BOTH ends: 100 would read as "everyone" while disconnected, and 0 as an empty
+    // largest group, which is impossible by definition.
     const pct = clamp(Math.floor(m.largestComponentFraction * 100), 1, 99);
     return `not everyone's connected — ${pct}% are in the largest group`;
   }
   if (m.aspl == null) return "not enough people yet to score";
-  // NAMES THE YARDSTICK. `quality` is the gap to the Moore bound FOR THE DEGREE THIS GRAPH
-  // ACTUALLY HAS — deliberately so, since a 3-regular graph can be exactly optimal for 3
-  // buddies and scoring it against a 12-buddy bound would call it bad for succeeding. But a
-  // bare "everyone's well-linked" reads as a claim about the group in the abstract, and two
-  // rosters with different buddy counts then sit next to different hop counts with captions
-  // that do not explain why. Saying what the score is relative to costs one clause and makes
-  // the sentence true as written.
-  // Built from `degreeLabel`, the same function the rail uses one panel away. Naming the
-  // yardstick with `degreeMax` alone meant the two panels stated different per-person buddy
-  // counts for one graph whenever it was not regular — and the prose one was the count only
-  // the best-connected person actually had.
+  // Names the yardstick: `quality` is the gap to the Moore bound FOR THE DEGREE THIS GRAPH
+  // ACTUALLY HAS, so a bare "well-linked" would be a claim about the group in the abstract.
+  // Built from `degreeLabel` — `degreeMax` alone made this and the rail state different
+  // per-person counts for one non-regular graph.
   const per = buddiesEachLabel(m);
   if (qualityPercent(m) < WELL_LINKED_PCT) return `everyone's connected, but loosely linked for ${per}`;
   return `everyone's well-linked for ${per}`;
@@ -225,12 +169,10 @@ export interface RawMetrics {
 }
 
 /**
- * The single owner of the display `Metrics` shape — called by BOTH the generation and
- * import paths so they can't drift. Quality is scored against the graph's ACTUAL degree
- * (`degreeMax`), not a declared/target `k`, and ONLY when the whole roster is connected:
- * a disconnected import has a finite reachable-pairs ASPL that would otherwise beat the
- * whole-n Moore bound and read as a false 100%. When disconnected, aspl/diameter are null
- * (undefined over unreachable pairs) and quality is 0.
+ * The single owner of the display `Metrics` shape — called by BOTH the generation and import
+ * paths. Quality is scored against the ACTUAL degree and ONLY when the whole roster is
+ * connected: a disconnected import has a finite reachable-pairs ASPL that would otherwise beat
+ * the whole-n Moore bound and read as a false 100%.
  */
 export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
   const measurable = raw.connected && Number.isFinite(raw.aspl);
@@ -238,7 +180,7 @@ export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
     aspl: measurable ? raw.aspl : null,
     diameter: measurable ? raw.diameter : null,
     girth: finiteOrNull(raw.girth),
-    quality: measurable ? quality(raw.aspl, n, raw.degreeMax) : 0, // one scorer (see quality())
+    quality: measurable ? quality(raw.aspl, n, raw.degreeMax) : 0,
     connected: raw.connected,
     largestComponentFraction: raw.largestComponentFraction,
     regular: raw.degreeMin === raw.degreeMax,
@@ -247,22 +189,13 @@ export function assembleMetrics(n: number, raw: RawMetrics): Metrics {
   };
 }
 
-/** Human label for how many buddies each person actually has: a single number when
-    regular, else a min–max range. Reflects the produced graph, not the target `k`. */
+/** How many buddies each person actually has. Reflects the produced graph, not the target `k`. */
 export function degreeLabel(m: Metrics): string {
   return m.regular ? String(m.degreeMax) : `${m.degreeMin}–${m.degreeMax}`;
 }
 
-/**
- * "4 buddies" / "1 buddy" — the number AND its noun, from one seam.
- *
- * `degreeLabel` made the NUMBER single-sourced after two panels disagreed about it; the noun
- * beside it stayed copy-pasted, and the rail then hardcoded the plural while the connection
- * caption and the shortfall line both pluralised correctly. A 2-person, 1-edge import read
- * "2 people · 1 buddies each" next to "everyone's well-linked for 1 buddy each" — one graph,
- * two panels, disagreeing about the same count. A seam for the number and none for the noun
- * is half a seam.
- */
+/** "4 buddies" / "1 buddy" — the number AND its noun from one seam, so two panels can't
+    pluralise the same count differently. */
 export function buddiesLabel(m: Metrics): string {
   return `${degreeLabel(m)} ${m.regular && m.degreeMax === 1 ? "buddy" : "buddies"}`;
 }
@@ -272,7 +205,6 @@ export function buddiesEachLabel(m: Metrics): string {
   return `${buddiesLabel(m)} each`;
 }
 
-/** "person" / "people". The other noun the rail got wrong ("1 people"). */
 export function peopleNoun(n: number): string {
   return n === 1 ? "person" : "people";
 }
@@ -280,18 +212,13 @@ export function peopleNoun(n: number): string {
 /**
  * Why a seed-bump "Different arrangement" CAN'T vary the graph, or null if it might.
  *
- * The seed only feeds the polish RNG and the greedy is RNG-free, so a re-roll can only vary
- * when polish runs (the core's own gate says so, and polish is not off). NECESSARY, not sufficient —
- * condition — a small polished graph can still converge to the same optimum, which only a
- * post-generation edge comparison (in useBuddyGraph) can detect. This function gives the cheap,
- * accurate reason for the two cases we CAN predict pre-hoc, with actionable, non-contradictory
- * copy (it never tells a user to enable polish they've already enabled).
+ * NECESSARY, not sufficient: a small polished graph can still converge to the same optimum,
+ * which only a post-generation edge comparison (in useBuddyGraph) can detect.
  */
 export function rerollBlockReason(
   n: number,
   settings: Settings,
-  // Which builder will run, because the two have different polish budgets. Defaults
-  // to the unconstrained path, which is what a caller with no rules is asking about.
+  // Which builder will run — the two have different polish budgets.
   constrained = false,
 ): string | null {
   if (!seedCanVary(n, settings, constrained)) {
@@ -300,19 +227,15 @@ export function rerollBlockReason(
   if (settings.polish === false) {
     return "Turn on Polish (Advanced) to see a different arrangement.";
   }
-  return null; // reroll may vary — a post-generation identical-edges check handles the plateau
+  return null; // may vary — the plateau is caught post-hoc by an identical-edges check
 }
 
 /**
  * How far short of the requested buddy count the delivered graph fell, or null when it met it.
  *
- * The app holds both numbers and never compared them. Quality is scored against the DELIVERED
- * degree — right, since a 3-regular graph can be exactly optimal for 3 buddies — but the
- * consequence is that asking for 4 and receiving 3 shows a gauge of 100, `isOptimal` true, and
- * a re-roll that answers "That's already an optimal arrangement". Every one of those statements
- * is true about the graph that was built and none of them tells the user they did not get what
- * they asked for. It is routine at small n, where the default minimum separation forces the
- * demotion floor.
+ * Quality is scored against the DELIVERED degree, so asking for 4 and receiving 3 shows a gauge
+ * of 100, `isOptimal` true and "already optimal" on reroll — all true of the graph that was
+ * built, none of them saying the ask was missed.
  */
 export function targetShortfall(view: GraphView): { asked: number; got: number } | null {
   const got = view.metrics.degreeMax;
@@ -322,31 +245,16 @@ export function targetShortfall(view: GraphView): { asked: number; got: number }
 
 /**
  * How far short of the requested MINIMUM SEPARATION the delivered graph fell, or null when it
- * met it — the sibling of `targetShortfall`, and the same gap one setting over.
+ * met it. The core routinely demotes the request and nothing else discloses it.
  *
- * The Advanced panel showed the number the user ASKED for while the core routinely demotes it,
- * and nothing disclosed the difference: at k=4 the default request of 5 is delivered as 3 at
- * n=12, 20 and 30, and `{minSeparation: 12}` and `{minSeparation: 5}` produce the identical
- * graph — so the control looked inert and the export recorded a target the graph does not meet.
- *
- * DERIVED FROM `girth`, which already crosses the worker boundary, rather than carrying the
- * core's `finalMinSeparation` across as a new field: separation IS `girth - 1` (the core's own
- * postcondition, and the property its tests pin), so a second channel for the same fact would be
- * a second thing to keep in step. It also works on the constrained path, whose builder ignores
- * the option entirely and reports no target at all, and on an imported graph, which has no
- * builder behind it.
- *
- * `girth === null` means acyclic — no cycle to measure, separation unbounded, nothing short.
+ * DERIVED FROM `girth` rather than carrying the core's `finalMinSeparation` as a new field:
+ * separation IS `girth - 1` (the core's own postcondition), so a second channel would be a
+ * second thing to keep in step — and this also works on an imported graph, which has no builder
+ * behind it. `girth === null` means acyclic: separation unbounded, nothing short.
  */
 export function separationShortfall(view: GraphView): { asked: number; got: number } | null {
-  // NOT ON THE CONSTRAINED PATH. The core documents `minSeparation` as "ACCEPTED AND IGNORED"
-  // there — `constrainedGreedy` maximises separation rather than aiming at a target, so no value
-  // of the control can change the output. Reporting a shortfall against it blames a knob that is
-  // inert: measured at n=20, k=4 with one rule, `{2}`, `{5}` and `{12}` produce byte-identical
-  // graphs, and the organizer could lower the setting, watch the message vanish, and conclude the
-  // graph had changed. A disclosure is only honest about a setting the builder consumed. The
-  // sibling is named rather than left for later: `exportGraph` still writes `settings.minSeparation`
-  // into a constrained file, recording a target that graph does not and never could meet.
+  // NOT ON THE CONSTRAINED PATH: the core documents `minSeparation` as "ACCEPTED AND IGNORED"
+  // there, so reporting a shortfall would blame a knob no value of which changes the output.
   if (view.constraints.length > 0) return null;
   if (view.metrics.girth === null) return null;
   const asked = view.settings.minSeparation ?? SEPARATION_DEFAULT;
@@ -357,10 +265,9 @@ export function separationShortfall(view: GraphView): { asked: number; got: numb
 /**
  * What a screen reader is told when a person is selected.
  *
- * Selecting someone from the buddy list or a search result is the app's headline task, and it
- * produced NO immediate feedback: PersonPanel simply appeared, focus did not move into it, and it
- * precedes both controls in DOM order (deliberately — the DOM follows the visual layout), so Tab
- * had already passed it. Announcing the result is the fix that does not fight that ordering.
+ * The only feedback for the app's headline task: `PersonPanel` precedes both controls in DOM
+ * order (deliberately — the DOM follows the visual layout), so Tab has already passed it and
+ * focus is not moved into it.
  */
 export function selectionStatusText(view: GraphView, index: number | null): string {
   if (index === null) return "";
@@ -378,11 +285,10 @@ const ROUTE_NAMES_MAX = 12;
 /**
  * The path finder's announcement, as plain text.
  *
- * Exists so the SPOKEN version can live in a region that is always mounted while the visible
- * panel stays conditional. A live region has to be in the accessibility tree before its
- * content changes for the change to count as a change, and `PathPanel` — region and all — is
- * mounted by the same action that writes its first sentence, so nothing was ever announced.
- * One function so the two renderings cannot drift.
+ * Exists so the SPOKEN version can live in an always-mounted region while the visible panel
+ * stays conditional: a live region must be in the accessibility tree BEFORE its content changes
+ * for the change to count, and `PathPanel` is mounted by the same action that writes its first
+ * sentence.
  */
 export function pathStatusText(
   view: GraphView,
@@ -395,76 +301,48 @@ export function pathStatusText(
   if (route !== null) {
     const steps = route.length - 1;
     // Clamped: a route's length is the graph's diameter, which an imported file controls, and
-    // this string goes straight into a permanently-mounted live region. One of the three sinks
-    // io/clamp.ts names — see there for why they are one helper rather than three.
+    // this goes straight into a permanently-mounted live region.
     const chain = clampList(route.map((i) => view.names[i]), ROUTE_NAMES_MAX, " → ");
     return `${chain} — ${steps} step${steps === 1 ? "" : "s"}`;
   }
   return "";
 }
 
-/** Person i's buddies as display names — the raw list that `buddyLabel` joins. Module-local:
-    every UI sink goes through `buddyLabel`, so this has no external consumer. */
 function buddyNames(view: GraphView, i: number): string[] {
   return view.buddies[i].map((j) => view.names[j]);
 }
 
-/** The one buddy-cell projection — names joined by `separator`, or an em dash when a person has
-    none. Shared by the on-screen list, the printed slips, the clipboard copy, and the CSV export
-    (each passing its own separator) so the empty glyph and join can't drift between sinks. */
+/** The one buddy-cell projection, shared by the on-screen list, the printed slips, the clipboard
+    copy and the CSV export (each passing its own separator) so the empty glyph and the join
+    can't drift between sinks. */
 export function buddyLabel(view: GraphView, i: number, separator = ", "): string {
   return buddyNames(view, i).join(separator) || "—";
 }
 
-/**
- * The single view model that BOTH generation and import produce, so the whole UI
- * renders from one shape regardless of origin.
- */
+/** The single view model that BOTH generation and import produce. */
 export interface GraphView {
   names: string[];
   edges: [number, number][];
   buddies: number[][];
   settings: Settings;
   metrics: Metrics;
-  /**
-   * The buddy rules this graph was built under. A sibling of `settings`, not part
-   * of it — the file schema has always modelled them that way — so export, import
-   * and re-measure round-trip them.
-   */
+  /** A sibling of `settings`, not part of it — the file schema models them that way. */
   constraints: ConstraintPair[];
   /**
-   * The rules AS TYPED, name-keyed, that were submitted with this generation.
-   *
-   * `constraints` is what survived resolution — index pairs — so it is not a substitute: a row
-   * naming somebody not in the roster, a half-typed row and a duplicate all resolve to nothing
-   * and would be silently deleted by rebuilding rows from indices, which the editor contracts
-   * never to do. They travel WITH the view because they describe one generation together with
-   * `names` and `settings`, and three separately-written copies of "what was dispatched" is a
-   * defect this loop has now closed three times: the seed drift (round 13), the roster the
-   * refusal was worded from (round 15), and these rows (round 20). The third fix is the one that
-   * removes the copy rather than adding another writer to it.
+   * The rules AS TYPED, name-keyed. Not reconstructible from `constraints`, which holds only
+   * what SURVIVED resolution: rebuilding rows from indices silently deletes the unresolved rows
+   * the editor contracts to keep and flag.
    */
   rows: NamedPair[];
   /**
-   * How the rules turned out, or null when there were none to report on.
-   *
-   * Also null for an IMPORTED constrained graph: import rehydrates edges rather
-   * than regenerating, so no builder ran and there is nothing to report. That is
-   * a real gap and the panel says "not measured" rather than implying success —
-   * "no report" must never render as "all rules satisfied".
+   * How the rules turned out, or null when there were none — and also null for an IMPORTED
+   * constrained graph, where no builder ran. "No report" must never render as "all satisfied".
    */
   report: ConstraintReport | null;
 }
 
-/**
- * Combine a worker GraphResult (normalized from BuddyResult or ConstrainedBuddyResult) with the roster + settings into a GraphView.
- *
- * Connectivity is read from the result rather than assumed. It used to be
- * hardcoded true on the reasoning that the unconstrained builder seeds a ring and
- * so always connects — true of that builder, but it made the *view* layer carry a
- * fact about a *generator*, which is exactly the assumption that goes stale the
- * moment a second generator feeds the same view.
- */
+/** Combine a worker GraphResult with the roster + settings into a GraphView. Connectivity is
+    read from the result, never assumed from which builder ran. */
 export function viewFromResult(
   names: string[],
   settings: Settings,

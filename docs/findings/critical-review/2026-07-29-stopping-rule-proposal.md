@@ -116,7 +116,43 @@ Drop it for the whole run and measure what is lost — the same leave-one-out th
 computes, but prospective rather than post-hoc. If nothing is lost, that is a 20% ensemble cost
 reduction with a measurement attached instead of an argument.
 
-### 3.5 Record effective-FP at fix time (**P**)
+### 3.5 Track comment-to-code as a label-free cost of the method (**C**)
+
+Found by the repository's owner in one sentence of review, after forty rounds and five lenses had
+not looked at it. Measured across `lib/src` + `app/src`:
+
+| point in history | code | comment | ratio |
+| --- | ---: | ---: | ---: |
+| M2 baseline, before any review loop | 2,282 | 537 | **0.24** |
+| M3 features written, before the 40 rounds | 3,590 | 1,384 | **0.39** |
+| after the 40 rounds | 4,538 | 3,166 | **0.70** |
+
+`lib/src/core/budgets.ts` reached **6.4 comment lines per line of code**, and the largest single
+comment block in the tree was 41 lines.
+
+**The mechanism is the loop, not a taste for explaining.** Each round embedded the case against a
+rejected alternative in the source so the *next* round would not re-propose it — writing to critics,
+in a medium that outlives the review by years. It is the same self-reference E1 named, surfacing in
+an artifact nobody had thought to measure, and it is invisible to every instrument either experiment
+built: it is not a finding, not a defect, not a token cost, and no lens files it.
+
+Two things make it worth carrying forward:
+
+- **It is label-free**, like fix-churn. `git` answers it; no agent judges anything. Record it per
+  round and the growth curve comes out for free.
+- **It suggests the class rather than the instance.** If the loop inflates comments, ask what else
+  it inflates that no lens is pointed at — abstraction count, indirection depth, test-to-assertion
+  ratio, public API surface. "What did the method make worse in a dimension it does not measure" is
+  a question neither prior experiment asked, and the one instance of it we have was found by a human
+  reading the diff.
+
+**Deliberately not a linter.** A block-length or density cap was proposed and rejected: the
+pathology is *who the prose is addressed to*, and a cap measures length instead — crude, gameable by
+splitting a block in two, and one more mechanism policing a problem whose fix is a rule about
+audience. `docs/COMMENT_STANDARD.md` states the rule; `fix-finding` now requires adjudication in the
+commit message rather than defence in the source.
+
+### 3.6 Record effective-FP at fix time (**P**)
 
 Google's definition, verbatim: an issue where *developers did not take some positive action after
 seeing it*. Sextant measured precision only on clean controls. Record, per finding, whether the fix
@@ -138,8 +174,9 @@ precision into a per-round series on the real target rather than a single contro
 
 ## 5. Cost
 
-Arm F is 8 rounds × 4–5 lenses ≈ 40 agents, and it is the only arm that must run first. G, M, S and
-P ride along on a normal review loop and add roughly one agent-run per round plus four for M. That
+Arm F is 8 rounds × 4–5 lenses ≈ 40 agents, and it is the only arm that must run first. G, M, S, C
+and P ride along on a normal review loop and add roughly one agent-run per round plus four for M; C
+adds no agent at all, since `git` answers it. That
 is well under a third of Sextant's 21.7 M tokens, and F alone — maybe 3.5 M — would answer the
 question both prior experiments spent 27 M tokens failing to separate.
 

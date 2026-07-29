@@ -1,5 +1,6 @@
 /**
- * BFS-based metrics. Faithful ports of the Python reference so numbers match.
+ * BFS-based metrics. Ports of `reference-python/`: change the Python first, or the oracle
+ * silently stops being an oracle.
  */
 import { Graph } from "./graph.js";
 
@@ -8,11 +9,6 @@ export const UNREACHABLE = -1;
 
 /** Distance vector from s; unreachable = UNREACHABLE (-1). */
 export function bfsDistances(g: Graph, s: number): Int32Array {
-  // `checkVertex` exists in this module precisely because the index-taking entry points are
-  // fed caller (ultimately user) selections — and this one, which is exported from the
-  // package index and is the primitive the others are built on, was the only one skipping
-  // it. A bad index produced `TypeError: g.adj[u] is not iterable` instead of the module's
-  // own message. O(1), against a function that already allocates an Int32Array(n).
   checkVertex(g, s, "source");
   const dist = new Int32Array(g.n).fill(UNREACHABLE);
   dist[s] = 0;
@@ -32,10 +28,9 @@ export function bfsDistances(g: Graph, s: number): Int32Array {
 }
 
 /**
- * Throw on a vertex index outside 0..n-1. The path/eccentricity entry points take
- * indices chosen by a caller (ultimately a user selection), and `bfsDistances`
- * would silently tolerate a bad one — `Int32Array` ignores an out-of-range write,
- * so `dist[s]` reads back `undefined` and every downstream comparison is false.
+ * Throw on a vertex index outside 0..n-1. Every index-taking entry point in this module needs
+ * it: `Int32Array` ignores an out-of-range write, so `dist[s]` reads back `undefined` and every
+ * downstream comparison is silently false.
  */
 function checkVertex(g: Graph, v: number, label: string): void {
   if (!Number.isInteger(v) || v < 0 || v >= g.n) {
@@ -44,22 +39,13 @@ function checkVertex(g: Graph, v: number, label: string): void {
 }
 
 /**
- * Canonical shortest path from `s` to `t` inclusive, as vertex indices; null when
- * `t` is unreachable from `s`. `shortestPath(g, v, v)` is `[v]`.
+ * Canonical shortest path from `s` to `t` inclusive; null when `t` is unreachable.
+ * `shortestPath(g, v, v)` is `[v]`.
  *
- * Determinism is the whole design. `bfsDistances` iterates `g.adj[u]`, a Set in
- * insertion order, so *distances* are order-invariant but a *predecessor* is not:
- * recording a `parent` during BFS (as `girth` does) would make the path depend on
- * edge-insertion history, and a graph rebuilt with its edges added in a different
- * order would yield a different path. Instead, BFS from `t` and then walk forward
- * from `s`, always taking the lowest-indexed neighbour one step closer. `min` is
- * order-free, so the result depends only on the edge set — and it is the
- * lexicographically smallest shortest path.
- *
- * Not symmetric: `shortestPath(g, s, t)` is generally not the reverse of
- * `shortestPath(g, t, s)`, since each is smallest read from its own start. A
- * caller treating the pair as unordered should canonicalise (e.g. always pass the
- * lower index as `s`).
+ * Determinism is the design: BFS from `t`, then walk forward from `s` taking the lowest-indexed
+ * neighbour one step closer, so the path depends only on the edge set and not on the insertion
+ * order `g.adj` iterates in. Not symmetric — each direction is smallest read from its own start,
+ * so a caller treating the pair as unordered must canonicalise (pass the lower index as `s`).
  */
 export function shortestPath(g: Graph, s: number, t: number): number[] | null {
   checkVertex(g, s, "source");
@@ -68,10 +54,8 @@ export function shortestPath(g: Graph, s: number, t: number): number[] | null {
   const steps = dist[s];
   if (steps === UNREACHABLE) return null;
 
-  // Bounded by the known distance rather than looping until `u === t`, so a
-  // malformed adjacency can never spin. Each step is guaranteed to find a
-  // neighbour: `u` is reachable at distance d > 0 only because BFS discovered it
-  // from some vertex at d-1, and `Graph` keeps adjacency symmetric.
+  // Bounded by the known distance rather than looping until `u === t`, so a malformed
+  // adjacency can never spin.
   const path = new Array<number>(steps + 1);
   path[0] = s;
   let u = s;
@@ -88,17 +72,12 @@ export function shortestPath(g: Graph, s: number, t: number): number[] | null {
 }
 
 /**
- * Largest distance from `v` to any other vertex — how many steps the furthest
- * person is. Infinity when some vertex is unreachable from `v`, and 0 for the
- * single-vertex graph.
+ * Largest distance from `v` to any other vertex; 0 for the single-vertex graph.
  *
- * Infinity, not `UNREACHABLE`, because this is a *metric*: the module keeps two
- * non-overlapping conventions and `girth`/`aspl` already return Infinity for "no
- * such value", while `UNREACHABLE` (-1) is only ever a per-entry sentinel inside a
- * distance vector. Returning -1 here would read as "0 steps away, but less" to
- * every numeric comparison — and a disconnected roster reporting a small
- * eccentricity is precisely the "disconnected reads as optimal" failure this is
- * meant to prevent.
+ * Infinity, not `UNREACHABLE`, when something is unreachable: this module keeps two
+ * non-overlapping conventions — Infinity is the METRIC's "no such value" (as in `girth`/`aspl`),
+ * `UNREACHABLE` (-1) is only ever a per-entry sentinel inside a distance vector. -1 here would
+ * read as "nearer than 0 steps" to every numeric comparison.
  */
 export function eccentricity(g: Graph, v: number): number {
   checkVertex(g, v, "vertex");
@@ -120,29 +99,18 @@ export function isConnected(g: Graph): boolean {
 
 export interface Summary {
   /**
-   * Mean shortest-path length over REACHABLE ordered pairs. A WITHIN-GROUP
-   * value: when `connected` is false this describes only the pairs that can
-   * reach each other, so a split roster reports a small, healthy-looking
-   * average. Never surface it without `connected` beside it — `penalizedAspl`
-   * exists precisely because an optimizer that forgets this hill-climbs into
-   * fragmentation.
+   * Mean shortest-path length over REACHABLE ordered pairs only, so a split roster reports a
+   * small, healthy-looking average. Never surface it without `connected` beside it.
    */
   aspl: number;
   /** Longest shortest path over REACHABLE pairs. Within-group, exactly as `aspl` is. */
   diameter: number;
   connected: boolean;
-  /**
-   * Ordered pairs (s, t), s !== t, with t reachable from s. Counted by the same
-   * sweep that produces `aspl`, so it is free; it is what lets `penalizedAspl`
-   * charge for unreachability instead of applying a flat penalty.
-   */
+  /** Ordered pairs (s, t), s !== t, with t reachable from s. */
   reachablePairs: number;
 }
 
-/**
- * Single pass over all sources. ASPL over reachable ordered pairs, diameter,
- * and a connectivity flag. Matches Python `all_pairs_summary`.
- */
+/** Single pass over all sources. Matches Python `all_pairs_summary`. */
 export function allPairsSummary(g: Graph): Summary {
   const n = g.n;
   let total = 0;
@@ -171,30 +139,13 @@ export function allPairsSummary(g: Graph): Summary {
 const DISCONNECTED_PENALTY = 10;
 
 /**
- * The optimizer objective: ASPL, with disconnection made strictly costly.
+ * The optimizer objective: ASPL with disconnection made strictly costly.
  *
- * A FLAT penalty is not enough, and that was a real defect rather than a
- * refinement. `aspl` is averaged over REACHABLE pairs only, so breaking a
- * disconnected graph into smaller pieces LOWERS it — with a constant
- * disconnection term the optimizers (`polish`, `polishConstrained`) hill-climbed
- * into deeper fragmentation while the reported average separation "improved".
- * Measured before the fix: a 16-person roster went from one group of 14 to five
- * fragments, and the reported separation fell from 5.0 to 1.3.
- *
- * So unreachable pairs are CHARGED at `n`, strictly greater than any achievable
- * finite distance (at most n-1), and the mean is taken over ALL ordered pairs.
- * Any move that makes a pair unreachable then strictly increases the objective,
- * so an optimizer accepting only strict decreases cannot fragment — the
- * guarantee lives in the objective's shape rather than in a guard that each call
- * site has to remember.
- *
- * The flat term is kept ON TOP, because the charged mean alone does not make
- * every disconnected graph worse than every connected one (a clique plus one
- * isolated vertex can beat a sparse connected graph on the charged mean).
- *
- * A CONNECTED graph returns exactly `summary.aspl`, by the early return rather
- * than by arithmetic that happens to agree — so nothing about the connected case
- * moves, not even in the last bit. Every fixture is a connected case.
+ * Unreachable pairs are CHARGED at `n` (above any achievable finite distance) and the mean is
+ * over ALL ordered pairs, so any move that disconnects strictly increases the objective and an
+ * optimizer accepting only strict decreases cannot fragment. A flat penalty alone does not do
+ * that — `aspl` averages over reachable pairs, so fragmenting LOWERS it — and the charged mean
+ * alone does not put every disconnected graph below every connected one, so both terms stay.
  *
  * Mirrored in `reference-python/core.py` `penalized_aspl`.
  */
@@ -209,14 +160,12 @@ export function penalizedAspl(summary: Summary, n: number): number {
   return charged + DISCONNECTED_PENALTY * n;
 }
 
-/** How many of `pairs` are currently present as edges in `g`. */
 export function countPresentEdges(g: Graph, pairs: [number, number][]): number {
   let count = 0;
   for (const [a, b] of pairs) if (g.hasEdge(a, b)) count++;
   return count;
 }
 
-/** Partition vertices into connected components (each a list of vertex indices). */
 export function connectedComponents(g: Graph): number[][] {
   const seen = new Uint8Array(g.n);
   const comps: number[][] = [];
@@ -241,16 +190,13 @@ export function connectedComponents(g: Graph): number[][] {
 }
 
 /**
- * Fraction (0..1) of vertices in the largest connected component. 1 for a
- * connected graph; the empty graph is vacuously 1. A graded companion to
- * `isConnected` — how close to whole is a disconnected roster. Matches Python
- * `largest_component_fraction`.
+ * Fraction (0..1) of vertices in the largest connected component; the empty graph is vacuously
+ * 1. Matches Python `largest_component_fraction`.
  */
 export function largestComponentFraction(g: Graph): number {
   if (g.n === 0) return 1;
   let largest = 0;
-  // Loop rather than Math.max(...sizes) to avoid the argument-spread ceiling on
-  // large rosters (same reason as degreeExtent in index.ts).
+  // Loop, not `Math.max(...sizes)`: the argument-spread ceiling throws on large rosters.
   for (const comp of connectedComponents(g)) {
     if (comp.length > largest) largest = comp.length;
   }
@@ -259,16 +205,12 @@ export function largestComponentFraction(g: Graph): number {
 
 /**
  * Length of the shortest cycle, or Infinity for a forest. Matches Python girth.
- * O(n·(n+m)): a BFS from every source, with an early-out only once a triangle is
- * found — so a high-girth graph runs the full sweep. Intended for the small
- * generated graphs the builders produce (n ≤ MAX_CACHED_N); calling it on a
- * hand-built graph of hundreds of thousands of vertices is slow by design.
+ * Uncapped O(n·(n+m)) with an early-out only on a triangle, so a large high-girth graph runs
+ * the full sweep — a diagnostic for generated rosters, not for hand-built graphs of any size.
  */
 export function girth(g: Graph): number {
-  // Per-source BFS marker. Same value (-1) as UNREACHABLE and deliberately so —
-  // it is a separate, function-scoped constant because it means "not yet seen in
-  // THIS sweep", not "unreachable from the source". Do not merge them, and do not
-  // "fix" the shared value: it is reuse, not a collision.
+  // Deliberately the same value as UNREACHABLE but a separate constant: it means "not yet seen
+  // in THIS sweep", not "unreachable". Do not merge them.
   const UNVISITED = -1;
   const n = g.n;
   let best = Infinity;
@@ -286,14 +228,13 @@ export function girth(g: Graph): number {
           parent[w] = u;
           q.push(w);
         } else if (parent[u] !== w) {
-          // a non-parent already-seen neighbour closes a cycle; skip the tree edge
-          // back to the parent, which isn't one
+          // The parent test is load-bearing: without it every tree edge reads as a 2-cycle.
           const cyc = dist[u] + dist[w] + 1;
           if (cyc < best) best = cyc;
         }
       }
     }
-    if (best === 3) break; // 3 is the smallest possible cycle; no source can beat it
+    if (best === 3) break; // no source can beat the smallest possible cycle
   }
   return best;
 }

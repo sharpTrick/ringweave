@@ -1,16 +1,8 @@
 /**
- * Turn the core's structured infeasibility {@link Reason}s into copy that names
- * people.
+ * Turn the core's structured infeasibility {@link Reason}s into copy that names people.
  *
- * The core reports indices ("person 4") because it has no roster. This is the one
- * place that becomes "Alice", and it is a mapping over structured data rather
- * than a rewrite of the core's prose — parsing those strings would mean matching
- * twelve templates, one of which contains an en-dash, and only six of which name
- * a person at all.
- *
- * `unknown-person` and `self-pair` can carry an index that is deliberately OUT of
- * range — that is what those reasons report — so every lookup goes through
- * `personName`, which falls back rather than rendering "undefined".
+ * `unknown-person` and `self-pair` carry an index that is deliberately OUT of range — that is
+ * what those reasons report — so every lookup goes through `personName` rather than `names[i]`.
  */
 import type { Reason } from "ringweave";
 
@@ -32,10 +24,8 @@ function describeReason(r: Reason, names: string[]): string {
     case "self-pair":
       return `${personName(r.person, names)} can't be paired with themselves.`;
     case "too-many-invalid-constraints":
-      // The core summarises rather than listing once a rule set is malformed past counting; the
-      // count is exact even though the list it replaces is not. Reached only through the library
-      // directly — this app caps rules long before it — but the switch is exhaustive on purpose,
-      // and leaving a code unhandled is what the compiler is here to refuse.
+      // Unreachable from this app (it caps rules first), but the switch is exhaustive on purpose:
+      // an unhandled code is a compile error, which is how a new core reason gets worded.
       return `${r.count} buddy rules refer to someone who isn't in this roster — remove them and try again.`;
     case "roster-too-large-constrained":
       return `Buddy rules can only be used with up to ${r.max} people — this roster has ${r.n}.`;

@@ -8,19 +8,12 @@ import {
 } from "../constraints";
 
 interface Props {
-  /** The roster the rules are being written against, as currently parsed. */
   names: string[];
   pairs: NamedPair[];
   onChange: (pairs: NamedPair[]) => void;
 }
 
-/**
- * How much of a typed name an accessible label repeats back.
- *
- * The value is whatever the user typed into a free-text field, so it is unbounded — and an
- * `aria-label` is a DOM sink like any other. Same rule and the same helper as every other place
- * untrusted text reaches the tree; see io/clamp.ts.
- */
+/** The echoed name is unbounded free text, and an accessible label is a DOM sink like any other. */
 const NAME_ECHO_MAX = 40;
 
 const KIND_LABEL: Record<ConstraintKind, string> = {
@@ -29,25 +22,14 @@ const KIND_LABEL: Record<ConstraintKind, string> = {
 };
 
 /**
- * F7's rule editor: one row per rule, `[person A] [person B] [kind] [×]`.
- *
- * Rows hold NAMES, not roster positions — see `NamedPair`. A row naming somebody
- * who is not in the roster is kept and flagged rather than deleted: the user is
- * mid-edit, and silently removing a row they are still typing is worse than
- * showing it as unrecognised.
- *
- * People are picked through one shared `<datalist>` rather than two `<select>`
- * elements per row. At the roster ceiling (1000 people) two selects across the
- * 200-pair cap would mount 400,000 option nodes; a datalist is mounted once and
- * still gives native keyboard autocomplete.
+ * Rows hold NAMES, not roster positions: a row naming somebody who is not in the roster is kept
+ * and flagged, so deleting it here would remove a row the user is still typing.
  */
 export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
   const listId = useId();
   const atCap = pairs.length >= MAX_CONSTRAINT_PAIRS;
-  // ONE roster index per render, not one per field. `resolvePerson` builds a fresh
-  // Map over the whole roster on every call, and each row validated two fields — at
-  // the 1000-person ceiling with the 200-rule cap that was 400 thousand-entry Maps
-  // per render, on every keystroke.
+  // One roster index per render, not one per field: `indexByName` walks the whole roster, and
+  // every row validates two fields on every keystroke.
   const lookup = useMemo(() => indexByName(names), [names]);
   const unknownName = (text: string) =>
     text.trim() !== "" && !lookup.has(text.trim().toLowerCase());
@@ -59,8 +41,7 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
   return (
     <div className="rules">
       <datalist id={listId}>
-        {/* Text content as well as `value`: a bare <option/> reads as an unlabelled
-            control to the a11y linter, and browsers collapse the two when identical. */}
+        {/* Text content as well as `value`: a bare <option/> reads as an unlabelled control. */}
         {names.map((name) => (
           <option key={name} value={name}>{name}</option>
         ))}
@@ -69,20 +50,9 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
       {pairs.map((p, i) => {
         const unknownA = unknownName(p.a);
         const unknownB = unknownName(p.b);
-        // THE REASON TRAVELS WITH THE FIELD. `aria-invalid` says a control is wrong and nothing
-        // more; the only explanation was a COUNT in RosterModal's shared note stack ("2 buddy
-        // rules name someone who isn't in this roster"), which never says WHICH row. A sighted
-        // user gets the red outline on the offending input; a screen-reader user tabbing five
-        // rules with two flagged heard "invalid, edit text, Rule 3, first person" and had to
-        // cross-reference an aggregate elsewhere in the DOM.
-        //
-        // `aria-describedby`, NOT the label. Folding the reason into `aria-label` was the first
-        // attempt and it is the wrong channel: the label is the control's NAME — its identity in
-        // a rotor, and what every query in the suite and the e2e driver finds it by — so making
-        // it change on each keystroke renames the control while the user types. A description is
-        // the part of the ARIA contract that is allowed to vary, and it is what RosterModal
-        // already uses to explain why the dialog reopened. Rendered visibly too: a sighted user
-        // gets an outline and no words, which is the same gap one sense over.
+        // `aria-describedby`, not `aria-label`: the label is the control's NAME — its rotor
+        // identity, and what every test and the e2e driver find it by — so folding a per-keystroke
+        // reason into it renames the control while the user types. A description may vary.
         const whyId = (side: "a" | "b") => `${listId}-why-${i}-${side}`;
         const why = (name: string) => `“${clampText(name, NAME_ECHO_MAX)}” isn't in this roster.`;
         return (
@@ -131,14 +101,8 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
       })}
 
       <div className="rule-acts">
-        {/* `aria-disabled`, not `disabled`, for the reason the buddies stepper documents: the
-            click that adds the LAST allowed row is the click that flips `atCap`, so a real
-            `disabled` lands on the button under the user's finger and the browser blurs it. No
-            element is removed, so `useFocusRescue` fires on the new row's insertion instead and
-            relocates focus to the roster field at the top of the dialog — out of the rules
-            disclosure, away from the row just added and from the cap notice explaining why, with
-            200 rows to Tab back through. Keeping the button focusable and inert leaves the user
-            where they were, next to a live region that is already announcing the limit. */}
+        {/* `aria-disabled`, not `disabled`: the click that adds the LAST allowed row is the click
+            that flips `atCap`, and a real `disabled` blurs the button under the user's finger. */}
         <button
           className="linklike"
           aria-disabled={atCap}
@@ -149,12 +113,8 @@ export default function ConstraintsEditor({ names, pairs, onChange }: Props) {
         >
           + Add a buddy rule
         </button>
-        {/* Permanently mounted, text conditional — the same pattern RosterModal's note stack
-            uses, and for the same reason: a region that appears together with its first message
-            is never announced. This one gates a control (the Add button disables at the cap), so
-            a keyboard-and-screen-reader user hitting the limit would otherwise find Add dead with
-            no explanation. Fifth instance of this class; see io/clamp.ts for the sibling case
-            where four repeats became one helper. */}
+        {/* Mounted always, text conditional: a region that appears together with its first message
+            is never announced, and this one is why Add went inert. */}
         <span className="rule-note" role="status" aria-live="polite">
           {atCap ? `That's the limit of ${MAX_CONSTRAINT_PAIRS} rules.` : ""}
         </span>

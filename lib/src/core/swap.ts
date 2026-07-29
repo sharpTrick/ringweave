@@ -1,7 +1,6 @@
 /**
- * Degree-preserving double edge swap, shared by the plain and constraint-aware
- * polish passes. Swapping (a-b, c-d) → (a-c, b-d) leaves every vertex degree
- * unchanged, so a regular graph stays regular.
+ * Double edge swap: (a-b, c-d) → (a-c, b-d) leaves every vertex degree unchanged, so polish
+ * cannot make a regular graph irregular.
  */
 import { Graph } from "./graph.js";
 import { RNG } from "./rng.js";
@@ -18,9 +17,8 @@ export interface Swap {
 }
 
 /**
- * Pick two edges and one of the two rewirings. Returns null when the swap is
- * degenerate, would duplicate an existing edge, or is vetoed by `reject` (used
- * to enforce constraint guards without duplicating the proposal machinery).
+ * Pick two edges and one of the two rewirings. Null when the swap is degenerate, would
+ * duplicate an edge, or is vetoed by `reject` — the seam constraint guards hook into.
  */
 export function proposeSwap(
   g: Graph,

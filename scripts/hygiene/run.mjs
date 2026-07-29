@@ -1,17 +1,10 @@
 /**
- * Mechanical hygiene checks for the classes oxlint and knip cannot see.
+ * Mechanical hygiene checks for the classes oxlint and knip cannot see. Each check below states
+ * what it catches and what it does not; the narrowings are deliberate, not accidental.
  *
- * These exist because `docs/REVIEW_PROTOCOL.md` takes lint classes off the adversarial critics'
- * plate, and E1's most-repeated finding labels were exactly these three: stale comments, dead CSS
- * hooks, and a literal silently mirroring a named constant. A critic finding them costs a whole
- * review round; a script finds them in milliseconds and never gets bored.
- *
- * Every check is deliberately tuned for a low **effective** false-positive rate (Tricorder's bar:
- * an issue nobody acts on is a false positive, however technically correct). Where a check cannot
- * be precise it is narrowed rather than made noisy, and the narrowing is stated. In particular,
- * "stale comment" is only partly mechanizable: a comment whose prose is now false but whose
- * identifiers all still exist is undetectable here. That gap is real and is recorded rather than
- * papered over.
+ * The largest gap: "stale comment" is only partly mechanizable. A comment whose prose is now false
+ * but whose identifiers all still exist is undetectable here, so a clean run is not evidence that
+ * the comments are true.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";

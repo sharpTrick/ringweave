@@ -1,16 +1,10 @@
 /**
- * BuddyGraph public API.
- *
- * The selected pipeline (per docs/findings/FINDINGS.md): ring-greedy + incremental distance
- * cache + degree repair, with an optional short fixed-seed polish pass at small
- * n where it reaches provable-optimal ASPL cheaply. Greedy is the spine —
- * deterministic, explainable, incremental — with polish as an optional layer.
+ * BuddyGraph public API. Pipeline: ring-greedy + degree repair, with an optional
+ * fixed-seed polish pass (see docs/findings/FINDINGS.md).
  */
-// `validate()` is the authoritative feasibility gate — it refuses on BOTH the
-// roster cap and the (intentionally internal) work budget. `MAX_CONSTRAINED_N` is
-// re-exported as a user-facing dial for UI preflight; `MAX_CONSTRAINED_WORK` /
-// `constrainedWork` stay unexported on purpose (a replaceable heuristic), so N is
-// deliberately not the only ceiling. Call `validate()` rather than the constant.
+// `validate()` is the authoritative feasibility gate: it also refuses on an unexported work
+// budget, so `MAX_CONSTRAINED_N` is not the only ceiling — preflight with `validate()`, not
+// with the constant.
 export { Graph, ring, MAX_ROSTER } from "./graph.js";
 export { MAX_CONSTRAINED_N, DEFAULT_MIN_SEPARATION } from "./budgets.js";
 export {
@@ -84,31 +78,20 @@ import {
 
 export interface BuddyOptions {
   /**
-   * Minimum degrees of separation to aim for (girth-flavored soft floor). Default 5.
-   *
-   * The SAME concept the core spells `mind` internally and `reference-python` spells `mind` as a
-   * kwarg — an alias, not a second knob (`lib/CLAUDE.md`'s vocabulary section says so, and this
-   * is the call site where a reader meets both names within a few lines of each other:
-   * `buildBuddyGraph` reads `options.minSeparation` into a local `mind` and hands it to
-   * `ringGreedy`). The public surface keeps the spelled-out name because it is read by app
-   * authors; the internals keep the short one because it mirrors the oracle.
-   *
-   * Honoured on the UNCONSTRAINED path only. `ConstrainedBuddyOptions` accepts the same field and
-   * documents that it cannot change the output — see `choosePartner` in `constrainedGreedy.ts`.
+   * Minimum degrees of separation to aim for. Default 5. An alias for the `mind` the core and
+   * `reference-python` spell, not a second knob. Honoured on the UNCONSTRAINED path only.
    */
   minSeparation?: number;
   /**
-   * Run a fixed-seed polish pass to tighten ASPL. Default "auto": on when the
-   * pass's modelled work fits `MAX_POLISH_WORK`, which is k-aware — not when n
-   * alone is small. An explicit `true` is honoured regardless.
+   * Run a fixed-seed polish pass to tighten ASPL. Default "auto": on when the modelled work fits
+   * `MAX_POLISH_WORK`, which is k-aware — not when n alone is small. `true` is honoured regardless.
    */
   polish?: boolean | "auto";
   /** Seed for the polish pass. Default 12345 (matches the `polish` backend). */
   seed?: number;
   /**
-   * Iteration budget for polish. Default 20000. A non-integer or negative value
-   * falls back to that default, and ANY value is clamped to what
-   * `MAX_POLISH_WORK` affords at this (n, k) — the budget is authoritative.
+   * Iteration budget for polish. Default 20000. A non-integer or negative value falls back to
+   * that default, and ANY value is clamped to what `MAX_POLISH_WORK` affords at this (n, k).
    */
   polishIters?: number;
 }
@@ -121,18 +104,10 @@ export interface BuddyResult {
   degreeMin: number;
   degreeMax: number;
   /**
-   * Mean separation over pairs that CAN reach each other, and the longest such
-   * separation. WITHIN-GROUP values: when `connected` is false they describe only
-   * the reachable pairs, so a split roster reports a small, healthy-looking
-   * number. Always read them with `connected` — which is why it is now here.
-   *
-   * They are deliberately NOT Infinity when disconnected, unlike `eccentricity`.
-   * That asymmetry is not an oversight: these two are pinned byte-for-byte
-   * against `reference-python`'s `all_pairs_summary` and its fixtures, whereas
-   * `eccentricity` is new and had no such constraint, so it could take the safer
-   * convention from the start. Changing these would mean changing the oracle and
-   * regenerating every fixture to remove a hazard that `connected` already
-   * closes for every consumer in this repo.
+   * Mean and longest separation over pairs that CAN reach each other — a split roster reports a
+   * small, healthy-looking number, so always read them with `connected`. Deliberately not
+   * Infinity when disconnected (unlike `eccentricity`): pinned against `reference-python`'s
+   * `all_pairs_summary`, so the convention cannot change without regenerating every fixture.
    */
   aspl: number;
   diameter: number;
@@ -140,36 +115,21 @@ export interface BuddyResult {
   asplGap: number;
   polished: boolean;
   finalMinSeparation: number;
-  /**
-   * Whether every person can reach every other. `allPairsSummary` has always
-   * computed this; it simply was not surfaced, which left every consumer either
-   * hardcoding `true` or inferring connectivity from a finite ASPL — and ASPL is
-   * a mean over *reachable* pairs, so a split roster reads as finite and can
-   * score as optimal.
-   */
+  /** Whether every person can reach every other. A finite `aspl` does NOT imply it. */
   connected: boolean;
-  /**
-   * Fraction (0..1) of people in the largest group. 1 when connected. The graded
-   * companion to `connected`, matching {@link ConstraintReport}'s field of the
-   * same name so both builders report connectivity the same way.
-   */
+  /** Fraction (0..1) of people in the largest group. 1 when connected. */
   largestComponentFraction: number;
 }
 
 /**
  * Build a buddy graph on `n` people where each person has ~`buddies` buddies.
  *
- * Returns adjacency plus quality metrics. Deterministic: the same (n, buddies,
- * options) always yields the same assignment (greedy is RNG-free; polish uses a
- * fixed seed).
+ * Deterministic: the same (n, buddies, options) always yields the same assignment (greedy is
+ * RNG-free; polish uses a fixed seed).
  *
- * Requires `buddies >= 2`: the ring seed floors every degree at 2, so smaller
- * values throw (use `buildConstrainedBuddyGraph` for the empty graph / matching).
- *
- * Contract note: this unconstrained builder has no report channel, so malformed
- * `n`/`k` **throw** a clear error. The constraint-aware
- * `buildConstrainedBuddyGraph` instead **refuses** (populating `report.refusals`)
- * because it already carries a report — a deliberate, if asymmetric, split.
+ * Requires `buddies >= 2` — the ring seed floors every degree at 2, so smaller values throw
+ * (use `buildConstrainedBuddyGraph` for the empty graph / matching). Malformed `n`/`k` THROW
+ * here because this builder has no report channel; `buildConstrainedBuddyGraph` refuses instead.
  */
 export function buildBuddyGraph(
   n: number,
@@ -178,11 +138,8 @@ export function buildBuddyGraph(
 ): BuddyResult {
   const k = buddiesPerPerson;
   const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;
-  // Checked HERE rather than left to the `RNG` constructor, which only runs when polish does.
-  // `resolveWantPolish` is a function of (n, k), so leaving it there made an option's acceptance
-  // depend on roster size — the same shape as the `priorWeight` bug on the constrained path,
-  // where a contract broke as a function of n. This entry point throws on bad input (see the
-  // doc comment above); its constrained sibling refuses, and normalises instead.
+  // Checked here, not left to the `RNG` constructor (which only runs when polish does), so that
+  // whether a bad seed is rejected does not depend on roster size.
   const seed = checkSeed(options.seed ?? 12345);
   // 0 priors: this path runs `polish`, whose objective has no prior term.
   const wantPolish = resolveWantPolish(options.polish, n, k, 0, DEFAULT_POLISH_ITERS);
@@ -192,16 +149,9 @@ export function buildBuddyGraph(
   let g: Graph = graph;
   let polished = false;
   if (wantPolish) {
-    // polish returns the lowest penalized-ASPL graph it saw, never worse than its
-    // input (disconnection is penalized, so a connected input stays connected) —
-    // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
-    // polishConstrained.
-    // FROM THE ARTIFACT, not from a counter, and not from the decision to call. Three versions
-    // of this flag: the call site (true whenever polish was invoked), then `iters > 0` — and
-    // `iters` counts loop PASSES, so `polish(ring(3))` reports 19,990 of them while returning the
-    // triangle untouched, because no vertex-disjoint edge pair exists to propose. `changed` is
-    // set where `best` is replaced, which needs a strict energy improvement, so `polished: true`
-    // now implies the edge list differs from `{ polish: false }`.
+    // polish returns the lowest penalized-ASPL graph it saw, never worse than its input
+    // (disconnection is penalized), so adopting it is always safe. `polished` must come from
+    // `changed`: `iters` counts loop PASSES, so an untouched return still reports thousands.
     const res = polish(g, { mode: "anneal", seed, maxIters: options.polishIters });
     g = res.graph;
     polished = res.changed;
@@ -219,20 +169,12 @@ export function buildBuddyGraph(
     aspl: summary.aspl,
     diameter: summary.diameter,
     girth: gi,
-    // Scored against the degree actually DELIVERED, not the one requested. The
-    // demotion floor can hand back a uniformly smaller degree, and scoring that
-    // graph against the requested k reports a large gap for one that is exactly
-    // optimal for what it delivered — buildBuddyGraph(8, 6) returns a 3-regular
-    // graph whose ASPL equals mooreLowerBounds(8, 3) exactly. `model.ts` already
-    // scores the displayed quality this way; this aligns the library's own field.
+    // Scored against the degree DELIVERED, not the one requested: the demotion floor can return a
+    // smaller degree, and scoring that against k reports a large gap for an optimal graph.
     asplGap: asplGap(summary.aspl, n, degreeMax),
     polished,
-    // Derived from the graph being RETURNED, not from the pre-polish target.
-    // `ringGreedy` reports the separation it reached; polish then runs and is NOT
-    // separation-aware, so the old value routinely over-advertised — for
-    // buildBuddyGraph(16, 5) it claimed 3 while the returned graph had girth 3,
-    // i.e. buddies two steps apart. Linking two people d apart closes a (d+1)
-    // cycle, so the achieved separation is girth - 1.
+    // Derived from the RETURNED graph, not `ringGreedy`'s target: polish runs afterwards and is
+    // not separation-aware, so the target over-advertises. Achieved separation is girth - 1.
     finalMinSeparation: Number.isFinite(gi) ? gi - 1 : finalMind,
     connected: summary.connected,
     largestComponentFraction: largestComponentFraction(g),
@@ -241,15 +183,9 @@ export function buildBuddyGraph(
 
 export interface ConstrainedBuddyOptions {
   /**
-   * ACCEPTED AND IGNORED on this path. The constrained completion always takes the
-   * farthest legal partner rather than aiming at a target, so no value here can
-   * change the output — see `choosePartner` in `constrainedGreedy.ts`, whose own
-   * contract says the same. Kept for call-site compatibility with
-   * {@link BuddyOptions}; removing it would be a breaking change.
-   *
-   * It previously documented "Default 5", which was doubly wrong: nothing applies a default
-   * because nothing ACTS on the field — it is read here and passed to `constrainedGreedy`, which
-   * ignores it — and stating a default invites a caller to believe passing 7 does something.
+   * ACCEPTED AND IGNORED on this path: `choosePartner` always takes the farthest legal partner
+   * rather than aiming at a target, so no value here changes the output. Kept only for call-site
+   * compatibility with {@link BuddyOptions}.
    */
   minSeparation?: number;
   /**
@@ -260,15 +196,13 @@ export interface ConstrainedBuddyOptions {
   /** Seed for the polish pass. Default 0 (matches the `polishConstrained` backend). */
   seed?: number;
   /**
-   * Iteration budget for polish. Default 8000. A non-integer or negative value
-   * falls back to that default, and ANY value is clamped to what
-   * `MAX_POLISH_WORK` affords at this (n, k).
+   * Iteration budget for polish. Default 8000. A non-integer or negative value falls back to that
+   * default, and ANY value is clamped to what `MAX_POLISH_WORK` affords at this (n, k).
    */
   polishIters?: number;
   /**
-   * Soft penalty weight for keeping prior buddies (churn). Ignored when priors
-   * are promoted to hard (`Constraints.priorHard`). Defaults to a mild penalty
-   * when priors exist, else none.
+   * Soft penalty weight for keeping prior buddies (churn). Ignored when priors are promoted to
+   * hard (`Constraints.priorHard`). Defaults to a mild penalty when priors exist, else none.
    */
   priorWeight?: number;
 }
@@ -279,24 +213,12 @@ export interface ConstraintReport {
   reqViolations: number;
   prohViolations: number;
   connected: boolean;
-  /**
-   * Fraction (0..1) of people in the largest connected group. 1 when connected;
-   * a graded companion to `connected` for the honest residual-disconnection the
-   * constrained generator can leave (e.g. "94% of people are in one group").
-   */
+  /** Fraction (0..1) of people in the largest connected group. 1 when connected. */
   largestComponentFraction: number;
   /**
-   * Fraction (0..1) of prior buddies preserved, or null when priors were never
-   * WEIGHED — either because there were none, or because polish did not run at this
-   * (n, k) and so nothing ever consulted them.
-   *
-   * The second case used to report a number, and the number was meaningless: above
-   * roughly n≈190 at k=4 the auto-polish gate declines, `constrainedGreedy` never
-   * looks at priors at all, and whatever fraction happened to survive was pure
-   * coincidence. A caller reading "62% of prior buddies kept" could not tell that
-   * from "priors were honoured to the tune of 62%". `null` already means "not
-   * measured" on this field, so reusing it removes a misleading number rather than
-   * adding a flag that has to be interpreted alongside it.
+   * Fraction (0..1) of prior buddies preserved, or null when priors were never WEIGHED (none
+   * existed, or polish did not run at this (n, k)) — an unweighed fraction is coincidence, so it
+   * is reported as null rather than as a number a caller would read as intent.
    */
   priorsKeptFraction: number | null;
   /** Plain-language reasons the input was refused (empty when generated). */
@@ -304,21 +226,18 @@ export interface ConstraintReport {
 }
 
 /**
- * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is
- * non-empty the input was refused: `edges` is empty, the metric fields are placeholders, and
- * `buddies` holds one EMPTY list per person — read `report` first, and note `buddies.length` is
- * therefore not a "did this succeed" test.
+ * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is non-empty the input was
+ * refused: `edges` is empty, the metric fields are placeholders, and `buddies` holds one EMPTY
+ * list per person — read `report` first, and note `buddies.length` is therefore not a "did this
+ * succeed" test.
  *
- * `buddies.length === n` HOLDS ONLY FOR n THIS BUILDER COULD HAVE ACCEPTED, i.e. an integer in
- * [0, MAX_CONSTRAINED_N]; for anything larger it is 0. That is deliberate and the reasoning is
- * at `refusedResult`: allocating from an n the builder is refusing FOR being too large would
- * make a refusal cost more than a success, which is a denial-of-service gradient pointing the
- * wrong way. The condition is stated here because this docblock is the contract, and it
- * previously promised the indexing shape without it.
+ * `buddies.length === n` holds only for an `n` this builder could have accepted (an integer in
+ * [0, MAX_CONSTRAINED_N]); for anything larger it is 0, so a refusal never allocates from the
+ * oversized `n` it is refusing.
  *
- * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}):
- * Moore's bound assumes a k-regular target, which constrained graphs only
- * approximate. Build a Graph from `edges` and call `girth(g)` if a UI needs it.
+ * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}): Moore's bound assumes
+ * a k-regular target, which constrained graphs only approximate. Build a Graph from `edges` and
+ * call `girth(g)` if a UI needs it.
  */
 export interface ConstrainedBuddyResult {
   buddies: number[][];
@@ -346,10 +265,8 @@ export function buildConstrainedBuddyGraph(
 ): ConstrainedBuddyResult {
   const k = buddiesPerPerson;
 
-  // Refuse a malformed roster size FIRST, before the n !== cons.n check (which
-  // would fire on NaN via NaN !== NaN and mask the clearer reason) and before any
-  // n-sized allocation. This entry point refuses (never throws) — see the
-  // throw-vs-refuse note on buildBuddyGraph.
+  // Malformed roster size FIRST: the `n !== cons.n` check below fires on NaN (NaN !== NaN) and
+  // would mask the clearer reason, and nothing should allocate n-sized from an unvalidated n.
   if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
     const why =
       Number.isInteger(n) && n > MAX_ROSTER
@@ -366,9 +283,8 @@ export function buildConstrainedBuddyGraph(
     ]);
   }
 
-  // Promote hard priors to required BEFORE validating, so an infeasibility that
-  // only exists after promotion (e.g. a prior that is also prohibited, or one
-  // that pushes required-degree over k) is refused rather than silently emitted.
+  // Promote hard priors BEFORE validating, so an infeasibility that only exists after promotion
+  // (a prior that is also prohibited, or one pushing required-degree over k) is refused.
   const active = withHardPriors(cons);
   const refusals = validate(active, k);
   if (refusals.length > 0) return refusedResult(n, refusals);
@@ -379,39 +295,15 @@ export function buildConstrainedBuddyGraph(
 
   let g = graph;
   let polished = false;
-  // Hoisted out of the branch because the report needs it. `priorsKeptFraction` is only
-  // meaningful when priors were ACCOUNTED FOR, and there are two ways that happens —
-  // promoted to required edges, or weighed as a soft penalty by a polish pass that ran.
-  // The full rule is at the `buildReport` call below; this only has to survive the branch.
   let priorWeight = 0;
   let priorsWeighed = false;
-  // priorHard already promoted priors to required, so no soft penalty then.
-  // Finiteness-checked HERE, not only inside `polishConstrained`. Both places used to
-  // decide independently: the optimizer coerced a non-finite weight to 0 and never
-  // weighed the priors, while the report tested the RAW value against `!== 0`, found
-  // NaN !== 0 true, and published a `priorsKeptFraction` — the exact coincidental number
-  // that field's contract says must be null. Resolving once means the optimizer and the
-  // report cannot disagree about what was actually optimized.
-  //
-  // Resolved ABOVE the gate rather than inside it, since round 20: the auto-polish gate has to
-  // charge the prior probes the pass will actually pay for, and whether it pays any is exactly
-  // what this value decides. Nothing below the gate reads a different weight — `priorWeight` is
-  // assigned from it — so hoisting moves no decision, it only lets the estimator see one.
+  // Resolved once, above the gate: the gate, the optimizer and the report all read this weight
+  // and must not disagree, and the gate has to charge for the prior probes the pass will pay for.
   const requestedPriorWeight =
     options.priorWeight ?? (active.priorCount > 0 ? DEFAULT_PRIOR_WEIGHT : 0);
-  //
-  // The SAME predicate `polishConstrained` enforces, so this wrapper can never hand its callee a
-  // value the callee throws on. Only finiteness was normalized once, so a NEGATIVE weight passed
-  // straight through and `polishConstrained`'s sign check threw out of the one entry point whose
-  // documented contract is that it REFUSES rather than throws — and only at the roster sizes where
-  // auto-polish happens to run, so the contract broke as a function of n. Normalising to 0 rather
-  // than refusing is what this entry point does with a bad option value generally — it refuses
-  // INPUTS, never options. The siblings reach the same outcome by different routes, and the
-  // difference is worth naming rather than implying one rule: a non-finite `polishIters` falls
-  // back to the default inside `boundedPolishIterations`, and `minSeparation` is passed through to
-  // `constrainedGreedy`, which does not act on a non-integer floor. Only `priorWeight` is
-  // normalised HERE, because only it is read three times — by the gate, by the optimizer and by
-  // the report — and they must not disagree.
+  // priorHard already promoted priors to required, so no soft penalty then. The rest is the SAME
+  // predicate `polishConstrained` enforces by throwing — normalised here instead, because this
+  // entry point's contract is to refuse via `report.refusals` and never to throw.
   const resolvedPriorWeight =
     active.priorHard || !(Number.isFinite(requestedPriorWeight) && requestedPriorWeight >= 0)
       ? 0
@@ -426,12 +318,8 @@ export function buildConstrainedBuddyGraph(
     )
   ) {
     priorWeight = resolvedPriorWeight;
-    // polishConstrained returns the lowest-energy graph it saw, never worse
-    // than its input on the objective, so adopting it is always safe.
-    // Normalised, not thrown, for the same reason `priorWeight` is: this entry point's contract
-    // is to REFUSE (via `report.refusals`), so it must never hand `polishConstrained` a value
-    // its `RNG` throws on. Polish is the only seed-dependent stage here, so unlike the fast
-    // tier there is nothing outside this branch for the seed to affect.
+    // polishConstrained returns the lowest-energy graph it saw, never worse than its input on the
+    // objective, so adopting it is always safe. Seed normalised, not thrown on, like `priorWeight`.
     const requestedSeed = options.seed ?? 0;
     const res = polishConstrained(g, active, {
       seed: isSeed(requestedSeed) ? requestedSeed : 0,
@@ -439,11 +327,8 @@ export function buildConstrainedBuddyGraph(
       priorWeight,
     });
     g = res.graph;
-    // TWO DIFFERENT FACTS, and they were one field for two rounds. `polished` describes the
-    // OUTPUT — same correction as the fast tier — while `priorsKeptFraction` describes whether
-    // the priors were ever WEIGHED, which a pass that took decisions and accepted none still did.
-    // Collapsing them made a pass that changed nothing publish a fraction, and a pass that
-    // weighed priors without improving report none.
+    // Two different facts, not one: `changed` describes the OUTPUT, while `decisions > 0`
+    // describes whether the priors were ever WEIGHED — a pass that accepted nothing still did.
     polished = res.changed;
     priorsWeighed = res.decisions > 0;
   }
@@ -459,14 +344,10 @@ export function buildConstrainedBuddyGraph(
     aspl: summary.aspl,
     diameter: summary.diameter,
     polished,
-    // report from the ORIGINAL cons (not active): reqViolations reflects the
-    // caller's declared requireds, not priors promoted to required — safe because
-    // the postconditions guarantee every active-required edge is present.
-    // Whether priors were ACCOUNTED FOR at all, by either of the two mechanisms that
-    // can do it: promoted to required edges (priorHard), or weighed as a soft penalty
-    // by a polish pass that actually ran. Only the remaining case — polish declined at
-    // this (n, k) and no promotion — leaves `priorsKeptFraction` measuring coincidence,
-    // and that is the case it must report as null.
+    // ORIGINAL cons, not active: reqViolations must reflect the caller's declared requireds, not
+    // priors promoted to required (safe — the postconditions guarantee every active-required edge
+    // is present). Priors count as accounted for by either route, promotion or a polish pass that
+    // ran; any other case leaves `priorsKeptFraction` measuring coincidence, so it must be null.
     report: buildReport(g, cons, summary.connected, active.priorHard || (priorsWeighed && priorWeight !== 0)),
   };
 }
@@ -493,44 +374,22 @@ function summarize(g: Graph): {
   return { degreeMin, degreeMax, summary, buddies };
 }
 
-
-
-
-
-// Measured on the churn sweep (docs/findings/churn-priors-weight.md): preservation is a
-// step function — any weight >= ~0.5 saturates it (98% kept at n=30, 86% at n=60, 64% at
-// n=120), at negligible ASPL cost. 2 sits on that plateau with margin above the activation
-// threshold. Tests check monotonicity in the weight, not this value. A product-tunable dial.
+// A product-tunable dial sitting on the preservation plateau measured in
+// docs/findings/churn-priors-weight.md. Tests check monotonicity in the weight, not this value.
 const DEFAULT_PRIOR_WEIGHT = 2;
 
 /**
- * Resolve the polish option. "auto" (the default) enables polish when its
- * MODELLED WORK fits the budget, rather than when n alone is small.
+ * Resolve the polish option. "auto" (the default) enables polish when its MODELLED WORK fits
+ * `MAX_POLISH_WORK`, rather than when n alone is small.
  *
- * The old rule was `n <= 120`, which bounds n and nothing else — so the most
- * expensive input on the entire default path sat just below the gate:
- * `buildBuddyGraph(120, 12)` ran for 33 s while `buildBuddyGraph(121, 12)` took
- * 0.1 s. Density never participated, and cost DECREASED as the roster grew.
- *
- * `MAX_POLISH_WORK` is calibrated to reproduce the old threshold exactly at k=4
- * — the configuration the fixtures and the reroll boundary test pin — so nothing
- * currently pinned moves; see the constant for the arithmetic.
- *
- * An EXPLICIT `polish: true` is still honoured — but it is no longer unbounded.
- * The caller decides WHETHER to polish; `boundedPolishIterations` decides how much work
- * that may cost. Before, honouring the instruction meant one boolean could
- * re-open the exact 33 s case this budget was introduced to close.
- *
- * The decision is modelled on the DEFAULT iteration budget, not on whatever the
- * caller passed. "Is this a configuration we auto-polish?" is a property of the
- * roster (n, k). Letting a small `polishIters` flip the gate on would tie a stable
- * contract to a tuning knob.
+ * `MAX_POLISH_WORK` reproduces the old `n <= 120` threshold exactly at k=4, the configuration the
+ * fixtures and the reroll boundary test pin, so retuning it moves what they pin. The gate is
+ * modelled on the DEFAULT iteration budget, not the caller's `polishIters`, so a small
+ * `polishIters` cannot flip auto-polish on.
  */
-// NOTE for anyone tempted to clamp iterations here: don't. `boundedPolishIterations` lives
-// inside `polish` / `polishConstrained` because both are exported public API, so a clamp in this
-// wrapper would not apply to a direct caller — which is exactly how `polish(ring(20), { maxIters:
-// Infinity })` used to never return. This comment sits next to the gate it is about; it spent a
-// round floating between two unrelated functions, describing code that is not there.
+// Do not clamp iterations here: `boundedPolishIterations` lives inside `polish` /
+// `polishConstrained` because both are exported public API, so a clamp in this wrapper would not
+// apply to a direct caller — which is how `polish(ring(20), { maxIters: Infinity })` used to hang.
 function resolveWantPolish(
   option: boolean | "auto" | undefined,
   n: number,
@@ -545,36 +404,15 @@ function resolveWantPolish(
 }
 
 /**
- * Whether the default ("auto") path polishes this configuration — the gate itself,
- * exported, so a consumer never has to re-derive it.
+ * Whether `buildBuddyGraph` will generate this configuration rather than throw — the gate itself,
+ * exported, the sibling of {@link autoPolishEnabled} and for the same reason.
  *
- * Polish is the only seed-dependent stage, so a UI that offers "give me a different
- * arrangement" has to know this to avoid promising variation it cannot deliver. The
- * app used to answer with its own `POLISH_MAX_N = 120` literal, which was correct
- * only at k=4: the real cutoff is k-dependent (146 at k=2, 131 at k=3, 120 at k=4,
- * 78 at k=12) and different again for the constrained builder. It disagreed with
- * this function in BOTH directions, and the disagreement reached users as a false
- * "this group is too large to shuffle".
+ * A consumer's pre-flight must call this rather than re-derive it from the exported constants: the
+ * densest advertised configuration clears `MAX_GREEDY_WORK` by zero margin, so one constant edit in
+ * either package would have a UI offer Generate for a configuration this package throws on.
  *
- * Exporting a number would have re-created the same problem one release later. The
- * gate is a function of (n, k, which builder), so the export is the function.
- */
-/**
- * Whether `buildBuddyGraph` will generate this configuration rather than throw — the gate
- * itself, exported, the sibling of {@link autoPolishEnabled} and for the same reason.
- *
- * The app's pre-flight promised "you can generate this" for its whole advertised rectangle
- * (n <= 1000, k in [2, 12]) from its own constants, and that promise was true only because the
- * densest corner lands on `MAX_GREEDY_WORK` by exactly zero margin: `greedyWork(1000, 12)` is
- * 1.5e10 and the budget is 1.5e10. One constant edit in either package — a roster cap of 1001,
- * a buddy cap of 13, or a tightened budget here — would have had the UI enable Generate for a
- * configuration this package throws on, surfacing as a raw library string. That is the same
- * shape as the k-blind polish-cap literal `autoPolishEnabled` replaced above, and exporting the NUMBER
- * would recreate it one release later.
- *
- * Covers what is predictable BEFORE the run: the argument domain, the memory cap, and the work
- * budget. It cannot cover `repairDegrees`' runtime counter, which by construction only knows
- * what it has already spent — that path is bounded, not predicted, and says so.
+ * Covers only what is predictable BEFORE the run (argument domain, memory cap, work budget); it
+ * cannot cover `repairDegrees`' runtime counter, which is bounded rather than predicted.
  */
 export function canGenerate(n: number, k: number): boolean {
   return (
@@ -587,6 +425,12 @@ export function canGenerate(n: number, k: number): boolean {
   );
 }
 
+/**
+ * Whether the default ("auto") path polishes this configuration — the gate itself, exported, so a
+ * consumer never re-derives it. Polish is the only seed-dependent stage, so a UI offering "give me
+ * a different arrangement" must ask this before promising variation it cannot deliver; the cutoff
+ * is a function of (n, k, which builder), not an n literal, hence a function rather than a number.
+ */
 export function autoPolishEnabled(
   n: number,
   k: number,
@@ -596,12 +440,8 @@ export function autoPolishEnabled(
     "auto",
     n,
     k,
-    // 0, not a new `priorCount` option. Nothing in the tree would pass one: this is the question a
-    // UI asks about a roster it is offering a reroll for, and the app has no prior concept at all
-    // (F9 is deferred, and a grep for `addPrior` across `app/src` returns nothing). An option with
-    // no caller is the speculative-seam anti-pattern, so the gate answers for the prior-free case
-    // and grows the parameter when something needs it. `polishWork` underneath still REQUIRES the
-    // dimension, because defaulting it away is how it went missing.
+    // 0, not a new option: no caller has a prior concept yet. `polishWork` underneath still
+    // REQUIRES the dimension, because defaulting it away is how it went missing.
     0,
     opts.constrained ? DEFAULT_CONSTRAINED_POLISH_ITERS : DEFAULT_POLISH_ITERS,
   );
@@ -624,11 +464,9 @@ function buildReport(
   cons: Constraints,
   connected: boolean,
   /**
-   * Whether the priors were ACCOUNTED FOR — by either route, which is why the name is not
-   * `priorsWeighed`. The argument is `priorHard || (a polish pass took decisions && weight !== 0)`,
-   * so it is true when priors were PROMOTED to required edges and never weighed at all. Reading
-   * the narrower name in isolation, a maintainer would conclude `priorsKeptFraction` is null on
-   * the promotion path; it is 1, correctly, because promotion guarantees the edges are present.
+   * Accounted for by EITHER route — promoted to required edges, or weighed by polish — which is
+   * why it is not named `priorsWeighed`: on the promotion path nothing weighed them and
+   * `priorsKeptFraction` is correctly 1, not null.
    */
   priorsAccountedFor: boolean,
 ): ConstraintReport {
@@ -653,14 +491,9 @@ function buildReport(
 }
 
 function refusedResult(n: number, refusals: string[]): ConstrainedBuddyResult {
-  // A malformed/oversized n reaches here (that IS what's being refused), so never
-  // allocate an n-sized array from it — the caller reads `report.refusals` anyway.
-  //
-  // Bounded by MAX_CONSTRAINED_N, not MAX_ROSTER. This builder cannot ACCEPT a
-  // roster above 5000, so clamping the placeholder to MAX_ROSTER (1e6) meant
-  // refusing an oversized roster allocated 200x more than accepting the largest
-  // legal one — a refusal that costs more than success is a denial-of-service
-  // gradient pointing the wrong way.
+  // A malformed/oversized n reaches here (that IS what is being refused), so never allocate an
+  // n-sized array from it. Bounded by MAX_CONSTRAINED_N, not MAX_ROSTER (1e6): a refusal that
+  // costs more than a success is a denial-of-service gradient pointing the wrong way.
   const size = Number.isInteger(n) && n >= 0 && n <= MAX_CONSTRAINED_N ? n : 0;
   return {
     buddies: Array.from({ length: size }, () => []),

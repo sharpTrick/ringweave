@@ -48,10 +48,17 @@ Fixtures/oracle workflow (from `reference-python/`): `python3 test_core.py`, the
 - **Vocabulary:** core terms — `Graph`, `adj`, `degree`, `aspl`, `mind` (min separation; mirrors the
   Python kwarg). The constrained path's public option spells the same concept `minSeparation`; they
   are aliases, not different knobs.
-- **Clean Code:** clear names, DRY, small public API. Code is self-documenting — the *what* is
-  evident without comments; add a short comment only when the *why* is non-obvious. Prefer small
-  extracted functions, but a hot loop may stay un-extracted when decomposition costs measurable
-  performance — that is the only accepted reason not to extract.
+- **Clean Code:** clear names, DRY, small public API. Prefer small extracted functions, but a hot
+  loop may stay un-extracted when decomposition costs measurable performance — that is the only
+  accepted reason not to extract.
+- **Comments:** [`../docs/COMMENT_STANDARD.md`](../docs/COMMENT_STANDARD.md) is the rule, and it is
+  enforced by review rather than by a linter. A comment survives only in the shape *"<non-obvious
+  fact> so that <consequence>"*. Rationale goes in the commit message; measurements and cost models
+  go in `../docs/findings/`; limitations go in the *Known limitations* section below; invariants go
+  in a test whose name states the claim. This file's own standard used to say the same thing in one
+  clause and it did not hold: forty rounds of review took this package to 0.87 comment lines per
+  line of code, with `budgets.ts` at 6.4, because fixes were written to be defended by the next
+  round rather than read by the next contributor.
 - **YAGNI/KISS:** design patterns only at real ≥2-variant decision points; simplest correct form
   everywhere else.
 - **Design by Contract:** dev-mode postcondition assertions back the hard-constraint guarantees
