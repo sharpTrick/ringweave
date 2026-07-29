@@ -191,6 +191,68 @@ check("export carries the rules",
   check("closing the person panel keeps focus somewhere usable", landed !== "body", landed);
 }
 
+// ---- a11y on a PHONE: the rescue must not raise the soft keyboard -----------
+// Reported from a phone against this branch: creating the graph, and then selecting anyone,
+// put the caret in the fuzzy-search box — which opens the keyboard and scrolls the viewport
+// to it. Two separate defects behind one symptom, and neither is visible on a desktop
+// viewport, which is why this runs in its own touch-enabled context.
+//
+// The oracle is "does the focused element accept typing", asked of a real browser after a real
+// tap. jsdom can assert where focus went; it cannot tell you a keyboard came up.
+{
+  const phone = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 3,
+  });
+  const mob = await phone.newPage();
+  const mobErrors = [];
+  mob.on("pageerror", (e) => mobErrors.push(String(e)));
+  await mob.goto(BASE, { waitUntil: "networkidle" });
+
+  const typable = () => mob.evaluate(() => {
+    const a = document.activeElement;
+    if (!a) return "(none)";
+    const tag = a.tagName;
+    if (tag === "TEXTAREA") return "TEXTAREA";
+    if (tag === "INPUT" && /^(text|search|)$/.test(a.type ?? "")) return `INPUT[${a.type}]`;
+    return a.isContentEditable ? "contenteditable" : "";
+  });
+
+  await mob.getByLabel("Roster names").fill(ROSTER.join("\n"));
+  await mob.getByRole("button", { name: /generate/i }).click();
+  await generationSettles(mob);
+  const afterGenerate = await typable();
+  check("phone: creating the graph does not raise the keyboard", afterGenerate === "", afterGenerate);
+  // NOT VACUOUS. Focus stranded on <body> is not a text input either, so the check above passes
+  // on a completely broken rescue — and it did, against the first version of this fix, which
+  // disarmed itself when the anchor was momentarily unreachable behind `inert`. The rescue owes a
+  // reachable anchor here, and saying so is what makes the line above mean something.
+  const rescued = await mob.evaluate(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body) return "body";
+    return a.closest("#app") ? "" : a.tagName;
+  });
+  check("phone: creating the graph leaves focus reachable, not on <body>", rescued === "", rescued);
+
+  // Tapping a person. The buddy-list row is the touch-reachable equivalent of tapping a node,
+  // and it is the interaction the report calls out as making the graph hard to explore.
+  await mob.locator(".brow").first().tap();
+  await mob.waitForSelector("#person");
+  const afterSelect = await typable();
+  check("phone: selecting a person does not raise the keyboard", afterSelect === "", afterSelect);
+
+  // ...and the graph canvas itself, which is SVG and so not focusable — the exact gesture that
+  // blurred to <body> and made the rescue think the user's footing had been removed.
+  await mob.locator("#stage svg").tap({ position: { x: 5, y: 5 } });
+  const afterCanvas = await typable();
+  check("phone: tapping the canvas does not raise the keyboard", afterCanvas === "", afterCanvas);
+
+  check("phone: no page errors", mobErrors.length === 0, mobErrors.slice(0, 2).join(" | "));
+  await phone.close();
+}
+
 check("no page errors or console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 
 await browser.close();

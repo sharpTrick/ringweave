@@ -503,6 +503,21 @@ describe("overlays and focus", () => {
 // Class: focus must never be stranded on <body>. Removing a focused element moves focus
 // there per spec, so the next Tab restarts at the top of the document — a keyboard user
 // who dismisses a panel is thrown back to the header. Nothing in app/src called .focus().
+/**
+ * What a rescue owes: a reachable Tab anchor inside the app that is not a caret.
+ *
+ * Written once and shared because it is the contract, and because naming a specific element in
+ * each assertion is what let the anchor be a text input for twenty rounds — every test agreed
+ * with the code and none of them agreed with a phone.
+ */
+function expectRescued(el: Element | null): void {
+  const landed = el as HTMLElement;
+  expect(landed).not.toBe(document.body);
+  expect(landed.closest("#app")).not.toBeNull();
+  expect(landed.tagName).not.toBe("TEXTAREA");
+  expect(landed.tagName === "INPUT" && /text|search/.test((landed as HTMLInputElement).type)).toBe(false);
+}
+
 describe("focus survives a panel closing itself", () => {
   function withGraph(rerender: (ui: React.ReactElement) => void) {
     dispatchGenerate();
@@ -533,7 +548,59 @@ describe("focus survives a panel closing itself", () => {
     // MutationObserver, which delivers on the microtask after the batch rather than inside the
     // commit. That is the property that makes it independent of which component re-rendered.
     await waitFor(() => expect(document.activeElement).not.toBe(document.body));
-    expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
+    // The PROPERTY, not the element. This used to name the search input, which is how an anchor
+    // that opens a phone keyboard stayed pinned by tests whose subject is "focus is not stranded".
+    expectRescued(document.activeElement);
+  });
+
+  it("does not touch focus when a commit removed nothing the user was standing on", async () => {
+    // REPORTED FROM A PHONE, and the reason it is a phone bug rather than a cosmetic one: the
+    // rescue's anchor is a text input, so every spurious firing opens the soft keyboard and
+    // scrolls the viewport to it. Selecting a person is the common path — the graph nodes are
+    // SVG and not focusable, so a tap blurs to <body>, and mounting the person panel is a
+    // childList mutation. The rescue saw "<body> + a mutation" and concluded the user's footing
+    // had been removed, which it had not.
+    //
+    // The invariant, and it is checkable rather than inferable: the rescue fires only when the
+    // element that HELD focus is no longer in the document.
+    const { rerender } = render(<App />);
+    withGraph(rerender);
+    const search = screen.getByLabelText("Find a person");
+    search.focus();
+    search.blur(); // a tap on a non-focusable SVG node lands here
+    expect(document.activeElement).toBe(document.body);
+    // ...and now something mounts, which is what a selection does.
+    fireEvent.click(document.querySelectorAll(".brow")[0]);
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("lands the rescue somewhere that does not open a phone keyboard", async () => {
+    // The other half of the same report. This firing is CORRECT — the dialog's Generate button
+    // is genuinely removed and focus would otherwise be stranded on <body> — but the anchor was
+    // the search input, so completing a generation opened the soft keyboard and scrolled to it.
+    // The rescue owes a keyboard user a place to Tab from; it does not owe anyone a caret.
+    //
+    // Asserted as the property (nothing text-entry receives a rescue) rather than by naming the
+    // element, so a later change of anchor cannot quietly reintroduce the symptom.
+    const { rerender } = render(<App />);
+    fireEvent.change(screen.getByLabelText("Roster names"), {
+      target: { value: "Ana\nBen\nChen\nDee\nEli" },
+    });
+    // Focused AFTER the roster is filled: with an empty roster the button is disabled and
+    // `.focus()` is a no-op, which would make this test pass for the wrong reason.
+    const submit = screen.getByRole("button", { name: /generate/i });
+    submit.focus();
+    expect(document.activeElement).toBe(submit);
+    fireEvent.click(submit);
+    act(() => {
+      hooks.state.status = "done";
+      hooks.state.result = generateResult(5, 4, { polish: false });
+      rerender(<App />);
+    });
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    expectRescued(document.activeElement);
   });
 
   it("does not steal focus when the user deliberately blurs to the background", () => {
@@ -548,7 +615,7 @@ describe("focus survives a panel closing itself", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  it("moves focus to the search box when the person panel's Close is used", async () => {
+  it("keeps focus reachable when the person panel's Close is used", async () => {
     const { rerender } = render(<App />);
     withGraph(rerender);
     // Open the panel from the buddy list, then close it from inside.
@@ -560,7 +627,9 @@ describe("focus survives a panel closing itself", () => {
     expect(document.activeElement).toBe(close);
     fireEvent.click(close);
     await waitFor(() => expect(document.activeElement).not.toBe(document.body));
-    expect(document.activeElement).toBe(screen.getByLabelText("Find a person"));
+    // The PROPERTY, not the element. This used to name the search input, which is how an anchor
+    // that opens a phone keyboard stayed pinned by tests whose subject is "focus is not stranded".
+    expectRescued(document.activeElement);
   });
 
   it("rescues focus when a DESCENDANT's own state removes the focused element", async () => {

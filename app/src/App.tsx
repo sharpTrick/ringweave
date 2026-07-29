@@ -89,9 +89,17 @@ export default function App() {
   const [hovered, setHovered] = useState<number | null>(null);
 
   const importRef = useRef<HTMLInputElement>(null);
-  // The stable place focus goes when a panel removes itself. The search box is mounted
-  // for the whole life of a view, which is what makes it a valid anchor.
-  const searchRef = useRef<HTMLInputElement>(null);
+  // The stable place focus goes when a panel removes itself.
+  //
+  // It was the search input, chosen because it is mounted for the whole life of a view. That is
+  // true and it was the wrong property to choose on: an input is a CARET, and putting one under a
+  // user who did not ask for it opens the soft keyboard and scrolls the viewport to it on every
+  // phone. Reported from a phone against this branch — finishing a generation raised the keyboard.
+  //
+  // `<main>` carries `tabIndex={-1}` so it can receive a programmatic rescue while staying out of
+  // the tab order, which is the standard landing spot for exactly this: the next Tab continues
+  // from the top of the content rather than the top of the document, and nothing is typed into.
+  const mainRef = useRef<HTMLElement>(null);
 
   // ONE rescue for the whole app, at the commit boundary — see useFocusRescue. There is
   // deliberately no per-call-site helper: two rounds of review found the call sites that had
@@ -102,20 +110,24 @@ export default function App() {
   // spot during a first generation.
   useFocusRescue(() => {
     // `??` was not enough, and the reason is the OTHER fix from the same round. Opening the
-    // roster editor makes `#app` inert in the same commit, and the search input lives inside
-    // it — so `searchRef.current` is non-null (the input is still mounted) but silently
-    // unfocusable, and `??` never falls through for a non-null value. Focus stayed on <body>
-    // with the dialog open, which is the case the rescue exists for.
+    // roster editor makes `#app` inert in the same commit, and everything inside it — `<main>`
+    // included — is still mounted but silently unfocusable, and `??` never falls through for a
+    // non-null value. Focus stayed on <body> with the dialog open, which is the case the rescue
+    // exists for.
     //
     // Ask whether the candidate can actually take focus, not whether it exists.
     const reachable = (el: HTMLElement | null | undefined) =>
       el && !el.closest("[inert]") ? el : null;
     // Three candidates, because there is a state where the first two are both unavailable: on
-    // the FIRST generation the roster field unmounts with the modal and the search box does not
-    // exist yet (no view), while #app is inert behind the busy overlay. The overlay's own Cancel
-    // button is the only focusable thing on screen at that moment, and it is outside #app.
+    // the FIRST generation the roster field unmounts with the modal while #app is still inert
+    // behind the busy overlay. The overlay's own Cancel button is the only focusable thing on
+    // screen at that moment, and it is outside #app.
+    //
+    // The roster field IS a text input and stays second on purpose: it is the landing spot only
+    // when the setup dialog is the whole accessible document, where putting the caret in the
+    // first field is what the user came to do rather than something done to them.
     return (
-      reachable(searchRef.current) ??
+      reachable(mainRef.current) ??
       reachable(document.querySelector<HTMLElement>(`[aria-label="${ROSTER_FIELD_LABEL}"]`)) ??
       reachable(document.querySelector<HTMLElement>(".busy button"))
     );
@@ -338,7 +350,7 @@ export default function App() {
           <div className="privacy"><span className="dot" />Runs on your device · roster never uploaded</div>
         </header>
 
-        <main>
+        <main ref={mainRef} tabIndex={-1}>
           {view && (
             <>
               <div id="stage">
@@ -396,7 +408,7 @@ export default function App() {
                   onClear={path.clear}
                 />
               )}
-              <PersonSearch names={view.names} onSelect={setSelected} inputRef={searchRef} />
+              <PersonSearch names={view.names} onSelect={setSelected} />
               <div className="hint">Hover a person to light their buddies</div>
               <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />
             </>
