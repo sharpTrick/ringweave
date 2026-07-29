@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Graph } from "../src/core/graph.js";
 import { constrainedWork, MAX_CONSTRAINED_WORK } from "../src/core/budgets.js";
-import { allPairsSummary, isConnected } from "../src/core/metrics.js";
+import { allPairsSummary, connectedComponents, isConnected } from "../src/core/metrics.js";
 import { BAD_N, BAD_K } from "./fixtures/malformedInputs.js";
 import {
   Constraints,
@@ -490,4 +490,93 @@ describe("constrainedGreedy precondition (always-on)", () => {
     small.require(0, 1).require(0, 2);
     expect(() => constrainedGreedy(8, 2, small)).toThrow(/does not match the constraints/);
   });
+});
+
+describe("connectivity is repaired by rewiring, not only by adding", () => {
+  // `forceConnect` can only ADD an edge whose BOTH endpoints are under k, so a component whose
+  // whole boundary is saturated cannot be joined however many legal pairs exist elsewhere — and
+  // the comment that used to end the generator claimed residual disconnection "means the roster
+  // cannot be connected within k buddies each", which is false. A degree-preserving double edge
+  // swap reaches what an addition cannot, because it frees the degree it spends.
+  it("connects the recorded witness, which validate accepts and completion split", () => {
+    const cons = new Constraints(7);
+    cons.prohibit(3, 5);
+    cons.prohibit(3, 4);
+    expect(validate(cons, 2)).toEqual([]); // the input is feasible, so a split is on us
+    const g = constrainedGreedy(7, 2, cons);
+    expect(connectedComponents(g)).toHaveLength(1);
+    // The hard guarantees still hold: no prohibited edge, and nobody over k.
+    for (const [a, b] of g.edgeList()) expect(cons.isProhibited(a, b)).toBe(false);
+    expect(Math.max(...g.degrees())).toBeLessThanOrEqual(2);
+    // ...through the builder too, with polish OFF so the repair is what did it. Auto-polish
+    // happens to run at n=7 and would have hidden this, which is how the guarantee had become a
+    // function of roster size.
+    const built = buildConstrainedBuddyGraph(7, 2, cons, { polish: false });
+    expect(built.report.connected).toBe(true);
+    expect(built.report.largestComponentFraction).toBe(1);
+  });
+
+  it("leaves no split that a single constraint-preserving swap could have merged", () => {
+    // The property, brute-forced: for every feasible input in the sweep whose result is still
+    // disconnected, no degree-preserving double edge swap that keeps the hard constraints
+    // reduces the component count. That is the exact condition the repair searches for, so a
+    // residual split now means "no such swap exists", not "the algorithm cannot reach it".
+    // The two shapes a 1,500-case cross-language sweep found still split after the repair, kept
+    // as explicit witnesses so the brute force below is never vacuous, plus a deterministic
+    // pseudo-random sweep around them.
+    const witnesses: { n: number; k: number; proh: [number, number][] }[] = [
+      { n: 4, k: 2, proh: [[1, 2], [1, 3], [2, 3]] },
+      { n: 5, k: 2, proh: [[0, 1], [0, 2], [0, 4], [1, 2], [2, 4]] },
+    ];
+    let disconnected = 0;
+    const check = (n: number, k: number, cons: Constraints): void => {
+      const g = constrainedGreedy(n, k, cons);
+      const comps = connectedComponents(g).length;
+      if (comps === 1) return;
+      disconnected++;
+      const edges = g.edgeList();
+      for (let i = 0; i < edges.length; i++) {
+        for (let j = i + 1; j < edges.length; j++) {
+          const [a, b] = edges[i];
+          const [c, d] = edges[j];
+          if (cons.isRequired(a, b) || cons.isRequired(c, d)) continue;
+          for (const [x, y] of [[c, d], [d, c]] as const) {
+            if (a === x || b === y || a === y || b === x) continue;
+            if (g.hasEdge(a, x) || g.hasEdge(b, y)) continue;
+            if (cons.isProhibited(a, x) || cons.isProhibited(b, y)) continue;
+            const h = g.copy();
+            h.removeEdge(a, b);
+            h.removeEdge(c, d);
+            h.addEdge(a, x);
+            h.addEdge(b, y);
+            expect(connectedComponents(h).length).toBeGreaterThanOrEqual(comps);
+          }
+        }
+      }
+    };
+    for (const w of witnesses) {
+      const cons = new Constraints(w.n);
+      for (const [a, b] of w.proh) cons.prohibit(a, b);
+      expect(validate(cons, w.k)).toEqual([]);
+      check(w.n, w.k, cons);
+    }
+    for (let n = 4; n <= 12; n++) {
+      for (let k = 2; k <= 3; k++) {
+        for (let p = 0; p < 40; p++) {
+          const cons = new Constraints(n);
+          // Deterministic pseudo-random prohibitions — no RNG in the core's tests either.
+          for (let t = 0; t < 4; t++) {
+            const a = (p * 7 + t * 3) % n;
+            const b = (p * 5 + t * 11 + 1) % n;
+            if (a !== b) cons.prohibit(a, b);
+          }
+          if (validate(cons, k).length > 0) continue;
+          check(n, k, cons);
+        }
+      }
+    }
+    // Not vacuous: the sweep must actually produce splits, or it proves nothing. The witnesses
+    // above guarantee at least two even if the pseudo-random shapes all connect.
+    expect(disconnected).toBeGreaterThan(1);
+  }, 60_000);
 });

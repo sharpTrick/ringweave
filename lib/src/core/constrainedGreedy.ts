@@ -125,6 +125,8 @@ export function constrainedGreedy(
   }
 
   forceConnect(g, cons, k);
+  // REWIRE, because adding is not enough — see `repairConnectivity`.
+  repairConnectivity(g, cons, k);
 
   assertHardConstraints(g, cons, "constrainedGreedy");
   assertWithinDegreeCap(g, k, "constrainedGreedy");
@@ -138,12 +140,11 @@ export function constrainedGreedy(
  * is ASPL (with a large disconnection penalty) plus an optional
  * prior-preservation penalty for churn.
  *
- * Reports `decisions` alongside the graph, matching `polish`'s `PolishResult.iters`. It used to
- * return the graph alone, with a comment saying run-level metrics come from the caller's report
- * — and that was the hole: the caller could only infer whether a pass had happened from its own
- * decision to CALL, so `polishIters: 0`, or a graph with fewer than two edges, produced
- * `polished: true` over an untouched graph and a `priorsKeptFraction` measuring nothing. A fact
- * about what a pass did has to come from the pass.
+ * Reports what it did alongside the graph. It used to return the graph alone, with a comment
+ * saying run-level metrics come from the caller's report — and that was the hole: the caller
+ * could only infer whether a pass had happened from its own decision to CALL, so `polishIters: 0`
+ * produced `polished: true` over an untouched graph and a `priorsKeptFraction` measuring nothing.
+ * A fact about what a pass did has to come from the pass.
  */
 export interface PolishConstrainedResult {
   graph: Graph;
@@ -153,8 +154,18 @@ export interface PolishConstrainedResult {
    * Not the iteration BUDGET: the loop breaks immediately on a graph with fewer than two edges,
    * and an iteration that finds no legal swap weighs nothing. Both are cases where a budget of
    * 8,000 and a real count of 0 differ, and both are reachable without passing an option.
+   *
+   * NOT the same quantity as `PolishResult.iters`, which counts loop PASSES — an earlier version
+   * of this comment claimed it was. What the priors gate needs is this one: a pass that took a
+   * decision weighed the priors, whether or not any move was accepted.
    */
   decisions: number;
+  /**
+   * Whether the returned graph differs from the input — see `PolishResult.changed`, which this
+   * mirrors. `decisions > 0` means the pass DID something; this means it CHANGED something, and
+   * the two are different claims. `polished` is the second.
+   */
+  changed: boolean;
 }
 
 export function polishConstrained(
@@ -209,6 +220,7 @@ export function polishConstrained(
   let current = start.energy;
   let best = g.copy();
   let bestEnergy = current;
+  let changed = false;
 
   let decisions = 0;
   for (let it = 0; it < iters; it++) {
@@ -241,6 +253,7 @@ export function polishConstrained(
       if (next.energy < bestEnergy) {
         bestEnergy = next.energy;
         best = g.copy();
+        changed = true;
       }
     } else {
       revertSwap(g, swap);
@@ -249,7 +262,7 @@ export function polishConstrained(
 
   assertHardConstraints(best, cons, "polishConstrained");
   assertDegreesPreserved(startDegrees, best, "polishConstrained");
-  return { graph: best, decisions };
+  return { graph: best, decisions, changed };
 }
 
 // --- generation helpers -----------------------------------------------------
@@ -345,6 +358,15 @@ function choosePartner(candidates: number[], dist: Int32Array, g: Graph): number
  * parity with the reference and to keep the connectivity guarantee if completion's
  * termination is ever weakened.
  */
+/**
+ * Join components by ADDING a legal cross-component edge, while both endpoints are under k.
+ *
+ * This used to be the last word on connectivity, and its comment said residual disconnection
+ * "means the roster cannot be connected within k buddies each" — a claim about the caller's
+ * input that was really a limit of this function. `repairConnectivity` runs after it and can
+ * rewire; what survives BOTH is disconnection no single constraint-preserving double edge swap
+ * can remove.
+ */
 function forceConnect(g: Graph, cons: Constraints, k: number): void {
   const legal = legalEdge(g, cons, k); // same predicate as completion
   // At most n-1 joins are ever needed; each pass adds one edge or stops.
@@ -353,6 +375,131 @@ function forceConnect(g: Graph, cons: Constraints, k: number): void {
     if (comps.length <= 1) return;
     if (!joinAnyComponents(g, comps, legal)) return;
   }
+}
+
+/**
+ * Edges whose removal disconnects their component, keyed as `min * n + max`.
+ *
+ * Needed because a double edge swap between two components merges them IFF at least one of the
+ * two dropped edges is NOT a bridge. If both are bridges, dropping them splits both components
+ * and the two new edges reconnect the halves crosswise into two pieces again — the count does
+ * not fall. That makes this an exact test, so the repair never applies a swap speculatively and
+ * measures afterwards.
+ *
+ * Iterative Tarjan. Bridges are a property of the GRAPH, not of the traversal, so the adjacency
+ * `Set`'s insertion order cannot make this differ from the Python mirror.
+ */
+function bridges(g: Graph): Set<number> {
+  const disc = new Int32Array(g.n).fill(-1);
+  const low = new Int32Array(g.n);
+  const out = new Set<number>();
+  let timer = 0;
+  for (let root = 0; root < g.n; root++) {
+    if (disc[root] !== -1) continue;
+    disc[root] = low[root] = timer++;
+    const stack: { u: number; parent: number; nbrs: number[]; at: number }[] = [
+      { u: root, parent: -1, nbrs: [...g.adj[root]], at: 0 },
+    ];
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1];
+      if (top.at < top.nbrs.length) {
+        const w = top.nbrs[top.at++];
+        if (w === top.parent) continue;
+        if (disc[w] === -1) {
+          disc[w] = low[w] = timer++;
+          stack.push({ u: w, parent: top.u, nbrs: [...g.adj[w]], at: 0 });
+        } else if (disc[w] < low[top.u]) {
+          low[top.u] = disc[w];
+        }
+        continue;
+      }
+      stack.pop();
+      const parent = stack[stack.length - 1];
+      if (parent !== undefined) {
+        if (low[top.u] < low[parent.u]) low[parent.u] = low[top.u];
+        if (low[top.u] > disc[parent.u]) out.add(edgeKey(g.n, parent.u, top.u));
+      }
+    }
+  }
+  return out;
+}
+
+function edgeKey(n: number, a: number, b: number): number {
+  return a < b ? a * n + b : b * n + a;
+}
+
+/**
+ * Merge components with degree-preserving, constraint-preserving double edge swaps.
+ *
+ * `joinAnyComponents` needs BOTH endpoints under k, so a component whose whole boundary is
+ * saturated cannot be joined however many legal pairs exist elsewhere — and the comment that
+ * used to sit at the end of this generator claimed residual disconnection "means the roster
+ * cannot be connected within k buddies each", which is false. Witness: n=7, k=2, prohibiting
+ * (3,5) and (3,4). `validate` accepts it, completion leaves {0,1,2,3,6} and {4,5} with every
+ * vertex at its degree cap, and the 7-cycle 0-1-2-3-6-4-5-0 is a connected graph at the same k
+ * under the same prohibitions — one double edge swap away. A swap reaches it where an addition
+ * cannot, because it frees the degree it spends.
+ *
+ * Deterministic and RNG-free like the rest of this generator: components are visited in
+ * ascending-minimum-vertex order (`connectedComponents` scans vertices ascending) and edges in
+ * `edgeList()`'s sorted order, so the first legal rewiring is a function of the graph alone.
+ *
+ * BOUNDED, and the bound is part of the contract. Each pass costs O(n + m) for the
+ * component/bridge scan plus at most the remaining candidate-pair budget, which is charged
+ * across the WHOLE repair so a pathological input cannot make this quadratic in m. If the budget
+ * runs out the graph is returned as it stands, and residual disconnection then means "no legal
+ * rewiring was found within the budget" — which is what this says, rather than a claim about the
+ * roster the caller supplied.
+ */
+function repairConnectivity(g: Graph, cons: Constraints, k: number): void {
+  void k; // degrees are PRESERVED by a swap, so the cap needs no re-check here
+  let budget = 8 * (g.n + 2 * g.numEdges()) + 64;
+  for (let pass = 0; pass < g.n; pass++) {
+    const comps = connectedComponents(g);
+    if (comps.length <= 1) return;
+    const spent = swapJoin(g, comps, cons, bridges(g), budget);
+    if (spent === null) return;
+    budget = spent;
+  }
+}
+
+/** One merging swap, or null when none was found (or the budget ran out). Returns what is left. */
+function swapJoin(
+  g: Graph,
+  comps: number[][],
+  cons: Constraints,
+  bridged: Set<number>,
+  budget: number,
+): number | null {
+  const owner = new Int32Array(g.n);
+  comps.forEach((comp, ci) => comp.forEach((v) => { owner[v] = ci; }));
+  const per: [number, number][][] = comps.map(() => []);
+  for (const [a, b] of g.edgeList()) per[owner[a]].push([a, b]);
+  let left = budget;
+  for (let i = 0; i < comps.length; i++) {
+    for (let j = i + 1; j < comps.length; j++) {
+      for (const [a, b] of per[i]) {
+        if (cons.isRequired(a, b)) continue;
+        for (const [c, d] of per[j]) {
+          if (cons.isRequired(c, d)) continue;
+          if (left <= 0) return null;
+          left--;
+          if (bridged.has(edgeKey(g.n, a, b)) && bridged.has(edgeKey(g.n, c, d))) continue;
+          for (const [x, y] of [[c, d], [d, c]] as const) {
+            if (a === x || b === y) continue;
+            if (g.hasEdge(a, x) || g.hasEdge(b, y)) continue;
+            if (cons.isProhibited(a, x) || cons.isProhibited(b, y)) continue;
+            g.removeEdge(a, b);
+            g.removeEdge(c, d);
+            g.addEdge(a, x);
+            g.addEdge(b, y);
+            return left;
+          }
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /** Add one legal edge bridging two distinct components; true if one was added. */

@@ -30,13 +30,14 @@ import {
   largestComponentFraction,
 } from "../src/core/metrics.js";
 import { polish } from "../src/core/polish.js";
-import { repairDegrees } from "../src/core/greedy.js";
+import { repairDegrees, ringGreedy } from "../src/core/greedy.js";
 import { bfsDistances } from "../src/core/metrics.js";
 import { ring } from "../src/core/graph.js";
 import { mooreLowerBounds, asplGap } from "../src/core/bounds.js";
 import {
   Constraints,
   polishConstrained,
+  autoPolishEnabled,
   buildBuddyGraph,
   buildConstrainedBuddyGraph,
 } from "../src/core/index.js";
@@ -199,20 +200,31 @@ describe("polishConstrained never fragments the roster", () => {
  * expensive input on each path sat just inside the gate.
  */
 describe("work budgets bound the default path", () => {
+  // ASSERTED ON THE GATE ITSELF, not on `result.polished`. These three used the flag as a proxy
+  // for "did auto-polish fire", which worked only while the flag meant "polish was called". It
+  // now means "the returned graph differs from the unpolished one" — a stricter and more useful
+  // claim, and a different one: at `polishIters: 1` a single iteration improves nothing, so the
+  // proxy reported false for a gate that had fired. `autoPolishEnabled` is the gate, it is
+  // exported precisely so consumers never re-derive it, and it is what these tests are about.
   it("keeps the polish gate exactly where it was at k=4, which is what the fixtures pin", () => {
-    expect(buildBuddyGraph(120, 4, { polishIters: 1 }).polished).toBe(true);
-    expect(buildBuddyGraph(121, 4, { polishIters: 1 }).polished).toBe(false);
+    expect(autoPolishEnabled(120, 4)).toBe(true);
+    expect(autoPolishEnabled(121, 4)).toBe(false);
   });
 
   it("turns polish off for a dense roster the n-cap waved through", () => {
     // buildBuddyGraph(120, 12) ran for 33 s under the n-only gate, while
     // buildBuddyGraph(121, 12) took 0.1 s — cost falling as the roster grew.
-    expect(buildBuddyGraph(120, 12, { polishIters: 1 }).polished).toBe(false);
+    expect(autoPolishEnabled(120, 12)).toBe(false);
   });
 
   it("still honours an explicit polish request", () => {
-    // A heuristic must not override a direct instruction from the caller.
-    expect(buildBuddyGraph(120, 12, { polish: true, polishIters: 1 }).polished).toBe(true);
+    // A heuristic must not override a direct instruction from the caller: the gate says no at
+    // (120, 12), and an explicit `polish: true` runs the pass anyway. Observed through the
+    // ITERATION count rather than `polished`, because "the pass ran" and "the pass changed
+    // something" are now different facts and this test is about the first.
+    expect(autoPolishEnabled(120, 12)).toBe(false);
+    const { graph } = ringGreedy(120, 12, { mind: 5, repair: true });
+    expect(polish(graph, { mode: "anneal", seed: 1, maxIters: 5 }).iters).toBeGreaterThan(0);
   });
 
   it("refuses an (n,k) that would run for tens of minutes", () => {
@@ -392,6 +404,42 @@ describe("MAX_POLISH_WORK cannot be stepped around", () => {
     expect(() => checkPolishSize(5000, 10000)).not.toThrow();
     expect(() => polish(ring(200), { maxIters: 1 })).not.toThrow();
   });
+
+  it("reports `polished` only when the graph actually differs from an unpolished build", () => {
+    // THE PROPERTY, not a case table. The previous version of this test pinned the two
+    // zero-iteration cases and passed while `polished: true` was still being reported over an
+    // edge list byte-identical to `{ polish: false }` — because the flag was read off a COUNTER
+    // (`iters`, which counts loop PASSES: `polish(ring(3))` reports 19,990 of them over an
+    // untouched triangle, since no vertex-disjoint edge pair exists to propose). A test named
+    // for a property has to assert the property.
+    // A SMALL iteration budget on purpose: it makes "the pass changed nothing" the common case,
+    // which is the case under test, and keeps the sweep inside a normal test budget.
+    let sawUnchanged = 0;
+    for (let n = 3; n <= 30; n++) {
+      for (const k of [2, 3, 4]) {
+        if (n < k + 1) continue;
+        const on = buildBuddyGraph(n, k, { polish: true, polishIters: 40 });
+        const off = buildBuddyGraph(n, k, { polish: false });
+        if (JSON.stringify(on.edges) === JSON.stringify(off.edges)) {
+          expect(on.polished).toBe(false);
+          sawUnchanged++;
+        }
+      }
+    }
+    // ...and the same on the constrained tier, where a sibling flag gates priorsKeptFraction.
+    for (let n = 4; n <= 20; n += 2) {
+      const cons = new Constraints(n);
+      for (let v = 0; v + 1 < n; v += 2) cons.addPrior(v, v + 1);
+      const on = buildConstrainedBuddyGraph(n, 3, cons, { polish: true, polishIters: 40 });
+      const off = buildConstrainedBuddyGraph(n, 3, cons, { polish: false });
+      if (JSON.stringify(on.edges) === JSON.stringify(off.edges)) {
+        expect(on.polished).toBe(false);
+        sawUnchanged++;
+      }
+    }
+    // The sweep must actually REACH the unchanged case, or it asserts nothing.
+    expect(sawUnchanged).toBeGreaterThan(5);
+  }, 60_000);
 
   it("reports `polished` from what the pass DID, not from the decision to call it", () => {
     // `polished` was set at the call site, so it meant "I decided to run polish" rather than

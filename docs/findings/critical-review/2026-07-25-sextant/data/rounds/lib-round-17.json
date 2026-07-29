@@ -1,0 +1,289 @@
+{
+  "target": "lib/src",
+  "round": 17,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 4,
+    "blocking": 3,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 3
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of lib/src/core (graph, metrics, bounds, budgets, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus lib/test and reference-python. Reproduced with scratch harnesses in /home/user/ringweave/.review-scratch against lib/dist. Verified clean: (a) determinism of constrainedGreedy under permuted constraint-insertion order (200 instances, 0 divergences); (b) order-invariance of shortestPath, girth and connectedComponents under permuted edge-insertion order (3000 graphs, all source/target pairs, 0 divergences); (c) girth exact against exhaustive cycle enumeration (3000 graphs); (d) constrainedGreedy hard-constraint, degree-cap and legal-edge-maximality fuzz (2861 valid instances, 0 violations, confirming forceConnect never fires); (e) polishConstrained fuzz (1110 runs) for required/prohibited preservation, degree preservation, component-count and largest-component non-regression, and exact seed determinism; (f) asplGap never negative across the (n,k) grid; (g) budget arithmetic — MAX_POLISH_WORK calibration reproduces the documented k=4 boundary, and checkPolishSize provably cannot throw out of either builder; (h) boundaries n in {0,1,2}, k=0, k>=n, mind clamping and demotion; (i) oracle parity — python3 test_core.py passes and gen_fixtures.py regenerates lib/test/fixtures/reference.json byte-identically (git status clean); (j) npm test 253/253 green.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full surface of `lib/src/core` (graph, budgets, constraints, constrainedGreedy, greedy, polish, metrics, swap, rng, bounds, index) plus `lib/test/*` and the app call sites that reach the library (`app/src/worker/generate.ts`, `app/src/panels/RosterModal.tsx`, `app/src/constraints.ts`). Built `lib/dist` and ran hostile inputs against the real code under `/home/user/ringweave/.review-scratch/`.\n\nAttacks that FAILED to break it (each measured, not reasoned about):\n- Work-budget honesty at the calibration corners. `buildBuddyGraph(1000, 12)` sits exactly at `MAX_GREEDY_WORK` (1.5e10) and completed in 40.3 s against a documented \"~60 s worst case\". `buildConstrainedBuddyGraph(464, 463)` sits at the deepest corner `MAX_CONSTRAINED_WORK` admits and completed in 50.0 s against a documented ~46 s. Both budgets are honest upper bounds; neither admits a shape whose real cost escapes the model. `buildBuddyGraph(5000,2)` (the `Math.max(edgesAdded,1)` floor case, modelled at 7.5e7) = 2.2 s; `(1500,4)` = 18.4 s.\n- `validate`'s O(n²) prohibited-pair connectivity walk at the n-cap: `validate(Constraints(5000) with one prohibited pair, 4)` = 59 ms. The `pairKey` string construction I expected to dominate 25M probes does not. n=1000 (the app's own ceiling, and the one place `validateDetailed` runs on the MAIN THREAD, in `RosterModal.tsx`) = 6 ms. No main-thread hang from a pasted roster + rules.\n- Attacker-chosen `minSeparation` as a demotion-count multiplier in `ringGreedy`: `curMind` can start at `floor(n/2)` and each demotion costs a full `findPair` scan, uncharged by `greedyWork`. Traced the arithmetic — demotion cost is bounded by n³/2 against a model of 3n²·edgesAdded, so it cannot exceed the modelled work for any admitted (n,k). Not an escape.\n- The `constrainedWork(n,0) = 0` blind spot: `constrainedGreedy(5000, 0, cons)` really does pay a Θ(n²) `forceConnect`/`joinAnyComponents` scan that the model prices at zero — but measured at 1.27 s (k=1: 3.0 s), and I proved it runs at most once (completion is legal-edge-maximal, so `joinAnyComponents` returns false after one full scan). Bounded, not a hang.\n- Dense prohibited sets: n=1000 with 404,550 prohibited pairs is accepted by `validate` and generates in 1.88 s vs 0.68 s unconstrained, despite the pair arrays being re-materialized ~8 times across `structuralReasons`/`prohibitedDegree`/`checkConstraintIds`/`assertHardConstraints`/`buildReport`. The amplification is real but sub-linear in impact at every size the n-cap admits.\n- `stuck`-memoization monotonicity in `constrainedGreedy` (traced: edges are never removed, degrees only grow, prohibitions are static ⇒ a stuck vertex stays stuck, so completion is O(n²) not O(n³)); `completionCap = n*k*6` proven non-binding.\n- Numeric edges: `polishIters: -0`, `Infinity` (via `JSON.parse('1e999')`), `1e20`, NaN seeds, non-integer/negative/NaN `n`, `n > MAX_ROSTER`, `n !== cons.n`, `prohibit(0,-0)` (normalizes to a self-pair and is refused), `prohibit(NaN,1)` (refused as unknown-person), negative/NaN `priorWeight`. Every one is refused or normalized before the expensive step.\n- Untrusted-text-to-sink: `lib/src` has no string sink at all — the only strings it produces are `formatReason`'s number interpolations and `pairKey`'s internal Set keys. Nothing here reaches CSV, clipboard, filename or DOM.\n\nVerified but NOT filed (already owned elsewhere): `Constraints.fromTags`'s ungated O(n²) materialization (documented deferral in `lib/CLAUDE.md`, no caller outside `lib/test`); `aspl`/`girth` becoming `Infinity` → `null` under `JSON.stringify`, which I confirmed is broader than the documented \"n≤1\" (it is every edgeless graph, e.g. `buildConstrainedBuddyGraph(12, 0, cons).aspl` is Infinity) but is unreachable from the app (`BUDDY_MIN = 2`) and its fix lives at the app's export boundary (F6).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of every file in lib/src/core (graph.ts, budgets.ts, greedy.ts, constraints.ts, constrainedGreedy.ts, polish.ts, swap.ts, metrics.ts, bounds.ts, rng.ts, index.ts) against lib/CLAUDE.md's SOLID-scoped bar (SRP/OCP/light DIP) and docs/PROJECT_PLAN.md's next-committed work (M3: F7 constraints UI, F8 fuzzy search/explorer, F10 path finder; M4: F9 recalc, F11 replay).\n\nConcretely attempted the declared OCP seam: added a second `TagPolicy` variant (`require_same`, mirroring the existing `prohibit_same`) to `Constraints.fromTags` in lib/src/core/constraints.ts — the exact seam lib/CLAUDE.md names as \"the genuine open/closed seam.\" Ran `npm run typecheck` (clean) and the full `npm test` suite (253/253 passing) with the change in place, then reverted with `git checkout`. Zero other files needed touching — no caller, no export site beyond the existing `TagPolicy` type, no test needed updating to keep the suite green. This is the seam paying off exactly as documented.\n\nCross-checked the two declared non-seams (`legalEdge`, `constrainedMeasure` in constrainedGreedy.ts) against their stated four-site sync obligation (legalEdge / swapBreaksConstraint / assertHardConstraints / buildReport for a genuinely new hard-constraint category) — the comments naming that obligation are present at all four sites and are accurate; did not attempt to add a new constraint category since none is committed in PROJECT_PLAN.md.\n\nVerified fromTags/TagPolicy has no live caller in app/ (grepped app/src, app/test — zero matches), consistent with the already-documented known-limitation in lib/CLAUDE.md.\n\nChecked whether the core already exposes what F8 (node explorer: 1st/2nd-order buddies, eccentricity) and F10 (path finder) need: `shortestPath` and `eccentricity` in metrics.ts, exported from index.ts — both present and already exercised by paths.props.test.ts / paths.test.ts, so no lib-side fan-out is implied by those two features landing next.\n\nRead graph.ts, greedy.ts, budgets.ts, polish.ts, swap.ts, bounds.ts, rng.ts end-to-end for SRP leaks (view/UI concerns in core — none found), OCP violations (none found beyond the tag-policy seam already tested), and gratuitous indirection (none found — no factories/strategy objects with a single implementation; free functions throughout per the module's own \"do not force LSP/ISP\" instruction).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "\nAll 11 core modules (graph.ts, metrics.ts, constraints.ts, greedy.ts, constrainedGreedy.ts, polish.ts, bounds.ts, budgets.ts, rng.ts, swap.ts, index.ts):\n- Comments checked for factual accuracy against current code\n- Public API surfaces examined for misuse patterns\n- Hardcoded values and their consistency across the codebase\n- Error handling and contract enforcement (throws vs refuses)\n- Algorithm correctness verified against docblock claims\n- Naming consistency (mind vs minSeparation, vocabulary)\n- Separation of concerns and duplication detection\n- Edge case handling (empty graphs, disconnected components, invalid inputs)\n- Test expectations cross-checked against implementation\n\nAll 9 test files reviewed to understand contracts and expectations.\nLint suite (oxlint, knip, hygiene) confirmed clean before review.\n",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "The `polished` flag (and its sibling `priorsWeighed`/`priorsKeptFraction`) is derived from run counters that track whether the pass looped or decided, not whether the returned graph actually differs from the input — so callers are told 'polish happened' over output that can be byte-identical to skipping it.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness",
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`polished` is derived from `res.iters > 0` / `res.decisions > 0`, which count loop iterations and accept/reject decisions, not changes — so `polished: true` is reported over an edge list byte-identical to `{ polish: false }`. The same counter feeds `priorsWeighed` at index.ts:425, so `priorsKeptFraction` can currently publish a number for a pass that changed nothing.",
+        "`PolishResult.iters` counts LOOP PASSES, not accept/reject decisions, so `buildBuddyGraph`'s `polished = res.iters > 0` is true for passes that took no decision at all. `polish`'s `iters++` sits at the TOP of the while body, before the `edges.length < 2` break and before the `if (!sw) continue`, unlike `polishConstrained`'s `decisions++` which only fires after a swap is proposed, applied and measured — despite `PolishConstrainedResult.decisions`'s own docblock claiming it matches `polish`'s `iters`. The fast tier's fewer-than-two-edges case is untested (`optimizer.props.test.ts:396` only covers it on the constrained tier)."
+      ],
+      "remediation": "Stop inferring `polished` from any loop/decision counter and instead report the fact from the artifact itself: at the point `best`/`g` is first replaced with a strictly-improving swap in both `polish` and `polishConstrained`, set a single `changed` boolean (no new counter, no new field on the loop budget — the existing accept branch is the only place this needs to live), and have `buildBuddyGraph`/`buildConstrainedBuddyGraph` set `polished` from that boolean directly. Delete the `res.iters > 0` / `res.decisions > 0` reads in index.ts entirely (including the one feeding `priorsWeighed`), so there is exactly one source of truth for 'did the graph change' instead of two counters that measure different things and both diverge from it."
+    },
+    {
+      "theme": "The constrained generator's connectivity-repair step (`forceConnect`) can only add edges, never rewire them, so residual disconnection is a property of the algorithm's limited repair toolkit, not a fact about the input roster — yet the docblock (and its Python twin) asserts the split is unavoidable.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`forceConnect` can only add edges with both endpoints under k, so it cannot join a component whose neighbours are saturated — yet its docblock claims residual disconnection \"means the roster cannot be connected within k buddies each\", which is false."
+      ],
+      "remediation": "Remove the false claim by removing its cause: give the repair loop the ability to rewire (a constraint-preserving double edge swap that reduces component count, using the machinery already in swap.ts + swapBreaksConstraint) instead of only adding, applied deterministically post-`forceConnect` until connected or no swap reduces components. Update both the TypeScript and the identical Python docblock (reference-python/constrained_gen.py) in the same commit so the claim is deleted everywhere it appears rather than patched in one language."
+    },
+    {
+      "theme": "The refusal-path shape of `ConstrainedBuddyResult.buddies` contradicts the interface's own promise that callers can index it by person without branching.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`ConstrainedBuddyResult`'s docblock promises `buddies` holds one empty list per person on a refusal (\"`buddies.length` is still the roster size, not 0\"), but `refusedResult` allocates 0 entries whenever n exceeds `MAX_CONSTRAINED_N`."
+      ],
+      "remediation": "Narrow the documented guarantee instead of widening the allocation: state at the interface that `buddies.length === n` holds only for n the builder could have accepted (n <= MAX_CONSTRAINED_N), removing the unconditional 'always roster size' claim so the doc no longer promises a shape `refusedResult`'s DoS-avoidance branch doesn't produce."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "reported-fact-disagrees-with-artifact",
+      "theme": "a run-level fact the library publishes (\"this graph was polished\") is true of the call rather than of the graph returned, so a caller is told work happened over an output byte-identical to not doing it",
+      "file": "lib/src/core/index.ts",
+      "line": 190,
+      "summary": "`polished` is derived from `res.iters > 0` / `res.decisions > 0`, which count loop iterations and accept/reject decisions, not changes — so `polished: true` is reported over an edge list byte-identical to `{ polish: false }`.",
+      "failure": "`buildBuddyGraph(12, 4)` returns `polished: true` and `aspl 1.6363636363636365`, with `JSON.stringify(edges)` exactly equal to `buildBuddyGraph(12, 4, { polish: false }).edges`. Reproduced for 52 (n,k) pairs on the fast tier (n=4..40, k in {2,3,4}) and 33 on the constrained tier. Underneath: `polish(ring(12), { maxIters: 500 })` reports `iters: 488` while returning the ring unchanged (anneal accepts non-improving moves into `g`, but `best` is never replaced). The existing test at test/optimizer.props.test.ts:396 (\"reports `polished` from what the pass DID\") passes, because it pins only the two zero-iteration cases — `polishIters: 0` and an edgeless graph — as a case table rather than the property its own name states.",
+      "remediation": "Report the fact from the artifact, not the counter: have `polish` and `polishConstrained` report whether `best` differs from the input (they already hold both graphs — compare at the point `best` is first replaced, i.e. set a `changed` flag inside the `bestE`/`bestEnergy` improvement branch, costing nothing), and set `polished` from that in both builders. This closes the sibling too: the same counter feeds `priorsWeighed` at index.ts:425, so `priorsKeptFraction` can currently publish a number for a pass that changed nothing.",
+      "invariant": "For every input to `buildBuddyGraph` / `buildConstrainedBuddyGraph`, `result.polished === true` implies `result.edges` differs from the edge list the same call returns with `{ polish: false }`; equivalently, at the primitive level, if `polish(g, o).graph.edgeList()` deep-equals `g.edgeList()` then the builder must report `polished: false`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "broken-connectivity-guarantee",
+      "theme": "the constrained generator ships a split roster while asserting the split is unavoidable, because its only repair mechanism can add edges but never rewire them",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 348,
+      "summary": "`forceConnect` can only add edges with both endpoints under k, so it cannot join a component whose neighbours are saturated — yet its docblock claims residual disconnection \"means the roster cannot be connected within k buddies each\", which is false.",
+      "failure": "`cons = new Constraints(7); cons.prohibit(3,5); cons.prohibit(3,4);` — `validate(cons, 2)` returns `[]`. `buildConstrainedBuddyGraph(7, 2, cons, { polish: false })` returns edges `[[0,1],[0,6],[1,2],[2,3],[3,6],[4,5]]`: components {0,1,2,3,6} and {4,5}, `connected: false`, `largestComponentFraction: 0.714`, `aspl: 1.45`, `diameter: 2`. A connected witness exists at the same k and the same prohibitions — the 7-cycle 0-1-2-3-6-4-5-0 — and it is one constraint-legal double edge swap away (drop 0-1 and 4-5, add 0-4 and 1-5). `constrainedGreedy(7, 2, cons)` alone shows the same split (the primitive is exported public API). Whether a caller sees the split depends on `resolveWantPolish`: auto-polish is on at n=7 and repairs it, but the same shape at an (n,k) where the gate declines would ship split, so the guarantee is a function of roster size. Rate on random valid inputs: 3/4000 at n in 4..19, k in 2..4. The within-group `aspl 1.45` / `diameter 2` also read BETTER than the connected optimum (7-cycle: aspl 2.0, diameter 3) — the split-reads-as-healthy shape, mitigated here only by `report.connected`.",
+      "remediation": "Give `constrainedGreedy` a connectivity-repair step that can rewire, not just add: after `forceConnect`, while the graph is disconnected, search for a constraint-preserving double edge swap that reduces the component count (the machinery already exists in swap.ts + swapBreaksConstraint) and apply it deterministically (lowest lexicographic edge pair) so the pass stays RNG-free. Because reference-python/constrained_gen.py carries the identical algorithm and the identical false claim, change the Python first and regenerate fixtures per lib/CLAUDE.md. Correct both docblocks in the same commit — the claim \"the roster cannot be connected within k buddies each\" is what makes the split look like a fact about the input rather than about the algorithm.",
+      "invariant": "For every (n, k, cons) that `validate` accepts, if the graph returned by `constrainedGreedy` / `buildConstrainedBuddyGraph` is disconnected then no degree-preserving double edge swap that preserves the hard constraints reduces its number of connected components (checkable in O(m^2) over all edge pairs and both rewirings).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "public-contract-contradicted-by-implementation",
+      "theme": "the refusal shape a caller is told it can index by person is not always that shape, so the documented \"no branching needed\" reading of a refused result is unsafe",
+      "file": "lib/src/core/index.ts",
+      "line": 576,
+      "summary": "`ConstrainedBuddyResult`'s docblock promises `buddies` holds one empty list per person on a refusal (\"`buddies.length` is still the roster size, not 0\"), but `refusedResult` allocates 0 entries whenever n exceeds `MAX_CONSTRAINED_N`.",
+      "failure": "`buildConstrainedBuddyGraph(5001, 4, new Constraints(5001))` returns `report.refusals: ['roster size 5001 exceeds the constrained maximum of 5000 (generation is O(n²))']` with `buddies.length === 0`, not 5001. A caller following the docblock and reading `result.buddies.length` as the roster size, or iterating `buddies` to render one row per person, silently renders nothing for exactly the input the interface says is safe to index. The refusedResult comment justifies the clamp as a DoS-gradient fix, which is sound — but the interface docblock 200 lines above still states the opposite, and that docblock is the public contract.",
+      "remediation": "Make the two agree by subtraction: state the bound at the interface — `buddies.length === n` only for n the builder could have accepted (n <= MAX_CONSTRAINED_N), and 0 otherwise — so the one documented use of the field (index by person without branching) is stated with the condition under which it holds. Do not widen the allocation; the DoS reasoning at refusedResult is the correct trade.",
+      "invariant": "For every call to `buildConstrainedBuddyGraph(n, k, cons)` with an integer n in [0, MAX_CONSTRAINED_N] — accepted or refused — `result.buddies.length === n`, and for every other n the documented indexing contract must not be asserted.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "flag-reports-intent-not-work",
+      "theme": "a run-level flag reports the decision to call a pass rather than the work the pass actually did",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 115,
+      "summary": "`PolishResult.iters` counts LOOP PASSES, not accept/reject decisions, so `buildBuddyGraph`'s `polished = res.iters > 0` is true for passes that took no decision at all. This is the exact sibling of the round-16 fix (commit 999ded6, \"`polished` meant 'I decided to run polish', not 'polish ran'\"): `polishConstrained` was corrected to report `decisions` (incremented only after a swap is proposed, applied and measured), but `polish`'s `iters++` sits at the TOP of the while body, before the `edges.length < 2` break and before the `if (!sw) continue`. `PolishConstrainedResult.decisions`' own docblock claims it is \"matching `polish`'s `PolishResult.iters`\" — the two measure different quantities. `optimizer.props.test.ts:396` covers the fewer-than-two-edges case only on the CONSTRAINED tier (`buildConstrainedBuddyGraph(12, 0, ...)`) and covers only `polishIters: 0` on the fast tier, so the fast tier's version of the case its own comment names is untested.",
+      "failure": "Reproduced with the built `lib/dist`. `polish(new Graph(5))` (edgeless) returns `iters: 1` — the loop incremented, then broke on `edges.length < 2`; no swap was ever proposed. `polish(ring(3))` returns `iters: 19990` over a byte-identical graph — a triangle admits no vertex-disjoint edge pair, so `proposeSwap` returns null on every one of the 19,990 passes. Through the builder: `buildBuddyGraph(1, 2).polished === true` (0 edges), `buildBuddyGraph(2, 2).polished === true` (1 edge), and `buildBuddyGraph(3, 2)` returns `polished: true` with an edge list byte-identical to `buildBuddyGraph(3, 2, { polish: false })` — verified by `JSON.stringify` comparison. The flag then flows out through `app/src/worker/generate.ts:42,61` into the worker protocol as `polished: true`.",
+      "remediation": "Count decisions, not passes: move the counter in `polish`'s loop to after `proposeSwap` returns non-null and `energy(g)` has been evaluated (i.e. immediately after `const newE = energy(g)`), exactly where `polishConstrained` does `decisions++`. Keep the `while (iters < loopIters)` bound driven by a separate pass counter so the iteration budget still binds. Then `buildBuddyGraph`'s `res.iters > 0` becomes the same predicate the constrained tier already uses. Re-check `optimizer.props.test.ts:203-215`, which uses `.polished` as a proxy for the auto-polish GATE (those configurations do take real decisions, so they should stay green, but the proxy becomes exact rather than incidental). Ratchet the invariant into `optimizer.props.test.ts` alongside the existing round-16 test.",
+      "invariant": "For every Graph g and every PolishOptions o, `polish(g, o).iters` equals the number of iterations in which a swap was proposed, applied and measured — the same quantity `polishConstrained` reports as `decisions`. Machine-checkable over all inputs: for every graph containing no two vertex-disjoint edges (which includes every graph with fewer than 2 edges and every graph whose edges all share a vertex), `polish(g, o).iters === 0` for all o; and `buildBuddyGraph(n, k, o).polished === true` implies at least one accept/reject decision was taken.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "reported-fact-disagrees-with-artifact",
+      "theme": "a run-level fact the library publishes (\"this graph was polished\") is true of the call rather than of the graph returned, so a caller is told work happened over an output byte-identical to not doing it",
+      "file": "lib/src/core/index.ts",
+      "line": 190,
+      "summary": "`polished` is derived from `res.iters > 0` / `res.decisions > 0`, which count loop iterations and accept/reject decisions, not changes — so `polished: true` is reported over an edge list byte-identical to `{ polish: false }`.",
+      "failure": "`buildBuddyGraph(12, 4)` returns `polished: true` and `aspl 1.6363636363636365`, with `JSON.stringify(edges)` exactly equal to `buildBuddyGraph(12, 4, { polish: false }).edges`. Reproduced for 52 (n,k) pairs on the fast tier (n=4..40, k in {2,3,4}) and 33 on the constrained tier. Underneath: `polish(ring(12), { maxIters: 500 })` reports `iters: 488` while returning the ring unchanged (anneal accepts non-improving moves into `g`, but `best` is never replaced). The existing test at test/optimizer.props.test.ts:396 (\"reports `polished` from what the pass DID\") passes, because it pins only the two zero-iteration cases — `polishIters: 0` and an edgeless graph — as a case table rather than the property its own name states.",
+      "remediation": "Report the fact from the artifact, not the counter: have `polish` and `polishConstrained` report whether `best` differs from the input (they already hold both graphs — compare at the point `best` is first replaced, i.e. set a `changed` flag inside the `bestE`/`bestEnergy` improvement branch, costing nothing), and set `polished` from that in both builders. This closes the sibling too: the same counter feeds `priorsWeighed` at index.ts:425, so `priorsKeptFraction` can currently publish a number for a pass that changed nothing.",
+      "invariant": "For every input to `buildBuddyGraph` / `buildConstrainedBuddyGraph`, `result.polished === true` implies `result.edges` differs from the edge list the same call returns with `{ polish: false }`; equivalently, at the primitive level, if `polish(g, o).graph.edgeList()` deep-equals `g.edgeList()` then the builder must report `polished: false`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "broken-connectivity-guarantee",
+      "theme": "the constrained generator ships a split roster while asserting the split is unavoidable, because its only repair mechanism can add edges but never rewire them",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 348,
+      "summary": "`forceConnect` can only add edges with both endpoints under k, so it cannot join a component whose neighbours are saturated — yet its docblock claims residual disconnection \"means the roster cannot be connected within k buddies each\", which is false.",
+      "failure": "`cons = new Constraints(7); cons.prohibit(3,5); cons.prohibit(3,4);` — `validate(cons, 2)` returns `[]`. `buildConstrainedBuddyGraph(7, 2, cons, { polish: false })` returns edges `[[0,1],[0,6],[1,2],[2,3],[3,6],[4,5]]`: components {0,1,2,3,6} and {4,5}, `connected: false`, `largestComponentFraction: 0.714`, `aspl: 1.45`, `diameter: 2`. A connected witness exists at the same k and the same prohibitions — the 7-cycle 0-1-2-3-6-4-5-0 — and it is one constraint-legal double edge swap away (drop 0-1 and 4-5, add 0-4 and 1-5). `constrainedGreedy(7, 2, cons)` alone shows the same split (the primitive is exported public API). Whether a caller sees the split depends on `resolveWantPolish`: auto-polish is on at n=7 and repairs it, but the same shape at an (n,k) where the gate declines would ship split, so the guarantee is a function of roster size. Rate on random valid inputs: 3/4000 at n in 4..19, k in 2..4. The within-group `aspl 1.45` / `diameter 2` also read BETTER than the connected optimum (7-cycle: aspl 2.0, diameter 3) — the split-reads-as-healthy shape, mitigated here only by `report.connected`.",
+      "remediation": "Give `constrainedGreedy` a connectivity-repair step that can rewire, not just add: after `forceConnect`, while the graph is disconnected, search for a constraint-preserving double edge swap that reduces the component count (the machinery already exists in swap.ts + swapBreaksConstraint) and apply it deterministically (lowest lexicographic edge pair) so the pass stays RNG-free. Because reference-python/constrained_gen.py carries the identical algorithm and the identical false claim, change the Python first and regenerate fixtures per lib/CLAUDE.md. Correct both docblocks in the same commit — the claim \"the roster cannot be connected within k buddies each\" is what makes the split look like a fact about the input rather than about the algorithm.",
+      "invariant": "For every (n, k, cons) that `validate` accepts, if the graph returned by `constrainedGreedy` / `buildConstrainedBuddyGraph` is disconnected then no degree-preserving double edge swap that preserves the hard constraints reduces its number of connected components (checkable in O(m^2) over all edge pairs and both rewirings).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "public-contract-contradicted-by-implementation",
+      "theme": "the refusal shape a caller is told it can index by person is not always that shape, so the documented \"no branching needed\" reading of a refused result is unsafe",
+      "file": "lib/src/core/index.ts",
+      "line": 576,
+      "summary": "`ConstrainedBuddyResult`'s docblock promises `buddies` holds one empty list per person on a refusal (\"`buddies.length` is still the roster size, not 0\"), but `refusedResult` allocates 0 entries whenever n exceeds `MAX_CONSTRAINED_N`.",
+      "failure": "`buildConstrainedBuddyGraph(5001, 4, new Constraints(5001))` returns `report.refusals: ['roster size 5001 exceeds the constrained maximum of 5000 (generation is O(n²))']` with `buddies.length === 0`, not 5001. A caller following the docblock and reading `result.buddies.length` as the roster size, or iterating `buddies` to render one row per person, silently renders nothing for exactly the input the interface says is safe to index. The refusedResult comment justifies the clamp as a DoS-gradient fix, which is sound — but the interface docblock 200 lines above still states the opposite, and that docblock is the public contract.",
+      "remediation": "Make the two agree by subtraction: state the bound at the interface — `buddies.length === n` only for n the builder could have accepted (n <= MAX_CONSTRAINED_N), and 0 otherwise — so the one documented use of the field (index by person without branching) is stated with the condition under which it holds. Do not widen the allocation; the DoS reasoning at refusedResult is the correct trade.",
+      "invariant": "For every call to `buildConstrainedBuddyGraph(n, k, cons)` with an integer n in [0, MAX_CONSTRAINED_N] — accepted or refused — `result.buddies.length === n`, and for every other n the documented indexing contract must not be asserted.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "flag-reports-intent-not-work",
+      "theme": "a run-level flag reports the decision to call a pass rather than the work the pass actually did",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 115,
+      "summary": "`PolishResult.iters` counts LOOP PASSES, not accept/reject decisions, so `buildBuddyGraph`'s `polished = res.iters > 0` is true for passes that took no decision at all. This is the exact sibling of the round-16 fix (commit 999ded6, \"`polished` meant 'I decided to run polish', not 'polish ran'\"): `polishConstrained` was corrected to report `decisions` (incremented only after a swap is proposed, applied and measured), but `polish`'s `iters++` sits at the TOP of the while body, before the `edges.length < 2` break and before the `if (!sw) continue`. `PolishConstrainedResult.decisions`' own docblock claims it is \"matching `polish`'s `PolishResult.iters`\" — the two measure different quantities. `optimizer.props.test.ts:396` covers the fewer-than-two-edges case only on the CONSTRAINED tier (`buildConstrainedBuddyGraph(12, 0, ...)`) and covers only `polishIters: 0` on the fast tier, so the fast tier's version of the case its own comment names is untested.",
+      "failure": "Reproduced with the built `lib/dist`. `polish(new Graph(5))` (edgeless) returns `iters: 1` — the loop incremented, then broke on `edges.length < 2`; no swap was ever proposed. `polish(ring(3))` returns `iters: 19990` over a byte-identical graph — a triangle admits no vertex-disjoint edge pair, so `proposeSwap` returns null on every one of the 19,990 passes. Through the builder: `buildBuddyGraph(1, 2).polished === true` (0 edges), `buildBuddyGraph(2, 2).polished === true` (1 edge), and `buildBuddyGraph(3, 2)` returns `polished: true` with an edge list byte-identical to `buildBuddyGraph(3, 2, { polish: false })` — verified by `JSON.stringify` comparison. The flag then flows out through `app/src/worker/generate.ts:42,61` into the worker protocol as `polished: true`.",
+      "remediation": "Count decisions, not passes: move the counter in `polish`'s loop to after `proposeSwap` returns non-null and `energy(g)` has been evaluated (i.e. immediately after `const newE = energy(g)`), exactly where `polishConstrained` does `decisions++`. Keep the `while (iters < loopIters)` bound driven by a separate pass counter so the iteration budget still binds. Then `buildBuddyGraph`'s `res.iters > 0` becomes the same predicate the constrained tier already uses. Re-check `optimizer.props.test.ts:203-215`, which uses `.polished` as a proxy for the auto-polish GATE (those configurations do take real decisions, so they should stay green, but the proxy becomes exact rather than incidental). Ratchet the invariant into `optimizer.props.test.ts` alongside the existing round-16 test.",
+      "invariant": "For every Graph g and every PolishOptions o, `polish(g, o).iters` equals the number of iterations in which a swap was proposed, applied and measured — the same quantity `polishConstrained` reports as `decisions`. Machine-checkable over all inputs: for every graph containing no two vertex-disjoint edges (which includes every graph with fewer than 2 edges and every graph whose edges all share a vertex), `polish(g, o).iters === 0` for all o; and `buildBuddyGraph(n, k, o).polished === true` implies at least one accept/reject decision was taken.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 3,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 17,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 488625,
+    "agents": 5,
+    "toolCalls": 143
+  }
+}

@@ -41,7 +41,26 @@ export interface PolishResult {
   graph: Graph;
   aspl: number;
   connected: boolean;
+  /**
+   * LOOP PASSES run, which is not the same as work done and must not be read as such.
+   *
+   * The counter sits at the top of the body, before the fewer-than-two-edges break and before
+   * the "no swap could be proposed" continue — so `polish(new Graph(5))` reports 1 and
+   * `polish(ring(3))` reports 19,990 over a byte-identical graph (a triangle admits no
+   * vertex-disjoint edge pair, so every proposal fails). It is the budget actually consumed,
+   * useful for cost accounting and for nothing else. `changed` is the fact about the OUTPUT.
+   */
   iters: number;
+  /**
+   * Whether the returned graph differs from the input.
+   *
+   * Set where `best` is replaced, which only happens on a strict energy improvement, so it is
+   * exact and free. This is what a caller reporting "polished" wants: two earlier attempts
+   * derived that flag from the decision to CALL and then from a counter, and both reported
+   * `polished: true` over an edge list byte-identical to `{ polish: false }`. A counter says how
+   * hard the pass tried; only the artifact says whether it did anything.
+   */
+  changed: boolean;
 }
 
 function energy(g: Graph): number {
@@ -69,6 +88,7 @@ export function polish(
   let curE = energy(g);
   let best = g.copy();
   let bestE = curE;
+  let changed = false;
 
   // temperature calibration for anneal
   let T = 0;
@@ -136,6 +156,7 @@ export function polish(
       if (newE < bestE - 1e-12) {
         bestE = newE;
         best = g.copy();
+        changed = true;
         rejects = 0;
       } else {
         rejects++;
@@ -150,5 +171,5 @@ export function polish(
   }
 
   const { aspl, connected } = allPairsSummary(best);
-  return { graph: best, aspl, connected, iters };
+  return { graph: best, aspl, connected, iters, changed };
 }

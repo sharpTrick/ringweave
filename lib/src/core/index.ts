@@ -181,13 +181,15 @@ export function buildBuddyGraph(
     // input (disconnection is penalized, so a connected input stays connected) —
     // adopting it is always safe, exactly as buildConstrainedBuddyGraph trusts
     // polishConstrained.
-    // OBSERVED, NOT INFERRED. `polished` used to be set from the decision to CALL, so a pass
-    // that ran zero iterations — `polishIters: 0`, or a graph with fewer than two edges — was
-    // reported as polished over an edge list byte-identical to `{ polish: false }`. `polish`
-    // already reports what it ran; the fact now comes from there.
+    // FROM THE ARTIFACT, not from a counter, and not from the decision to call. Three versions
+    // of this flag: the call site (true whenever polish was invoked), then `iters > 0` — and
+    // `iters` counts loop PASSES, so `polish(ring(3))` reports 19,990 of them while returning the
+    // triangle untouched, because no vertex-disjoint edge pair exists to propose. `changed` is
+    // set where `best` is replaced, which needs a strict energy improvement, so `polished: true`
+    // now implies the edge list differs from `{ polish: false }`.
     const res = polish(g, { mode: "anneal", seed, maxIters: options.polishIters });
     g = res.graph;
-    polished = res.iters > 0;
+    polished = res.changed;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);
@@ -288,10 +290,16 @@ export interface ConstraintReport {
 
 /**
  * Result of {@link buildConstrainedBuddyGraph}. When `report.refusals` is
- * non-empty the input was refused: `edges` is empty, `buddies` holds one EMPTY list per
- * person (so `buddies.length` is still the roster size, not 0), and the metric fields are
- * placeholders — read `report` first. The shape is kept so a caller can index by person
- * without branching; `buddies.length` is therefore not a "did this succeed" test.
+ * non-empty the input was refused: `edges` is empty, the metric fields are placeholders, and
+ * `buddies` holds one EMPTY list per person — read `report` first, and note `buddies.length` is
+ * therefore not a "did this succeed" test.
+ *
+ * `buddies.length === n` HOLDS ONLY FOR n THIS BUILDER COULD HAVE ACCEPTED, i.e. an integer in
+ * [0, MAX_CONSTRAINED_N]; for anything larger it is 0. That is deliberate and the reasoning is
+ * at `refusedResult`: allocating from an n the builder is refusing FOR being too large would
+ * make a refusal cost more than a success, which is a denial-of-service gradient pointing the
+ * wrong way. The condition is stated here because this docblock is the contract, and it
+ * previously promised the indexing shape without it.
  *
  * `girth`/`asplGap` are intentionally omitted (unlike {@link BuddyResult}):
  * Moore's bound assumes a k-regular target, which constrained graphs only
@@ -361,6 +369,7 @@ export function buildConstrainedBuddyGraph(
   // promoted to required edges, or weighed as a soft penalty by a polish pass that ran.
   // The full rule is at the `buildReport` call below; this only has to survive the branch.
   let priorWeight = 0;
+  let priorsWeighed = false;
   if (resolveWantPolish(options.polish, n, k, DEFAULT_CONSTRAINED_POLISH_ITERS)) {
     // priorHard already promoted priors to required, so no soft penalty then.
     // Finiteness-checked HERE, not only inside `polishConstrained`. Both places used to
@@ -397,10 +406,13 @@ export function buildConstrainedBuddyGraph(
       priorWeight,
     });
     g = res.graph;
-    // Same correction as the fast tier: from the pass, not from the call. `priorsKeptFraction`
-    // rides on this, and publishing a fraction when nothing ever weighed the priors is the
-    // "coincidental number" that field's own contract says must be null.
-    polished = res.decisions > 0;
+    // TWO DIFFERENT FACTS, and they were one field for two rounds. `polished` describes the
+    // OUTPUT — same correction as the fast tier — while `priorsKeptFraction` describes whether
+    // the priors were ever WEIGHED, which a pass that took decisions and accepted none still did.
+    // Collapsing them made a pass that changed nothing publish a fraction, and a pass that
+    // weighed priors without improving report none.
+    polished = res.changed;
+    priorsWeighed = res.decisions > 0;
   }
 
   const { degreeMin, degreeMax, summary, buddies } = summarize(g);
@@ -422,7 +434,7 @@ export function buildConstrainedBuddyGraph(
     // by a polish pass that actually ran. Only the remaining case — polish declined at
     // this (n, k) and no promotion — leaves `priorsKeptFraction` measuring coincidence,
     // and that is the case it must report as null.
-    report: buildReport(g, cons, summary.connected, active.priorHard || (polished && priorWeight !== 0)),
+    report: buildReport(g, cons, summary.connected, active.priorHard || (priorsWeighed && priorWeight !== 0)),
   };
 }
 

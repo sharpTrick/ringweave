@@ -72,13 +72,16 @@ describe("core reroll behavior (why post-hoc detection is needed)", () => {
   // AT EVERY k. The old test pinned k=4 only, which is exactly why a k-blind literal
   // survived: 120 is right at k=4 and wrong at every other k the UI offers.
   it("the predicate reroll copy is derived from agrees with the builder, at every k", () => {
-    // polishIters:1 keeps it fast — we're pinning WHETHER auto-polish runs, not how much
-    // it iterates; `polished` reflects that the stage executed either way.
+    // Asserted against `autoPolishEnabled`, which IS the builder's gate exported (the builder
+    // calls the same `resolveWantPolish`), not against `result.polished`. The two `.polished`
+    // assertions that used to sit here were a proxy resting on that flag meaning "the stage
+    // executed"; it now means "the returned graph differs from the unpolished one", which at
+    // `polishIters: 1` is false even where the gate fired. Comparing the copy to the gate
+    // function compares it to one predicate rather than to a symptom of it.
     for (const k of [2, 3, 4, 6, 12]) {
       const boundary = tooLargeToVary(k);
       expect(autoPolishEnabled(boundary - 1, k)).toBe(true);
-      expect(buildBuddyGraph(boundary - 1, k, { polish: "auto", polishIters: 1 }).polished).toBe(true);
-      expect(buildBuddyGraph(boundary, k, { polish: "auto", polishIters: 1 }).polished).toBe(false);
+      expect(autoPolishEnabled(boundary, k)).toBe(false);
       // And the user-facing copy follows the same predicate, so it can never claim a
       // roster is "too large to shuffle" that the builder would in fact polish.
       const settings = { ...DEFAULT_SETTINGS, buddies: k, polish: "auto" as const };
