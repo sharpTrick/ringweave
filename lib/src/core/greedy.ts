@@ -36,7 +36,8 @@ export interface GreedyOptions {
 
 /**
  * Build a ~k-regular graph on `n` people: a ring seed, then greedily join the pair that is
- * farthest apart and least connected.
+ * LEAST CONNECTED first and only then farthest apart — degree outranks distance, which is the
+ * order `reference-python/generators.py` states and `lexLess` implements.
  *
  * THROWS rather than refuses (it has no report channel): on `k < 2`, on a malformed `k`/`mind`,
  * and past `MAX_CACHED_N` or `MAX_GREEDY_WORK`.

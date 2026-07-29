@@ -215,13 +215,34 @@ describe("the structural reason list is bounded", () => {
     const reasons = validateDetailed(c, 4);
     expect(reasons.length).toBeLessThanOrEqual(20);
     const texts = validate(c, 4);
-    expect(texts.some((t) => /100000 constraints are invalid/.test(t))).toBe(true);
+    // 50,000 CONSTRAINTS, not the 100,000 faulty endpoints they carry between them. The count
+    // reaches an organizer through `report.refusals`, and a number that describes something other
+    // than what it names is worse than no number.
+    expect(texts.some((t) => /50000 constraints are invalid/.test(t))).toBe(true);
     // The count is EXACT even though the list is not: two bad endpoints per pair.
     const few = new Constraints(10);
     few.prohibit(99, 1);
     expect(validate(few, 4)).toEqual([
       "constraint references unknown person 99 (roster has 10)",
     ]);
+  });
+
+  it("says nothing was held back when nothing was", () => {
+    // "only some are listed" fired whenever DUPLICATE messages deduped, so a refusal that listed
+    // every distinct reason still claimed it had suppressed some. Two pairs sharing person 12
+    // produce four faults and three distinct messages, all of which fit the cap.
+    const c = new Constraints(10);
+    c.prohibit(12, 13).prohibit(12, 14);
+    const texts = validate(c, 4);
+    expect(texts.some((t) => /are invalid/.test(t))).toBe(false);
+    expect(texts).toHaveLength(3);
+  });
+
+  it("counts invalid constraints, not the faulty endpoints they carry", () => {
+    const c = new Constraints(10);
+    for (let i = 0; i < 40; i++) c.prohibit(100 + i, 200 + i); // 40 pairs, 80 bad endpoints
+    const summary = validate(c, 4).find((t) => /are invalid/.test(t)) ?? "";
+    expect(summary).toMatch(/^40 constraints are invalid/);
   });
 
   it("lists the same reasons whatever order the constraint set was built in", () => {

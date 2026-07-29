@@ -319,7 +319,13 @@ const MAX_STRUCTURAL_REASONS = 16;
  * constrainedGreedy's `checkConstraintIds` and in reference-python `_structural_errors`.
  */
 function structuralReasons(cons: Constraints): Reason[] {
-  let invalid = 0;
+  // Faulty CONSTRAINTS, not faulty endpoints: a pair naming two unknown people is one invalid
+  // constraint, and counting notes made the refusal say "4 constraints are invalid" about two.
+  let faulty = 0;
+  // Set when a distinct message could not be listed, which is the only thing "only some are
+  // listed" can honestly mean. Counting notes fired it whenever duplicates deduped, so a refusal
+  // that listed every distinct reason still claimed it had held some back.
+  let suppressed = false;
   const n = cons.n;
   if (!Number.isInteger(n) || n < 0) {
     return [{ code: "roster-invalid", n }];
@@ -336,30 +342,41 @@ function structuralReasons(cons: Constraints): Reason[] {
   // both languages sort alike.
   const listed: { text: string; reason: Reason }[] = [];
   const note = (r: Reason) => {
-    invalid++;
     const text = formatReason(r);
-    if (listed.length === MAX_STRUCTURAL_REASONS && text >= listed[listed.length - 1].text) return;
+    if (listed.length === MAX_STRUCTURAL_REASONS && text >= listed[listed.length - 1].text) {
+      suppressed = true;
+      return;
+    }
     let at = 0;
     while (at < listed.length && listed[at].text < text) at++;
     if (listed[at]?.text === text) return;
     listed.splice(at, 0, { text, reason: r });
-    if (listed.length > MAX_STRUCTURAL_REASONS) listed.pop();
+    if (listed.length > MAX_STRUCTURAL_REASONS) {
+      listed.pop();
+      suppressed = true;
+    }
   };
   const scan = (pairs: [number, number][]) => {
     for (const [a, b] of pairs) {
+      let bad = false;
       for (const x of [a, b]) {
         if (!Number.isInteger(x) || x < 0 || x >= n) {
           note({ code: "unknown-person", person: x, n });
+          bad = true;
         }
       }
-      if (a === b) note({ code: "self-pair", person: a });
+      if (a === b) {
+        note({ code: "self-pair", person: a });
+        bad = true;
+      }
+      if (bad) faulty++;
     }
   };
   scan(cons.requiredPairs());
   scan(cons.prohibitedPairs());
   scan(cons.priorPairs());
   const errs: Reason[] = listed.map((e) => e.reason);
-  if (invalid > errs.length) errs.push({ code: "too-many-invalid-constraints", count: invalid });
+  if (suppressed) errs.push({ code: "too-many-invalid-constraints", count: faulty });
   return errs;
 }
 

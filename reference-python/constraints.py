@@ -169,7 +169,13 @@ def _structural_errors(cons):
     if n > MAX_ROSTER:
         return [f"roster size {n} exceeds the maximum of {MAX_ROSTER}"]
     errs = []
-    counted = [0]
+    # Faulty CONSTRAINTS, not faulty endpoints: a pair with two unknown people is one invalid
+    # constraint, and counting notes made the refusal say "4 constraints are invalid" about two.
+    faulty = [0]
+    # Set when a distinct message could not be listed, which is the only thing "only some are
+    # listed" can honestly mean. Counting notes fired it whenever duplicates deduped, so a
+    # refusal that listed every distinct reason still claimed it had held some back.
+    suppressed = [False]
 
     # Counted always, listed up to the cap. The list used to be unbounded in both work and
     # output; see MAX_STRUCTURAL_REASONS in the TS port for the measurements.
@@ -179,8 +185,8 @@ def _structural_errors(cons):
     # set was built, breaking the message parity the two are held to. Deduping here also stops a
     # thousand copies of one fault from filling every slot.
     def note(msg):
-        counted[0] += 1
         if len(errs) == MAX_STRUCTURAL_REASONS and msg >= errs[-1]:
+            suppressed[0] = True
             return
         at = 0
         while at < len(errs) and errs[at] < msg:
@@ -190,20 +196,26 @@ def _structural_errors(cons):
         errs.insert(at, msg)
         if len(errs) > MAX_STRUCTURAL_REASONS:
             errs.pop()
+            suppressed[0] = True
 
     def scan(pairs):
         for (a, b) in pairs:
+            bad = False
             for x in (a, b):
                 if not isinstance(x, int) or isinstance(x, bool) or x < 0 or x >= n:
                     note(f"constraint references unknown person {x} (roster has {n})")
+                    bad = True
             if a == b:
                 note(f"person {a} cannot be paired with themselves")
+                bad = True
+            if bad:
+                faulty[0] += 1
 
     scan(cons.required)
     scan(cons.prohibited)
     scan(cons.priors)
-    if counted[0] > len(errs):
-        errs.append(f"{counted[0]} constraints are invalid — only some are listed")
+    if suppressed[0]:
+        errs.append(f"{faulty[0]} constraints are invalid — only some are listed")
     return errs
 
 
