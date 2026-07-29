@@ -21,6 +21,105 @@ async function generationSettles(page) {
 
 const EXEC = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 
+/**
+ * Every panel <main> renders, by the selector the stylesheet places it with. Wrappers are included
+ * because a wrapper is what carries the offsets in the middle tier, and a container off-screen
+ * takes its contents with it however the contents are styled.
+ */
+const PANELS = ["#rail", "#toggle", "#rightcol", "#sidecol", "#route", "#person", "#buddies",
+  "#search", ".hint", "#metrics"];
+
+/**
+ * Where every rendered panel actually lands, in one pass, so a caller can assert against the
+ * viewport rather than against the stylesheet's intent. `body` does not scroll (`overflow: hidden`)
+ * so anything outside 0..innerWidth is unreachable at any scroll position; vertically the answer
+ * depends on the scroll container, which is why each box is also measured after being scrolled to.
+ */
+async function panelBoxes(pg) {
+  return pg.evaluate((sels) => {
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+
+    /**
+     * The box the element PAINTS: its own, clipped by every ancestor that clips. A scroll
+     * container's overflowing content is drawn nowhere outside that container, so an unclipped
+     * rect reports a panel as covering things it cannot reach.
+     */
+    const painted = (el) => {
+      let box = el.getBoundingClientRect();
+      for (let a = el.parentElement; a; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+        const r = a.getBoundingClientRect();
+        const x = Math.max(box.left, r.left), y = Math.max(box.top, r.top);
+        box = new DOMRect(x, y, Math.min(box.right, r.right) - x, Math.min(box.bottom, r.bottom) - y);
+      }
+      return box;
+    };
+
+    const els = sels.map((sel) => [sel, document.querySelector(sel)]).filter(([, el]) => el);
+    // Measured BEFORE anything scrolls, so every box shares one scroll state — interleaving the
+    // two passes made a panel's box depend on where a previously-checked panel had scrolled to.
+    const boxes = new Map(els.map(([sel, el]) => [sel, painted(el)]));
+
+    const restore = [];
+    for (const el of document.querySelectorAll("*")) {
+      if (el.scrollTop || el.scrollLeft) restore.push([el, el.scrollTop, el.scrollLeft]);
+    }
+    // Containment covers EVERY panel, including ones currently clipped away: each is scrolled to
+    // first, so "clipped at this scroll position" is not an answer to "can it be reached". Skipping
+    // them left the phone tier — where <main> scrolls and most panels start below the fold —
+    // measuring seven of ten, and the panel this check exists for could have been one of the three.
+    const found = [];
+    for (const [sel, el] of els) {
+      const own = el.getBoundingClientRect();
+      if (own.width < 1 || own.height < 1) continue; // renders nothing at all
+      const flat = boxes.get(sel);
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+      const s = el.getBoundingClientRect();
+      found.push({
+        sel, flat: { x: flat.x, y: flat.y, w: flat.width, h: flat.height },
+        offX: s.left < -1 || s.right > vw + 1 ? `${Math.round(s.left)}..${Math.round(s.right)} of 0..${vw}` : null,
+        // A panel taller than the viewport cannot fit in it, and scrolling is the only possible
+        // answer for one — so height is only asked about when there was room to succeed.
+        offY: s.height <= vh && (s.top < -1 || s.bottom > vh + 1)
+          ? `${Math.round(s.top)}..${Math.round(s.bottom)} of 0..${vh}` : null,
+      });
+    }
+    for (const [el, top, left] of restore) { el.scrollTop = top; el.scrollLeft = left; }
+
+    // Ancestors are skipped against their own descendants; every other pair sharing painted area
+    // means one panel is covering another, which is how the quality strip hid the hover hint.
+    // Only what is on screen at this scroll position is compared — below the fold the layout is
+    // pure flow, where boxes cannot overlap in the first place.
+    const overlaps = [];
+    for (let i = 0; i < found.length; i++) {
+      for (let j = i + 1; j < found.length; j++) {
+        const a = found[i], b = found[j];
+        if (a.flat.w < 1 || a.flat.h < 1 || b.flat.w < 1 || b.flat.h < 1) continue; // paints nothing
+        if (document.querySelector(a.sel).contains(document.querySelector(b.sel))) continue;
+        const w = Math.min(a.flat.x + a.flat.w, b.flat.x + b.flat.w) - Math.max(a.flat.x, b.flat.x);
+        const h = Math.min(a.flat.y + a.flat.h, b.flat.y + b.flat.h) - Math.max(a.flat.y, b.flat.y);
+        if (w > 1 && h > 1) overlaps.push(`${a.sel}\u00d7${b.sel} share ${Math.round(w)}\u00d7${Math.round(h)}px`);
+      }
+    }
+    return { found, overlaps };
+  }, PANELS);
+}
+
+/** One containment/overlap verdict per viewport, named so a failure says which one broke. */
+async function checkLayout(pg, label) {
+  const { found, overlaps } = await panelBoxes(pg);
+  const off = found.filter((f) => f.offX || f.offY)
+    .map((f) => `${f.sel} ${f.offX ? `x ${f.offX}` : ""}${f.offY ? ` y ${f.offY}` : ""}`.trim());
+  // Non-vacuity: with no panels found, "none are off-screen" is true and means nothing. Nine
+  // rather than ten because `#rightcol` generates no box at the widest tier (`display: contents`),
+  // where its two children place themselves.
+  check(`${label}: every panel is measured`, found.length >= 9, `${found.length} panels`);
+  check(`${label}: no panel is placed outside the viewport`, off.length === 0, off.join(" | "));
+  check(`${label}: no panel covers another`, overlaps.length === 0, overlaps.join(" | "));
+}
+
 const results = [];
 function check(name, ok, detail = "") {
   results.push({ name, ok, detail });
@@ -163,6 +262,18 @@ check("the lit chain has exactly one edge per step", routeEdges === hops, `${rou
   await page.keyboard.press("Enter");
   await page.waitForSelector("#route .rt-chain");
 }
+
+// Run with a route AND a person card open, which is the widest the layout ever gets — and the
+// state the reported defect appeared in. A panel placed by an offset measured across a sibling
+// (`#sidecol` was `right: 314px`, i.e. the buddy panel's width plus two gaps) goes off the far
+// edge the moment the viewport is narrower than the sum, which one viewport can never reveal.
+// jsdom computes no layout at all, so this is the only place the question can be asked.
+for (const [w, h, label] of [[1400, 900, "desktop"], [1180, 800, "small laptop"],
+  [1024, 768, "tablet landscape"], [768, 1024, "tablet portrait"], [390, 844, "phone"]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await checkLayout(page, `${label} ${w}x${h}`);
+}
+await page.setViewportSize({ width: 1400, height: 900 });
 
 await page.locator("g.node").first().hover();
 const afterHover = await page.$$eval("line.edge.route", (ls) => ls.length);

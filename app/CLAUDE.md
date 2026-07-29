@@ -80,6 +80,15 @@ below, invariants to a test whose name states the claim.
   (`@fontsource/*`), so the page makes no external requests at all. Don't add CDNs/telemetry.
 - **The graph is a view, never the only interface.** Everything (roster, buddies, export) works
   from the panels; keyboard-navigable; reduced-motion honored; WCAG-AA contrast.
+- **No panel offset is measured across another panel.** `<main>` is a column of `#upper` (the
+  floating panels, absolutely positioned against *it*) over `#bottom` (search, hint and the quality
+  strip, in normal flow), and the two right-hand panels share `#rightcol`. Both are structural, not
+  cosmetic: a `bottom:` calibrated for the quality strip's minimum height had it covering the hover
+  hint and the last rows of the buddy list once its disclosure lines wrapped, and a `right:` equal
+  to the buddy panel's width put the person card at x = −174 on a phone. `responsiveCss.test.ts`
+  pins every absolutely-positioned panel to rejoining the flow at phone width;
+  `scripts/e2e/drive.mjs` measures containment and overlap at five viewports, which is the only
+  place either question can be asked — jsdom computes no layout.
 
 ## One view model
 

@@ -21,6 +21,11 @@
   --input-bg: #0b1322;  /* textarea / inputs */
   --ink-on-cool: #08131a; /* text on the cool accent button */
 
+  /* The right column's width and the gap it keeps from the viewport edge. Every offset measured
+     across that column derives from these so no two rules can disagree about where it starts. */
+  --col-w: 280px;
+  --gutter: 18px;
+
   --font-ui: "Instrument Sans", system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -59,8 +64,23 @@ header {
 }
 .privacy .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cool); box-shadow: 0 0 8px var(--cool); }
 
-main { flex: 1; position: relative; min-height: 0; }
+main { flex: 1; position: relative; min-height: 0; display: flex; flex-direction: column; }
 #stage { position: absolute; inset: 0; }
+
+/* The floating panels are placed against THIS box rather than the viewport, and it ends where the
+   quality strip begins — so a strip that grows with its disclosure lines moves them up instead of
+   covering them. `pointer-events` is handed back per panel so the graph stays draggable between. */
+#upper { position: relative; flex: 1 1 auto; min-height: 0; pointer-events: none; }
+#upper > * { pointer-events: auto; }
+
+/* Everything below the graph, in normal flow: no offset in here is measured past a neighbour, so
+   none of them can be wrong about one. Growing the search results grows this band upward, because
+   #upper is what yields the space. */
+#bottom {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start;
+  gap: 8px; padding: 0 18px 16px; pointer-events: none;
+}
+#bottom > * { pointer-events: auto; }
 svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 
 .edge { stroke: var(--cool); stroke-opacity: 0.16; stroke-width: 0.9; transition: stroke-opacity 0.25s, stroke 0.25s; }
@@ -113,12 +133,10 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 #toggle button.on.ring { background: var(--warm); box-shadow: 0 0 16px var(--warm-glow); }
 
 /* pan/zoom is gesture-only (d3-zoom: wheel + drag), so there are no zoom buttons */
-.hint { position: absolute; left: 18px; bottom: 104px; font-size: 11px; color: var(--ink-faint); z-index: 3; }
+.hint { font-size: 11px; color: var(--ink-faint); }
 
-/* F8 person search — bottom-left, above the quality strip. The hint moves up to make
-   room; the mock parked the hint on the RIGHT for the same reason, but that side now
-   holds the buddy panel. */
-#search { position: absolute; left: 18px; bottom: 104px; width: 240px; z-index: 6; padding: 0; }
+/* F8 person search — top of the bottom stack. */
+#search { width: 240px; padding: 0; }
 .search-in { width: 100%; box-sizing: border-box; background: transparent; border: none; color: var(--ink); font-family: var(--font-ui); font-size: 13px; padding: 10px 12px; }
 .search-in:focus { outline: none; }
 #search:focus-within { border-color: var(--cool); }
@@ -127,10 +145,15 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .search-row.on, .search-row:hover { background: rgba(255, 255, 255, 0.06); }
 .search-empty { padding: 8px; font-size: 12px; color: var(--ink-faint); }
 
+/* At the widest tier the wrapper places nothing — `display: contents` drops it out of the box
+   tree so its two children keep positioning themselves against <main>. The narrow tiers below
+   turn it into a real flex column instead. */
+#rightcol { display: contents; }
+
 /* Path and person cards share one column, left of the buddy panel. Flow order inside it IS the
    visual order, so the JSX decides which sits on top; height is content-driven so the column
    covers no graph it is not drawing on. */
-#sidecol { position: absolute; top: 14px; right: 314px; width: 250px; z-index: 6; display: flex; flex-direction: column; gap: 10px; }
+#sidecol { position: absolute; top: 14px; right: calc(var(--gutter) + var(--col-w) + 16px); width: 250px; z-index: 6; display: flex; flex-direction: column; gap: 10px; }
 
 /* F8 person explorer card. */
 #person { padding: 14px 15px; }
@@ -157,7 +180,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .rt-steps { display: block; margin-top: 8px; color: var(--ink-faint); }
 
 /* right buddy panel */
-#buddies { position: absolute; top: 14px; right: 18px; bottom: 96px; width: 280px; z-index: 4; display: flex; flex-direction: column; overflow: hidden; }
+#buddies { position: absolute; top: 14px; right: var(--gutter); bottom: 8px; width: var(--col-w); z-index: 4; display: flex; flex-direction: column; overflow: hidden; }
 .bp-head { padding: 15px 17px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
 .bp-head h2 { margin: 0; font-size: 13.5px; font-weight: 600; }
 .bp-acts { display: flex; gap: 5px; }
@@ -173,7 +196,7 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .brow .bd { font-size: 11.5px; color: var(--ink-dim); line-height: 1.4; margin-top: 3px; }
 
 /* metrics footer */
-#metrics { position: absolute; left: 18px; right: 18px; bottom: 16px; min-height: 66px; z-index: 4; display: flex; align-items: center; padding: 10px 22px; gap: 26px; flex-wrap: wrap; }
+#metrics { width: 100%; min-height: 66px; display: flex; align-items: center; padding: 10px 22px; gap: 26px; flex-wrap: wrap; }
 .metric { display: flex; align-items: baseline; gap: 9px; }
 .metric .v { font-family: var(--font-display); font-size: 23px; font-weight: 500; color: var(--cool); }
 .metric .l { font-size: 11.5px; color: var(--ink-dim); max-width: 120px; line-height: 1.25; }
@@ -262,14 +285,37 @@ svg.graph { width: 100%; height: 100%; display: block; touch-action: none; }
   * { transition: none !important; animation: none !important; }
 }
 
+/* Two columns of cards no longer fit beside a centre-anchored toggle: the person column starts at
+   `viewport - 594px` and the toggle reaches `viewport/2 + 76px`, so they cross below ~1360px. Here
+   the two right-hand panels become one flex column instead, and every horizontal offset in it is
+   measured from the viewport edge rather than across a sibling. */
+@media (max-width: 1360px) {
+  #rightcol {
+    position: absolute; top: 14px; right: var(--gutter); bottom: 8px; width: var(--col-w);
+    z-index: 6; display: flex; flex-direction: column; gap: 10px; overflow: auto;
+  }
+  /* The COLUMN scrolls, not the cards inside it — a card with its own scrollbar nested inside a
+     buddy list with another is two places to lose your position. The floor is what makes the
+     column overflow instead of squeezing the list away. */
+  #sidecol { position: static; width: auto; }
+  #buddies { position: static; width: auto; flex: 1 1 auto; min-height: 200px; }
+}
+
+/* Narrow enough that nothing is placed against a viewport edge at all: every panel joins the
+   normal flow, in JSX order, and <main> scrolls. A panel left out of this block keeps its
+   absolute offsets and lands off-screen — `responsiveCss.test.ts` enumerates them so a new one
+   cannot be forgotten. */
 @media (max-width: 820px) {
+  main { display: block; overflow: auto; }
+  #stage { position: relative; height: 46vh; }
+  #upper { display: block; }
+  #bottom { align-items: stretch; padding: 0 12px 16px; }
   #rail { position: static; width: auto; margin: 8px 12px; }
-  #buddies { position: static; width: auto; height: 200px; margin: 8px 12px; }
-  #search { position: static; width: auto; margin: 8px 12px; }
+  #rightcol { position: static; width: auto; display: block; }
+  #sidecol { position: static; width: auto; gap: 0; }
+  #buddies { position: static; width: auto; height: 200px; flex: none; margin: 8px 12px; }
+  #search { width: auto; }
   #route { position: static; width: auto; margin: 8px 12px; }
   #person { position: static; width: auto; margin: 8px 12px; }
-  #metrics { position: static; margin: 8px 12px; }
   #toggle { position: static; transform: none; justify-content: center; margin: 8px auto; }
-  main { overflow: auto; }
-  #stage { position: relative; height: 46vh; }
 }

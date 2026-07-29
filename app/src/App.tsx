@@ -280,53 +280,61 @@ export default function App() {
                 />
               </div>
 
-              <div id="rail" className="glass">
-                <div className="rail-lbl">This roster</div>
-                <div className="rail-big tabnum">{view.names.length}</div>
-                <div className="rail-sub">{peopleNoun(view.names.length)} · {buddiesEachLabel(view.metrics)}</div>
-                <div className="rail-btns">
-                  <button className="btn btn-warm" onClick={handleReroll}>↻ Different arrangement</button>
-                  <button className="btn btn-ghost" onClick={() => setModalOpen(true)}>Edit people</button>
+              <div id="upper">
+                <div id="rail" className="glass">
+                  <div className="rail-lbl">This roster</div>
+                  <div className="rail-big tabnum">{view.names.length}</div>
+                  <div className="rail-sub">{peopleNoun(view.names.length)} · {buddiesEachLabel(view.metrics)}</div>
+                  <div className="rail-btns">
+                    <button className="btn btn-warm" onClick={handleReroll}>↻ Different arrangement</button>
+                    <button className="btn btn-ghost" onClick={() => setModalOpen(true)}>Edit people</button>
+                  </div>
+                </div>
+
+                {/* DOM ORDER FOLLOWS THE VISUAL LAYOUT, deliberately: the panels in here are
+                    absolutely positioned by app.css, so JSX order is the tab order and nothing
+                    else — reorder these and focus starts jumping across the viewport. */}
+                <LayoutToggle layout={layout} onChange={setLayout} />
+                {/* The cards and the buddy list are ONE column, not two panels that happen to sit
+                    side by side, so a narrow viewport can stack them without either being placed
+                    by an offset measured across the other. Path sits ABOVE the person card: the
+                    path widget re-renders the whole graph, so it has to be visible from the
+                    control that arms it — parked elsewhere, it read as nothing having happened. */}
+                <div id="rightcol">
+                  <div id="sidecol">
+                    {path.active && (
+                      <PathPanel
+                        view={view}
+                        from={path.pending}
+                        route={path.route}
+                        unreachable={path.unreachable}
+                        onSelect={setSelected}
+                        onClear={path.clear}
+                      />
+                    )}
+                    {selected !== null && (
+                      <PersonPanel
+                        view={view}
+                        graph={graph}
+                        index={selected}
+                        canGoBack={explorer.canGoBack}
+                        onSelect={setSelected}
+                        onBack={explorer.back}
+                        onClose={() => setSelected(null)}
+                        pathFrom={path.source === selected}
+                        onFindPath={() => path.toggle(selected)}
+                      />
+                    )}
+                  </div>
+                  <BuddyList view={view} selected={selected} onSelect={setSelected} />
                 </div>
               </div>
 
-              {/* DOM ORDER FOLLOWS THE VISUAL LAYOUT, deliberately: every panel here is
-                  absolutely positioned by app.css, so JSX order is the tab order and nothing
-                  else — reorder these and focus starts jumping across the viewport. Top row
-                  left-to-right, then the bottom-left stack downward, then the metrics band. */}
-              <LayoutToggle layout={layout} onChange={setLayout} />
-              {/* One column, path ABOVE the person card. The path widget re-renders the whole
-                  graph, so it has to be visible from the control that arms it — parked in the
-                  opposite corner, it read as nothing having happened. */}
-              <div id="sidecol">
-                {path.active && (
-                  <PathPanel
-                    view={view}
-                    from={path.pending}
-                    route={path.route}
-                    unreachable={path.unreachable}
-                    onSelect={setSelected}
-                    onClear={path.clear}
-                  />
-                )}
-                {selected !== null && (
-                  <PersonPanel
-                    view={view}
-                    graph={graph}
-                    index={selected}
-                    canGoBack={explorer.canGoBack}
-                    onSelect={setSelected}
-                    onBack={explorer.back}
-                    onClose={() => setSelected(null)}
-                    pathFrom={path.source === selected}
-                    onFindPath={() => path.toggle(selected)}
-                  />
-                )}
+              <div id="bottom">
+                <PersonSearch names={view.names} onSelect={setSelected} />
+                <div className="hint">Hover a person to light their buddies</div>
+                <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />
               </div>
-              <BuddyList view={view} selected={selected} onSelect={setSelected} />
-              <PersonSearch names={view.names} onSelect={setSelected} />
-              <div className="hint">Hover a person to light their buddies</div>
-              <QualityPanel view={view} onExport={handleExport} onImport={() => importRef.current?.click()} />
             </>
           )}
 
