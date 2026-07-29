@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_SETTINGS, buddiesEachLabel, isOptimal, peopleNoun, nextRerollSeed, pathStatusText, rerollBlockReason,
   selectionStatusText, targetShortfall, type GraphView, type Settings,
@@ -25,7 +25,7 @@ import { toNamedPairs, type ConstraintPair, type NamedPair } from "./constraints
 import { exportGraphJson } from "./io/exportGraph";
 import { importGraph } from "./io/importGraph";
 import { feasibility } from "./io/feasibility";
-import { readFileText } from "./io/readFileText";
+import { checkJsonShape, readFileText } from "./io/readFileText";
 import { downloadBlob } from "./io/download";
 
 /** Stable identity for the no-view case, so the graph memo doesn't rebuild every render. */
@@ -136,10 +136,21 @@ export default function App() {
    * pick completes it instead of navigating; routing that through a single seam is
    * what keeps "pick the second person" working from every one of those places.
    */
-  const setSelected = (i: number | null) => {
-    if (i !== null && path.complete(i)) return;
-    explorer.select(i);
-  };
+  // STABLE IDENTITY, because `BuddyList` and `Slips` are memoized and a fresh arrow each render
+  // would defeat both. `path.complete` and `explorer.select` are themselves stable (`useCallback`
+  // in their hooks), so this closes over nothing that changes per render.
+  // Destructured so the dependency list names plain identifiers: the lint rule cannot see that
+  // `path.complete` and `explorer.select` are themselves stable, and a member expression in a
+  // dep array is exactly the shape it refuses to reason about.
+  const completePath = path.complete;
+  const selectPerson = explorer.select;
+  const setSelected = useCallback(
+    (i: number | null) => {
+      if (i !== null && completePath(i)) return;
+      selectPerson(i);
+    },
+    [completePath, selectPerson],
+  );
 
   // Escape clears the path first, then the selection — most-transient first, so one
   // press never throws away more than the user meant. Suspended while the roster
@@ -283,6 +294,10 @@ export default function App() {
       // Size-gate the read BEFORE parsing: importGraph's caps operate on the parsed
       // object and can't bound a giant JSON.parse that precedes them.
       const text = await readFileText(file);
+      // Shape before parse, the same gate-before-the-work discipline importGraph follows
+      // internally: `JSON.parse` allocates per node, and 8 MB of pathological JSON blocks this
+      // thread for ~1.8 s and ~238 MB before importGraph gets to reject it in 0 ms.
+      checkJsonShape(text);
       applyImported(importGraph(JSON.parse(text)));
     } catch (err) {
       flash(err instanceof Error ? `Couldn't import that file: ${err.message}` : "Couldn't import that file.");

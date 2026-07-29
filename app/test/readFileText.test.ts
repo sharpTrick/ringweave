@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { readFileText } from "../src/io/readFileText";
+import { checkJsonShape, readFileText } from "../src/io/readFileText";
 
 // Class: the byte-size gate must reject an oversized file BEFORE reading it (an already-parsed
 // giant string can't be helped by the downstream import/roster caps). The maxBytes param is the
@@ -24,5 +24,39 @@ describe("readFileText size gate", () => {
     await expect(readFileText(over)).rejects.toThrow(/limit 8 MB/);
     const under = new File(["x".repeat(8_000_000)], "ok.txt", { type: "text/plain" });
     await expect(readFileText(under)).resolves.toHaveLength(8_000_000);
+  });
+});
+
+describe("the shape of a JSON file is bounded before it is parsed", () => {
+  // The byte cap bounds BYTES; `JSON.parse` allocates per NODE, and 8 MB buys wildly different
+  // node counts. Measured at exactly the byte limit: a valid maximum graph parses in 96 ms, while
+  // 3.9M '[' followed by 3.9M ']' takes 1,778 ms and ~238 MB — synchronously, with no spinner and
+  // no Cancel, and entirely BEFORE importGraph gets to reject it in 0 ms.
+  it("passes the largest file this app can write, with an order of magnitude to spare", () => {
+    const n = 1000;
+    const file = {
+      version: 1,
+      people: Array.from({ length: n }, (_, i) => ({ id: i, name: `Person ${i}` })),
+      edges: Array.from({ length: 6000 }, (_, i) => [i % n, (i * 7 + 1) % n]),
+      constraints: { required: [], prohibited: [] },
+      settings: { buddies: 12, minSeparation: 5, seed: 1, polish: "auto" },
+    };
+    expect(() => checkJsonShape(JSON.stringify(file))).not.toThrow();
+  });
+
+  it("refuses the shapes the byte cap admits and the parser cannot afford", () => {
+    // Deep nesting: cheap in characters, expensive in stack and time.
+    expect(() => checkJsonShape("[".repeat(5000) + "]".repeat(5000))).toThrow(/nested too deeply/);
+    // Wide: shallow, but a node per pair of characters.
+    expect(() => checkJsonShape("[" + "{},".repeat(300_000) + "{}]")).toThrow(/too many parts/);
+  });
+
+  it("counts structure, not text — a brace inside a name is just a character", () => {
+    // The scan must skip string literals, or a legitimate name would be charged for its content
+    // and a hostile one could hide structure from the count.
+    const braces = JSON.stringify({ version: 1, people: [{ id: 0, name: "{[,:".repeat(2000) }] });
+    expect(() => checkJsonShape(braces)).not.toThrow();
+    // ...including when the brace is preceded by an escaped quote.
+    expect(() => checkJsonShape(JSON.stringify({ name: 'a"{['.repeat(100) }))).not.toThrow();
   });
 });

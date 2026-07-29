@@ -339,6 +339,15 @@ export function targetShortfall(view: GraphView): { asked: number; got: number }
  * `girth === null` means acyclic — no cycle to measure, separation unbounded, nothing short.
  */
 export function separationShortfall(view: GraphView): { asked: number; got: number } | null {
+  // NOT ON THE CONSTRAINED PATH. The core documents `minSeparation` as "ACCEPTED AND IGNORED"
+  // there — `constrainedGreedy` maximises separation rather than aiming at a target, so no value
+  // of the control can change the output. Reporting a shortfall against it blames a knob that is
+  // inert: measured at n=20, k=4 with one rule, `{2}`, `{5}` and `{12}` produce byte-identical
+  // graphs, and the organizer could lower the setting, watch the message vanish, and conclude the
+  // graph had changed. A disclosure is only honest about a setting the builder consumed. The
+  // sibling is named rather than left for later: `exportGraph` still writes `settings.minSeparation`
+  // into a constrained file, recording a target that graph does not and never could meet.
+  if (view.constraints.length > 0) return null;
   if (view.metrics.girth === null) return null;
   const asked = view.settings.minSeparation ?? SEPARATION_DEFAULT;
   const got = view.metrics.girth - 1;

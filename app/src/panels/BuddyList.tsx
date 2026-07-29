@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { buddyLabel, type GraphView } from "../model";
 import { copyText, downloadBlob, neutralizeCell, toCsv } from "../io/download";
 import { AUTO_CLEAR_MS } from "../state/useNotice";
@@ -14,7 +14,13 @@ interface Props {
 /** What a successful copy announces. One string, so the emptied/refilled pair cannot drift. */
 const COPIED_MESSAGE = "Buddy list copied to the clipboard.";
 
-export default function BuddyList({ view, selected, onSelect }: Props) {
+/**
+ * MEMOIZED for the same measured reason as `Slips`: a hover transition over the graph rewrote
+ * App-level state this component does not read, and re-rendered all n rows — ~70 ms at the import
+ * ceiling, per transition, per node crossed. The memo only pays if `onSelect` is stable, which is
+ * why App's `setSelected` is a `useCallback`.
+ */
+function BuddyListInner({ view, selected, onSelect }: Props) {
   const [copied, setCopied] = useState(false);
   // The live region's text, held separately from `copied` so it can be emptied and refilled —
   // see copyAll. The button's own label still reads from `copied`.
@@ -99,3 +105,5 @@ export default function BuddyList({ view, selected, onSelect }: Props) {
     </section>
   );
 }
+
+export default memo(BuddyListInner);

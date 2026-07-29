@@ -258,7 +258,7 @@ describe("App handles a refusal from the worker", () => {
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: "A\nB\nC\nD\nE\nF" },
     });
-    fireEvent.click(screen.getByText(/Buddy rules/));
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
     fireEvent.click(screen.getByText("+ Add a buddy rule"));
     fireEvent.change(screen.getByLabelText("Rule 1, first person"), { target: { value: "A" } });
     fireEvent.change(screen.getByLabelText("Rule 1, second person"), { target: { value: "B" } });
@@ -280,7 +280,7 @@ describe("App handles a refusal from the worker", () => {
       rerender(<App />);
     });
     fireEvent.click(screen.getByRole("button", { name: /edit people/i }));
-    fireEvent.click(screen.getByText(/Buddy rules/));
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
     // Both rows are still there, including the one that never resolved.
     expect((screen.getByLabelText("Rule 1, second person") as HTMLInputElement).value).toBe("B");
     expect((screen.getByLabelText("Rule 2, second person") as HTMLInputElement).value).toBe("Zoe");
@@ -522,7 +522,7 @@ describe("focus survives a panel closing itself", () => {
     fireEvent.change(screen.getByLabelText("Roster names"), {
       target: { value: "Ana\nBen\nChen\nDee\nEli" },
     });
-    fireEvent.click(screen.getByText(/Buddy rules/));
+    fireEvent.click(document.querySelector(".rules-block > summary") as HTMLElement);
     fireEvent.click(screen.getByText("+ Add a buddy rule"));
     const remove = screen.getByLabelText("Remove rule 1");
     remove.focus();

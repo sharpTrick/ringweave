@@ -1,9 +1,19 @@
+import { useId } from "react";
 import { clamp } from "../io/clamp";
 import { BUDDY_MAX, BUDDY_MIN, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN, type Settings } from "../model";
 
 interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
+  /**
+   * Whether `minSeparation` reaches a builder that acts on it.
+   *
+   * False once the roster carries buddy rules: the constrained builder maximises separation
+   * instead of aiming at a target, so the core documents the option as accepted and ignored on
+   * that path. A control that cannot affect the output must not read as a request — the same
+   * reason `separationShortfall` stops reporting a shortfall there.
+   */
+  separationApplies?: boolean;
 }
 
 const polishValue = (p: boolean | "auto"): string => (p === "auto" ? "auto" : p ? "on" : "off");
@@ -12,7 +22,9 @@ const parsePolish = (v: string): boolean | "auto" => (v === "auto" ? "auto" : v 
 /** F2 settings: buddies-per-person (k) plus an Advanced disclosure for minimum
     separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped
     on change — HTML min/max don't stop a cleared/typed value (an empty field is 0). */
-export default function SettingsControls({ settings, onChange }: Props) {
+export default function SettingsControls({ settings, onChange, separationApplies = true }: Props) {
+  const separationNoteId = `${useId()}-sep`;
+
   const setK = (k: number) => onChange({ ...settings, buddies: clamp(Math.round(k), BUDDY_MIN, BUDDY_MAX) });
 
   const setMinSep = (raw: number) =>
@@ -83,8 +95,18 @@ export default function SettingsControls({ settings, onChange }: Props) {
               value={settings.minSeparation ?? SEPARATION_DEFAULT}
               onChange={(e) => setMinSep(Number(e.target.value))}
               style={{ width: 56 }}
+              // `aria-disabled`, not `disabled`, for the reason the stepper documents: the value
+              // is still worth reading, and a control blurred out from under a keyboard user is
+              // its own defect. The note beside it is what says why.
+              aria-disabled={!separationApplies || undefined}
+              aria-describedby={separationApplies ? undefined : separationNoteId}
             />
           </label>
+          {!separationApplies && (
+            <span className="field-note" id={separationNoteId}>
+              Doesn't apply when the group has buddy rules — those arrange it a different way.
+            </span>
+          )}
           <label className="field">
             Polish
             <select

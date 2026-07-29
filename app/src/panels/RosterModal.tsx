@@ -216,7 +216,11 @@ export default function RosterModal({
         </details>
 
         <div className="sheet-row">
-          <SettingsControls settings={settings} onChange={setSettings} />
+          <SettingsControls
+            settings={settings}
+            onChange={setSettings}
+            separationApplies={resolved.pairs.length === 0}
+          />
           <div className="spacer" />
           {canCancel && <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>}
           <button

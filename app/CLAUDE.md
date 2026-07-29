@@ -159,8 +159,16 @@ token-swap; M2 ships the mock-faithful dark theme only.
   (~200 ms at the n=1000 ceiling instead of ~1.5 s at a fixed 300 ticks), and `GraphCanvas`
   defers it to when force is actually selected. The robust fix — settling off the main thread
   (or incrementally) — is a clean follow-on if very large graphs in force mode become common.
-- **Hover highlight is O(n+m) per hover** (recomputes neighbor sets + node/edge classes). Fine at
-  M2 sizes; memoize/gate it if very large graphs become common.
+- ~~**Hover highlight is O(n+m) per hover.**~~ **Corrected and partly retired in M3.** The note
+  named the wrong term: the highlight recompute is the SMALLEST of three, since `neighborhood()`
+  is bounded at ~144 set operations by the degree cap. The real cost was that `hovered` is
+  App-level state and nothing below App was memoized, so every hover transition re-rendered
+  `BuddyList` (n rows) and `Slips` (n print cards) — panels that read neither `hovered` nor
+  `selected` — measured at ~70 ms and ~46 ms per transition at the import ceiling, on top of the
+  canvas's own 168 ms. Both are now `React.memo`, and `setSelected` is a `useCallback` so the memo
+  actually holds. What remains is `GraphCanvas`'s own re-render, which does read the state; gating
+  that (or keeping `hovered` inside the canvas) is the clean follow-on if very large graphs become
+  common.
 - ~~**Generation connectivity is assumed, not measured.**~~ **Retired in M3.** `BuddyResult` now
   carries `connected` / `largestComponentFraction` (from the `allPairsSummary` the builder already
   ran), and `viewFromResult` reads them instead of hardcoding `true` / `1`. The fix was taken
