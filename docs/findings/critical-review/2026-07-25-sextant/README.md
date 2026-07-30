@@ -13,7 +13,7 @@ suite, seeded defects with known locations. Where judgment was unavoidable it is
 pushed onto a different model.
 
 **Status: partial, and the loop is still running.** The retrospective measurements over E1 are
-complete. E3 is complete with a valid denominator. The M3 review loop itself has run **14 rounds
+complete. E3 is complete with a valid denominator. The M3 review loop itself has run **45 rounds
 across two targets and has not converged** — §5 reports where it stands rather than waiting for a
 tidy ending, because a partial series that is honestly labelled is worth more than a complete one
 that stopped when the numbers looked good. The pre-registration is
@@ -247,10 +247,13 @@ comparisons do not.
 
 ---
 
-### 5. The M3 review loop: fourteen rounds, and neither target has converged
+### 5. The M3 review loop: forty-five rounds, and neither target has converged
 
 Data in [`data/rounds/`](./data/rounds/) and the normalized [`data/perRound.json`](./data/perRound.json).
 Two targets, run as separate loops: `lib/src` (the ringweave core) and `app/src` (the BuddyGraph app).
+**45 rounds — 21 on `lib/src`, 24 on `app/src` — 282 confirmed findings, 81 of them blocking, at a
+measured 24,479,539 subagent tokens (≈544 K per round).** Not one round of the 45 reached zero
+confirmed findings; the minimum on either target is one.
 
 **`lib/src`** — after M3 added `shortestPath`/`eccentricity`, connectivity fields on `BuddyResult`,
 and the `validateDetailed` split.
@@ -264,8 +267,20 @@ and the `validateDetailed` split.
 | 5 | 12 | 5 | 1 | 9 | 1 | 0 | 0 |
 | 6 | 8 | 2 | 0 | 6 | 1 | 0 | 0 |
 | 7 | 7 | 3 | 0 | 5 | 2 | 0 | 0 |
-| 8 | 6 | **0** | 2 | 4 | 0 | **1** | 0 |
+| 8 | 6 | **0** | 2 | 4 | 0 | 1 | 0 |
 | 9 | 5 | 2 | 1 | 4 | 1 | 1 | 0 |
+| 10 | 8 | 1 | 0 | 7 | 0 | 1 | 0 |
+| 11 | 6 | 2 | 0 | 6 | 1 | 1 | 0 |
+| 12 | 6 | 2 | 1 | 6 | 0 | 1 | 0 |
+| 13 | 4 | 1 | 2 | 4 | 2 | 1 | 0 |
+| 14 | 6 | **0** | 2 | 5 | 1 | 1 | 0 |
+| 15 | 5 | **0** | 1 | 5 | 2 | 1 | 0 |
+| 16 | 2 | **0** | 0 | 2 | 2 | 1 | 0 |
+| 17 | 4 | 3 | 0 | 3 | 2 | 1 | 0 |
+| 18 | 1 | **0** | 0 | 1 | 3 | 1 | 0 |
+| 19 | 6 | **0** | 2 | 5 | 1 | 1 | 0 |
+| 20 | 7 | 2 | 1 | 6 | 1 | 1 | 0 |
+| 21 | 3 | **0** | 1 | 3 | 2 | 1 | 0 |
 
 **`app/src`** — F7, F8 and F10.
 
@@ -276,14 +291,43 @@ and the `validateDetailed` split.
 | 3 | 6 | 1 | 0 | 7 | 1 | 0 | 0 |
 | 4 | 9 | 4 | 0 | 9 | 1 | 0 | 0 |
 | 5 | 9 | 3 | 0 | 9 | 0 | 0 | 0 |
+| 6 | 11 | 5 | 1 | 9 | 1 | 0 | 0 |
+| 7 | 6 | 2 | 0 | 6 | 1 | 0 | 0 |
+| 8 | 6 | 2 | 0 | 6 | 0 | 0 | 0 |
+| 9 | 8 | 4 | 1 | 7 | 1 | 0 | 0 |
+| 10 | 4 | 1 | 0 | 4 | 2 | 0 | 0 |
+| 11 | 5 | 1 | 2 | 4 | 2 | 0 | 0 |
+| 12 | 6 | 2 | 2 | 7 | 1 | 0 | 0 |
+| 13 | 6 | 1 | 0 | 7 | 1 | 1 | 0 |
+| 14 | 7 | **0** | 0 | 7 | 0 | 0 | 0 |
+| 15 | 10 | 2 | 3 | 5 | 2 | 0 | 0 |
+| 16 | 4 | **0** | 1 | 4 | 1 | 0 | 0 |
+| 17 | 1 | 1 | 0 | 1 | 3 | 1 | 0 |
+| 18 | 3 | **0** | 0 | 2 | 2 | 1 | 0 |
+| 19 | 3 | **0** | 0 | 4 | 2 | 0 | 0 |
+| 20 | 3 | 2 | 0 | 3 | 3 | 0 | 0 |
+| 21 | 7 | **0** | 0 | 6 | 1 | 0 | 0 |
+| 22 | 6 | 1 | 2 | 6 | 0 | 1 | 0 |
+| 23 | 9 | 2 | 0 | 6 | 0 | 1 | 0 |
+| 24 | 8 | 1 | 0 | 8 | 0 | 0 | 0 |
 
-**Neither series is monotone, and each has produced a false summit.** On `lib/src`, round 4's single
-blocking finding was followed by round 5's five — the largest blocking count of the run — so stopping
-at the quiet round would have stopped one round before the peak. `app/src` repeated it exactly one
-target later: round 3 fell to a single blocking finding and round 4 went back up to four. Neither loop
-has yet produced the two consecutive clean rounds the protocol requires, and after fourteen rounds the
-best either has managed is **one round with zero blocking findings** (`lib` round 8), immediately
-followed by a round with two.
+**Neither series is monotone, and each has produced a false summit — repeatedly.** On `lib/src`,
+round 4's single blocking finding was followed by round 5's five, the largest blocking count of that
+run, so stopping at the quiet round would have stopped one round before the peak. `app/src` repeated
+it one target later: round 3 fell to a single blocking finding and round 4 went back up to four.
+
+**The longer series makes this worse rather than better, and it refutes what this section claimed at
+fourteen rounds.** That earlier text said the best either loop had managed was one zero-blocking round
+followed immediately by a round with two. `lib/src` has since produced **three consecutive
+zero-blocking rounds (14, 15, 16)** — and round 17 then filed three. It produced two more quiet rounds
+(18, 19) and round 20 filed two. `app/src` has produced five zero-blocking rounds (14, 16, 18, 19, 21)
+and never two in a row except 18–19; round 20 filed two, and rounds 23 and 24 filed nine and eight
+confirmed findings with two and one blocking. A three-round quiet streak is the longest either loop has
+managed in 45 rounds, and it was not the end of anything.
+
+So the stopping rule the protocol asks for — zero confirmed non-deferral findings, then one more clean
+round — **has never once been satisfied on either target.** Every zero-*blocking* round still carried
+confirmed suggestions, and every one was followed by a round that found more.
 
 This is the same shape E1 had and the same shape Calboreanu published (15, 8, 12, 2, 8, 1, 4, 1, 0).
 Three independent runs now show it. It is the strongest evidence in this experiment for the

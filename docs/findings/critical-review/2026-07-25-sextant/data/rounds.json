@@ -1691,6 +1691,340 @@
     }
   },
   {
+    "file": "app-round-21.json",
+    "runId": null,
+    "round": 21,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 7,
+      "confirmed": 7,
+      "blocking": 0,
+      "deferrals": 0,
+      "plausible": 1,
+      "themes": 6
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 5,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 2,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      }
+    }
+  },
+  {
+    "file": "app-round-22.json",
+    "runId": null,
+    "round": 22,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 4,
+      "confirmed": 6,
+      "blocking": 1,
+      "deferrals": 2,
+      "plausible": 1,
+      "themes": 6
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [
+      {
+        "critic": "critic-security",
+        "reason": "saturated (2 quiet rounds), surface untouched"
+      }
+    ],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 22,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 2,
+        "lastRound": 22,
+        "skipped": true
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 22,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 22,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 22,
+        "skipped": false
+      }
+    }
+  },
+  {
+    "file": "app-round-23.json",
+    "runId": null,
+    "round": 23,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 9,
+      "confirmed": 9,
+      "blocking": 2,
+      "deferrals": 0,
+      "plausible": 0,
+      "themes": 6
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 2,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 3,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [
+      {
+        "critic": "critic-security",
+        "reason": "saturated (2 quiet rounds), surface untouched"
+      }
+    ],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 23,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 2,
+        "lastRound": 23,
+        "skipped": true
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 23,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 23,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 23,
+        "skipped": false
+      }
+    }
+  },
+  {
+    "file": "app-round-24.json",
+    "runId": null,
+    "round": 24,
+    "target": "app/src",
+    "converged": false,
+    "counts": {
+      "gating": 7,
+      "confirmed": 8,
+      "blocking": 1,
+      "deferrals": 0,
+      "plausible": 1,
+      "themes": 8
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 5,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "interaction",
+        "model": "sonnet",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 24,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 0,
+        "lastRound": 24,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 0,
+        "lastRound": 24,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 24,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 0,
+        "lastRound": 24,
+        "skipped": false
+      }
+    }
+  },
+  {
     "file": "lib-round-01.json",
     "runId": "wf_88887b29-0f5",
     "round": 1,
@@ -3347,6 +3681,88 @@
       "critic-interaction": {
         "nothingFoundStreak": 5,
         "lastRound": 20,
+        "skipped": true
+      }
+    }
+  },
+  {
+    "file": "lib-round-21.json",
+    "runId": null,
+    "round": 21,
+    "target": "lib/src",
+    "converged": false,
+    "counts": {
+      "gating": 2,
+      "confirmed": 3,
+      "blocking": 0,
+      "deferrals": 1,
+      "plausible": 0,
+      "themes": 3
+    },
+    "byCritic": [
+      {
+        "critic": "correctness",
+        "model": "opus",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "security",
+        "model": "opus",
+        "nothingFound": true,
+        "findings": 0,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "solid",
+        "model": "sonnet",
+        "nothingFound": true,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      },
+      {
+        "critic": "maintainability",
+        "model": "haiku",
+        "nothingFound": false,
+        "findings": 1,
+        "errored": false,
+        "erroredReason": null
+      }
+    ],
+    "skipped": [
+      {
+        "critic": "critic-interaction",
+        "reason": "saturated (5 quiet rounds), surface untouched"
+      }
+    ],
+    "saturation": {
+      "critic-correctness": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-security": {
+        "nothingFoundStreak": 1,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-solid": {
+        "nothingFoundStreak": 7,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-maintainability": {
+        "nothingFoundStreak": 0,
+        "lastRound": 21,
+        "skipped": false
+      },
+      "critic-interaction": {
+        "nothingFoundStreak": 5,
+        "lastRound": 21,
         "skipped": true
       }
     }

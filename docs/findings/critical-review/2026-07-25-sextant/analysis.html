@@ -1,4 +1,4 @@
-<title>Sextant — 40 rounds, measured</title>
+<title>Sextant — 45 rounds, measured</title>
 <style>
   :root {
     --bg: #f5f7f9; --panel: #ffffff; --panel-2: #eef1f5; --ink: #161b24;
@@ -224,8 +224,10 @@
   <div class="col">
     <p>
       In Ouroboros the equivalent split was correctness 17, SOLID 24, security 14, maintainability 37 —
-      with SOLID the second-largest producer. Here it produced <strong>47 findings and zero blocking
-      ones across 40 rounds</strong>, and 30 of them were deferrals.
+      with SOLID the second-largest producer. Here it produced <strong>37 findings and exactly one
+      blocking one across 45 rounds</strong>. That one arrived in round 23, and it was not about the
+      product: it found that the browser-test harness the previous round had just added was wired
+      into no CI job, so a guarantee the docs asserted ran nowhere.
     </p>
 
     <h3>3. External oracles closed themes that critic attention could not</h3>
@@ -383,9 +385,10 @@
   <div class="tablewrap">
   <table>
     <tr><th>Point in history</th><th class="n">Code</th><th class="n">Comment</th><th class="n">Ratio</th></tr>
-    <tr><td>M2 baseline, before any review loop</td><td class="n">2,282</td><td class="n">537</td><td class="n">0.24</td></tr>
-    <tr><td>M3 features written, before the 40 rounds</td><td class="n">3,590</td><td class="n">1,384</td><td class="n">0.39</td></tr>
-    <tr><td>after the 40 rounds</td><td class="n">4,538</td><td class="n">3,166</td><td class="n hi">0.70</td></tr>
+    <tr><td>M2 baseline (<code>main</code>), before any review loop</td><td class="n">2,758</td><td class="n">854</td><td class="n">0.31</td></tr>
+    <tr><td>M3 features written, before the rounds (<code>86056c9</code>)</td><td class="n">3,801</td><td class="n">1,420</td><td class="n">0.37</td></tr>
+    <tr><td>peak, just before the comment sweep (<code>6a7aa8c~1</code>)</td><td class="n">4,753</td><td class="n">3,298</td><td class="n hi">0.69</td></tr>
+    <tr><td>after the sweep and the remaining rounds (<code>HEAD</code>)</td><td class="n">4,861</td><td class="n">1,623</td><td class="n">0.33</td></tr>
   </table>
   </div>
   <div class="col">
@@ -401,6 +404,14 @@
       years by people who were never in the argument. It is E1's self-reference surfacing in an
       artifact nobody thought to measure — invisible to every instrument either experiment built,
       because it is not a finding, not a defect, not a token cost, and no lens files it.
+    </p>
+    <p>
+      <strong>The sweep that followed is the other half of the datum.</strong> One human sentence
+      triggered a subtractive pass that cut comment lines from 3,298 to 1,485 while code grew — ratio
+      0.69 to 0.32 — and nothing about the code got harder to read. So the loop had roughly doubled the
+      prose density of the tree, and none of the 2,200-odd lines it added that way survived contact with
+      the question "would a future reader be harmed without this?". The five later rounds added 178 code
+      lines and 138 comment lines, holding the ratio at 0.33.
     </p>
     <p>
       Two facts make this the most uncomfortable entry on the page. It is <strong>label-free</strong>
@@ -493,9 +504,11 @@
       <li><strong>Is the interaction lens's 60% blocking rate a property of the lens or of the model?</strong>
         The new lens and the new model tier arrived in the same change. The confound is total and was
         not designed out.</li>
-      <li><strong>Is SOLID worth running?</strong> Zero blocking findings in 40 rounds and zero recall
-        cost in leave-one-out say no. Thirty-two themes no other lens raised say the question is not
-        settled by those two numbers alone.</li>
+      <li><strong>Is SOLID worth running?</strong> One blocking finding in 45 rounds and zero recall
+        cost in leave-one-out say almost no. But that one finding was that the review harness itself
+        was unenforced — a class no other lens is pointed at, and one the product-facing lenses are
+        structurally unable to see. Thirty-two themes no other lens raised say the question is not
+        settled by the counts alone.</li>
       <li><strong>What is inside the 92-finding <code>unknown</code> bucket?</strong> Blame-based
         attribution is documented as weakest on non-functional findings, and three of five lenses file
         mostly those. The self-induction figure is measured over 212 classifiable findings, not 304.</li>

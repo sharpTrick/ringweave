@@ -623,6 +623,135 @@
     "toolCalls": 213
   },
   {
+    "round": 21,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 7,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 6,
+    "totalFindings": 8,
+    "files": [
+      "app/src/model.ts",
+      "app/src/panels/QualityPanel.tsx",
+      "app/src/state/usePathFinder.ts",
+      "app/src/neighborhood.ts",
+      "app/src/App.tsx"
+    ],
+    "classes": [
+      "unguarded-satisfaction-claim",
+      "untested-display-wiring",
+      "unpinned-tie-break",
+      "untested-projection-boundary",
+      "orphaned-invariant-comment",
+      "stale-comment",
+      "mouse-only-explanation",
+      "comment-claims-unreproducible-hazard"
+    ],
+    "subagentTokens": 597125,
+    "agents": 6,
+    "toolCalls": 235
+  },
+  {
+    "round": 22,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 1,
+    "themes": 6,
+    "totalFindings": 9,
+    "files": [
+      "app/src/App.tsx",
+      "app/src/constraints.ts",
+      "app/src/io/importGraph.ts (the only existing precedent for app-side use of Graph/allPairsSummary/largestComponentFraction, which F12 would copy) and lib/src/core/graph.ts + lib/src/core/metrics.ts (Graph has no vertex-removal primitive; largestComponentFraction divides by g.n)",
+      "app/test/quality.test.ts"
+    ],
+    "classes": [
+      "unguarded-optimality-claim",
+      "field-contradicts-its-own-doc",
+      "metric-population-mismatch",
+      "type-mismatch-test-mock",
+      "missing-completion-announcement",
+      "focus-lands-out-of-context",
+      "focus-stranded-on-inert-cascade"
+    ],
+    "subagentTokens": 498508,
+    "agents": 5,
+    "toolCalls": 201
+  },
+  {
+    "round": 23,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 9,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6,
+    "totalFindings": 9,
+    "files": [
+      "app/src/styles/print.css",
+      "scripts/e2e/drive.mjs",
+      "app/test/responsiveCss.test.ts",
+      "scripts/e2e/drive.mjs, package.json, .github/workflows/ci.yml, .github/workflows/pages.yml, app/CLAUDE.md",
+      "app/src/styles/app.css",
+      "app/src/panels/RosterModal.tsx",
+      "app/src/state/useNotice.ts"
+    ],
+    "classes": [
+      "print-output-includes-app-chrome",
+      "clip-arithmetic-fabricates-box",
+      "tier-local-placement-check",
+      "unenforced-verification-seam",
+      "misleading-comment-violates-stated-principle",
+      "false-comment-about-test-coverage",
+      "modal-focus-not-trapped",
+      "actionable-fix-hidden-behind-closed-disclosure",
+      "fixed-timeout-vs-variable-length-message"
+    ],
+    "subagentTokens": 483285,
+    "agents": 5,
+    "toolCalls": 194
+  },
+  {
+    "round": 24,
+    "target": "app/src",
+    "converged": false,
+    "confirmed": 8,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 8,
+    "totalFindings": 9,
+    "files": [
+      "scripts/e2e/run.mjs",
+      "app/test/responsiveCss.test.ts",
+      "app/src/worker/generate.ts",
+      "app/src/styles/app.css",
+      "app/src/io/parseRoster.ts",
+      "scripts/e2e/drive.mjs",
+      "app/src/panels/PersonPanel.tsx",
+      "app/src/model.ts"
+    ],
+    "classes": [
+      "e2e-server-lifetime-not-owned",
+      "guard-model-false-negative",
+      "provably-empty-refusal-channel",
+      "comment-arithmetic-now-false",
+      "per-keystroke-reparse-cost-budget",
+      "duplicated-manual-registry",
+      "test-coverage-inconsistency",
+      "focus-context-loss-on-in-panel-navigation",
+      "optimality-claim-outruns-disclosures"
+    ],
+    "subagentTokens": 651679,
+    "agents": 6,
+    "toolCalls": 256
+  },
+  {
     "round": 1,
     "target": "lib/src",
     "converged": false,
@@ -1187,5 +1316,29 @@
     "subagentTokens": 532750,
     "agents": 5,
     "toolCalls": 147
+  },
+  {
+    "round": 21,
+    "target": "lib/src",
+    "converged": false,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 3,
+    "totalFindings": 4,
+    "files": [
+      "lib/src/core/constraints.ts",
+      "lib/src/core/index.ts",
+      "lib/src/core/greedy.ts"
+    ],
+    "classes": [
+      "misreported-refusal-count",
+      "seam-verified-not-yet-exercised",
+      "false-comment"
+    ],
+    "subagentTokens": 525920,
+    "agents": 5,
+    "toolCalls": 178
   }
 ]
