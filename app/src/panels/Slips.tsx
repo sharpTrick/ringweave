@@ -1,8 +1,9 @@
+import { memo } from "react";
 import { buddyLabel, type GraphView } from "../model";
 
-/** F3: print-friendly buddy slips in their own DOM subtree (hidden on screen, shown
-    for print via print.css) — one card per person, cut-apart friendly. */
-export default function Slips({ view }: { view: GraphView }) {
+/** Memoized: a hover rewrites App state this component does not read, and it renders one card per
+    person. */
+function SlipsInner({ view }: { view: GraphView }) {
   return (
     <div className="slips" aria-hidden="true">
       {view.names.map((name, i) => (
@@ -15,3 +16,5 @@ export default function Slips({ view }: { view: GraphView }) {
     </div>
   );
 }
+
+export default memo(SlipsInner);

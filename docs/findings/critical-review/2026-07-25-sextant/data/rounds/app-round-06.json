@@ -1,0 +1,560 @@
+{
+  "target": "app/src",
+  "round": 6,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 10,
+    "confirmed": 11,
+    "blocking": 5,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 9
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of `app/src` (every file under io/, state/, panels/, graph/, worker/, plus model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts and styles/app.css), plus the lib functions they call synchronously on the main thread (`allPairsSummary`, `girth`, `validateDetailed`/`connectivityReasons`, `Constraints`, `Graph`, `eccentricity`, `shortestPath`) and the app's own test suite for existing coverage.\n\nMEASURED (harnesses in /home/user/ringweave/.review-scratch/, gitignored; vitest via a scratch config, plus real Chromium at /opt/pw-browsers driving `app/dist`):\n\nImport path — gates verified to run before the work they bound, in this order: type/version -> `people.length` in [1, 1000] -> `edges` is array -> average-density `2m <= 12n` -> `declaredPairs <= 200` -> per-name length -> control chars -> round-trip through `parseRoster` -> `addEdge` loop -> per-vertex `degreeMax <= 12` -> `readConstraints` -> `allPairsSummary`/`girth`. Densest admissible file (n=1000, 12-regular, 6000 edges) re-measures in 106 ms; P1000 path graph (diameter 999) in 72 ms; export 6 ms. Tried to bypass the pair cap with `constraints.required = {length:\"abc\"}` (makes the comparison NaN, so the gate passes) — `Array.isArray` then refuses it, so no O(n^2) work is reached. Tried `buddies:1e9`, `minSeparation:±1e9/Infinity`, `seed:NaN/MAX_SAFE_INTEGER`, `buddies:2.5`, `polish:\"yes\"/null`, `settings` as a string/`0`, `-0` edge endpoints, a degree-13 star (refused), edgeless and n=1 graphs: every value lands inside the UI's clamps, no metric is NaN/Infinity, exported JSON always re-parses and re-imports, and `qualityPercent` never reaches the `conic-gradient` as NaN.\n\nSpreadsheet sink — tried to get an embedded delimiter into a cell. `parseRoster` splits on `,`/`\\n` and normalizes `\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}` to spaces; `importGraph` refuses the same class and refuses any name the parser would not round-trip, so a comma/tab/CR/LF/NEL/U+2028/U+2029 cannot survive into a name. `toCsv` RFC-quotes every cell, so even a `;` (the European Excel list separator) inside a name stays one cell. The un-neutralized halves I found (the buddy list inside a CSV cell, the buddy half of the clipboard line) are not reachable as a live formula without an explicit \"split text to columns\" action. No name reaches a filename (both are literals). I could not break this.\n\nMain-thread superlinear work — force settle is bounded (176 ms at n=1000/m=5979, 140 ms at n=120, and the flat `FORCE_MAX_EDGES=6000` is unreachable at small n because the import density gate caps m at 6n). RosterModal keystroke cost with 1000 names + 200 prohibited rules is 3 ms; on a 500 K-char all-duplicate paste, 23 ms. `rankMatches`/`matchNormalized` early-exit, so a giant query does not make the scan superlinear. Explorer history is capped at 50; `describeReasons` output is bounded by the 200-pair cap.\n\nWHAT DID BREAK: two DOM text sinks with no length clamp, both confirmed end-to-end in the production build (findings below). The three bounds the codebase does have (`clampNotice` at 300, `quote` at 80, `capText` at MAX_PARSE_CHARS) are per-sink, and these two sinks are not among them; no input in the app carries a `maxLength`.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 1,
+      "checked": "Attempted the concrete next committed change (F9, PROJECT_PLAN.md's flagship 'recalculate with minimal disruption') against the real files it would touch: app/src/worker/protocol.ts (GenerateRequest.constraints, GenerateOptions), app/src/worker/generate.ts (toConstraints/joinPairs, priorWeight/priorHard passthrough to buildConstrainedBuddyGraph), app/src/constraints.ts (ConstraintKind union and its exhaustive assertNever switches in splitPairs/toConstraints/joinPairs), app/src/panels/ConstraintsEditor.tsx (KIND_LABEL exhaustiveness), app/src/panels/RosterModal.tsx and App.tsx (RosterModal receives only names/settings/rules, not view.edges, so a 'preserve current buddies' toggle has no data to derive priors from at its current call site), and lib/src/core/constraints.ts + index.ts (confirmed the core-side addPrior/priorHard/priorWeight machinery already exists and is exactly what the app would call). Cross-checked with `grep -rn 'priorWeight|priorHard|addPrior|ConstraintKind' app/src` to mechanically confirm zero live callers. Also traced and verified (not just read) GraphCanvas's declared open/closed seam (LAYOUT_MODES/FIT_MODES/positionsFor, assertNever exhaustiveness), the route-highlight edgeClass shortest-path-adjacency proof in graph/highlight.ts, neighborhood.ts's UI-local adjacency walk against the 'UI never reimplements math' rule, usePathFinder/useGraph's core-delegation, ConstraintsEditor's datalist-based person picker, useExplorerHistory's back-stack, search.ts's fuzzy ranking, model.ts's single-scorer functions (quality/qualityPercent/isOptimal/assembleMetrics), and useBuddyGraph.ts's identical-reroll/constraints-carryover logic. Did not find a SOLID violation, a broken/never-paying seam, or an undocumented responsibility leak that the app's own CLAUDE.md 'Known follow-ons' section doesn't already account for with sound reasoning.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full trace of app/src (App.tsx, all panels/, all state/ hooks, graph/GraphCanvas.tsx, styles/app.css) against the \"mouse broken, screen off\" scenario: roster entry -> generate -> read quality numbers -> find a person -> see buddies -> export -> hit an error and recover. For each interactive surface I traced the actual JSX/handlers (not just presence of ARIA) and, where checkable, reproduced behavior with a throwaway vitest+RTL harness (kept only in .review-scratch/, removed from app/test/ before finishing). Specifically verified: useFocusRescue's anchor-resolution logic across every state transition (modal open/close, generate dispatch, cancel, reroll, escape, close-panel, search-choose); DOM order of every panel in App.tsx cross-referenced against each panel's CSS position (#rail/#toggle/#search/#person/#route/#buddies/#metrics/toast) to check Tab order vs. visual/reading order; every aria-live/role=status region in the codebase (grep) vs. every place text appears/disappears in response to user input, focusing on RosterModal's six kinds of validation notes; reduced-motion handling in GraphCanvas's JS-driven RAF animation and in app.css; PersonSearch/PersonPanel/PathPanel/BuddyList/ConstraintsEditor/SettingsControls for keyboard reachability, aria-pressed/aria-current/aria-invalid correctness, and dead ends on empty/error states (zero search results, unreachable path, refused/errored generation, capped rules, unknown rule names). Did not re-file any oxlint jsx-a11y class (bad role, aria-hidden misuse, dangling label) — those are confirmed absent by the pre-spawn lint gate.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Two independently-maintained predicates for the same concept have drifted apart — the identical-graph 'changed' gate doesn't cover every field it adopts, and the rule-row 'is this name valid' check has two different definitions (row-level vs summary-level) for the empty string — so the UI reports stale or inconsistent validity state instead of a single source of truth.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The identical-graph short-circuit adopts settings, constraints AND report, but its `changed` predicate tests only settings and constraints — so a freshly computed ConstraintReport is discarded whenever the regenerated graph is byte-identical and the rules/settings are unchanged.",
+        "`resolveNamedPairs` looks up \"\" like any other name, so a still-empty (or half-filled) rule row is counted under `unmatched` and RosterModal immediately claims it \"names someone who isn't in this roster\" — while ConstraintsEditor's own `unknownName` explicitly exempts empty text and leaves the row unflagged."
+      ],
+      "remediation": "Remove the second, independently-maintained definition in each case instead of patching it: in useBuddyGraph, either drop the `changed` guard (adopt cur/next fields unconditionally in the identical branch) or make it test exactly the fields it assigns; in constraints.ts, route resolveNamedPairs's emptiness handling through the same resolvePerson-based check ConstraintsEditor's unknownName already uses, so there is one definition of \"names nobody\" instead of two that can drift."
+    },
+    {
+      "theme": "A UI message asserts a causal claim ('you asked for N, the roster only allows M') that depends on a generator having run, but is rendered with no regard for how the view was actually produced, making a false statement on the import path.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`targetShortfall` compares `settings.buddies` against `metrics.degreeMax` with no regard for how the view was produced, so QualityPanel renders \"You asked for N buddies each; this roster only allows M\" for imported edge sets no generator ever built — blaming the roster for a limit that comes from the file."
+      ],
+      "remediation": "Delete the request/generation-specific framing from the copy and state only what's true on every path (e.g. \"Each person has M buddies, not the N in Settings\") — closing the gap by removing the unearned claim rather than adding provenance-tracking state to conditionally suppress it."
+    },
+    {
+      "theme": "The setup dialog has no overflow guard and its content producers are unbounded, so attacker- or user-controlled text (roster de-dup warnings, rule notes, etc.) can grow without limit and permanently strand the dialog's controls off-screen with nothing scrollable to recover them.",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`parseRoster`'s de-duplication warning enumerates every de-duplicated name with no cap (~122 KB possible) and RosterModal renders `parsed.warnings` straight into an unclamped `.note` div inside a non-scrolling, centered `#modal`, pushing the sheet's top off-screen with nothing to bring it back.",
+        "`#modal`/`.sheet` have no `max-height` or `overflow`, so any oversized content (the parseRoster warning, the rules `<details>` block at its 200-rule cap, or hundreds of `ruleProblems` notes) is clipped symmetrically off both edges of the viewport with no scrollbar and no Cancel reachable, since the dialog is modal and #app is inert behind it."
+      ],
+      "remediation": "Give the dialog itself an overflow guard — `#modal { overflow:auto; align-items:flex-start }` or `.sheet { max-height: calc(100vh - 32px); overflow:auto }` — so the single shared boundary caps worst-case damage regardless of which producer overflows it, removing the need to separately clamp every current and future content source (roster warnings, rule notes, feasibility messages) one at a time."
+    },
+    {
+      "theme": "A pasted search query is echoed verbatim into a rendered, screen-reader-announced region with no length cap anywhere in the pipeline (no maxLength on the input, no clamp at interpolation), so its layout and announcement cost is unbounded in paste size.",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`{open && matches.length === 0 ? `Nobody matches “${query.trim()}”` : \"\"}` interpolates the entire unclamped query into a visible, `aria-live=\"polite\"` `.search-empty` box with no `max-height`/`overflow`/`nowrap`, so a large paste synchronously wraps into hundreds of thousands of line boxes on the main thread and is handed whole to a screen reader."
+      ],
+      "remediation": "Clamp the query at the point it's interpolated into the live region (reuse the existing truncate helper behind clampNotice rather than writing a new one) and add `maxLength` to the search input itself, removing the unbounded path instead of only capping its visual line count with CSS."
+    },
+    {
+      "theme": "F9 (minimal-disruption recalc / 'preserve current buddies') has no representation anywhere in the constraint model, worker protocol, or RosterModal's props, so it cannot be built without fanning out changes across multiple files that currently have no notion of a prior.",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "Tracing the F9 fan-out shows ConstraintKind, worker/protocol.ts's GenerateOptions, and RosterModal's props all lack any representation of a 'prior' derived from the previous view's edges, and naively adding one would leak a UI concept (typed rules) into a different concept (derived priors)."
+      ],
+      "remediation": "Build nothing now: do not add a ConstraintKind variant, protocol field, or RosterModal prop for priors until F9 is actually scheduled — avoiding speculative scaffolding is itself the subtractive move."
+    },
+    {
+      "theme": "A code comment misidentifies which numbered feature the focus/ego-layout placeholder belongs to, mislabeling a deferred feature under the wrong feature number.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comments refer to 'F8 focus' as a future feature, but F8 is actually 'fuzzy search, clickable panel names, and a working back stack' per CLAUDE.md; the focus/ego layout is a separate, deferred feature."
+      ],
+      "remediation": "Delete the incorrect 'F8' label from the comment rather than appending a correction alongside it — state only what the future mode is, without a feature-number claim that can go stale again."
+    },
+    {
+      "theme": "The app's single focus-rescue mechanism relies on a fixed, hardcoded list of specific fallback anchors, so any commit that strands focus outside that enumerated set (e.g. first-generation dispatch unmounting the focused button while the overlay's Cancel sits right there, visible and non-inert) is not actually rescued.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "When the first generation is dispatched, useFocusRescue's anchor function has no reachable candidate: searchRef is inside the now-inert #app and the roster textarea no longer exists, so focus lands on <body> even though the busy overlay's Cancel button is the only visible, interactive element on screen."
+      ],
+      "remediation": "Replace the hardcoded, enumerated anchor list with a single generic query for 'the first visible, non-inert focusable element in the document' — tightening the rescue to one boundary check instead of requiring a new named ref to be added every time another transition can strand focus."
+    },
+    {
+      "theme": "Dynamically appearing/disappearing validation text must live inside a region already present in the accessibility tree before it changes, or the change is invisible to non-visual users — a discipline the app applies everywhere except RosterModal, which recomputes six kinds of validation text on every keystroke with zero aria-live/role=status anywhere in the component.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "RosterModal renders six distinct kinds of dynamically-appearing validation text (fileError, inputCapped, parsed.warnings, feas.messages, resolved.unmatched/selfPair/duplicate, ruleProblems) with no aria-live/role=status/role=alert anywhere, so messages can silently appear or vanish on every interaction, unlike every other live-region pattern already used elsewhere in the app (busy-live, sr-live, toast, search-empty, stepper status)."
+      ],
+      "remediation": "Don't add six separate live regions for six message types — wrap the single existing note-stack container that already holds all of them in one permanently-mounted role='status' aria-live='polite' region, unifying it with the pattern already used elsewhere instead of introducing a new per-message mechanism."
+    },
+    {
+      "theme": "Tab order is driven purely by JSX/DOM render order, which was never kept in sync with each panel's actual on-screen (CSS) position, so a sighted keyboard user's focus jumps unpredictably between screen regions instead of moving in one visual direction; the toast notice suffers the same DOM-vs-visual mismatch, sitting first on screen but last in the document.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "DOM/tab order (rail, toggle, search, person, route, buddies, metrics) crosses the screen top-to-bottom-to-top three times relative to each panel's actual CSS position, and Notice.tsx renders visually at the top of the viewport but is the last element in the document, so a persistent notice is reachable only at the very end of Tab order."
+      ],
+      "remediation": "Reorder the existing JSX to match the panels' actual visual top-to-bottom, left-to-right layout (and move Notice earlier in the sibling stack) rather than adding tabIndex overrides on top of the current order — removing the mismatch instead of compensating for it."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-view-field-after-identical-regeneration",
+      "theme": "the identical-graph short-circuit keeps stale fields from the previous view, so the UI reports state the core has already superseded",
+      "file": "app/src/state/useBuddyGraph.ts",
+      "line": 90,
+      "summary": "The identical-graph short-circuit adopts settings, constraints AND report, but its `changed` predicate tests only settings and constraints — so a freshly computed ConstraintReport is discarded whenever the regenerated graph is byte-identical and the rules/settings are unchanged.",
+      "failure": "Generate an 8-person graph with rules [{0,4 required},{1,2 prohibited}] at k=3 → export → import (view.report === null, panel reads \"2 buddy rules saved with this graph — not re-checked on import.\") → \"Edit people\" → Generate with nothing changed. Generation is deterministic and export/import is exact, so sameStrings+sameEdges hold and sameSettings+sameConstraints both return true ⇒ changed === false ⇒ setView is never called. view.report stays null and QualityPanel still says \"not re-checked on import\" even though buildConstrainedBuddyGraph just ran and returned a report with reqViolations=0/prohViolations=0. Reproduced in .review-scratch/mine/report.probe.tsx (assertion `expect(v.report).not.toBeNull()` fails). The existing suite does not cover this path.",
+      "remediation": "Stop predicting which adopted fields changed. Either drop the `changed` guard and always `setView({...cur, settings: next.settings, constraints: next.constraints, report: next.report})` in the identical branch (React bails out on an equal-by-value re-render anyway, and the point of the branch is only to preserve the `edges`/`buddies` identities), or — if the guard must stay — derive it from the same set of fields it adopts (add `cur.report !== next.report`). Fixing only `report` leaves the sibling open the moment a fourth field is adopted.",
+      "invariant": "For every generation result the effect consumes, the resulting view's `report` is identical to that result's `report` (`view.report === consumedResult.report`); no view field that the identical-graph branch adopts may ever retain a value inherited from a previous view.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "blank-row-counted-as-resolution-failure",
+      "theme": "a rule row the user has not finished typing is reported as a broken rule, and the row-level and summary-level validity checks disagree about the empty string",
+      "file": "app/src/constraints.ts",
+      "line": 187,
+      "summary": "`resolveNamedPairs` looks up `\"\"` like any other name, so a still-empty (or half-filled) rule row is counted under `unmatched` and RosterModal immediately claims it \"names someone who isn't in this roster\" — while ConstraintsEditor's own `unknownName` explicitly exempts empty text and leaves the row unflagged.",
+      "failure": "Open the roster modal on any roster and click \"+ Add a buddy rule\" once, typing nothing. The row's inputs have value \"\" and no `aria-invalid` (the row says it is fine), but the modal renders \"1 buddy rule names someone who isn't in this roster and won't be used.\" `resolveNamedPairs([{a:\"Alice\",b:\"\",kind:\"required\"}], roster)` likewise returns `unmatched: 1`. Reproduced in .review-scratch/mine/editor.probe.tsx. The one existing assertion on this string (test/constraintsFlow.test.tsx:91) uses a genuinely unknown name, so the suite is blind to the blank case.",
+      "remediation": "Give `resolveNamedPairs` an `incomplete` cause for rows whose `a` or `b` is empty after trimming, and count them there instead of under `unmatched` (report them with copy about finishing the row, or not at all). That makes the summary's per-cause counts and `ConstraintsEditor`'s per-row `aria-invalid` derive from one definition of \"names nobody\" — the same definition `resolvePerson` already uses when it returns -1 for empty text.",
+      "invariant": "For every rows list and roster, `resolveNamedPairs(rows, names).unmatched` counts a row only if at least one of its post-trim NON-EMPTY fields fails to resolve; equivalently, for every row the summary attributes a resolution failure to it iff `ConstraintsEditor` marks that row `aria-invalid`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "generation-path-claim-rendered-on-import-path",
+      "theme": "a sentence whose truth depends on a builder having run is rendered unconditionally, so it makes a false causal claim about imported graphs",
+      "file": "app/src/model.ts",
+      "line": 292,
+      "summary": "`targetShortfall` compares `settings.buddies` against `metrics.degreeMax` with no regard for how the view was produced, so QualityPanel renders \"You asked for N buddies each; this roster only allows M\" for imported edge sets no generator ever built — blaming the roster for a limit that comes from the file.",
+      "failure": "Import {version:1, people:[A..F], edges: 6-cycle, settings:{buddies:4,...}}: `targetShortfall` returns {asked:4, got:2} and QualityPanel displays \"You asked for 4 buddies each; this roster only allows 2.\" A 6-person roster plainly allows 4 buddies each — the file's sparse edge list is the limit, and the user never \"asked\" for anything on this path. Second reachable form: import {people:[A,B], edges:[[0,1]]} with no settings block; `sanitizeSettings` synthesises `buddies: 2` via the BUDDY_MIN clamp, producing {asked:2, got:1} and the same sentence about a request that was never made. Both reproduced in .review-scratch/mine/shortfall.probe.tsx.",
+      "remediation": "Fix it by subtraction in the copy rather than by adding provenance state: word the line about the graph instead of the roster and the request (e.g. \"Each person has M buddies, not the N in Settings\"), which is true on both the generation and the import path. If the \"you asked / the roster allows\" framing is worth keeping, it needs an explicit origin marker on GraphView and must be suppressed for imported views — and the synthesised `buddies` from the BUDDY_MIN clamp must not feed it either, or the sibling stays open.",
+      "invariant": "No copy derived from `targetShortfall` may attribute the delivered degree to the ROSTER or to a user request for a view no builder produced: for every imported view, the quality panel renders no text matching /this roster only allows/ and no \"you asked for\" claim unless the file declared that buddy count.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-warning-text-strands-dialog",
+      "theme": "roster content of attacker-chosen size is rendered into the setup dialog with no length clamp, and the dialog cannot be scrolled or dismissed once it overflows",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 128,
+      "summary": "`parseRoster`'s de-duplication warning enumerates EVERY de-duplicated name by hand (`[...extras.keys()].map(...).join(\", \")`). `extras` is bounded only by MAX_NAMES-1 (999) and each name by MAX_NAME_CHARS (120), so one warning string reaches ~122 KB. RosterModal renders `parsed.warnings` straight into `<div className=\"note\">{w}</div>` with no clamp — `useNotice.clampNotice` (MAX_NOTICE_CHARS=300) guards the toast, not this sink. `.note` has no max-height, `.sheet` has no max-height, and `#modal` is `position:fixed` flex-centered with `overflow: visible`, so the note's height is added to a centered box and pushes the top of the sheet off-screen with nothing scrollable to bring it back.",
+      "failure": "Drop (or paste) a .txt roster of 999 distinct 120-character names, each listed twice — 241,757 characters, comfortably inside the 8 MB file gate and the 500,000-char MAX_PARSE_CHARS cap. Measured in headless Chromium against `app/dist`: the warning is 121,935 characters, its `.note` box is 15,015 px tall, `.sheet` becomes 15,521 px tall with `top: -7310`, and the roster textarea (`top: -7168`) and the \"Generate buddy graph\" button (`top: -6910`) are both ABOVE the viewport. `document.documentElement.scrollHeight` is 900 (= innerHeight), so there is no scrollbar; `#modal` computed `overflow` is `visible`. `ta.focus(); ta.scrollIntoView()` leaves `top` at -7182 with `scrollY` 0 — the controls stay unreachable. On first load `canCancel` is false so there is no Cancel button, and `useEscape` is suspended while the modal is open, so nothing on screen is interactive and the only recovery is a page reload. Each further keystroke re-renders the 122 KB node (78-82 ms).",
+      "invariant": "For every input string s, every element of `parseRoster(s).warnings` has length <= a fixed constant (the same MAX_NOTICE_CHARS the toast sink already uses) — the bound must not depend on s.length, on how many names were de-duplicated, or on how long those names are. Mechanically checkable as a property test over arbitrary s.",
+      "remediation": "Bound the enumeration where it is built: list at most a fixed number of de-duplicated names and end with \"and N more\" (the same shape `PersonPanel`'s SECOND_LIMIT already uses), so the warning length is constant. Then close the amplifier as defence in depth by clamping at the render sink too — reuse `clampNotice` for `.note` text, since per-site truncation cannot be enforced mechanically and `useNotice` already documents exactly that argument.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-query-echo-freezes-main-thread",
+      "theme": "a pasted search query is echoed verbatim into a rendered aria-live region with no length clamp, so its layout cost is unbounded in the paste size",
+      "file": "/home/user/ringweave/app/src/panels/PersonSearch.tsx",
+      "line": 139,
+      "summary": "`{open && matches.length === 0 ? `Nobody matches “${query.trim()}”` : \"\"}` interpolates the entire query into `.search-empty`. The input has no `maxLength`, `query` is never capped (unlike the roster textarea, which `RosterModal.capText` pre-caps to MAX_PARSE_CHARS), and `.search-empty` is a VISIBLE element (`padding: 8px; font-size: 12px`) inside `#search { position: absolute; width: 240px }` with no `max-height`, no `overflow`, and no `white-space: nowrap` (unlike `.sr-live`, which does have nowrap). So a paste wraps into hundreds of thousands of line boxes inside a 240 px column, synchronously, on the main thread — and the region is `aria-live=\"polite\"`, so a screen reader is additionally handed the whole string to announce.",
+      "failure": "Paste a 4,000,000-character string into the \"Find a person\" box. Measured in headless Chromium against the built `app/dist` (roster = the example names, so `#search` is mounted): 3,766 ms from input event to painted frame, `.search-empty` text length 4,000,016, element height 1,363,666 px. At 1 MB it is 622 ms / 340,936 px; the cost is linear in the paste, so a 20 MB clipboard (trivially available) is ~19 s. Every subsequent keystroke re-does the whole layout. Confirmed independently in jsdom that the component itself is the producer: a 4 MB `fireEvent.change` yields a 4,000,017-character text node in the `aria-live=\"polite\"` region.",
+      "invariant": "For every value of `query`, the length of the text rendered into `.search-empty` is <= a fixed constant independent of `query.length`. More generally: no DOM text node the app renders may have a length that grows with an unbounded user input — the three clamps that exist (`clampNotice` 300, `importGraph.quote` 80, `capText` MAX_PARSE_CHARS) must cover every render sink, not three of them.",
+      "remediation": "Clamp the echoed query at the interpolation (reuse the same truncate-with-ellipsis helper as `clampNotice`/`quote` rather than adding a fourth ad-hoc one) and put a `maxLength` on the search input so the state itself cannot hold a multi-megabyte string. Adding `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` to `.search-empty` is worth doing too but is not the fix — it caps the line boxes, not the text node or what the live region announces.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "non-scrollable-modal-has-no-overflow-guard",
+      "theme": "the setup dialog has no overflow guard, so any oversized content permanently strands its controls off-screen",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 185,
+      "summary": "`#modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }` with `.sheet { width: min(560px, 92vw); padding: 28px; }` — neither has `max-height` or `overflow`. Because the sheet is centre-aligned in a fixed, non-scrolling container, any content taller than the viewport is clipped SYMMETRICALLY: half of it goes above `top: 0`, where neither a scrollbar nor `scrollIntoView` can reach it. This is the amplifier that turns the parseRoster warning above from jank into an unrecoverable dialog, and it is independent of that particular producer — the `<details>` rules block at the 200-rule cap, or `ruleProblems` rendering a few hundred blocking notes, reach the same state. Filed separately because clamping one producer does not close the class, and the dialog is modal: `#app` is `inert` behind it, first-run has no Cancel, and `useEscape` is suspended while it is open.",
+      "failure": "Same reproduction as the parseRoster finding: with a 121,935-character note the sheet is 15,521 px tall at `top: -7310`; `#modal` computed `overflow` is `visible`, `document.documentElement.scrollHeight` equals `innerHeight` (900), and `textarea.focus(); textarea.scrollIntoView()` leaves it at `top: -7182` with `scrollY` 0. No control is on screen and no gesture brings one back.",
+      "invariant": "For every content the roster dialog can render, the roster textarea and the \"Generate buddy graph\" button either have a client rect inside the viewport, or have a scrollable ancestor whose `scrollHeight > clientHeight` that can bring them into view. Checkable in a browser harness by asserting `getBoundingClientRect().top >= 0` for both controls after `scrollIntoView()`.",
+      "remediation": "Give the dialog an overflow guard: `#modal { overflow: auto; align-items: flex-start; }` with vertical padding, or `.sheet { max-height: calc(100vh - 32px); overflow: auto; }`. Either makes the sheet's own content scrollable so no amount of note/rule content can put a control out of reach, independently of whatever produced the content.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Feature label mismatch - comment describes deferred feature under wrong feature number",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 27,
+      "summary": "Comments refer to 'F8 focus' as a future feature, but F8 is actually 'fuzzy search, clickable panel names, and a working back stack' per CLAUDE.md. The focus/ego layout is a separate, deferred feature (DEFERRED PAST M3).",
+      "failure": "A developer reading lines 26-27 and 40-41 will believe F8 is the focus/ego layout. In reality: PersonSearch (F8), PersonPanel (F8), useExplorerHistory (F8) are already being built. The layout-mode they refer to is unrelated to F8.",
+      "remediation": "Replace 'F8 focus' with 'a future selection-dependent mode' OR update to: 'A future SELECTION-DEPENDENT mode (not F8 — focus/ego layout is deferred past M3) whose points move per hover/click'",
+      "invariant": "Comments naming a feature number X must match X's acceptance criteria in app/CLAUDE.md",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-anchor-gap",
+      "theme": "the app's single focus-rescue mechanism has a fixed, incomplete list of fallback anchors, so a commit that strands focus on <body> outside those anchors' reach is not actually rescued despite the mechanism's stated purpose",
+      "file": "app/src/App.tsx",
+      "line": 94,
+      "summary": "When the FIRST generation is dispatched (RosterModal's 'Generate buddy graph' button, which has focus, is unmounted the same commit that sets bg.status to 'running' and makes #app inert), useFocusRescue's anchor function has no reachable candidate: searchRef is inside the now-inert #app, and the roster-names textarea no longer exists because the modal just closed. Focus is left on <body> even though the busy overlay's Cancel button — the only non-inert, visible, interactive element on screen — is sitting right there and was explicitly called out in App.tsx's own comment as the reason the rescue mechanism needed the overlay treated as a sibling of #app.",
+      "failure": "Reproduced with a scratch RTL test: render <App/>, focus the 'Generate buddy graph' button, click it (worker mocked to report status='running'). After the commit, document.activeElement === document.body while document.querySelector('.busy button') (the Cancel button) is present, visible, and not inert — but never received focus. A screen-reader/keyboard-only user who just triggered generation has no accessible cue where focus went; they must blindly press Tab once and hope, rather than the rescue landing them on Cancel the way it lands on the search box or the roster textarea in every other traced transition.",
+      "remediation": "Add a third fallback in App.tsx's useFocusRescue anchor — e.g. a ref on the busy overlay's Cancel button, tried after searchRef and the roster-names field — so the anchor resolves to a real focusable element whenever bg.status === 'running' regardless of whether the transition came from a first generation (modal→overlay) or a reroll (rail button→overlay, where a real browser's inert-triggered blur produces the identical dead end, though jsdom cannot simulate that half of the repro).",
+      "invariant": "Whenever document.activeElement becomes document.body immediately after a React commit that had focus somewhere real beforehand (the exact condition useFocusRescue's own hadFocus/activeElement check gates on), the anchor function must resolve to a non-null, non-inert, mounted, focusable element for every value of bg.status/modalOpen the app can be in — including status==='running' after the setup modal has already closed."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unannounced-validation-state",
+      "theme": "text that appears or disappears in response to user input must live inside a region that already exists in the accessibility tree before the change, or the change is invisible to a non-visual user — the app applies this discipline everywhere except RosterModal",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 170,
+      "summary": "RosterModal renders six distinct kinds of dynamically-appearing validation text with zero aria-live/role=status/role=alert anywhere in the component: fileError (a rejected .txt/.csv drop or file-picker choice), inputCapped (character-cap truncation), parsed.warnings (roster-parse notes, e.g. duplicate names), feas.messages (the buddy-count feasibility gate — the one that also disables the Generate button), resolved.unmatched/selfPair/duplicate (buddy-rule resolution notes), and ruleProblems (the buddy-rule feasibility gate). Every one of these recomputes live via useMemo off `text`/`settings`/`rules` on every keystroke or stepper press, so a message can appear or vanish on literally every interaction — silently, to anyone not looking at the screen. This is the exact 'silence is indistinguishable from a broken box' failure mode the rest of the app (busy-live, sr-live, the toast, PersonSearch's search-empty region, SettingsControls' stepper role=status) was explicitly hardened against; RosterModal — the very first screen on cold load, and the one the app reopens on every refusal/error — was missed.",
+      "failure": "A screen-reader user raises the 'Buddies each' stepper past what the roster supports (or pastes a roster that trips a parse warning, or drops an unreadable file). The Generate button silently becomes disabled — no aria-disabled reason, no aria-describedby to the message explaining why — and the explanatory note (`feas.messages`, rendered as a plain non-live <div>) is never announced. The user has no accessible signal that anything changed; they must independently rediscover the note by manually re-reading the whole modal, which nothing prompts them to do. Confirmed by grep: `aria-live` does not appear anywhere in RosterModal.tsx, versus five other components in the same codebase that use exactly this pattern for an analogous problem.",
+      "remediation": "Wrap the note stack (or at minimum feas.messages/ruleProblems, which gate the primary action) in a permanently-mounted role='status' aria-live='polite' region, following the same pattern already used by App.tsx's busy-live/sr-live, Notice.tsx's toast-region, and PersonSearch's search-empty region — the region exists in the DOM from first render; only its text content changes.",
+      "invariant": "For every text node in RosterModal whose presence/content is a function of `text`, `settings`, `rules`, or file-read results (i.e. every note derived via useMemo from those in RosterModal.tsx), that text must be rendered inside an element that carries aria-live (directly or via an always-mounted ancestor) — a validation message must never be the sole content of a div that is only conditionally present in the tree."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-mismatch",
+      "theme": "the sequence in which panels receive focus on Tab does not track their position on screen, so a sighted keyboard user's focus jumps unpredictably between screen regions instead of moving in one direction",
+      "file": "app/src/App.tsx",
+      "line": 267,
+      "summary": "Traced JSX render order against each panel's CSS position: DOM/tab order is rail(top-left) -> toggle(top-center) -> search(bottom-left, CSS bottom:104px) -> person(top-right, CSS top:14px right:314px) -> route(bottom-left, CSS bottom:168px — visually ABOVE search, yet later in tab order) -> buddies(top-right, CSS top:14px right:18px) -> metrics(bottom bar). A sighted keyboard-only or low-vision user tabbing forward crosses from the top of the screen down to the bottom-left search box, back up to the top-right person panel, back down to a route panel positioned above the search box they just left, back up to the top-right buddy list, and finally down to the bottom metrics bar — reversing vertical direction three times in one pass. Separately, the toast notice (Notice.tsx) is rendered fixed at the visual TOP of the viewport (top:14px, centered) but is the very LAST element in the whole document, so a persistent (non-auto-clearing) error/refusal notice sits at the very end of Tab order despite being the first thing visible on screen.",
+      "failure": "With a view on screen (no modal, not running), pressing Tab repeatedly from the 'Edit people' button visits: Ring/Force toggle, then the search input (bottom-left) before ever reaching the person-details panel or buddy list positioned at the top of the screen — and, if a persistent worker-error toast is showing, it is reached only after tabbing through every button in the roster rail, layout toggle, search, person panel, route panel, buddy list, and quality panel, even though visually it floats above all of them.",
+      "remediation": "Reorder the JSX so DOM order follows the panels' visual top-to-bottom, left-to-right layout (rail, toggle, person, buddies, route, search, metrics), or use CSS `order`/flex placement decoupled from DOM order if the visual layout must stay as-is; render Notice near the top of #app's sibling stack (or give it a lower tabindex position) so a persistent notice is reachable early rather than last.",
+      "invariant": "For any two focusable elements A and B where A is positioned strictly above B on screen (and roughly aligned horizontally, or A is in a left-to-right reading position before B), A should precede B in Tab order — DOM order should not require a keyboard user's focus to move backward (up the screen, after having moved down) more than once per full traversal."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-view-field-after-identical-regeneration",
+      "theme": "the identical-graph short-circuit keeps stale fields from the previous view, so the UI reports state the core has already superseded",
+      "file": "app/src/state/useBuddyGraph.ts",
+      "line": 90,
+      "summary": "The identical-graph short-circuit adopts settings, constraints AND report, but its `changed` predicate tests only settings and constraints — so a freshly computed ConstraintReport is discarded whenever the regenerated graph is byte-identical and the rules/settings are unchanged.",
+      "failure": "Generate an 8-person graph with rules [{0,4 required},{1,2 prohibited}] at k=3 → export → import (view.report === null, panel reads \"2 buddy rules saved with this graph — not re-checked on import.\") → \"Edit people\" → Generate with nothing changed. Generation is deterministic and export/import is exact, so sameStrings+sameEdges hold and sameSettings+sameConstraints both return true ⇒ changed === false ⇒ setView is never called. view.report stays null and QualityPanel still says \"not re-checked on import\" even though buildConstrainedBuddyGraph just ran and returned a report with reqViolations=0/prohViolations=0. Reproduced in .review-scratch/mine/report.probe.tsx (assertion `expect(v.report).not.toBeNull()` fails). The existing suite does not cover this path.",
+      "remediation": "Stop predicting which adopted fields changed. Either drop the `changed` guard and always `setView({...cur, settings: next.settings, constraints: next.constraints, report: next.report})` in the identical branch (React bails out on an equal-by-value re-render anyway, and the point of the branch is only to preserve the `edges`/`buddies` identities), or — if the guard must stay — derive it from the same set of fields it adopts (add `cur.report !== next.report`). Fixing only `report` leaves the sibling open the moment a fourth field is adopted.",
+      "invariant": "For every generation result the effect consumes, the resulting view's `report` is identical to that result's `report` (`view.report === consumedResult.report`); no view field that the identical-graph branch adopts may ever retain a value inherited from a previous view.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "blank-row-counted-as-resolution-failure",
+      "theme": "a rule row the user has not finished typing is reported as a broken rule, and the row-level and summary-level validity checks disagree about the empty string",
+      "file": "app/src/constraints.ts",
+      "line": 187,
+      "summary": "`resolveNamedPairs` looks up `\"\"` like any other name, so a still-empty (or half-filled) rule row is counted under `unmatched` and RosterModal immediately claims it \"names someone who isn't in this roster\" — while ConstraintsEditor's own `unknownName` explicitly exempts empty text and leaves the row unflagged.",
+      "failure": "Open the roster modal on any roster and click \"+ Add a buddy rule\" once, typing nothing. The row's inputs have value \"\" and no `aria-invalid` (the row says it is fine), but the modal renders \"1 buddy rule names someone who isn't in this roster and won't be used.\" `resolveNamedPairs([{a:\"Alice\",b:\"\",kind:\"required\"}], roster)` likewise returns `unmatched: 1`. Reproduced in .review-scratch/mine/editor.probe.tsx. The one existing assertion on this string (test/constraintsFlow.test.tsx:91) uses a genuinely unknown name, so the suite is blind to the blank case.",
+      "remediation": "Give `resolveNamedPairs` an `incomplete` cause for rows whose `a` or `b` is empty after trimming, and count them there instead of under `unmatched` (report them with copy about finishing the row, or not at all). That makes the summary's per-cause counts and `ConstraintsEditor`'s per-row `aria-invalid` derive from one definition of \"names nobody\" — the same definition `resolvePerson` already uses when it returns -1 for empty text.",
+      "invariant": "For every rows list and roster, `resolveNamedPairs(rows, names).unmatched` counts a row only if at least one of its post-trim NON-EMPTY fields fails to resolve; equivalently, for every row the summary attributes a resolution failure to it iff `ConstraintsEditor` marks that row `aria-invalid`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "generation-path-claim-rendered-on-import-path",
+      "theme": "a sentence whose truth depends on a builder having run is rendered unconditionally, so it makes a false causal claim about imported graphs",
+      "file": "app/src/model.ts",
+      "line": 292,
+      "summary": "`targetShortfall` compares `settings.buddies` against `metrics.degreeMax` with no regard for how the view was produced, so QualityPanel renders \"You asked for N buddies each; this roster only allows M\" for imported edge sets no generator ever built — blaming the roster for a limit that comes from the file.",
+      "failure": "Import {version:1, people:[A..F], edges: 6-cycle, settings:{buddies:4,...}}: `targetShortfall` returns {asked:4, got:2} and QualityPanel displays \"You asked for 4 buddies each; this roster only allows 2.\" A 6-person roster plainly allows 4 buddies each — the file's sparse edge list is the limit, and the user never \"asked\" for anything on this path. Second reachable form: import {people:[A,B], edges:[[0,1]]} with no settings block; `sanitizeSettings` synthesises `buddies: 2` via the BUDDY_MIN clamp, producing {asked:2, got:1} and the same sentence about a request that was never made. Both reproduced in .review-scratch/mine/shortfall.probe.tsx.",
+      "remediation": "Fix it by subtraction in the copy rather than by adding provenance state: word the line about the graph instead of the roster and the request (e.g. \"Each person has M buddies, not the N in Settings\"), which is true on both the generation and the import path. If the \"you asked / the roster allows\" framing is worth keeping, it needs an explicit origin marker on GraphView and must be suppressed for imported views — and the synthesised `buddies` from the BUDDY_MIN clamp must not feed it either, or the sibling stays open.",
+      "invariant": "No copy derived from `targetShortfall` may attribute the delivered degree to the ROSTER or to a user request for a view no builder produced: for every imported view, the quality panel renders no text matching /this roster only allows/ and no \"you asked for\" claim unless the file declared that buddy count.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-warning-text-strands-dialog",
+      "theme": "roster content of attacker-chosen size is rendered into the setup dialog with no length clamp, and the dialog cannot be scrolled or dismissed once it overflows",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 128,
+      "summary": "`parseRoster`'s de-duplication warning enumerates EVERY de-duplicated name by hand (`[...extras.keys()].map(...).join(\", \")`). `extras` is bounded only by MAX_NAMES-1 (999) and each name by MAX_NAME_CHARS (120), so one warning string reaches ~122 KB. RosterModal renders `parsed.warnings` straight into `<div className=\"note\">{w}</div>` with no clamp — `useNotice.clampNotice` (MAX_NOTICE_CHARS=300) guards the toast, not this sink. `.note` has no max-height, `.sheet` has no max-height, and `#modal` is `position:fixed` flex-centered with `overflow: visible`, so the note's height is added to a centered box and pushes the top of the sheet off-screen with nothing scrollable to bring it back.",
+      "failure": "Drop (or paste) a .txt roster of 999 distinct 120-character names, each listed twice — 241,757 characters, comfortably inside the 8 MB file gate and the 500,000-char MAX_PARSE_CHARS cap. Measured in headless Chromium against `app/dist`: the warning is 121,935 characters, its `.note` box is 15,015 px tall, `.sheet` becomes 15,521 px tall with `top: -7310`, and the roster textarea (`top: -7168`) and the \"Generate buddy graph\" button (`top: -6910`) are both ABOVE the viewport. `document.documentElement.scrollHeight` is 900 (= innerHeight), so there is no scrollbar; `#modal` computed `overflow` is `visible`. `ta.focus(); ta.scrollIntoView()` leaves `top` at -7182 with `scrollY` 0 — the controls stay unreachable. On first load `canCancel` is false so there is no Cancel button, and `useEscape` is suspended while the modal is open, so nothing on screen is interactive and the only recovery is a page reload. Each further keystroke re-renders the 122 KB node (78-82 ms).",
+      "invariant": "For every input string s, every element of `parseRoster(s).warnings` has length <= a fixed constant (the same MAX_NOTICE_CHARS the toast sink already uses) — the bound must not depend on s.length, on how many names were de-duplicated, or on how long those names are. Mechanically checkable as a property test over arbitrary s.",
+      "remediation": "Bound the enumeration where it is built: list at most a fixed number of de-duplicated names and end with \"and N more\" (the same shape `PersonPanel`'s SECOND_LIMIT already uses), so the warning length is constant. Then close the amplifier as defence in depth by clamping at the render sink too — reuse `clampNotice` for `.note` text, since per-site truncation cannot be enforced mechanically and `useNotice` already documents exactly that argument.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-query-echo-freezes-main-thread",
+      "theme": "a pasted search query is echoed verbatim into a rendered aria-live region with no length clamp, so its layout cost is unbounded in the paste size",
+      "file": "/home/user/ringweave/app/src/panels/PersonSearch.tsx",
+      "line": 139,
+      "summary": "`{open && matches.length === 0 ? `Nobody matches “${query.trim()}”` : \"\"}` interpolates the entire query into `.search-empty`. The input has no `maxLength`, `query` is never capped (unlike the roster textarea, which `RosterModal.capText` pre-caps to MAX_PARSE_CHARS), and `.search-empty` is a VISIBLE element (`padding: 8px; font-size: 12px`) inside `#search { position: absolute; width: 240px }` with no `max-height`, no `overflow`, and no `white-space: nowrap` (unlike `.sr-live`, which does have nowrap). So a paste wraps into hundreds of thousands of line boxes inside a 240 px column, synchronously, on the main thread — and the region is `aria-live=\"polite\"`, so a screen reader is additionally handed the whole string to announce.",
+      "failure": "Paste a 4,000,000-character string into the \"Find a person\" box. Measured in headless Chromium against the built `app/dist` (roster = the example names, so `#search` is mounted): 3,766 ms from input event to painted frame, `.search-empty` text length 4,000,016, element height 1,363,666 px. At 1 MB it is 622 ms / 340,936 px; the cost is linear in the paste, so a 20 MB clipboard (trivially available) is ~19 s. Every subsequent keystroke re-does the whole layout. Confirmed independently in jsdom that the component itself is the producer: a 4 MB `fireEvent.change` yields a 4,000,017-character text node in the `aria-live=\"polite\"` region.",
+      "invariant": "For every value of `query`, the length of the text rendered into `.search-empty` is <= a fixed constant independent of `query.length`. More generally: no DOM text node the app renders may have a length that grows with an unbounded user input — the three clamps that exist (`clampNotice` 300, `importGraph.quote` 80, `capText` MAX_PARSE_CHARS) must cover every render sink, not three of them.",
+      "remediation": "Clamp the echoed query at the interpolation (reuse the same truncate-with-ellipsis helper as `clampNotice`/`quote` rather than adding a fourth ad-hoc one) and put a `maxLength` on the search input so the state itself cannot hold a multi-megabyte string. Adding `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` to `.search-empty` is worth doing too but is not the fix — it caps the line boxes, not the text node or what the live region announces.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "non-scrollable-modal-has-no-overflow-guard",
+      "theme": "the setup dialog has no overflow guard, so any oversized content permanently strands its controls off-screen",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 185,
+      "summary": "`#modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }` with `.sheet { width: min(560px, 92vw); padding: 28px; }` — neither has `max-height` or `overflow`. Because the sheet is centre-aligned in a fixed, non-scrolling container, any content taller than the viewport is clipped SYMMETRICALLY: half of it goes above `top: 0`, where neither a scrollbar nor `scrollIntoView` can reach it. This is the amplifier that turns the parseRoster warning above from jank into an unrecoverable dialog, and it is independent of that particular producer — the `<details>` rules block at the 200-rule cap, or `ruleProblems` rendering a few hundred blocking notes, reach the same state. Filed separately because clamping one producer does not close the class, and the dialog is modal: `#app` is `inert` behind it, first-run has no Cancel, and `useEscape` is suspended while it is open.",
+      "failure": "Same reproduction as the parseRoster finding: with a 121,935-character note the sheet is 15,521 px tall at `top: -7310`; `#modal` computed `overflow` is `visible`, `document.documentElement.scrollHeight` equals `innerHeight` (900), and `textarea.focus(); textarea.scrollIntoView()` leaves it at `top: -7182` with `scrollY` 0. No control is on screen and no gesture brings one back.",
+      "invariant": "For every content the roster dialog can render, the roster textarea and the \"Generate buddy graph\" button either have a client rect inside the viewport, or have a scrollable ancestor whose `scrollHeight > clientHeight` that can bring them into view. Checkable in a browser harness by asserting `getBoundingClientRect().top >= 0` for both controls after `scrollIntoView()`.",
+      "remediation": "Give the dialog an overflow guard: `#modal { overflow: auto; align-items: flex-start; }` with vertical padding, or `.sheet { max-height: calc(100vh - 32px); overflow: auto; }`. Either makes the sheet's own content scrollable so no amount of note/rule content can put a control out of reach, independently of whatever produced the content.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-feature-fanout",
+      "theme": "F9 (minimal-disruption recalc / 'preserve current buddies') has no representation anywhere in the app's constraint model, worker protocol, or RosterModal props, and building it would fan out across several files that currently have no notion of a prior",
+      "file": "app/src/constraints.ts",
+      "line": 14,
+      "summary": "Independently traced (not just re-read) the fan-out F9 requires: ConstraintKind ('required'|'prohibited') would need a third concept for priors, but priors are structurally different from the user-typed rows ConstraintsEditor/NamedPair model (derived from the PREVIOUS view's edges rather than typed by the user), so naively adding a 'prior' variant to ConstraintKind would leak into the manual rule editor's KIND_LABEL/select UI where it doesn't belong. Separately, worker/protocol.ts's GenerateRequest/GenerateOptions carry no priorWeight/priorHard field even though the core (lib/src/core/constraints.ts addPrior/priorHard, index.ts priorWeight) already supports it, and RosterModal — the only 'Edit people' surface — receives only names/settings/rules from App.tsx, never view.edges, so there is no data source in scope to derive priors from at the toggle's natural UI location.",
+      "failure": "n/a - no caller exists yet; mechanically confirmed via grep -rn 'priorWeight|priorHard|addPrior|ConstraintKind' app/src, which returns only the required/prohibited machinery and zero prior references",
+      "remediation": "When F9 is scheduled: (1) pass the live view (or at least view.edges + view.names) into RosterModal from App.tsx; (2) add a name-keyed prior-derivation analogous to resolveNamedPairs but sourced from previous edges, not typed rows; (3) extend GenerateOptions with priorWeight/priorHard and thread it through worker/generate.ts's toConstraints call (cons.addPrior/cons.priorHard), kept independent of ConstraintPair/ConstraintKind so it never surfaces in ConstraintsEditor's UI.",
+      "invariant": "for every exported name in lib/src/core's prior API (addPrior, priorHard, priorWeight, priorsKeptFraction), grep -rn '<name>' app/src returns at least one caller once F9 ships; until then it returns none, which is the mechanical no-caller test this finding is filed against",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Feature label mismatch - comment describes deferred feature under wrong feature number",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 27,
+      "summary": "Comments refer to 'F8 focus' as a future feature, but F8 is actually 'fuzzy search, clickable panel names, and a working back stack' per CLAUDE.md. The focus/ego layout is a separate, deferred feature (DEFERRED PAST M3).",
+      "failure": "A developer reading lines 26-27 and 40-41 will believe F8 is the focus/ego layout. In reality: PersonSearch (F8), PersonPanel (F8), useExplorerHistory (F8) are already being built. The layout-mode they refer to is unrelated to F8.",
+      "remediation": "Replace 'F8 focus' with 'a future selection-dependent mode' OR update to: 'A future SELECTION-DEPENDENT mode (not F8 — focus/ego layout is deferred past M3) whose points move per hover/click'",
+      "invariant": "Comments naming a feature number X must match X's acceptance criteria in app/CLAUDE.md",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-rescue-anchor-gap",
+      "theme": "the app's single focus-rescue mechanism has a fixed, incomplete list of fallback anchors, so a commit that strands focus on <body> outside those anchors' reach is not actually rescued despite the mechanism's stated purpose",
+      "file": "app/src/App.tsx",
+      "line": 94,
+      "summary": "When the FIRST generation is dispatched (RosterModal's 'Generate buddy graph' button, which has focus, is unmounted the same commit that sets bg.status to 'running' and makes #app inert), useFocusRescue's anchor function has no reachable candidate: searchRef is inside the now-inert #app, and the roster-names textarea no longer exists because the modal just closed. Focus is left on <body> even though the busy overlay's Cancel button — the only non-inert, visible, interactive element on screen — is sitting right there and was explicitly called out in App.tsx's own comment as the reason the rescue mechanism needed the overlay treated as a sibling of #app.",
+      "failure": "Reproduced with a scratch RTL test: render <App/>, focus the 'Generate buddy graph' button, click it (worker mocked to report status='running'). After the commit, document.activeElement === document.body while document.querySelector('.busy button') (the Cancel button) is present, visible, and not inert — but never received focus. A screen-reader/keyboard-only user who just triggered generation has no accessible cue where focus went; they must blindly press Tab once and hope, rather than the rescue landing them on Cancel the way it lands on the search box or the roster textarea in every other traced transition.",
+      "remediation": "Add a third fallback in App.tsx's useFocusRescue anchor — e.g. a ref on the busy overlay's Cancel button, tried after searchRef and the roster-names field — so the anchor resolves to a real focusable element whenever bg.status === 'running' regardless of whether the transition came from a first generation (modal→overlay) or a reroll (rail button→overlay, where a real browser's inert-triggered blur produces the identical dead end, though jsdom cannot simulate that half of the repro).",
+      "invariant": "Whenever document.activeElement becomes document.body immediately after a React commit that had focus somewhere real beforehand (the exact condition useFocusRescue's own hadFocus/activeElement check gates on), the anchor function must resolve to a non-null, non-inert, mounted, focusable element for every value of bg.status/modalOpen the app can be in — including status==='running' after the setup modal has already closed."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unannounced-validation-state",
+      "theme": "text that appears or disappears in response to user input must live inside a region that already exists in the accessibility tree before the change, or the change is invisible to a non-visual user — the app applies this discipline everywhere except RosterModal",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 170,
+      "summary": "RosterModal renders six distinct kinds of dynamically-appearing validation text with zero aria-live/role=status/role=alert anywhere in the component: fileError (a rejected .txt/.csv drop or file-picker choice), inputCapped (character-cap truncation), parsed.warnings (roster-parse notes, e.g. duplicate names), feas.messages (the buddy-count feasibility gate — the one that also disables the Generate button), resolved.unmatched/selfPair/duplicate (buddy-rule resolution notes), and ruleProblems (the buddy-rule feasibility gate). Every one of these recomputes live via useMemo off `text`/`settings`/`rules` on every keystroke or stepper press, so a message can appear or vanish on literally every interaction — silently, to anyone not looking at the screen. This is the exact 'silence is indistinguishable from a broken box' failure mode the rest of the app (busy-live, sr-live, the toast, PersonSearch's search-empty region, SettingsControls' stepper role=status) was explicitly hardened against; RosterModal — the very first screen on cold load, and the one the app reopens on every refusal/error — was missed.",
+      "failure": "A screen-reader user raises the 'Buddies each' stepper past what the roster supports (or pastes a roster that trips a parse warning, or drops an unreadable file). The Generate button silently becomes disabled — no aria-disabled reason, no aria-describedby to the message explaining why — and the explanatory note (`feas.messages`, rendered as a plain non-live <div>) is never announced. The user has no accessible signal that anything changed; they must independently rediscover the note by manually re-reading the whole modal, which nothing prompts them to do. Confirmed by grep: `aria-live` does not appear anywhere in RosterModal.tsx, versus five other components in the same codebase that use exactly this pattern for an analogous problem.",
+      "remediation": "Wrap the note stack (or at minimum feas.messages/ruleProblems, which gate the primary action) in a permanently-mounted role='status' aria-live='polite' region, following the same pattern already used by App.tsx's busy-live/sr-live, Notice.tsx's toast-region, and PersonSearch's search-empty region — the region exists in the DOM from first render; only its text content changes.",
+      "invariant": "For every text node in RosterModal whose presence/content is a function of `text`, `settings`, `rules`, or file-read results (i.e. every note derived via useMemo from those in RosterModal.tsx), that text must be rendered inside an element that carries aria-live (directly or via an always-mounted ancestor) — a validation message must never be the sole content of a div that is only conditionally present in the tree."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-mismatch",
+      "theme": "the sequence in which panels receive focus on Tab does not track their position on screen, so a sighted keyboard user's focus jumps unpredictably between screen regions instead of moving in one direction",
+      "file": "app/src/App.tsx",
+      "line": 267,
+      "summary": "Traced JSX render order against each panel's CSS position: DOM/tab order is rail(top-left) -> toggle(top-center) -> search(bottom-left, CSS bottom:104px) -> person(top-right, CSS top:14px right:314px) -> route(bottom-left, CSS bottom:168px — visually ABOVE search, yet later in tab order) -> buddies(top-right, CSS top:14px right:18px) -> metrics(bottom bar). A sighted keyboard-only or low-vision user tabbing forward crosses from the top of the screen down to the bottom-left search box, back up to the top-right person panel, back down to a route panel positioned above the search box they just left, back up to the top-right buddy list, and finally down to the bottom metrics bar — reversing vertical direction three times in one pass. Separately, the toast notice (Notice.tsx) is rendered fixed at the visual TOP of the viewport (top:14px, centered) but is the very LAST element in the whole document, so a persistent (non-auto-clearing) error/refusal notice sits at the very end of Tab order despite being the first thing visible on screen.",
+      "failure": "With a view on screen (no modal, not running), pressing Tab repeatedly from the 'Edit people' button visits: Ring/Force toggle, then the search input (bottom-left) before ever reaching the person-details panel or buddy list positioned at the top of the screen — and, if a persistent worker-error toast is showing, it is reached only after tabbing through every button in the roster rail, layout toggle, search, person panel, route panel, buddy list, and quality panel, even though visually it floats above all of them.",
+      "remediation": "Reorder the JSX so DOM order follows the panels' visual top-to-bottom, left-to-right layout (rail, toggle, person, buddies, route, search, metrics), or use CSS `order`/flex placement decoupled from DOM order if the visual layout must stay as-is; render Notice near the top of #app's sibling stack (or give it a lower tabindex position) so a persistent notice is reachable early rather than last.",
+      "invariant": "For any two focusable elements A and B where A is positioned strictly above B on screen (and roughly aligned horizontally, or A is in a left-to-right reading position before B), A should precede B in Tab order — DOM order should not require a keyboard user's focus to move backward (up the screen, after having moved down) more than once per full traversal."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-feature-fanout",
+      "theme": "F9 (minimal-disruption recalc / 'preserve current buddies') has no representation anywhere in the app's constraint model, worker protocol, or RosterModal props, and building it would fan out across several files that currently have no notion of a prior",
+      "file": "app/src/constraints.ts",
+      "line": 14,
+      "summary": "Independently traced (not just re-read) the fan-out F9 requires: ConstraintKind ('required'|'prohibited') would need a third concept for priors, but priors are structurally different from the user-typed rows ConstraintsEditor/NamedPair model (derived from the PREVIOUS view's edges rather than typed by the user), so naively adding a 'prior' variant to ConstraintKind would leak into the manual rule editor's KIND_LABEL/select UI where it doesn't belong. Separately, worker/protocol.ts's GenerateRequest/GenerateOptions carry no priorWeight/priorHard field even though the core (lib/src/core/constraints.ts addPrior/priorHard, index.ts priorWeight) already supports it, and RosterModal — the only 'Edit people' surface — receives only names/settings/rules from App.tsx, never view.edges, so there is no data source in scope to derive priors from at the toggle's natural UI location.",
+      "failure": "n/a - no caller exists yet; mechanically confirmed via grep -rn 'priorWeight|priorHard|addPrior|ConstraintKind' app/src, which returns only the required/prohibited machinery and zero prior references",
+      "remediation": "When F9 is scheduled: (1) pass the live view (or at least view.edges + view.names) into RosterModal from App.tsx; (2) add a name-keyed prior-derivation analogous to resolveNamedPairs but sourced from previous edges, not typed rows; (3) extend GenerateOptions with priorWeight/priorHard and thread it through worker/generate.ts's toConstraints call (cons.addPrior/cons.priorHard), kept independent of ConstraintPair/ConstraintKind so it never surfaces in ConstraintsEditor's UI.",
+      "invariant": "for every exported name in lib/src/core's prior API (addPrior, priorHard, priorWeight, priorsKeptFraction), grep -rn '<name>' app/src returns at least one caller once F9 ships; until then it returns none, which is the mechanical no-caller test this finding is filed against",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 6,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 6,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 703414,
+    "agents": 6,
+    "toolCalls": 268
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "observations": [
+    {
+      "kind": "halt-recovered",
+      "note": "This round is a re-run: the first attempt lost all five lenses to a session limit and was excluded rather than recorded, since a round whose lenses died produced no observation."
+    },
+    {
+      "kind": "non-monotonic-convergence",
+      "note": "app confirmed findings 14,9,6,9,9,11 — rising again at round 6, with 5 blocking against round 3 one."
+    }
+  ]
+}

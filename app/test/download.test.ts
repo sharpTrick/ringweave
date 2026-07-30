@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { neutralizeCell, toCsv } from "../src/io/download";
 
-// Class: any spreadsheet-bound sink must neutralize a value whose first char could start a
-// formula. neutralizeCell is the ONE shared guard used by both the CSV serializer and the
-// clipboard copy (see BuddyList), so exercising it over the full dangerous set guards both.
 describe("neutralizeCell (shared formula-injection guard)", () => {
   for (const c of ["=", "+", "-", "@", "\t", "\r"]) {
     it(`prefixes a value starting with ${JSON.stringify(c)} with an apostrophe`, () => {

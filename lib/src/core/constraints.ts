@@ -10,16 +10,11 @@
  * possible, and refuse (with a specific reason) only when a graph is genuinely
  * impossible. Priors are soft by default (polish penalty), promotable to hard.
  */
-import {
-  MAX_ROSTER,
-  MAX_CONSTRAINED_N,
-  MAX_CONSTRAINED_WORK,
-  constrainedWork,
-} from "./graph.js";
+import { MAX_ROSTER } from "./graph.js";
+import { MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, constrainedWork } from "./budgets.js";
 
-// Pairs live as normalized "min,max" string keys (JS Set compares by reference).
-// The keys are held privately so every stored pair is guaranteed canonical — an
-// un-normalized key can never reach the legality checks that look pairs up.
+// Normalized "min,max" string keys (a JS `Set` compares objects by reference), held privately so
+// an un-normalized key can never reach the legality checks that look pairs up.
 function pairKey(a: number, b: number): string {
   return a < b ? `${a},${b}` : `${b},${a}`;
 }
@@ -34,8 +29,8 @@ function pairsOf(set: Set<string>): [number, number][] {
 }
 
 function degreeOf(n: number, pairs: [number, number][]): number[] {
-  // Guard the allocation so a directly-constructed Constraints with a malformed n
-  // (bypassing validate) gets a clear message, not a native RangeError.
+  // Guard the allocation, so a `Constraints` built directly with a malformed n gets a clear
+  // message rather than a native RangeError.
   if (!Number.isInteger(n) || n < 0 || n > MAX_ROSTER) {
     throw new Error(`roster size ${n} is not a valid count`);
   }
@@ -57,8 +52,8 @@ export class Constraints {
   #required = new Set<string>();
   #prohibited = new Set<string>();
   #priors = new Set<string>();
-  // A plain boolean with no canonicalization invariant to protect, so it stays
-  // public (unlike the pair sets); toggling it promotes priors to required.
+  // Promotes priors to required — but only `buildConstrainedBuddyGraph` acts on it, so `validate`
+  // and the primitives accept inputs the builder would refuse (see `validateDetailed`).
   priorHard = false;
 
   constructor(n: number) {
@@ -108,7 +103,9 @@ export class Constraints {
     policy: TagPolicy = "prohibit_same",
   ): Constraints {
     const c = new Constraints(n);
-    const tagOf = (i: number): Tag => (i < tags.length ? tags[i] : null);
+    // `?? null` and not a length check: a hole or an explicit `undefined` compares equal to every
+    // other, which would prohibit every pair of UNGROUPED people — the inverse of the contract.
+    const tagOf = (i: number): Tag => tags[i] ?? null;
     switch (policy) {
       case "prohibit_same":
         for (let i = 0; i < n; i++) {
@@ -125,8 +122,8 @@ export class Constraints {
   }
 
   merge(other: Constraints): this {
-    // TS-only fail-fast (the Python reference has no size check) — a mismatch
-    // would otherwise surface as an out-of-range pair at a later call site.
+    // TS-only fail-fast (the Python reference has no size check): a mismatch would otherwise
+    // surface as an out-of-range pair at a much later call site.
     if (other.n !== this.n) {
       throw new Error(`cannot merge constraints for ${other.n} people into ${this.n}`);
     }
@@ -159,116 +156,236 @@ export class Constraints {
 }
 
 /**
- * Human-readable infeasibility reasons (empty = feasible). These are the cases
- * where NO valid graph exists; everything else is handled by sacrificing
- * regularity. Sorted and deduplicated, mirroring the Python reference.
+ * A machine-readable infeasibility reason; people are named as roster indices, so a caller can
+ * substitute names without parsing prose.
+ *
+ * `person` on `unknown-person` may be out of range, non-integer or NaN — that IS what is being
+ * reported, so a formatter must show the raw value rather than index a roster with it.
  */
-export function validate(cons: Constraints, k: number): string[] {
-  const structural = structuralErrors(cons);
-  if (structural.length > 0) return Array.from(new Set(structural)).sort();
+export type Reason =
+  | { code: "roster-invalid"; n: number }
+  | { code: "roster-too-large"; n: number; max: number }
+  | { code: "unknown-person"; person: number; n: number }
+  | { code: "self-pair"; person: number }
+  | { code: "too-many-invalid-constraints"; count: number }
+  | { code: "roster-too-large-constrained"; n: number; max: number }
+  | { code: "buddy-count-invalid"; k: number }
+  | { code: "work-too-large"; n: number; k: number }
+  | { code: "required-degree-exceeds-k"; person: number; required: number; k: number }
+  | { code: "required-and-prohibited"; a: number; b: number }
+  | { code: "required-within-prohibited"; person: number }
+  | { code: "prohibited-from-everyone"; person: number }
+  | { code: "prohibited-splits-group"; person: number };
 
-  // Roster too large for the O(n²) constrained path (rationale on MAX_CONSTRAINED_N
-  // in graph.ts); refuse before the O(n²) connectivity walk and generation.
+/**
+ * Renders a number as Python spells it ("nan", "inf"), not as JS does ("NaN", "Infinity") — raw
+ * interpolation breaks `formatReason`'s byte-identity with the reference on exactly the values
+ * these reasons are documented to carry.
+ */
+function num(x: number): string {
+  if (Number.isNaN(x)) return "nan";
+  if (x === Infinity) return "inf";
+  if (x === -Infinity) return "-inf";
+  return String(x);
+}
+
+/**
+ * The one place a `Reason` becomes prose. These strings must stay byte-identical to
+ * `reference-python`'s `format_reason` — the oracle and `constrained.test.ts` both pin them.
+ */
+export function formatReason(r: Reason): string {
+  switch (r.code) {
+    case "roster-invalid":
+      return `roster size ${num(r.n)} is not a valid count`;
+    case "roster-too-large":
+      return `roster size ${num(r.n)} exceeds the maximum of ${num(r.max)}`;
+    case "unknown-person":
+      return `constraint references unknown person ${num(r.person)} (roster has ${num(r.n)})`;
+    case "self-pair":
+      return `person ${num(r.person)} cannot be paired with themselves`;
+    case "too-many-invalid-constraints":
+      return `${num(r.count)} constraints are invalid — only some are listed`;
+    case "roster-too-large-constrained":
+      return `roster size ${num(r.n)} exceeds the constrained maximum of ${num(r.max)} (generation is O(n²))`;
+    case "buddy-count-invalid":
+      return `buddy count ${num(r.k)} must be a non-negative whole number`;
+    case "work-too-large":
+      return `roster size ${num(r.n)} with ${num(r.k)} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`;
+    case "required-degree-exceeds-k":
+      return `person ${num(r.person)} has ${num(r.required)} required buddies but each person gets ${num(r.k)}`;
+    case "required-and-prohibited":
+      return `pair ${num(r.a)}–${num(r.b)} is both required and prohibited`;
+    case "required-within-prohibited":
+      return `person ${num(r.person)} cannot meet required buddies within their prohibited set`;
+    case "prohibited-from-everyone":
+      return `person ${num(r.person)} is prohibited from everyone — they'd have no buddies`;
+    case "prohibited-splits-group":
+      return `prohibited pairs split the group — person ${num(r.person)} can never be connected to everyone`;
+  }
+}
+
+/** Deduplicate and order by the rendered string, so `validate` sorts identically. */
+function normalize(reasons: Reason[]): Reason[] {
+  const byText = new Map<string, Reason>();
+  for (const r of reasons) {
+    const text = formatReason(r);
+    if (!byText.has(text)) byText.set(text, r);
+  }
+  return Array.from(byText.keys())
+    .sort()
+    .map((text) => byText.get(text) as Reason);
+}
+
+/**
+ * Structured infeasibility reasons (empty = feasible), sorted and deduplicated by rendered text.
+ * These are the cases where NO valid graph exists; everything else is handled by sacrificing
+ * regularity. The primary implementation; {@link validate} is its formatter.
+ *
+ * Does NOT consider `priorHard`: only `buildConstrainedBuddyGraph` promotes priors, and it does
+ * so before validating — so this and the primitives accept inputs that entry point refuses.
+ */
+export function validateDetailed(cons: Constraints, k: number): Reason[] {
+  const structural = structuralReasons(cons);
+  if (structural.length > 0) return normalize(structural);
+
+  // Refuse before the O(n²) connectivity walk below (rationale in budgets.ts).
   if (cons.n > MAX_CONSTRAINED_N) {
     return [
-      `roster size ${cons.n} exceeds the constrained maximum of ${MAX_CONSTRAINED_N} (generation is O(n²))`,
+      { code: "roster-too-large-constrained", n: cons.n, max: MAX_CONSTRAINED_N },
     ];
   }
 
   if (!Number.isInteger(k) || k < 0) {
-    return [`buddy count ${k} must be a non-negative whole number`];
+    return [{ code: "buddy-count-invalid", k }];
   }
 
-  // Dense k blows generation up past the n-cap (rationale on MAX_CONSTRAINED_WORK
-  // in graph.ts); refuse when the estimated work exceeds the budget. Mirrored as a
-  // throw in constrainedGreedy's checkWellFormed.
-  if (constrainedWork(cons.n, k) > MAX_CONSTRAINED_WORK) {
-    return [
-      `roster size ${cons.n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
-    ];
+  // Dense k blows generation up past the n-cap (rationale in budgets.ts). Mirrored as a throw in
+  // constrainedGreedy's `checkWellFormed` — keep the two in step.
+  if (constrainedWork(cons.n, k, cons.prohibitedCount) > MAX_CONSTRAINED_WORK) {
+    return [{ code: "work-too-large", n: cons.n, k }];
   }
 
-  const errs: string[] = [];
+  const errs: Reason[] = [];
   const n = cons.n;
   const reqd = cons.requiredDegree();
   const prod = cons.prohibitedDegree();
 
   for (let v = 0; v < n; v++) {
     if (reqd[v] > k) {
-      errs.push(
-        `person ${v} has ${reqd[v]} required buddies but each person gets ${k}`,
-      );
+      errs.push({ code: "required-degree-exceeds-k", person: v, required: reqd[v], k });
     }
   }
 
   for (const [a, b] of cons.requiredPairs()) {
     if (cons.isProhibited(a, b)) {
-      errs.push(`pair ${a}–${b} is both required and prohibited`);
+      errs.push({ code: "required-and-prohibited", a, b });
     }
   }
 
   for (let v = 0; v < n; v++) {
     const allowed = n - 1 - prod[v];
     if (allowed < reqd[v]) {
-      errs.push(
-        `person ${v} cannot meet required buddies within their prohibited set`,
-      );
+      errs.push({ code: "required-within-prohibited", person: v });
     }
-    // only a real problem when people actually need buddies (k > 0)
     if (allowed <= 0 && n > 1 && k > 0) {
-      errs.push(`person ${v} is prohibited from everyone — they'd have no buddies`);
+      errs.push({ code: "prohibited-from-everyone", person: v });
     }
   }
 
-  // Connectivity feasibility: if prohibited pairs split the roster so some people
-  // can never be linked to the rest (even ignoring degree caps), no connected
-  // buddy graph exists. Degree-budget shortfalls are not refused here — they are
-  // handled by sacrificing regularity and surface as report.connected === false.
-  if (k > 0 && n > 1) errs.push(...connectivityErrors(cons));
+  // Only prohibition-induced splits are refused. Degree-budget shortfalls are not — they are
+  // handled by sacrificing regularity and surface as `report.connected === false`.
+  if (k > 0 && n > 1) errs.push(...connectivityReasons(cons));
 
-  return Array.from(new Set(errs)).sort();
+  return normalize(errs);
 }
 
 /**
- * Ill-formed roster size or constraint endpoints (unknown ids, self-pairs).
- * Mirrored as throws in constrainedGreedy's `checkConstraintIds` for direct
- * callers that skip validate, and in reference-python `_structural_errors`.
+ * Human-readable infeasibility reasons (empty = feasible). The formatter over
+ * {@link validateDetailed}; its strings are the wording contract pinned by the Python reference.
  */
-function structuralErrors(cons: Constraints): string[] {
-  const errs: string[] = [];
+export function validate(cons: Constraints, k: number): string[] {
+  return validateDetailed(cons, k).map(formatReason);
+}
+
+/**
+ * How many distinct structural faults are listed before the rest are summarised. Bounded because
+ * an unbounded list ran `validate` — whose contract is to REFUSE, not throw — out of memory on a
+ * few million invalid pairs.
+ */
+const MAX_STRUCTURAL_REASONS = 16;
+
+/**
+ * Ill-formed roster size or constraint endpoints (unknown ids, self-pairs). Mirrored as throws in
+ * constrainedGreedy's `checkConstraintIds` and in reference-python `_structural_errors`.
+ */
+function structuralReasons(cons: Constraints): Reason[] {
+  // Faulty CONSTRAINTS, not faulty endpoints: a pair naming two unknown people is one invalid
+  // constraint, and counting notes made the refusal say "4 constraints are invalid" about two.
+  let faulty = 0;
+  // Set when a distinct message could not be listed, which is the only thing "only some are
+  // listed" can honestly mean. Counting notes fired it whenever duplicates deduped, so a refusal
+  // that listed every distinct reason still claimed it had held some back.
+  let suppressed = false;
   const n = cons.n;
   if (!Number.isInteger(n) || n < 0) {
-    return [`roster size ${n} is not a valid count`];
+    return [{ code: "roster-invalid", n }];
   }
   if (n > MAX_ROSTER) {
     // Refuse before any n-sized allocation would overflow — validate must not throw.
-    return [`roster size ${n} exceeds the maximum of ${MAX_ROSTER}`];
+    return [{ code: "roster-too-large", n, max: MAX_ROSTER }];
   }
 
+  // Counted always, listed up to the cap, and WHICH ones are listed is the alphabetically
+  // smallest DISTINCT messages rather than the first encountered: `Set` iteration is insertion
+  // order in TS and hash order in the Python mirror, so "the first 16" would make a refusal's
+  // text depend on how the caller built the set and break message parity. ASCII throughout, so
+  // both languages sort alike.
+  const listed: { text: string; reason: Reason }[] = [];
+  const note = (r: Reason) => {
+    const text = formatReason(r);
+    if (listed.length === MAX_STRUCTURAL_REASONS && text >= listed[listed.length - 1].text) {
+      suppressed = true;
+      return;
+    }
+    let at = 0;
+    while (at < listed.length && listed[at].text < text) at++;
+    if (listed[at]?.text === text) return;
+    listed.splice(at, 0, { text, reason: r });
+    if (listed.length > MAX_STRUCTURAL_REASONS) {
+      listed.pop();
+      suppressed = true;
+    }
+  };
   const scan = (pairs: [number, number][]) => {
     for (const [a, b] of pairs) {
+      let bad = false;
       for (const x of [a, b]) {
         if (!Number.isInteger(x) || x < 0 || x >= n) {
-          errs.push(`constraint references unknown person ${x} (roster has ${n})`);
+          note({ code: "unknown-person", person: x, n });
+          bad = true;
         }
       }
-      if (a === b) errs.push(`person ${a} cannot be paired with themselves`);
+      if (a === b) {
+        note({ code: "self-pair", person: a });
+        bad = true;
+      }
+      if (bad) faulty++;
     }
   };
   scan(cons.requiredPairs());
   scan(cons.prohibitedPairs());
   scan(cons.priorPairs());
+  const errs: Reason[] = listed.map((e) => e.reason);
+  if (suppressed) errs.push({ code: "too-many-invalid-constraints", count: faulty });
   return errs;
 }
 
 /**
- * Refuse when the allowed-pairs graph (all non-prohibited pairs) is itself
- * disconnected — then no edge selection can ever connect everyone. A necessary
- * condition only; degree-budget infeasibility is handled elsewhere.
+ * Refuse when the allowed-pairs graph is itself disconnected — no edge selection can then connect
+ * everyone. A necessary condition only; degree-budget infeasibility is handled elsewhere.
  */
-function connectivityErrors(cons: Constraints): string[] {
-  // With nothing prohibited the allowed graph is complete, hence connected —
-  // skip the O(n^2) walk (the common case, and keeps validate cheap at scale).
+function connectivityReasons(cons: Constraints): Reason[] {
+  // Nothing prohibited ⇒ the allowed graph is complete, so skip the O(n²) walk in the common case.
   if (cons.prohibitedCount === 0) return [];
   const n = cons.n;
   const seen = new Uint8Array(n);
@@ -287,7 +404,5 @@ function connectivityErrors(cons: Constraints): string[] {
   }
   if (reached === n) return [];
   const stranded = seen.indexOf(0);
-  return [
-    `prohibited pairs split the group — person ${stranded} can never be connected to everyone`,
-  ];
+  return [{ code: "prohibited-splits-group", person: stranded }];
 }

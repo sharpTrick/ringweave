@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildBuddyGraph } from "ringweave";
 import { DEFAULT_SETTINGS, viewFromResult, type Settings } from "../src/model";
+import { MAX_CONSTRAINT_PAIRS } from "../src/constraints";
+import { generateResult } from "./helpers";
 import { exportGraph, exportGraphJson } from "../src/io/exportGraph";
-import { importGraph, MAX_IMPORT_N } from "../src/io/importGraph";
-import { parseRoster } from "../src/io/parseRoster";
+import { importGraph, ImportError, MAX_IMPORT_N } from "../src/io/importGraph";
+import { MAX_NAME_CHARS, parseRoster } from "../src/io/parseRoster";
+import { clampText } from "../src/io/clamp";
 import { degreeLabel, quality, BUDDY_MIN, BUDDY_MAX, MAX_ROSTER_N, SEPARATION_MIN, SEPARATION_MAX, SEPARATION_DEFAULT, SEED_MAX } from "../src/model";
 
 function names(n: number): string[] {
@@ -18,10 +20,9 @@ describe("export -> import round-trip (F6)", () => {
   it("reproduces identical graph and metrics", () => {
     const settings: Settings = { ...DEFAULT_SETTINGS, buddies: 4 };
     const roster = names(30);
-    const result = buildBuddyGraph(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const view = viewFromResult(roster, settings, result);
+    const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
+    const view = viewFromResult(roster, settings, [], [], result);
 
-    // Serialize through JSON (the real boundary) and back.
     const roundTripped = importGraph(JSON.parse(exportGraphJson(view)));
 
     expect(roundTripped.names).toEqual(view.names);
@@ -33,8 +34,8 @@ describe("export -> import round-trip (F6)", () => {
   it("exports canonical (u<v), sorted edges", () => {
     const settings = { ...DEFAULT_SETTINGS };
     const roster = names(20);
-    const result = buildBuddyGraph(roster.length, settings.buddies, { seed: settings.seed, polish: false });
-    const file = exportGraph(viewFromResult(roster, settings, result));
+    const result = generateResult(roster.length, settings.buddies, { seed: settings.seed, polish: false });
+    const file = exportGraph(viewFromResult(roster, settings, [], [], result));
     for (const [a, b] of file.edges) expect(a).toBeLessThan(b);
     const flat = file.edges.map(([a, b]) => a * 1000 + b);
     expect(flat).toEqual([...flat].sort((x, y) => x - y));
@@ -52,9 +53,8 @@ describe("export -> import round-trip (F6)", () => {
 describe("import hardening (adversarial files)", () => {
   const people = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i, name: `P${i}` }));
 
-  // Invariant: import is capped to the SAME ceiling as generation because it re-measures
-  // synchronously on the main thread — raising MAX_IMPORT_N above MAX_ROSTER_N would reintroduce
-  // an O(n^2) freeze on load. Guard the equality so the two can't silently drift apart.
+  // Import re-measures synchronously on the main thread, so raising MAX_IMPORT_N above
+  // MAX_ROSTER_N would reintroduce an O(n^2) freeze on load.
   it("caps import at exactly the generation ceiling (MAX_IMPORT_N === MAX_ROSTER_N)", () => {
     expect(MAX_IMPORT_N).toBe(MAX_ROSTER_N);
     // and the boundary is enforced: n = ceiling accepted, n = ceiling + 1 refused
@@ -75,8 +75,6 @@ describe("import hardening (adversarial files)", () => {
   });
 
   it("rejects a DENSE graph (avg degree beyond a buddy graph) before layout/render", () => {
-    // A near-complete graph passes the node cap but would freeze force layout + SVG render
-    // (one <line> per edge). The density cap rejects it arithmetically, before building.
     const n = 430;
     const edges: [number, number][] = [];
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) edges.push([i, j]); // K430, ~92k edges
@@ -94,8 +92,6 @@ describe("import hardening (adversarial files)", () => {
     expect(view.metrics.regular).toBe(true); // a ring is 2-regular
   });
 
-  // Class: an imported graph whose real degree differs from a declared settings.buddies
-  // must be scored and labeled from the ACTUAL graph, never from the declared target.
   it("scores quality and labels degree from the actual graph, not settings.buddies", () => {
     const cycle6: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]];
     const v = importGraph({ version: 1, people: people(6), edges: cycle6, settings: { buddies: 4, seed: 1, polish: "auto" } });
@@ -115,9 +111,6 @@ describe("import hardening (adversarial files)", () => {
   });
 });
 
-// Class: a disconnected or degenerate imported graph must never read as optimal or
-// "everyone's well-linked". aspl/diameter are undefined over unreachable pairs (null),
-// quality is 0, and connectivity is surfaced honestly.
 describe("import: disconnected / degenerate graphs are scored honestly", () => {
   const disconnected: Array<{ why: string; n: number; edges: [number, number][]; lcf: number }> = [
     { why: "two disjoint triangles (regular)", n: 6, edges: [[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3]], lcf: 0.5 },
@@ -163,16 +156,41 @@ describe("import: disconnected / degenerate graphs are scored honestly", () => {
   });
 });
 
-// Class: untrusted file fields must not flow unclamped into generation cost — a crafted
-// high-degree import must not let a later reroll inject k up to n-1 and hang the worker.
 describe("import: untrusted settings are clamped to the UI range", () => {
   const star = (n: number): [number, number][] => Array.from({ length: n - 1 }, (_, i) => [0, i + 1]);
 
-  it("a star graph's degree-(n-1) fallback is clamped to BUDDY_MAX", () => {
+  it("refuses a star graph outright rather than clamping its settings", () => {
     const n = 200;
-    const v = importGraph({ version: 1, people: peopleOf(n), edges: star(n) }); // no settings block
-    expect(v.settings.buddies).toBe(BUDDY_MAX); // clamped from degree 199
-    expect(v.settings.buddies).toBeGreaterThanOrEqual(BUDDY_MIN);
+    expect(() => importGraph({ version: 1, people: peopleOf(n), edges: star(n) })).toThrow(
+      /more than the 12 a buddy graph allows/,
+    );
+    // Still accepted at the boundary, so the gate refuses hubs and not buddy graphs.
+    const legal = importGraph({
+      version: 1,
+      people: peopleOf(n),
+      edges: Array.from({ length: BUDDY_MAX }, (_, i) => [0, i + 1] as [number, number]),
+    });
+    expect(legal.settings.buddies).toBe(BUDDY_MAX);
+    expect(legal.settings.buddies).toBeGreaterThanOrEqual(BUDDY_MIN);
+  });
+
+  it("bounds the text every buddy-label sink has to materialize", () => {
+    const n = 300;
+    const hugeName = "x".repeat(500);
+    expect(() =>
+      importGraph({
+        version: 1,
+        people: [{ id: 0, name: hugeName }, ...peopleOf(n).slice(1)],
+        edges: [[0, 1]],
+      }),
+    ).toThrow(/A name is too long/);
+    expect(() => importGraph({ version: 1, people: peopleOf(3), edges: [] })).not.toThrow();
+    try {
+      importGraph({ version: "A".repeat(100_000) });
+      throw new Error("expected a refusal");
+    } catch (err) {
+      expect((err as Error).message.length).toBeLessThan(200);
+    }
   });
 
   it("a declared oversized buddies is clamped to BUDDY_MAX", () => {
@@ -189,9 +207,6 @@ describe("import: untrusted settings are clamped to the UI range", () => {
     }
   });
 
-  // Class: an INVALID (non-integer) minSeparation must fall back to the one canonical default
-  // both Settings producers agree on (SEPARATION_DEFAULT), not to SEPARATION_MIN — otherwise a
-  // later reroll of the import would generate with a different separation than the panel shows.
   it("an invalid minSeparation falls back to SEPARATION_DEFAULT (single source with the panel)", () => {
     for (const decl of [2.5, Number.NaN, "5" as unknown as number]) {
       const v = importGraph({ version: 1, people: peopleOf(6), edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], settings: { buddies: 2, minSeparation: decl, seed: 1, polish: "auto" } });
@@ -203,8 +218,8 @@ describe("import: untrusted settings are clamped to the UI range", () => {
 describe("import: lossless round-trip and defaults", () => {
   const cycle = (nm: string[]): [number, number][] => nm.map((_, i) => [i, (i + 1) % nm.length]);
 
-  // Class: import must only ACCEPT names that survive the comma/newline roster editor, so an
-  // Edit→regenerate can't drop/split/merge people. Anything that wouldn't round-trip is refused.
+  // Import must only accept names that survive the roster editor, so that an Edit->regenerate
+  // cannot drop, split or merge people.
   it("refuses names that wouldn't survive the roster editor", () => {
     const badRosters: string[][] = [
       ["Alice", "   ", "Bob"],       // whitespace-only -> dropped
@@ -217,13 +232,14 @@ describe("import: lossless round-trip and defaults", () => {
     ];
     for (const nm of badRosters) {
       const people = nm.map((name, id) => ({ id, name }));
-      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow();
+      // Assert the TYPE, not merely "something threw": a bare .toThrow() also passes when the
+      // test itself throws a TypeError, which would hide the case it means to cover.
+      expect(() => importGraph({ version: 1, people, edges: cycle(nm) })).toThrow(ImportError);
     }
   });
 
-  // Class: a name with an embedded control char (tab/CR/…) is a spreadsheet-injection vector —
-  // it isn't a comma/newline here, so it would survive into the buddy list/CSV/clipboard and
-  // split a pasted line into a live-formula cell/row. Import refuses it at the authority.
+  // A tab or CR is a spreadsheet-injection vector: it is not a comma or newline here, so it would
+  // survive into the buddy list/CSV/clipboard and split a pasted line into a formula cell.
   it("refuses a name containing a tab, CR, or other control character", () => {
     const hostile = [
       "foo\t=cmd(1)",             // tab -> a tab-delimited paste splits off `=cmd(1)...`
@@ -243,13 +259,75 @@ describe("import: lossless round-trip and defaults", () => {
     expect(parseRoster(view.names.join("\n")).names).toEqual(view.names);
   });
 
-  // Class: an otherwise-valid but collectively over-long roster gets a SIZE reason, not the
-  // misleading commas/uniqueness message — the length check runs before the round-trip check.
   it("refuses an over-long roster with a size reason, not a commas/uniqueness one", () => {
     const long = Array.from({ length: 900 }, (_, i) => "x".repeat(600) + i);
     const people = long.map((name, id) => ({ id, name }));
     const edges = long.map((_, i) => [i, (i + 1) % long.length] as [number, number]);
     expect(() => importGraph({ version: 1, people, edges })).toThrow(/too long/i);
+  });
+
+  it("never refuses a file whose people are exactly what parseRoster emitted", () => {
+    // Swept across the boundary rather than asserted at one length: the two units differ by a
+    // factor of two for astral characters, so a single case can sit on either side by luck.
+    for (let points = MAX_NAME_CHARS - 3; points <= MAX_NAME_CHARS + 3; points++) {
+      const parsed = parseRoster(["\u{1F600}".repeat(points), "Ana", "Ben", "Chen"].join("\n"));
+      const people = parsed.names.map((name, id) => ({ id, name }));
+      expect(() => importGraph({ version: 1, people, edges: [[0, 1], [1, 2], [2, 3], [3, 0]] }))
+        .not.toThrow();
+      // ...and the gate is live, not vacuous: one code point past the limit is still refused.
+      const over = "\u{1F600}".repeat(MAX_NAME_CHARS + 1);
+      expect(() =>
+        importGraph({ version: 1, people: [{ id: 0, name: over }, ...peopleOf(3).slice(1)], edges: [] }),
+      ).toThrow(/A name is too long/);
+    }
+  });
+
+  it("clamps display text without splitting a surrogate pair", () => {
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    for (let max = 1; max <= 12; max++) {
+      for (const text of ["\u{1F600}".repeat(20), `Ana\u{1F600}${"\u{1F1EF}\u{1F1F5}".repeat(8)}`]) {
+        const out = clampText(text, max);
+        expect(out).not.toMatch(lone);
+        // ...and it still truncates: the fix must not have turned the clamp into a pass-through.
+        expect(Array.from(out).length).toBeLessThanOrEqual(max + 1); // + the ellipsis
+      }
+    }
+    expect(clampText("short", 10)).toBe("short");
+  });
+
+  it("bounds every error message it can throw, whatever the file contains", () => {
+    const huge = "A".repeat(200_000);
+    const list = Array.from({ length: 20_000 }, (_, i) => i);
+    for (const endpoint of [huge, list, { deep: huge }] as unknown[]) {
+      try {
+        importGraph({ version: 1, people: peopleOf(3), edges: [[endpoint, 0]] });
+        throw new Error("expected a refusal");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ImportError);
+        expect((err as Error).message.length).toBeLessThan(500);
+      }
+    }
+    try {
+      importGraph({ version: 1, people: [{ id: 0, name: huge }, ...peopleOf(3).slice(1)], edges: [] });
+      throw new Error("expected a refusal");
+    } catch (err) {
+      expect((err as Error).message.length).toBeLessThan(500);
+    }
+  });
+
+  it("refuses a name that is not well-formed UTF-16, however it got there", () => {
+    expect(() => importGraph({
+      version: 1,
+      people: [{ id: 0, name: "ab\uD83D" }, ...peopleOf(3).slice(1)],
+      edges: [],
+    })).toThrow(/name/i);
+    // The guard is about UNPAIRED surrogates only: a well-formed pair is one code point outside
+    // Cs, so every emoji still imports.
+    expect(() => importGraph({
+      version: 1,
+      people: [{ id: 0, name: "ab\u{1F600}" }, ...peopleOf(3).slice(1)],
+      edges: [],
+    })).not.toThrow();
   });
 
   it("a file with no settings.seed falls back to the shared DEFAULT_SEED", () => {
@@ -267,8 +345,8 @@ describe("import: lossless round-trip and defaults", () => {
 
 describe("file schema stays in sync with Metrics", () => {
   it("meta.metrics has exactly the keys of a produced Metrics object", () => {
-    const r = buildBuddyGraph(20, 4, { seed: 1, polish: false });
-    const view = viewFromResult(names(20), DEFAULT_SETTINGS, r);
+    const r = generateResult(20, 4, { seed: 1, polish: false });
+    const view = viewFromResult(names(20), DEFAULT_SETTINGS, [], [], r);
     const file = exportGraph(view);
     expect(Object.keys(file.meta.metrics).sort()).toEqual(Object.keys(view.metrics).sort());
   });
@@ -278,7 +356,6 @@ describe("import: validation & sanitization", () => {
   const square: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 0]];
 
   it("sanitizes a malformed settings.buddies so quality is never NaN or falsely 1.0", () => {
-    // A 4-cycle is k=2; a hand-edited file declaring buddies:"7" (or 0) must not read as optimal.
     for (const buddies of ["7", 0, -1, 1.5, NaN] as unknown[]) {
       const v = importGraph({ version: 1, people: peopleOf(4), edges: square, settings: { buddies } });
       expect(Number.isInteger(v.settings.buddies)).toBe(true);
@@ -289,15 +366,46 @@ describe("import: validation & sanitization", () => {
     }
   });
 
-  it("refuses a constraint-bearing file rather than silently dropping constraints", () => {
+  it("round-trips buddy rules instead of dropping them", () => {
+    const view = importGraph({
+      version: 1,
+      people: peopleOf(4),
+      edges: square,
+      constraints: { required: [[0, 1]], prohibited: [[0, 2]] },
+    });
+    expect(view.constraints).toEqual([
+      { a: 0, b: 1, kind: "required" },
+      { a: 0, b: 2, kind: "prohibited" },
+    ]);
+    // Import rehydrates edges rather than regenerating, so nothing measured the rules.
+    // Null must read as "not measured", never as "all satisfied".
+    expect(view.report).toBeNull();
+    expect(exportGraph(view).constraints).toEqual({ required: [[0, 1]], prohibited: [[0, 2]] });
+  });
+
+  it("refuses malformed buddy rules rather than skipping them", () => {
+    const withRules = (constraints: unknown) => () =>
+      importGraph({ version: 1, people: peopleOf(4), edges: square, constraints });
+
+    expect(withRules({ required: [[0, 9]], prohibited: [] })).toThrow(/outside 0\.\.3/);
+    expect(withRules({ required: [[0, 0]], prohibited: [] })).toThrow(/themselves/i);
+    expect(withRules({ required: [[0, 1], [1, 0]], prohibited: [] })).toThrow(/twice/i);
+    expect(withRules({ required: [[0, 1]], prohibited: [[1, 0]] })).toThrow(/both/i);
+    expect(withRules({ required: [[0]], prohibited: [] })).toThrow(/\[a, b\] pair/);
+    expect(withRules({ required: "nope", prohibited: [] })).toThrow(/aren't a list/);
+    expect(withRules({ required: [[0.5, 1]], prohibited: [] })).toThrow(/outside 0\.\.3/);
+  });
+
+  it("caps the number of buddy rules before doing any per-pair work", () => {
+    const many = Array.from({ length: MAX_CONSTRAINT_PAIRS + 1 }, () => [0, 1]);
     expect(() =>
       importGraph({
         version: 1,
         people: peopleOf(4),
         edges: square,
-        constraints: { required: [[0, 1]], prohibited: [] },
+        constraints: { required: many, prohibited: [] },
       }),
-    ).toThrow(/constraint/i);
+    ).toThrow(/the limit is 200/);
   });
 
   it("rejects people whose id disagrees with their position", () => {

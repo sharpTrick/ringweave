@@ -1,0 +1,396 @@
+{
+  "target": "app/src",
+  "round": 13,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 6,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under app/src (App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, io/*, state/*, worker/*, graph/*, panels/*) plus the 29-file app test suite (277 tests, green baseline). Reproduced with scratch harnesses in /home/user/ringweave/.review-scratch/cc5/: (a) 500-trial constrained+unconstrained fuzz recomputing isConnected/largestComponentFraction/allPairsSummary/degrees from view.edges and comparing against view.metrics and report.reqViolations/prohViolations — no lie found; (b) export->import round trip across k=2..12 x n in {k+1,k+2,k+3,20,33,64} x minSeparation in {undefined,2,5,12} — metrics/buddies/settings identical, degreeMax never exceeded BUDDY_MAX; (c) App driven in jsdom with a stubbed generation worker for reroll/cancel/error/export sequences; (d) editor pre-flight cost at the 1000-name x 200-rule ceiling (parse 1.1ms, resolve 0.7ms, validateDetailed sub-ms). Traced determinism: no Math.random/Date.now in app/src; every Set/Map is membership-only or deterministically ordered; importGraph sorts adjacency and uses g.edgeList(); lib shortestPath breaks ties on min so route reconstruction is edge-insertion-order-free. Traced boundaries: n=k+1, n=1 and n=2 imports, edgeless/disconnected imports, k=0/1 Moore-bound degeneracy (asplGap returns 0 but assembleMetrics's connected gate makes quality=1 unreachable), SEED_MAX wrap, and the MAX_NAMES / MAX_CONSTRAINT_PAIRS / MAX_IMPORT_N / ANIM_MAX_N / FORCE_MAX_* comparisons. Traced worker lifecycle (stale-id drop, swapWorker supersession, loadView clearing pending, consumed guard) and the spreadsheet-injection sinks.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read the whole of app/src (App.tsx, model.ts, constraints.ts, graph/{GraphCanvas,layout,highlight}.ts, io/{importGraph,exportGraph,parseRoster,feasibility,schema,clamp,readFileText,download,constraintMessages}.ts, state/{useBuddyGraph,useGenerationWorker,useGraph,usePathFinder,useExplorerHistory,useEscape,useFocusRescue,useNotice}.ts, worker/{generate,generate.worker,protocol}.ts, panels/*.tsx, neighborhood.ts, search.ts, sample.ts) plus app/CLAUDE.md, docs/PROJECT_PLAN.md and docs/REVIEW_PROTOCOL.md for scope/process, and cross-checked against lib/src/core/index.ts for what is and isn't exported.\n\nAttempted two concrete extensions against the real files rather than reading down a checklist:\n\n(1) F9's 'Recalculate with minimal disruption' / the already-documented 'buddy rules re-checked on import' follow-on — traced the call graph for wiring a constraint re-check into importGraph.ts (which currently sets report:null). The only function that computes {reqViolations, prohViolations, connected, priorsKeptFraction, refusals} against an existing Graph+Constraints is `buildReport` in lib/src/core/index.ts, and it is NOT exported (grep of the export list at lines 14-55 confirms). Implementing the follow-on therefore requires lib-first work (export a check function) before any app-side call-site change — this is the architecture working as documented ('if a number is missing, add it to the core, not here'), not a fan-out across modules that shouldn't know about each other, so I am not filing it as a boundary violation.\n\n(2) Attempted to reason through extending GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor triple for a selection-dependent (focus/ego) layout, per the lens's explicit instruction to try the declared seam. app/CLAUDE.md's 'Known follow-ons' section already records this exact attempt in detail (four concrete blockers: focus keyed off hovered??selected causing snap-not-tween, mock radii clipping the FIT_MODES frame, undefined-focus-with-nothing-selected, and positionsFor's signature change touching every call site plus graphCanvasFit.test.ts) and states the finding tally (8 findings/6 rounds, all suggestion, zero blocking), explicitly declining to build the feature just to retire the seam as sunk-cost reasoning. I re-derived the same blockers independently by reading GraphCanvas.tsx:115-190 and layout.ts and found nothing beyond what is already filed there, so re-filing would be re-labeling an already-recorded deferral rather than a new finding.\n\nAlso checked: whether App.tsx has become a god component (it is ~460 lines but is composition-only — 9 extracted hooks own all business logic; the state it does hold is each individually justified in its own comment trail) — no SRP violation found. Checked neighborhood.ts's documented BFS-avoidance exception against BUDDY_MAX=12 — the invariant it claims (degree never exceeds BUDDY_MAX on any path feeding it) still holds: importGraph.ts:267-272 gates degreeMax > BUDDY_MAX before producing a view. Checked constraints.ts (toConstraints/toNamedPairs/resolveNamedPairs) for a tag-policy-shaped seam — no tag UI exists in app/src (grep for tag|Tag returns nothing), consistent with the documented P2/no-caller deferral. Checked worker/protocol.ts's GenerateOptions — confirmed it genuinely has no priorWeight/priorHard field, and grep for priorWeight|priorHard|addPrior across app/src returns only two comments explaining the absence, matching the CLAUDE.md deferral note (no live caller, so per the mechanical no-caller test this stays a recorded deferral, not a gap to file).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "All source files under app/src (52 TypeScript/TSX files), all test files (29 test suites, all passing), lint passes clean. Read through: App.tsx, model.ts, constraints.ts, state hooks (useBuddyGraph, useGenerationWorker, usePathFinder, useExplorerHistory, useFocusRescue, useEscape, useGraph, useNotice), worker protocol and generation, panels (RosterModal, PersonPanel, PathPanel, BuddyList, QualityPanel, ConstraintsEditor, PersonSearch, SettingsControls, LayoutToggle), graph layout and highlighting, IO (importGraph, exportGraph, parseRoster, feasibility, search, clamp). All linting (oxlint, knip, hygiene) passes.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full keyboard/announcement path end-to-end from cold load through roster entry, generation, quality readout, search, person/buddy exploration, path-finding, export, and error/refusal recovery, reading (not skimming) App.tsx, RosterModal.tsx, GraphCanvas.tsx, BuddyList.tsx, PersonSearch.tsx, PersonPanel.tsx, PathPanel.tsx, QualityPanel.tsx, LayoutToggle.tsx, ConstraintsEditor.tsx, SettingsControls.tsx, Slips.tsx, Notice.tsx, useEscape.ts, useFocusRescue.ts, useExplorerHistory.ts, useNotice.ts, and app.css's reduced-motion rule, plus the existing appErrorRecovery.test.tsx suite (which already asserts focus-rescue behavior for every OTHER modal-open/reopen path). Verified aria-pressed on the layout toggle, aria-current on buddy-list rows, live-region pre-mounting for all six transient-text producers, the reduced-motion gate inside GraphCanvas's JS rAF tween (not just CSS), and canvas keyboard non-interactivity being intentionally offloaded to the buddy list. Confirmed the one gap found via a throwaway jsdom probe in `.review-scratch`/`app/test` (run then removed) asserting `document.activeElement` after `render(<App />)`.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-security",
+      "reason": "saturated (4 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 4,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (4 quiet rounds), surface untouched"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "App commits a synthesized value (advanced seed) into shared settings state at dispatch time instead of letting the existing view-derived effect be the single writer, so a non-successful reroll leaves the UI showing a seed the on-screen graph was never built with",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "handleReroll commits the advanced seed (view.settings.seed + 1) into App's `settings` at dispatch time, but the seed is only reconciled by the `if (view) setSettings(view.settings)` effect when a NEW view is adopted — so a reroll that is cancelled, errors, or is refused leaves the Advanced -> Seed field showing a seed the graph on screen was not built with, contradicting the exported file."
+      ],
+      "remediation": "Delete the eager `setSettings(s)` call inside handleReroll; keep `setNames`/`setConstraintRows` (which already copy verbatim view values), and let the pre-existing `useEffect(() => { if (view) setSettings(view.settings) }, [view])` be the sole writer of settings, so the seed field updates only when a reroll actually produces a new view."
+    },
+    {
+      "theme": "a character-counting routine mixes two units of length (Unicode code points vs UTF-16 code units) across the same computation, so the arithmetic is only correct for BMP-only input",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`matchNormalized` iterates the query by code point (`for (const ch of needle)`) but records UTF-16 offsets in `positions`, so `spread()` — which subtracts `positions.length - 1`, a code-POINT count, from a code-UNIT span — over-reports scatter for any name containing a non-BMP character, and the documented \"0 when the matched characters are adjacent\" is false there."
+      ],
+      "remediation": "Normalize once with `Array.from(name.toLowerCase())` and scan that code-point array directly, pushing code-point indices and advancing `at` by 1 per matched point, so `positions`, `positions.length`, and `spread` are all expressed in the same unit by construction — this also removes the now-unnecessary mid-surrogate `at = found + 1` special case."
+    },
+    {
+      "theme": "a comment describing a deferred/not-yet-built feature is written in present tense, so a reader cannot tell from the text alone whether the feature already exists in the code below it",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment uses present tense ('is added') to describe a deferred feature, making it unclear whether the feature is currently being implemented."
+      ],
+      "remediation": "Rewrite to conditional/future tense: 'If a future SELECTION-DEPENDENT mode (whose points move per hover/click) were added to LAYOUT_MODES and positionsFor, it would deliberately NOT be added here: folding its per-selection points into the frame would rescale the viewBox on every interaction.'"
+    },
+    {
+      "theme": "the same numeric-clamping logic is implemented a second time in a UI module instead of reusing the one clamp already defined for exactly this purpose, so the two copies can silently diverge",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Local clamp function defined here instead of reusing logic from elsewhere, creating maintenance risk if the pattern needs to change."
+      ],
+      "remediation": "Delete the local clamp in SettingsControls.tsx and import the existing clamp already exported by io/clamp.ts (alongside codePointsIfOver and clampList) at both call sites (SettingsControls and importGraph), leaving one implementation instead of two."
+    },
+    {
+      "theme": "a hook's public state exposes two independently-settable fields for what is really one outcome (failure), so a caller can check one and silently miss the other",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "GenState returns both 'error' (string) and 'refusals' (Reason[]) as separate fields, but status distinguishes only 'error' from 'refused'. A caller checking only status or only one of the error fields could miss a case."
+      ],
+      "remediation": "Remove the separate `error` and `refusals` fields and fold the failure payload into the `status` discriminant itself (e.g. status becomes 'error' | 'refused' carrying its own payload), so there is only one place to check and no way to read one without the other."
+    },
+    {
+      "theme": "a component accepts an index into a caller-owned array without the callee enforcing or the interface documenting the valid range, leaving correctness dependent on unstated caller discipline",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "PersonPanel's index parameter is passed directly to eccentricity(graph, index) without verifying it's in range [0, names.length). Valid range is not documented in the interface."
+      ],
+      "remediation": "Drop the implicit contract: add a single bounds check at the top of PersonPanel that throws/returns early for an out-of-range index, replacing reliance on caller discipline with one enforced boundary instead of documentation the caller must remember to honor."
+    },
+    {
+      "theme": "on cold load the app renders a dialog that is the only reachable content in the document, but the app's sole focus-management mechanism is structurally gated on a prior focus event that cold load never produces, so nothing ever moves focus into it",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "On cold load, modalOpen starts true and #app is immediately marked inert, so RosterModal is the ONLY reachable content in the document — yet nothing ever calls .focus() into it. useFocusRescue is the app's one focus-management mechanism, but it is gated on `hadFocus.current`, which starts false and is only set true by a focusin event — so on the very first paint, before the user has ever focused anything, the rescue's own precondition is unmet by design and it does not run. Every OTHER path that opens or reopens this same dialog (Edit people click, a worker refusal, a first-generation error) DOES land focus inside it; cold load is the one path with no test and no mechanism covering it, and it is also the path every single user hits first."
+      ],
+      "remediation": "Remove the special-case gap by not requiring `hadFocus` to be true before the very first modal-owning render: seed `hadFocus.current = true` ahead of the initial commit when the page loads with `modalOpen` already true, so the existing rescue mechanism (rather than a new bespoke .focus() call) also covers cold load."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "dispatch-time-settings-drift",
+      "theme": "two surfaces that both claim to describe the current graph's settings can disagree after a generation attempt that never produced a graph",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 242,
+      "summary": "handleReroll commits the advanced seed (view.settings.seed + 1) into App's `settings` at dispatch time, but the seed is only reconciled by the `if (view) setSettings(view.settings)` effect when a NEW view is adopted — so a reroll that is cancelled, errors, or is refused leaves the Advanced -> Seed field showing a seed the graph on screen was not built with, contradicting the exported file.",
+      "failure": "Generate 12 people at k=4, seed 12345 -> success. Click \"Different arrangement\" (dispatches seed 12346), then click Cancel on the busy overlay (or let the worker return an error/refusal). The view is unchanged, so the effect never re-runs. Export -> the file's settings.seed is 12345 (correct: it is the seed that produced the displayed edges). Open \"Edit people\" -> Advanced -> Seed reads 12346. Reproduced in .review-scratch/cc5/app2.test.tsx for both the cancel and the error path: \"cancel -> editor seed: 12346 exported seed: 12345\". The App comment at lines 116-126 names exactly this defect (\"the Advanced -> Seed field showing a seed that does not produce the displayed graph\") as the one the current design fixed; the fix covers only the success path. Note the sibling fields do NOT drift: handleReroll copies names and constraints verbatim from the view, so the seed is the only value it synthesises.",
+      "remediation": "Do not commit the synthesised seed to App state at dispatch time. `handleReroll` already reads everything else from `view`; drop `setSettings(s)` (keep `setNames`/`setConstraintRows`, which copy view values verbatim and so cannot drift) and let the existing `useEffect(() => { if (view) setSettings(view.settings) }, [view])` adopt the advanced seed when — and only when — the reroll actually yields a view. That closes the theme for every non-success outcome (cancel, error, refusal, supersession) with one deletion rather than one branch per outcome.",
+      "invariant": "For every reachable App state in which `view !== null` and `bg.status !== \"running\"`, and in which the user has not edited the settings in the roster editor since the last adopted view, `settings` deep-equals `view.settings` — i.e. the Settings the editor is seeded with are exactly the settings that produced the graph on screen and that `exportGraph` writes. Equivalently: no code path may write a settings value into App state that is not either user-entered or taken from an adopted `view`."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unit-mismatch-code-point-vs-code-unit",
+      "theme": "a character limit or offset measured in UTF-16 code units where the surrounding code counts code points",
+      "file": "/home/user/ringweave/app/src/search.ts",
+      "line": 52,
+      "summary": "`matchNormalized` iterates the query by code point (`for (const ch of needle)`) but records UTF-16 offsets in `positions`, so `spread()` — which subtracts `positions.length - 1`, a code-POINT count, from a code-UNIT span — over-reports scatter for any name containing a non-BMP character, and the documented \"0 when the matched characters are adjacent\" is false there.",
+      "failure": "`fuzzyMatch(\"An~o\\u{1F600}b\", \"An~o\\u{1F600}b\")` (a name matched against itself, the tightest possible match) returns positions [0,1,2,4] and `spread()` yields 1, not 0. Reproduced in .review-scratch/cc5/probe6.test.ts. Consequence: in `PersonSearch`, a roster entry that contains an emoji and matches the query contiguously is ranked below an entry whose match is genuinely scattered but starts at the same offset — the exact inversion `spread` exists to prevent. The app's own clamp helper (io/clamp.ts `codePointsIfOver`) documents this unit rule and `parseRoster`/`importGraph` were already fixed for it; `search.ts` is the remaining site. Ordering stays deterministic, so this is a wrong-order defect, not a nondeterminism one, and no existing search test uses a non-BMP name.",
+      "remediation": "Make `matchNormalized` work in one unit. Simplest subtraction: normalize once with `Array.from(name.toLowerCase())` and scan that array, pushing code-POINT indices and advancing `at` by 1 per matched point — then `positions`, `positions.length` and `spread` are all in code points by construction and the special case disappears. (This also removes the incidental `at = found + 1` mid-surrogate advance.)",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "ambiguous-comment-tense",
+      "theme": "Future-tense feature described in present-tense prose creates ambiguity about current state",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 27,
+      "summary": "Comment uses present tense ('is added') to describe a deferred feature, making it unclear whether the feature is currently being implemented.",
+      "failure": "New contributor reading line 27-30 cannot tell whether a selection-dependent layout mode is being added now or is merely planned. The comment says 'A future SELECTION-DEPENDENT mode ... is added to LAYOUT_MODES and positionsFor but deliberately NOT here' — the present tense 'is added' contradicts the future scope established by 'A future ... mode' and the deferred status documented elsewhere.",
+      "remediation": "Rewrite to use conditional/future tense: 'If a future SELECTION-DEPENDENT mode (whose points move per hover/click) were added to LAYOUT_MODES and positionsFor, it would deliberately NOT be added here: folding its per-selection points into the frame would rescale the viewBox on every interaction.'",
+      "invariant": "Comments describing code that is deferred, unbuilt, or in the design phase must use conditional tense ('would', 'if...were', 'when built') to distinguish from comments describing current implementation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "silently-drifting-clamping-logic",
+      "theme": "Numeric clamping pattern duplicated across modules with different names and no single source of truth",
+      "file": "/home/user/ringweave/app/src/panels/SettingsControls.tsx",
+      "line": 11,
+      "summary": "Local clamp function defined here instead of reusing logic from elsewhere, creating maintenance risk if the pattern needs to change.",
+      "failure": "The clamping pattern Math.max(lo, Math.min(hi, x)) appears in multiple places: SettingsControls.tsx (line 11, called 'clamp'), importGraph.ts (line 44, embedded in 'sanitizeInt'), and model.ts (lines 46, 109, 196, inline). If a bug is discovered in clamping logic (e.g., handling of NaN or Infinity), a maintainer might fix one location and miss the others. The local redefinition in SettingsControls makes this silently drifting duplication rather than obvious code sharing.",
+      "remediation": "Move clamp to io/clamp.ts alongside codePointsIfOver and clampList (which are the ONE place for text truncation logic). Export it and import into both SettingsControls and importGraph. Inline uses in model.ts can remain since they serve specific calculations, but the generic clamp should be centralized.",
+      "invariant": "Every generic numeric clamping operation uses a single shared function, not duplicated in multiple modules with different names or inline implementations.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "defensive-index-bounds-check-split-across-modules",
+      "theme": "PersonPanel accepts an index without bounds-checking, relying on caller to have validated it. Not documented.",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 41,
+      "summary": "PersonPanel's index parameter is passed directly to eccentricity(graph, index) without verifying it's in range [0, names.length). Valid range is not documented in the interface.",
+      "failure": "PersonPanel is called from App.tsx line 347 with App.tsx line 79-80 doing the bounds check. If PersonPanel is ever used in a new context (e.g., in a test or in a refactored component), a developer might pass an out-of-bounds index without remembering the check. The type signature { index: number } does not communicate 'this must be in range of the current view'.",
+      "remediation": "Either: (1) add runtime check in PersonPanel and throw a clear error if index is invalid, or (2) document in a JSDoc comment that index must satisfy 0 <= index < view.names.length, and the caller is responsible for validation. Option 1 is safer for maintainability; option 2 is lighter if performance is critical (though at n=1000, one bounds check per selection is negligible).",
+      "invariant": "Any component accepting an array index either validates it internally with a clear error, or documents the precondition in JSDoc with language making clear that the caller is responsible.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-initial-focus",
+      "theme": "a modal dialog that owns the entire accessible surface never receives focus, so nothing tells a keyboard/screen-reader user it opened",
+      "file": "app/src/App.tsx",
+      "line": 51,
+      "summary": "On cold load, modalOpen starts true and #app is immediately marked inert (App.tsx:302), so RosterModal is the ONLY reachable content in the document — yet nothing ever calls .focus() into it. useFocusRescue (state/useFocusRescue.ts) is the app's one focus-management mechanism, but it is gated on `hadFocus.current`, which starts false and is only set true by a focusin event — so on the very first paint, before the user has ever focused anything, the rescue's own precondition is unmet by design and it does not run. I traced every call to `.focus()` in app/src (grep) and the only two are inside useFocusRescue and PersonSearch's `choose()`; RosterModal has no autoFocus/useEffect/.focus() of its own (grepped, no matches). I reproduced this directly: rendering <App/> fresh and asserting `document.activeElement === document.body` returns true even though `screen.getByRole('dialog')` exists and #app carries `inert`. Every OTHER path that opens or reopens this same dialog (Edit people click, a worker refusal, a first-generation error) DOES land focus inside it — verified by the app's own appErrorRecovery.test.tsx (e.g. \"announces WHY the dialog reopened, through the dialog's own description\", which asserts `dialog.contains(document.activeElement)`). Cold load is the one path with no test and no mechanism covering it, and it is also the path every single user hits first.",
+      "failure": "Load the app fresh (no prior interaction). The setup dialog (`role=\"dialog\" aria-modal=\"true\" aria-label=\"Set up your group\"`) is the entire accessible page, but document.activeElement is document.body. A screen reader that announces role/state on focus entry (rather than doing a full linear read-through) never announces that a modal dialog opened, and a sighted keyboard user's first Tab press has to guess that it will land inside a dialog rather than, say, page chrome.",
+      "remediation": "Move initial focus into the dialog (or its first focusable control, i.e. the roster textarea) on the very first mount, not only on later reopens. The cleanest fix is to stop special-casing `hadFocus` for the FIRST render of a modal-owning dialog — e.g. seed `hadFocus.current = true` before the initial commit when the page loads with `modalOpen` already true, or give RosterModal its own mount-time `textareaRef.current?.focus()` the same way every other one-off in this app is handled explicitly rather than relying on the generic rescue.",
+      "invariant": "Whenever `#app` (or any equivalent \"rest of the page\") is `inert` and a `role=\"dialog\"` element is the only non-inert content in the document, `document.activeElement` must be the dialog element or a descendant of it — never `document.body`. This must hold immediately after the first paint that establishes that state, not only after subsequent transitions into it."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "dispatch-time-settings-drift",
+      "theme": "two surfaces that both claim to describe the current graph's settings can disagree after a generation attempt that never produced a graph",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 242,
+      "summary": "handleReroll commits the advanced seed (view.settings.seed + 1) into App's `settings` at dispatch time, but the seed is only reconciled by the `if (view) setSettings(view.settings)` effect when a NEW view is adopted — so a reroll that is cancelled, errors, or is refused leaves the Advanced -> Seed field showing a seed the graph on screen was not built with, contradicting the exported file.",
+      "failure": "Generate 12 people at k=4, seed 12345 -> success. Click \"Different arrangement\" (dispatches seed 12346), then click Cancel on the busy overlay (or let the worker return an error/refusal). The view is unchanged, so the effect never re-runs. Export -> the file's settings.seed is 12345 (correct: it is the seed that produced the displayed edges). Open \"Edit people\" -> Advanced -> Seed reads 12346. Reproduced in .review-scratch/cc5/app2.test.tsx for both the cancel and the error path: \"cancel -> editor seed: 12346 exported seed: 12345\". The App comment at lines 116-126 names exactly this defect (\"the Advanced -> Seed field showing a seed that does not produce the displayed graph\") as the one the current design fixed; the fix covers only the success path. Note the sibling fields do NOT drift: handleReroll copies names and constraints verbatim from the view, so the seed is the only value it synthesises.",
+      "remediation": "Do not commit the synthesised seed to App state at dispatch time. `handleReroll` already reads everything else from `view`; drop `setSettings(s)` (keep `setNames`/`setConstraintRows`, which copy view values verbatim and so cannot drift) and let the existing `useEffect(() => { if (view) setSettings(view.settings) }, [view])` adopt the advanced seed when — and only when — the reroll actually yields a view. That closes the theme for every non-success outcome (cancel, error, refusal, supersession) with one deletion rather than one branch per outcome.",
+      "invariant": "For every reachable App state in which `view !== null` and `bg.status !== \"running\"`, and in which the user has not edited the settings in the roster editor since the last adopted view, `settings` deep-equals `view.settings` — i.e. the Settings the editor is seeded with are exactly the settings that produced the graph on screen and that `exportGraph` writes. Equivalently: no code path may write a settings value into App state that is not either user-entered or taken from an adopted `view`."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unit-mismatch-code-point-vs-code-unit",
+      "theme": "a character limit or offset measured in UTF-16 code units where the surrounding code counts code points",
+      "file": "/home/user/ringweave/app/src/search.ts",
+      "line": 52,
+      "summary": "`matchNormalized` iterates the query by code point (`for (const ch of needle)`) but records UTF-16 offsets in `positions`, so `spread()` — which subtracts `positions.length - 1`, a code-POINT count, from a code-UNIT span — over-reports scatter for any name containing a non-BMP character, and the documented \"0 when the matched characters are adjacent\" is false there.",
+      "failure": "`fuzzyMatch(\"An~o\\u{1F600}b\", \"An~o\\u{1F600}b\")` (a name matched against itself, the tightest possible match) returns positions [0,1,2,4] and `spread()` yields 1, not 0. Reproduced in .review-scratch/cc5/probe6.test.ts. Consequence: in `PersonSearch`, a roster entry that contains an emoji and matches the query contiguously is ranked below an entry whose match is genuinely scattered but starts at the same offset — the exact inversion `spread` exists to prevent. The app's own clamp helper (io/clamp.ts `codePointsIfOver`) documents this unit rule and `parseRoster`/`importGraph` were already fixed for it; `search.ts` is the remaining site. Ordering stays deterministic, so this is a wrong-order defect, not a nondeterminism one, and no existing search test uses a non-BMP name.",
+      "remediation": "Make `matchNormalized` work in one unit. Simplest subtraction: normalize once with `Array.from(name.toLowerCase())` and scan that array, pushing code-POINT indices and advancing `at` by 1 per matched point — then `positions`, `positions.length` and `spread` are all in code points by construction and the special case disappears. (This also removes the incidental `at = found + 1` mid-surrogate advance.)",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "ambiguous-comment-tense",
+      "theme": "Future-tense feature described in present-tense prose creates ambiguity about current state",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 27,
+      "summary": "Comment uses present tense ('is added') to describe a deferred feature, making it unclear whether the feature is currently being implemented.",
+      "failure": "New contributor reading line 27-30 cannot tell whether a selection-dependent layout mode is being added now or is merely planned. The comment says 'A future SELECTION-DEPENDENT mode ... is added to LAYOUT_MODES and positionsFor but deliberately NOT here' — the present tense 'is added' contradicts the future scope established by 'A future ... mode' and the deferred status documented elsewhere.",
+      "remediation": "Rewrite to use conditional/future tense: 'If a future SELECTION-DEPENDENT mode (whose points move per hover/click) were added to LAYOUT_MODES and positionsFor, it would deliberately NOT be added here: folding its per-selection points into the frame would rescale the viewBox on every interaction.'",
+      "invariant": "Comments describing code that is deferred, unbuilt, or in the design phase must use conditional tense ('would', 'if...were', 'when built') to distinguish from comments describing current implementation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "silently-drifting-clamping-logic",
+      "theme": "Numeric clamping pattern duplicated across modules with different names and no single source of truth",
+      "file": "/home/user/ringweave/app/src/panels/SettingsControls.tsx",
+      "line": 11,
+      "summary": "Local clamp function defined here instead of reusing logic from elsewhere, creating maintenance risk if the pattern needs to change.",
+      "failure": "The clamping pattern Math.max(lo, Math.min(hi, x)) appears in multiple places: SettingsControls.tsx (line 11, called 'clamp'), importGraph.ts (line 44, embedded in 'sanitizeInt'), and model.ts (lines 46, 109, 196, inline). If a bug is discovered in clamping logic (e.g., handling of NaN or Infinity), a maintainer might fix one location and miss the others. The local redefinition in SettingsControls makes this silently drifting duplication rather than obvious code sharing.",
+      "remediation": "Move clamp to io/clamp.ts alongside codePointsIfOver and clampList (which are the ONE place for text truncation logic). Export it and import into both SettingsControls and importGraph. Inline uses in model.ts can remain since they serve specific calculations, but the generic clamp should be centralized.",
+      "invariant": "Every generic numeric clamping operation uses a single shared function, not duplicated in multiple modules with different names or inline implementations.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "defensive-index-bounds-check-split-across-modules",
+      "theme": "PersonPanel accepts an index without bounds-checking, relying on caller to have validated it. Not documented.",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 41,
+      "summary": "PersonPanel's index parameter is passed directly to eccentricity(graph, index) without verifying it's in range [0, names.length). Valid range is not documented in the interface.",
+      "failure": "PersonPanel is called from App.tsx line 347 with App.tsx line 79-80 doing the bounds check. If PersonPanel is ever used in a new context (e.g., in a test or in a refactored component), a developer might pass an out-of-bounds index without remembering the check. The type signature { index: number } does not communicate 'this must be in range of the current view'.",
+      "remediation": "Either: (1) add runtime check in PersonPanel and throw a clear error if index is invalid, or (2) document in a JSDoc comment that index must satisfy 0 <= index < view.names.length, and the caller is responsible for validation. Option 1 is safer for maintainability; option 2 is lighter if performance is critical (though at n=1000, one bounds check per selection is negligible).",
+      "invariant": "Any component accepting an array index either validates it internally with a clear error, or documents the precondition in JSDoc with language making clear that the caller is responsible.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-initial-focus",
+      "theme": "a modal dialog that owns the entire accessible surface never receives focus, so nothing tells a keyboard/screen-reader user it opened",
+      "file": "app/src/App.tsx",
+      "line": 51,
+      "summary": "On cold load, modalOpen starts true and #app is immediately marked inert (App.tsx:302), so RosterModal is the ONLY reachable content in the document — yet nothing ever calls .focus() into it. useFocusRescue (state/useFocusRescue.ts) is the app's one focus-management mechanism, but it is gated on `hadFocus.current`, which starts false and is only set true by a focusin event — so on the very first paint, before the user has ever focused anything, the rescue's own precondition is unmet by design and it does not run. I traced every call to `.focus()` in app/src (grep) and the only two are inside useFocusRescue and PersonSearch's `choose()`; RosterModal has no autoFocus/useEffect/.focus() of its own (grepped, no matches). I reproduced this directly: rendering <App/> fresh and asserting `document.activeElement === document.body` returns true even though `screen.getByRole('dialog')` exists and #app carries `inert`. Every OTHER path that opens or reopens this same dialog (Edit people click, a worker refusal, a first-generation error) DOES land focus inside it — verified by the app's own appErrorRecovery.test.tsx (e.g. \"announces WHY the dialog reopened, through the dialog's own description\", which asserts `dialog.contains(document.activeElement)`). Cold load is the one path with no test and no mechanism covering it, and it is also the path every single user hits first.",
+      "failure": "Load the app fresh (no prior interaction). The setup dialog (`role=\"dialog\" aria-modal=\"true\" aria-label=\"Set up your group\"`) is the entire accessible page, but document.activeElement is document.body. A screen reader that announces role/state on focus entry (rather than doing a full linear read-through) never announces that a modal dialog opened, and a sighted keyboard user's first Tab press has to guess that it will land inside a dialog rather than, say, page chrome.",
+      "remediation": "Move initial focus into the dialog (or its first focusable control, i.e. the roster textarea) on the very first mount, not only on later reopens. The cleanest fix is to stop special-casing `hadFocus` for the FIRST render of a modal-owning dialog — e.g. seed `hadFocus.current = true` before the initial commit when the page loads with `modalOpen` already true, or give RosterModal its own mount-time `textareaRef.current?.focus()` the same way every other one-off in this app is handled explicitly rather than relying on the generic rescue.",
+      "invariant": "Whenever `#app` (or any equivalent \"rest of the page\") is `inert` and a `role=\"dialog\"` element is the only non-inert content in the document, `document.activeElement` must be the dialog element or a descendant of it — never `document.body`. This must hold immediately after the first paint that establishes that state, not only after subsequent transitions into it."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "public-api-has-two-error-paths",
+      "theme": "Hook's public return type has separate error representations that are easy to check incompletely",
+      "file": "/home/user/ringweave/app/src/state/useGenerationWorker.ts",
+      "line": 19,
+      "summary": "GenState returns both 'error' (string) and 'refusals' (Reason[]) as separate fields, but status distinguishes only 'error' from 'refused'. A caller checking only status or only one of the error fields could miss a case.",
+      "failure": "Return type GenState has { status, error, refusals } where status is 'error' | 'refused' (distinct). A caller reading the hook's return type without understanding the protocol might write: if (!bg.error) { proceed() } and miss refusals. Or worse, might check status === 'done' && !bg.error and incorrectly treat a refused generation as successful if there's no error string. The hook works correctly in its only caller (App.tsx), but the type signature invites incomplete checking.",
+      "remediation": "Collapse error representation to a tagged union in the return type instead of separate fields: { status: 'done' | 'running' | 'idle' | { kind: 'error', error: string } | { kind: 'refused', refusals: Reason[] } }. Or document explicitly in a JSDoc comment that error and refusals must be checked via status, not independently.",
+      "invariant": "Any hook or function returning multiple error/failure modes must make the failure kind unambiguous — either via a tagged union or a single discriminant field that proves which error representation is populated.",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 4,
+      "lastRound": 13,
+      "skipped": true
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 13,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 499146,
+    "agents": 5,
+    "toolCalls": 157
+  }
+}

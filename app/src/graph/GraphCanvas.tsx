@@ -3,18 +3,19 @@ import { select } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { forceLayout, ringLayout, type Pt } from "./layout";
 
+/** Above this n a layout change snaps: the tween re-renders every node and edge, every frame. */
+const ANIM_MAX_N = 400;
+import { buildHighlight, edgeClass, nodeClass } from "./highlight";
+
 export type LayoutMode = "ring" | "force";
 
-/** Every user-selectable layout mode (what the toggle offers). Readonly — it's the single
-    load-bearing source of the mode set, so a consumer must not be able to mutate it app-wide. */
+/** Every user-selectable layout mode; LayoutToggle renders one button per entry. */
 export const LAYOUT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
 /**
- * The POSITION-STABLE layouts whose union defines the fixed viewBox (`fit`) — the ones whose
- * points depend only on the graph, not on the current selection. A future SELECTION-DEPENDENT
- * mode (F8 focus, whose points move per hover/click) is added to `LAYOUT_MODES` and `positionsFor`
- * but deliberately NOT here: folding its per-selection points into the frame would rescale the
- * viewBox on every interaction, defeating the fixed-frame invariant (see graphCanvasFit test).
+ * The POSITION-STABLE subset, whose union defines the fixed viewBox. A SELECTION-DEPENDENT mode
+ * must stay out: folding its per-selection points into the frame rescales the viewBox on every
+ * interaction.
  */
 export const FIT_MODES = ["ring", "force"] as const satisfies readonly LayoutMode[];
 
@@ -23,12 +24,9 @@ function assertNever(x: never): never {
 }
 
 /**
- * The ONE place a layout mode maps to its display positions. Force falls back to ring until its
- * (lazily computed) settle exists. Consumed by the render `target`, the animation destination, and
- * `fit`, so those three can never disagree. EXHAUSTIVE over LayoutMode via assertNever: a future
- * selection-keyed mode (F8 focus) added to LAYOUT_MODES will fail to COMPILE here until it gets a
- * branch — a loud single-seam edit, not a silent ring fallback. (It stays out of FIT_MODES so it
- * can't perturb the fixed frame.)
+ * The ONE place a layout maps to display positions — the render target, the animation destination
+ * and `fit` all read it, so they cannot disagree. Exhaustive via `assertNever`, so a new mode
+ * fails to COMPILE here rather than silently falling back to ring.
  */
 export function positionsFor(layout: LayoutMode, ringPos: Pt[], forcePos: Pt[] | null): Pt[] {
   switch (layout) {
@@ -44,13 +42,15 @@ export function positionsFor(layout: LayoutMode, ringPos: Pt[], forcePos: Pt[] |
 interface GraphCanvasProps {
   names: string[];
   edges: [number, number][];
-  /** The buddy list (`view.buddies`) under a graph-generic name — used for hover glow. */
+  /** `view.buddies` under a graph-generic name. */
   adjacency: number[][];
   layout: LayoutMode;
   selected: number | null;
   hovered: number | null;
   onSelect: (i: number | null) => void;
   onHover: (i: number | null) => void;
+  /** An active route to light, or null. Takes precedence over hover — see buildHighlight. */
+  route?: number[] | null;
 }
 
 const VB_W = 800;
@@ -63,8 +63,8 @@ interface Fit {
   cy: number;
 }
 
-/** A stable normalized->pixel transform covering both layouts, so points move but the
-    frame doesn't rescale mid-animation. Pure (no state) — exported for framing tests. */
+/** One normalized->pixel transform covering both layouts, so points move but the frame does not
+    rescale mid-animation. */
 export function computeFit(pts: Pt[]): Fit {
   if (pts.length === 0) return { s: 1, cx: VB_W / 2, cy: VB_H / 2 };
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -87,30 +87,22 @@ function reducedMotion(): boolean {
 }
 
 export default function GraphCanvas({
-  names, edges, adjacency, layout, selected, hovered, onSelect, onHover,
+  names, edges, adjacency, layout, selected, hovered, onSelect, onHover, route,
 }: GraphCanvasProps) {
   const n = names.length;
   const ringPos = useMemo(() => ringLayout(n), [n]);
-  // Compute the force settle LAZILY — only when the force layout is on. A ring-mode view (the
-  // default) and every re-roll while in ring mode then pay nothing, so the synchronous settle
-  // (bounded but non-trivial at large n) never runs unless the user actually asks for force.
+  // LAZY: the settle is synchronous, so ring mode and every ring-mode re-roll must not pay it.
   // `layout` is a dep, so switching to force computes it in the same render (never null then).
   const forcePos = useMemo(() => (layout === "force" ? forceLayout(n, edges) : null), [layout, n, edges]);
 
-  // Keep the union frame STABLE across ring<->force toggles. `forcePos` is null in ring mode
-  // (the settle is deferred), so framing off it alone would collapse the frame back to ring on
-  // every toggle and re-pop the scale. Instead, remember the force settle once computed for THIS
-  // graph (keyed on the edges identity, which changes only on a new graph) and frame the union
-  // from that — so a return to ring keeps the same frame. The first switch to force reframes once
-  // (unavoidable without settling eagerly, which we avoid to keep ring mode cheap); after that,
-  // toggling only pans. A new graph invalidates the cache back to a ring-only frame.
+  // `forcePos` is null in ring mode, so framing off it alone collapses the frame back to ring on
+  // every toggle and re-pops the scale. Remembering the settle for THIS graph (keyed on the edges
+  // identity) keeps the frame across toggles.
   const forceFitRef = useRef<{ edges: [number, number][]; pts: Pt[] } | null>(null);
   if (forcePos && forceFitRef.current?.edges !== edges) {
     forceFitRef.current = { edges, pts: forcePos };
   }
   const forceForFit = forceFitRef.current?.edges === edges ? forceFitRef.current.pts : null;
-  // Frame the union of the POSITION-STABLE layouts (FIT_MODES) so a settled toggle pans within a
-  // fixed viewBox; a selection-dependent mode is excluded so it can't rescale the frame per click.
   const fit = useMemo(
     () => computeFit(FIT_MODES.flatMap((m) => positionsFor(m, ringPos, forceForFit))),
     [ringPos, forceForFit],
@@ -122,17 +114,12 @@ export default function GraphCanvas({
   displayRef.current = display;
 
   const rafRef = useRef(0);
-  // A cheap size fingerprint, not a full graph identity: it changes when the roster size
-  // or edge count changes, which is enough to force a snap when `to`/`from` differ in
-  // length. A same-size re-roll (same n, same edge count, different edges) is NOT caught
-  // here — it still snaps correctly because a re-roll doesn't change `layout`, so the
-  // `!layoutChanged` branch below fires. Only a layout toggle animates.
+  // A size fingerprint, not a graph identity: a same-size re-roll is NOT caught here, and snaps
+  // only because a re-roll leaves `layout` unchanged and the `!layoutChanged` branch fires.
   const sizeKey = `${n}:${edges.length}`;
   const prevSize = useRef(sizeKey);
   const prevLayout = useRef(layout);
 
-  // Animate (cubic ease, ~650ms) only on a layout toggle at a stable size; otherwise snap
-  // (new/resized graph, same-size re-roll, or reduced-motion).
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
     const to = positionsFor(layout, ringPos, forcePos); // same resolver as `target` — never desyncs
@@ -141,7 +128,13 @@ export default function GraphCanvas({
     prevSize.current = sizeKey;
     prevLayout.current = layout;
     const from = displayRef.current;
-    if (sizeChanged || !layoutChanged || reducedMotion() || from.length !== to.length) {
+    if (
+      sizeChanged ||
+      !layoutChanged ||
+      reducedMotion() ||
+      from.length !== to.length ||
+      to.length > ANIM_MAX_N
+    ) {
       setDisplay(to);
       return;
     }
@@ -160,7 +153,6 @@ export default function GraphCanvas({
     return () => cancelAnimationFrame(rafRef.current);
   }, [layout, ringPos, forcePos, sizeKey]);
 
-  // Pan/zoom via d3-zoom; the transform is applied to the root <g>.
   const svgRef = useRef<SVGSVGElement>(null);
   const [zt, setZt] = useState<ZoomTransform>(zoomIdentity);
   useEffect(() => {
@@ -174,37 +166,18 @@ export default function GraphCanvas({
     return () => { sel.on(".zoom", null); };
   }, []);
 
-  const focus = hovered ?? selected;
-  const { first, second } = useMemo(() => {
-    const f = new Set<number>();
-    const s = new Set<number>();
-    if (focus != null) {
-      for (const b of adjacency[focus] ?? []) f.add(b);
-      for (const b of adjacency[focus] ?? []) {
-        for (const c of adjacency[b] ?? []) if (c !== focus && !f.has(c)) s.add(c);
-      }
-    }
-    return { first: f, second: s };
-  }, [focus, adjacency]);
+  const highlight = useMemo(
+    () => buildHighlight(adjacency, selected, hovered, route ?? null),
+    [adjacency, selected, hovered, route],
+  );
 
   const px = (p: Pt) => ({ x: fit.cx + p.x * fit.s, y: fit.cy + p.y * fit.s });
 
-  const nodeClass = (i: number): string => {
-    if (focus == null) return "node";
-    if (i === focus) return "node sel";
-    if (first.has(i)) return "node hi";
-    if (second.has(i)) return "node hi2";
-    return "node faded";
-  };
-
-  const edgeClass = (u: number, v: number): string => {
-    if (focus == null) return "edge";
-    if (u === focus || v === focus) return "edge lit";
-    if (second.has(u) || second.has(v)) return "edge lit2";
-    return "edge dim";
-  };
-
   return (
+    // The background click is a mouse convenience: every operation it offers is also on the
+    // keyboard-navigable buddy list, so a key handler here would add a focus stop leading nowhere.
+    // Suppressed at the site, so a new non-interactive click handler elsewhere still fails lint.
+    /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
     <svg
       ref={svgRef}
       className="graph"
@@ -221,7 +194,7 @@ export default function GraphCanvas({
             return (
               <line
                 key={idx}
-                className={edgeClass(u, v)}
+                className={edgeClass(highlight, u, v)}
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
               />
             );
@@ -233,7 +206,7 @@ export default function GraphCanvas({
             return (
               <g
                 key={i}
-                className={nodeClass(i)}
+                className={nodeClass(highlight, i)}
                 transform={`translate(${c.x},${c.y})`}
                 onMouseEnter={() => onHover(i)}
                 onMouseLeave={() => onHover(null)}

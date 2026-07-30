@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { POLISH_MAX_N, viewFromResult, type GraphView, type Settings } from "../model";
+import { viewFromResult, type GraphView, type Settings } from "../model";
+import { autoPolishEnabled } from "ringweave";
+import { splitPairs, type ConstraintPair, type NamedPair } from "../constraints";
+import { isConstrainedRequest } from "../worker/protocol";
 import { useGenerationWorker } from "./useGenerationWorker";
 
 function sameStrings(a: string[], b: string[]): boolean {
@@ -7,28 +10,17 @@ function sameStrings(a: string[], b: string[]): boolean {
 }
 
 function sameEdges(a: [number, number][], b: [number, number][]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false;
-  }
-  return true;
+  return a.length === b.length && a.every((e, i) => e[0] === b[i][0] && e[1] === b[i][1]);
 }
 
-function sameSettings(a: Settings, b: Settings): boolean {
-  return a.buddies === b.buddies && a.minSeparation === b.minSeparation && a.polish === b.polish && a.seed === b.seed;
-}
+
 
 /**
- * Orchestrates generation: sends a job to the worker and maps its BuddyResult back into
- * a GraphView using the exact roster + settings that produced it (captured in `pending`,
- * so an async result is never paired with a roster that changed underneath it).
+ * Orchestrates generation. The roster and settings that produced a job are captured in `pending`,
+ * so an async result is never paired with a roster that changed underneath it.
  *
- * `onIdenticalReroll(view)` fires ONLY when a REROLL (`generate(..., { reroll: true })`) yields a
- * byte-identical graph — a "Different arrangement" that couldn't vary (a small uniquely-determined
- * or polish-converged graph). It is not fired for a plain Edit→Generate no-op, which the user
- * didn't ask to vary. This is the robust, post-generation detection the pre-hoc `rerollBlockReason`
- * heuristic can't do. The kept (unchanged) view is passed so the caller can word the notice from
- * its actual quality rather than overclaiming optimality.
+ * `onIdenticalReroll(view)` fires ONLY for an explicit reroll that came back byte-identical, not
+ * for a plain Edit→Generate no-op the user never asked to vary.
  */
 export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
   const gen = useGenerationWorker();
@@ -39,27 +31,41 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
   viewRef.current = view;
   const onIdenticalRerollRef = useRef(onIdenticalReroll);
   onIdenticalRerollRef.current = onIdenticalReroll;
-  const pending = useRef<{ names: string[]; settings: Settings; reroll: boolean } | null>(null);
-  // consumed: the last worker result we've already turned into a view. Guards against a
-  // benign effect re-run (e.g. StrictMode's dev double-invoke) re-applying a still-"done"
-  // generation and clobbering a view set directly by loadView (an import).
+  const pending = useRef<{
+    names: string[];
+    settings: Settings;
+    constraints: ConstraintPair[];
+    rows: NamedPair[];
+    reroll: boolean;
+  } | null>(null);
+  // The last result already turned into a view: without it, a benign effect re-run (StrictMode's
+  // double-invoke) re-applies a still-"done" generation over a view set by loadView.
   const consumed = useRef<unknown>(null);
 
   useEffect(() => {
     if (gen.status === "done" && gen.result && gen.result !== consumed.current && pending.current) {
       consumed.current = gen.result;
       const wasReroll = pending.current.reroll;
-      const next = viewFromResult(pending.current.names, pending.current.settings, gen.result);
+      const next = viewFromResult(
+        pending.current.names,
+        pending.current.settings,
+        pending.current.constraints,
+        pending.current.rows,
+        gen.result,
+      );
       const cur = viewRef.current;
-      // A re-generation on the same roster that produced an identical graph is a visual no-op:
-      // keep the current graph rather than swapping in an indistinguishable one (no re-layout).
-      // But the SETTINGS may have changed (a new seed / minSeparation that happened to yield the
-      // same graph), and export + the Advanced panel must reflect what the user just configured —
-      // so adopt next.settings while REUSING cur's edges/buddies by reference (so GraphCanvas sees
-      // the same `edges` identity and doesn't re-lay-out/animate). Only a REROLL (an explicit
-      // "Different arrangement") also surfaces a notice; an unchanged Edit→Generate is silent.
+      // An identical graph is kept BY REFERENCE, so GraphCanvas sees the same `edges` identity
+      // and does not re-lay-out. Settings, constraints and report are still adopted from `next`,
+      // unconditionally: they can change while the edges do not, and keeping the old ones exports
+      // the wrong rules and shows a stale report.
       if (cur && sameStrings(cur.names, next.names) && sameEdges(cur.edges, next.edges)) {
-        if (!sameSettings(cur.settings, next.settings)) setView({ ...cur, settings: next.settings });
+        setView({
+          ...cur,
+          settings: next.settings,
+          constraints: next.constraints,
+          rows: next.rows,
+          report: next.report,
+        });
         if (wasReroll) onIdenticalRerollRef.current?.(cur);
       } else {
         setView(next);
@@ -67,12 +73,34 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
     }
   }, [gen.status, gen.result]);
 
-  const generate = useCallback((names: string[], settings: Settings, opts?: { reroll?: boolean }) => {
-    pending.current = { names, settings, reroll: opts?.reroll ?? false };
-    // Never DISPATCH an explicit polish=on above the core's polish cap: it is O(n·m)/iter
-    // and would run for tens of seconds. Downgrade to "auto" (which the core disables at
-    // this size anyway), so a hostile imported polish=true can't drive a multi-minute run.
-    const polish = settings.polish === true && names.length > POLISH_MAX_N ? "auto" : settings.polish;
+  const generate = useCallback((
+    names: string[],
+    settings: Settings,
+    constraints: ConstraintPair[],
+    /** The rules AS TYPED — see `GraphView.rows`. */
+    rows: NamedPair[],
+    opts?: { reroll?: boolean },
+  ) => {
+    // Never DISPATCH an explicit polish=on where the core would not auto-polish: polish is
+    // O(n·m)/iter, so a hostile imported polish=true would drive a multi-minute run. The core is
+    // ASKED rather than compared against a mirrored cap, which was k-blind and let it through.
+    // `isConstrainedRequest` is the same predicate the worker routes on: the budget picked here
+    // is only correct if it agrees with the builder that actually runs.
+    const wire = splitPairs(constraints);
+    const wouldAutoPolish = autoPolishEnabled(names.length, settings.buddies, {
+      constrained: isConstrainedRequest(wire),
+    });
+    const polish = settings.polish === true && !wouldAutoPolish ? "auto" : settings.polish;
+    // Store the DISPATCHED options, not the requested ones: `exportGraph` writes this, so storing
+    // a downgraded `polish` as `true` records a configuration that does not reproduce the graph
+    // beside it.
+    pending.current = {
+      names,
+      settings: { ...settings, polish },
+      constraints,
+      rows,
+      reroll: opts?.reroll ?? false,
+    };
     genGenerate({
       n: names.length,
       k: settings.buddies,
@@ -81,18 +109,26 @@ export function useBuddyGraph(onIdenticalReroll?: (view: GraphView) => void) {
         polish,
         seed: settings.seed,
       },
+      constraints: wire,
     });
   }, [genGenerate]);
 
   const loadView = useCallback((v: GraphView) => {
-    // Supersede any in-flight generation: clearing `pending` makes the effect drop a
-    // worker result that arrives AFTER this import, and reset() cancels the running
-    // computation + clears the "running" status so no stale "Generating…" overlay lingers
-    // over the imported graph.
+    // Supersede any in-flight generation: clearing `pending` makes the effect drop a result that
+    // arrives after this import, and reset() clears the "running" status so no stale overlay
+    // lingers over the imported graph.
     pending.current = null;
     genReset();
     setView(v);
   }, [genReset]);
 
-  return { view, status: gen.status, error: gen.error, generate, loadView, cancel: genReset };
+  return {
+    view,
+    status: gen.status,
+    error: gen.error,
+    refusals: gen.refusals,
+    generate,
+    loadView,
+    cancel: genReset,
+  };
 }

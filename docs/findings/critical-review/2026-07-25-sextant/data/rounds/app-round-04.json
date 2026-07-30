@@ -1,0 +1,515 @@
+{
+  "target": "app/src",
+  "round": 4,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 8,
+    "confirmed": 9,
+    "blocking": 4,
+    "deferrals": 0,
+    "plausible": 2,
+    "themes": 9
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface pass over app/src (all 30 source files) plus the lib gates they call, with runnable probes under /home/user/ringweave/.review-scratch/ (vitest, config outside every test glob).\n\nCost-before-commitment, traced in importGraph.ts: gate order is version -> people is array -> people.length <= MAX_IMPORT_N (1000) -> edges is array -> density (2m <= BUDDY_MAX*n) -> declaredPairs <= MAX_CONSTRAINT_PAIRS -> per-name length -> control chars -> joined length -> parseRoster round-trip -> Graph build -> per-vertex degreeMax <= 12 -> readConstraints -> only THEN allPairsSummary/girth. Every gate precedes the work it bounds. Measured: 6.87 MB / 700k-edge file refuses in 0 ms after a 352 ms JSON.parse (bounded by readFileText's 8 MB pre-read gate); 400 000 declared constraint pairs refuse in 0 ms; 200k-deep nested JSON parses in 26 ms (V8 iterative parser, no stack blowup) and any throw is caught by App.handleImportFile.\n\nAttacker-chosen numbers from a file: sanitizeSettings clamps buddies to [2,12], minSeparation to [2,12] (non-integer -> SEPARATION_DEFAULT), seed to [0, 2^31-1], polish to true/false/\"auto\"; the star-import fallback (degreeMax) is itself bounded by the per-vertex degree gate. Verified no path lets an imported n, k, minSeparation or seed reach the worker outside the UI's own clamps; handleReroll re-runs feasibility() and rerollBlockReason() from view, and useBuddyGraph.generate downgrades an explicit polish=true the core would not auto-polish. Constraints.fromTags / priorHard have no caller in app/src (grepped) — the lib's documented O(n^2) tag hazard is unreachable from this component.\n\nMain-thread superlinear work, measured at the ceiling: importGraph re-measure n=1000/m=6000 ~180 ms; forceLayout n=1000/m=6000 (40 ticks) ~475-640 ms under node; parseRoster at the 500k char cap — all-duplicates 50 ms, one 500k token 2 ms, 500k commas 1 ms, 1000 distinct + 150k dupes 43 ms; RosterModal's synchronous validateDetailed (O(n^2) prohibited-pair connectivity walk) 200 rules at n=1000 ~6 ms per keystroke. All bounded; no hang found. Warning strings in parseRoster are bounded by MAX_NAMES x MAX_NAME_CHARS, notices clamped at 300 chars in useNotice, ImportError interpolations bounded by quote().\n\nNumeric edges: metrics Infinity -> null before JSON.stringify (finiteOrNull); quality forced to 0 when aspl non-finite or disconnected; seed clamp keeps seed+1 float-exact; -0/NaN/non-integer all fall to Number.isInteger guards.\n\nUntrusted text to sinks: enumerated every code point 0..0x3000 in Cc/Cf/Zs/Zl/Zp through importGraph -> toCsv to find which survive and defeat neutralizeCell. Download filenames are hardcoded literals; no name reaches a filename, document.title, or innerHTML. One finding below.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Scenario: implemented the project's own next-committed follow-on end-to-end — \"Buddy rules are not re-checked on import\" (app/CLAUDE.md known-follow-ons) — against the real files, not hypothetically. Concretely: added an exported `checkConstraints(g, cons, connected)` wrapper around the existing (already-correct, already-tested) `buildReport` in lib/src/core/index.ts, then in app/src/io/importGraph.ts called it via the existing `toConstraints` (app/src/constraints.ts) when `constraints.length > 0` and set `report` instead of hardcoding null. Ran `npx tsc --noEmit` in both lib/ and app/ (clean both times), ran the full app vitest suite (257/258 passed; the single failure was test/importExport.roundtrip.test.ts:344, which literally asserted the old `report === null` behavior — i.e. it encoded exactly the gap being closed, not an unrelated break), and added a scratch probe test confirming a declared-but-missing required edge correctly surfaces `reqViolations: 1` / `satisfied: false`, and that a constraint-free import still leaves `report` null. All experimental edits were reverted afterward (git checkout) — nothing left in the tree. Also traced (without extending) GraphCanvas's declared LAYOUT_MODES/FIT_MODES/positionsFor seam against app/CLAUDE.md's own record of 8 findings/6 rounds/zero-blocking on a deliberately-deferred focus/ego layout, and confirmed via grep that F9's priorWeight/priorHard/addPrior have no caller in app/src, so that deferral filing still holds. Read App.tsx (394 lines) as composition root, useBuddyGraph.ts, ConstraintsEditor.tsx, search.ts, neighborhood.ts, constraints.ts for responsibility leaks and god-component symptoms.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Traced the full keyboard/interaction surface of app/src: App.tsx (focus-rescue plumbing: closeWithFocus, dismissOverlay, the inert-based modal containment, the refused/error effect), Notice.tsx + useNotice.ts (persistent role=status region, flash auto-clear), RosterModal.tsx, SettingsControls.tsx, ConstraintsEditor.tsx, PersonSearch.tsx (combobox keyboard path vs. mouse path), PersonPanel.tsx, PathPanel.tsx, BuddyList.tsx, QualityPanel.tsx, LayoutToggle.tsx, Slips.tsx, GraphCanvas.tsx (reduced-motion guard for the JS-driven animation, role=img delegation to the buddy list), useEscape.ts, useExplorerHistory.ts, usePathFinder.ts, useGenerationWorker.ts, and app.css's prefers-reduced-motion block. Reproduced three focus-stranding scenarios and one non-repro against the existing appErrorRecovery.test.tsx worker-mock harness in throwaway vitest specs (written to app/test/, run, then deleted — not left in the tree); full `npx vitest run` is clean (29 files / 258 tests) after removal. Also read through the roster-refusal, import-error, and reroll-block user-facing copy paths for dead ends, and the ARIA wiring on the search combobox, layout toggle, buddy-list rows, and constraint editor rows.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Focus is dropped to <body> whenever a focused element is removed by unmount or by the parent becoming inert — three separate call sites (Notice dismiss, PersonSearch result choice, App's reopen-modal-on-error effect) bypass the app's own closeWithFocus/dismissOverlay focus-rescue helper instead of going through it",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "Notice's dismiss button is wired straight to `clear` instead of through App's closeWithFocus/dismissOverlay rescue helpers; dismissing via keyboard unmounts the focused button and focus falls to <body>.",
+        "Choosing a search result via PersonSearch's `choose()` clears `query`, unmounting the whole listbox including the just-clicked, still-focused option button, with nothing returning focus to the input.",
+        "App's `bg.status === 'refused'|'error'` effect calls `setModalOpen(true)` which makes `#app` inert, forcibly blurring whatever control (e.g. the reroll button) currently holds focus, and never focuses anything inside the reopened dialog."
+      ],
+      "remediation": "Delete the three separate, ad hoc paths that unmount/inert a focused element without a rescue, and route all of them through the single existing closeWithFocus/dismissOverlay helper (Notice's dismiss, PersonSearch's choose(), and the reopen-modal effect) instead of adding a fourth bespoke focus-management branch."
+    },
+    {
+      "theme": "The connection score and every derived plain-language claim (caption, gauge, 'can't improve it' copy) are graded against a yardstick that moves with the graph's own low degree, turning a relative gap into a false absolute claim",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`assembleMetrics` scores quality against the graph's actual `degreeMax`, so a low-degree graph is judged against a low Moore bound; `connectionSummary`/`qualityPercent` render that degree-relative gap as an absolute claim, and `isOptimal` likewise claims perfection for graphs that are merely optimal-for-their-own-low-degree."
+      ],
+      "remediation": "In `assembleMetrics`, stop deriving the yardstick from the graph's own `degreeMax`; score against a yardstick fixed for a given n (e.g. `mooreLowerBounds(n, BUDDY_MAX)`) and let `connectionSummary` and `isOptimal` both read from that single fixed value instead of each recomputing its own degree-relative comparison."
+    },
+    {
+      "theme": "The control-character guard is a hand-rolled C0/DEL range duplicated in two places, and both undercover the true set of invisible/formatting characters that must be refused or normalized, letting them reach DOM, CSV, and clipboard sinks",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "importGraph's control-character guard and parseRoster's normalizer both use the identical hand-written `/[\\x00-\\x1f]/`-style range, missing the C1 block and all Cf format characters (zero-width, bidi overrides, etc.), which are not stripped by trim() either; consequences include false uniqueness claims, invisible-only names, bidi-reversed rendering, and unguarded formula-leading cells reaching buddies.csv/clipboard."
+      ],
+      "remediation": "Replace both duplicated hand-written ranges with one Unicode-category class (`/[\\p{Cc}\\p{Cf}]/u` in importGraph, `/[\\p{Cc}\\p{Cf}]/gu` in parseRoster) so the two authorities agree by construction instead of by two separately maintained regexes, and tighten download.ts's neutralizeCell anchor to skip leading non-graphic characters rather than adding a new pre-filter."
+    },
+    {
+      "theme": "The displayed route is canonicalized on min(from,to) for computation but returned in that same orientation, so it can visually contradict the 'Starting from X' sentence the panel just announced for the same result",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`usePathFinder` canonicalises on `min(from, to)` and returns the route in that orientation, so starting a path from the higher-indexed person renders the chain from the other end, contradicting the live-region announcement."
+      ],
+      "remediation": "Keep the canonical computation but reverse the already-computed array when `ends[0] !== route[0]`, rather than adding a second orientation-aware computation path."
+    },
+    {
+      "theme": "The generation worker has failure modes (load failure, mid-run crash) that produce no message at all, so status is stuck permanently 'running' with no route to the existing error-recovery UI",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`attach` registers only `worker.onmessage`; nothing listens for `error`/`messageerror`, so a worker crash leaves `status === \"running\"` forever, keeping `#app` inert and the overlay up indefinitely."
+      ],
+      "remediation": "Register `worker.onerror`/`worker.onmessageerror` and map both directly onto the existing `kind: \"error\"` transition already used by onmessage, rather than building a separate failure-handling path."
+    },
+    {
+      "theme": "Array-equality helpers in the same file use two different implementation idioms for the same kind of operation, leaving no consistent model for the next one added",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "`sameEdges` and `sameStrings` implement equivalent array-equality checks with different code styles (loop vs `.every()`)."
+      ],
+      "remediation": "Delete one of the two implementations and rewrite it to match the other's idiom (`.every()` recommended), leaving a single equality-check pattern in the file instead of two."
+    },
+    {
+      "theme": "A comment describing when/how minSeparation and buddies are consumed downstream is vague about timing and storage, inviting misreadings of the data flow",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment about minSeparation and buddies 'becoming generation targets' does not say they are stored in Settings first and only possibly used in a later reroll."
+      ],
+      "remediation": "Replace the vague phrase with the precise one: values are stored in Settings and may be used in a later reroll, so they must be clamped now — no code change, just remove the ambiguous wording."
+    },
+    {
+      "theme": "A function's name advertises only one of its responsibilities (quoting) while it silently also truncates, hiding a safety-relevant behavior from callers",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The `quote` function in download.ts quotes, truncates, and stringifies, but its name reflects only the quoting concern."
+      ],
+      "remediation": "Rename to `quoteTruncated`/`quoteAndTruncate` so the existing single function's full contract is visible at call sites, rather than adding documentation on top of an under-named function."
+    },
+    {
+      "theme": "A stepper control's numeric value changes only visually, with no accessible-tree signal, so screen-reader users get no confirmation their action had an effect",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "The 'Buddies each' stepper's static aria-labels and non-live value span give assistive tech no indication when the count changes, unlike the app's own LayoutToggle (aria-pressed) and PersonSearch (role=status) patterns for the same concern."
+      ],
+      "remediation": "Fold the current value into the two buttons' existing `aria-label`s (e.g. `more buddies, currently ${settings.buddies}`) so the accessible name itself carries the state, instead of introducing a separate live region alongside the buttons."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "degree-relative-score-shown-as-absolute-claim",
+      "theme": "the connection score and its plain-language caption are measured against a yardstick that the graph's own (low) degree lowers, so a badly-connected group can read better than a well-connected one of the same size",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 222,
+      "summary": "`assembleMetrics` scores quality against the graph's ACTUAL `degreeMax`, so a low-degree graph is judged against a low Moore bound; `connectionSummary`/`qualityPercent` then render that degree-relative gap as an absolute claim about the group, and the gauge and caption are non-monotone in the number of hops they sit next to.",
+      "failure": "Reproduced (`vite-node` against `app/src/model.ts` + `app/src/io/importGraph.ts`):\n- Generation-reachable, no hand editing: `buildBuddyGraph(200, 2)` (buddies = BUDDY_MIN, n well under the cap) -> aspl 50.25, diameter 100, `qualityPercent` = **100**, `connectionSummary` = **\"everyone's well-linked\"**, `isOptimal` = true (so the reroll replies \"That's already an optimal arrangement\"). A 200-person daisy chain where the average pair is 50 hops apart is displayed as a perfect score.\n- Import a 1000-person chain -> aspl 333.67, diameter 999, gauge **67**, caption **\"everyone's well-linked\"**.\n- Import a 1000-person 12-regular circulant on the same n -> aspl 42.13, diameter 84, gauge **0**, caption \"everyone's connected, but loosely linked\".\nThe second graph is ~8x closer on every displayed distance than the first, on the same roster size, and scores 0 where the first scores 67. Existing tests (`app/test/quality.test.ts`) fix `Metrics` by hand and only pin the disconnected and rounding-boundary cases, so none of this fails the suite.",
+      "remediation": "Close the theme where the yardstick is chosen, in `assembleMetrics`: stop letting the graph's own `degreeMax` move the bar. Score against a yardstick that is fixed for a given n (e.g. `mooreLowerBounds(n, BUDDY_MAX)`), or gate the plain-language tier in `connectionSummary` on an absolute distance criterion in addition to the gap. Do the same for `isOptimal`, which feeds the \"a re-roll can't improve it\" copy — that is the sibling one code path over, and fixing only the caption leaves it claiming perfection for a 200-person ring.",
+      "invariant": "For all `n` and all `Metrics` A, B derived from graphs on that same `n` with `A.connected && B.connected`: `A.aspl > B.aspl` implies `qualityPercent(A) <= qualityPercent(B)` and the connection tier of A (split < loosely-linked < well-linked, as produced by `connectionSummary`) is not above the tier of B. The displayed score and caption must be monotone non-increasing in ASPL at fixed roster size."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "displayed-route-contradicts-stated-start",
+      "theme": "the path panel states a fact about the user's own action (\"Starting from Dia\") that the chain it then renders contradicts",
+      "file": "/home/user/ringweave/app/src/state/usePathFinder.ts",
+      "line": 22,
+      "summary": "`usePathFinder` canonicalises the route on `min(from, to)` and returns it in that orientation, so when the user starts a path from the higher-indexed person the rendered chain reads from the OTHER end — directly contradicting the live-region sentence the same panel just announced.",
+      "failure": "Reproduced with `renderHook(() => usePathFinder(g))` on a 6-ring with names [Ana, Ben, Chen, Dia, Eli, Fay]: `start(3)` makes `PathPanel` announce \"Starting from **Dia** — now pick the other person.\"; `complete(0)` then yields `route = [0,1,2,3]`, which `PathPanel` renders as \"Ana -> Ben -> Chen -> Dia\". `expect(route[0]).toBe(3)` fails with `received 0`. The existing test `\"draws the same line whichever end is picked first\"` asserts the two orientations are `toEqual`, so it locks the defect in rather than catching it.",
+      "remediation": "Keep the canonical computation (it is what makes s->t and t->s the same line), but orient the RESULT to the user's stated start: compute on `min/max` and reverse the array when `ends[0] !== route[0]`. A reversed shortest path is still a shortest path, so the drawn edge set is unchanged and the s<->t symmetry the canonicalisation exists for is preserved.",
+      "invariant": "For all graphs and all `ends = [f, t]` with `f !== t`: if `route !== null` then `route[0] === f && route[route.length - 1] === t`, AND the route for `[f, t]` is exactly the reverse of the route for `[t, f]` (so the drawn chain is orientation-independent while the readout always starts where the user said it did)."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unhandled-worker-failure-channel",
+      "theme": "the generation worker has failure modes that never reach the UI, so a crash is indistinguishable from an in-progress run",
+      "file": "/home/user/ringweave/app/src/state/useGenerationWorker.ts",
+      "line": 49,
+      "summary": "`attach` registers only `worker.onmessage`; nothing listens for the Worker's `error` or `messageerror` events, so a worker that fails to load or dies mid-run leaves `status === \"running\"` permanently — which keeps `#app` `inert` and the \"Generating…\" overlay up indefinitely.",
+      "failure": "Reproduced under jsdom with a stubbed `Worker`: `renderHook(() => useGenerationWorker())`, `generate({n:5,k:2})` -> `status === \"running\"`; firing the worker's `onerror` leaves `status === \"running\"` (the probe logged that no handler was ever assigned). In `App`, `<div id=\"app\" inert={modalOpen || bg.status === \"running\"}>` means the whole UI stays inert; only the Cancel button in the busy overlay recovers. This is not hypothetical for a Pages-deployed SPA: a stale/404'd worker chunk after a redeploy fires exactly this event. No test in `app/test/` covers it — `generateWorker.test.ts` tests `runGeneration` directly and `appErrorRecovery.test.tsx` mocks the hook away entirely.",
+      "remediation": "Register `worker.onerror` and `worker.onmessageerror` alongside `onmessage` in `attach`, mapping both onto the existing `kind: \"error\"` state transition (clearing `runningRef`) so the already-tested `status === \"error\"` recovery path in `App` runs. That closes the theme rather than the single event: every way the worker can stop producing a response ends in a terminal status.",
+      "invariant": "For all worker outcomes, `useGenerationWorker` must leave `status === \"running\"` only while a response for `latestId` is still possible: any terminal Worker event (`message`, `error`, `messageerror`) for the current id must transition `status` out of `\"running\"` and set `runningRef` false."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "incomplete-character-class-guard",
+      "theme": "untrusted names carrying invisible and control characters defeat the import guard and reach every name sink (DOM, print slips, CSV, clipboard)",
+      "file": "app/src/io/importGraph.ts",
+      "line": 18,
+      "summary": "importGraph's control-character guard is a hand-written C0+DEL range (`/[\u0000-\u001f]/`), not a Unicode category check, and parseRoster's normalizer (parseRoster.ts:34) has the identical range. The whole C1 control block (U+0080-U+009F, including NEL U+0085) and every Cf format character (U+00AD, U+200B-U+200F, U+202A-U+202E, U+2060-U+206F, ...) pass both. They are not stripped by String.trim() either, so they also survive the parseRoster round-trip check at importGraph.ts:228 that is supposed to be the authority on which names are acceptable. Consequences reproduced from a file: (1) the round-trip check's own promise -- 'Every name must be non-empty, unique (case-insensitively)' -- is false, because zero-width characters make visually identical names distinct; (2) a name that is entirely invisible passes the non-empty check; (3) an unterminated bidi override reaches a shared DOM text node and reverses the rendering of everything after it; (4) 71 leading non-graphic code points sit in front of neutralizeCell's ^-anchored test in download.ts:18, so a formula-leading cell reaches buddies.csv and the clipboard with no apostrophe. Note the inversion in that regex: the only characters it covers beyond =+-@ are \\t and \\r, which import already refuses outright, so those branches are dead -- while the class that can actually get through is uncovered. Spreadsheet formula EXECUTION is not demonstrated (a name cannot contain a comma, and Excel keys detection on the literal first character), so leg (4) is forward-looking; legs (1)-(3) are reproduced today.",
+      "failure": "importGraph({version:1, people:[{id:0,name:\"Alice\"},{id:1,name:\"Alice​\"},{id:2,name:\"​\"},{id:3,name:\"Bob‮drowssap\"}], edges:[[0,1],[1,2],[2,3],[0,3]]}) is ACCEPTED. Resulting view.names === [\"Alice\",\"Alice​\",\"​\",\"Bob‮drowssap\"]: the buddy list shows two rows both reading \"Alice\", one row with a blank name, and buddyLabel(view,0) === \"Alice​, Bob‮drowssap\" -- one DOM text node whose RLO reverses the tail. Separately, importGraph({version:1, people:[{id:0,name:\"=cmd|'/c calc'!A0\"},{id:1,name:\"B\"},{id:2,name:\"C\"}], edges:[[0,1],[1,2],[0,2]]}) is accepted and toCsv emits `\"=cmd|'/c calc'!A0\"` -- no leading apostrophe, because neutralizeCell's /^[=+\\-@\\t\\r]/ sees U+0085, not '='. An exhaustive sweep of code points 0..0x3000 found 71 such leading characters (U+0080-U+009F, U+00AD, U+0600-U+0605, U+061C, U+06DD, U+070F, U+0890-U+0891, U+08E2, U+180E, U+200B-U+200F, U+202A-U+202E, U+2060-U+2064, U+2066-U+206F).",
+      "remediation": "Replace both hand-written ranges with a Unicode-category class: in importGraph.ts use `/[\\p{Cc}\\p{Cf}]/u` for CONTROL_CHARS_TEST (refuse, matching the file's refuse-what-we-cannot-round-trip stance), and in parseRoster.ts use `/[\\p{Cc}\\p{Cf}]/gu` for CONTROL_CHARS (normalize to space, matching the tolerant parser's contract). That single change makes legs (1)-(4) unreachable at once, and keeps the two authorities' round-trip agreement. Independently harden the sink: in download.ts anchor the test after leading non-graphic characters, e.g. `/^[\\p{Cc}\\p{Cf}\\p{Zs}]*[=+\\-@]/u`, so neutralizeCell stays correct for any future producer that does not go through importGraph.",
+      "invariant": "For every GraphView the app can hold, and for every string passed to toCsv or copyText: the string contains no code point in Unicode general category Cc or Cf; it is non-empty after removing all code points in Cc, Cf and Zs; the case-insensitive keys of view.names computed after that removal are pairwise distinct; and after removing any leading Cc/Cf/Zs code points the string does not begin with '=', '+', '-' or '@'.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "style-inconsistency",
+      "theme": "Inconsistent implementation pattern for similar operations",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 7,
+      "summary": "Array equality check functions use different implementations inconsistently",
+      "failure": "sameStrings (line 7-9) uses .every() for array equality, while sameEdges (line 11-17) uses a manual for loop. Both perform identical operations (element-by-element comparison) but with different code patterns.",
+      "remediation": "Standardize on one implementation. Either: (1) rewrite sameEdges to use .every() for consistency with sameStrings, or (2) rewrite sameStrings to use a for loop like sameEdges. Recommend .every() as the more idiomatic React pattern and more concise. A contributor adding sameConstraints would have no consistent model to follow.",
+      "invariant": "Array equality checks that compare two arrays for identical element sequences must use the same implementation pattern across the codebase to avoid confusion when similar functions are added.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unrescued-focus-on-unmount",
+      "theme": "an element is removed from the DOM while it holds keyboard focus, and nothing redirects focus, so it silently falls to <body> and the next Tab restarts the whole page",
+      "file": "app/src/panels/Notice.tsx",
+      "line": 23,
+      "summary": "Notice's dismiss button is wired straight to `clear` (App.tsx:391, `<Notice message={notice} onDismiss={clear} />`) instead of through App's own `closeWithFocus`/`dismissOverlay` rescue helpers that every other self-closing panel in the app uses. A keyboard user who Tabs to the toast and presses Enter/Space removes the button (the ternary in Notice.tsx unmounts it once `message` is null) while it is the focused element, and focus is dropped on `<body>`.",
+      "failure": "Reproduced directly: dispatch a generation, drive `hooks.state.status = 'error'` to raise a toast, `toast.focus()`, `fireEvent.click(toast)` (equivalent to Enter/Space) -> `document.activeElement === document.body` is true. The next Tab press then restarts from the top of the document (the '↻ Different arrangement' button), exactly the 'thrown back to the header' failure the file's own comments describe fixing for the person/route panels and both overlays — but the fix was never applied to Notice itself. Worse, the same removal also happens with NO user action at all: `useNotice.ts`'s `flash()` auto-clears after `AUTO_CLEAR_MS` (4000ms), so a user who tabs to the toast to read it slowly and doesn't act within 4s has focus pulled out from under them by a timer.",
+      "remediation": "Route Notice's dismiss through the same focus-rescue pattern App.tsx already has (e.g. call closeWithFocus-style logic with a stable anchor such as searchRef, or simply .focus() a known-good element such as the search box / roster field) whenever the toast is dismissed by button, and also when the auto-clear timer fires while the toast holds focus.",
+      "invariant": "For every element that can be unmounted or hidden by application code while it holds document.activeElement, some other visible non-inert element must receive focus in the same tick/microtask — document.activeElement must never settle on document.body as a result of an app-triggered removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unrescued-focus-on-unmount",
+      "theme": "an element is removed from the DOM while it holds keyboard focus, and nothing redirects focus, so it silently falls to <body> and the next Tab restarts the whole page",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 104,
+      "summary": "Choosing a search result via `choose()` (PersonSearch.tsx:42-46) clears `query`, which makes `open` false and unmounts the whole `role=\"listbox\"` result list — including whichever `<button role=\"option\">` was just interacted with. The keyboard path (Enter on the input, PersonSearch.tsx:57-61) never moves focus off the input so it is unaffected, but the pointer/hybrid path — clicking a result button directly — leaves the just-clicked button as `document.activeElement` at the moment it is unmounted.",
+      "failure": "Reproduced directly: render App, generate a roster, type 'ali' into the search box, `screen.getByRole('option', {name: /alice/i})`, `.focus()` it, `fireEvent.click(option)` -> `document.activeElement` is `<body>` (`tagName === 'BODY'`) immediately after. Any user who reaches the option by pointer/touch (or via a screen-reader's virtual cursor click-equivalent) and then continues by keyboard restarts Tab from the top of the document instead of continuing from the search UI.",
+      "remediation": "After `choose()` runs, explicitly return focus to the search input (`inputRef`/the input itself) rather than relying on the option button staying mounted.",
+      "invariant": "For every element that can be unmounted or hidden by application code while it holds document.activeElement, some other visible non-inert element must receive focus in the same tick/microtask — document.activeElement must never settle on document.body as a result of an app-triggered removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-value-announcement",
+      "theme": "a control's numeric/stateful value changes visually with no accessible-tree counterpart, so a screen-reader user gets no feedback that their action did anything",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 29,
+      "summary": "The 'Buddies each' stepper (SettingsControls.tsx:29-33) is two `<button aria-label=\"fewer/more buddies\">` around a plain `<span className=\"val tabnum\">{settings.buddies}</span>`. The buttons' accessible names are static and do not include the value, the value span is not `aria-live`, and there is no `role=\"spinbutton\"`/`aria-valuenow` pattern. Unlike LayoutToggle's `aria-pressed` (SettingsControls's own sibling pattern for the same 'expose state to AT' concern) or PersonSearch's `role=\"status\"` empty-result region, nothing here tells assistive tech the count changed.",
+      "failure": "A screen-reader user presses '+' repeatedly on the stepper; each press changes the visible digit in `.val` but nothing in the accessible tree changes on the currently-focused button (whose label stays 'more buddies'), so no announcement occurs and the user cannot tell how many buddies-per-person is currently set without leaving the button to inspect the page some other way.",
+      "remediation": "Give the value an `aria-live=\"polite\"` region (or better, mark the stepper as `role=\"group\"` with a live `aria-valuenow`/visually-hidden text appended to each button's accessible name, e.g. `aria-label={`more buddies, currently ${settings.buddies}`}`), matching the pattern the app already uses for LayoutToggle's active state.",
+      "invariant": "Every control whose activation changes an application-visible numeric/textual value must expose that new value somewhere in the accessible tree (a live region, an updated accessible name, or aria-valuenow) in the same update — a value change with no accessible counterpart must not occur."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "degree-relative-score-shown-as-absolute-claim",
+      "theme": "the connection score and its plain-language caption are measured against a yardstick that the graph's own (low) degree lowers, so a badly-connected group can read better than a well-connected one of the same size",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 222,
+      "summary": "`assembleMetrics` scores quality against the graph's ACTUAL `degreeMax`, so a low-degree graph is judged against a low Moore bound; `connectionSummary`/`qualityPercent` then render that degree-relative gap as an absolute claim about the group, and the gauge and caption are non-monotone in the number of hops they sit next to.",
+      "failure": "Reproduced (`vite-node` against `app/src/model.ts` + `app/src/io/importGraph.ts`):\n- Generation-reachable, no hand editing: `buildBuddyGraph(200, 2)` (buddies = BUDDY_MIN, n well under the cap) -> aspl 50.25, diameter 100, `qualityPercent` = **100**, `connectionSummary` = **\"everyone's well-linked\"**, `isOptimal` = true (so the reroll replies \"That's already an optimal arrangement\"). A 200-person daisy chain where the average pair is 50 hops apart is displayed as a perfect score.\n- Import a 1000-person chain -> aspl 333.67, diameter 999, gauge **67**, caption **\"everyone's well-linked\"**.\n- Import a 1000-person 12-regular circulant on the same n -> aspl 42.13, diameter 84, gauge **0**, caption \"everyone's connected, but loosely linked\".\nThe second graph is ~8x closer on every displayed distance than the first, on the same roster size, and scores 0 where the first scores 67. Existing tests (`app/test/quality.test.ts`) fix `Metrics` by hand and only pin the disconnected and rounding-boundary cases, so none of this fails the suite.",
+      "remediation": "Close the theme where the yardstick is chosen, in `assembleMetrics`: stop letting the graph's own `degreeMax` move the bar. Score against a yardstick that is fixed for a given n (e.g. `mooreLowerBounds(n, BUDDY_MAX)`), or gate the plain-language tier in `connectionSummary` on an absolute distance criterion in addition to the gap. Do the same for `isOptimal`, which feeds the \"a re-roll can't improve it\" copy — that is the sibling one code path over, and fixing only the caption leaves it claiming perfection for a 200-person ring.",
+      "invariant": "For all `n` and all `Metrics` A, B derived from graphs on that same `n` with `A.connected && B.connected`: `A.aspl > B.aspl` implies `qualityPercent(A) <= qualityPercent(B)` and the connection tier of A (split < loosely-linked < well-linked, as produced by `connectionSummary`) is not above the tier of B. The displayed score and caption must be monotone non-increasing in ASPL at fixed roster size."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "displayed-route-contradicts-stated-start",
+      "theme": "the path panel states a fact about the user's own action (\"Starting from Dia\") that the chain it then renders contradicts",
+      "file": "/home/user/ringweave/app/src/state/usePathFinder.ts",
+      "line": 22,
+      "summary": "`usePathFinder` canonicalises the route on `min(from, to)` and returns it in that orientation, so when the user starts a path from the higher-indexed person the rendered chain reads from the OTHER end — directly contradicting the live-region sentence the same panel just announced.",
+      "failure": "Reproduced with `renderHook(() => usePathFinder(g))` on a 6-ring with names [Ana, Ben, Chen, Dia, Eli, Fay]: `start(3)` makes `PathPanel` announce \"Starting from **Dia** — now pick the other person.\"; `complete(0)` then yields `route = [0,1,2,3]`, which `PathPanel` renders as \"Ana -> Ben -> Chen -> Dia\". `expect(route[0]).toBe(3)` fails with `received 0`. The existing test `\"draws the same line whichever end is picked first\"` asserts the two orientations are `toEqual`, so it locks the defect in rather than catching it.",
+      "remediation": "Keep the canonical computation (it is what makes s->t and t->s the same line), but orient the RESULT to the user's stated start: compute on `min/max` and reverse the array when `ends[0] !== route[0]`. A reversed shortest path is still a shortest path, so the drawn edge set is unchanged and the s<->t symmetry the canonicalisation exists for is preserved.",
+      "invariant": "For all graphs and all `ends = [f, t]` with `f !== t`: if `route !== null` then `route[0] === f && route[route.length - 1] === t`, AND the route for `[f, t]` is exactly the reverse of the route for `[t, f]` (so the drawn chain is orientation-independent while the readout always starts where the user said it did)."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unhandled-worker-failure-channel",
+      "theme": "the generation worker has failure modes that never reach the UI, so a crash is indistinguishable from an in-progress run",
+      "file": "/home/user/ringweave/app/src/state/useGenerationWorker.ts",
+      "line": 49,
+      "summary": "`attach` registers only `worker.onmessage`; nothing listens for the Worker's `error` or `messageerror` events, so a worker that fails to load or dies mid-run leaves `status === \"running\"` permanently — which keeps `#app` `inert` and the \"Generating…\" overlay up indefinitely.",
+      "failure": "Reproduced under jsdom with a stubbed `Worker`: `renderHook(() => useGenerationWorker())`, `generate({n:5,k:2})` -> `status === \"running\"`; firing the worker's `onerror` leaves `status === \"running\"` (the probe logged that no handler was ever assigned). In `App`, `<div id=\"app\" inert={modalOpen || bg.status === \"running\"}>` means the whole UI stays inert; only the Cancel button in the busy overlay recovers. This is not hypothetical for a Pages-deployed SPA: a stale/404'd worker chunk after a redeploy fires exactly this event. No test in `app/test/` covers it — `generateWorker.test.ts` tests `runGeneration` directly and `appErrorRecovery.test.tsx` mocks the hook away entirely.",
+      "remediation": "Register `worker.onerror` and `worker.onmessageerror` alongside `onmessage` in `attach`, mapping both onto the existing `kind: \"error\"` state transition (clearing `runningRef`) so the already-tested `status === \"error\"` recovery path in `App` runs. That closes the theme rather than the single event: every way the worker can stop producing a response ends in a terminal status.",
+      "invariant": "For all worker outcomes, `useGenerationWorker` must leave `status === \"running\"` only while a response for `latestId` is still possible: any terminal Worker event (`message`, `error`, `messageerror`) for the current id must transition `status` out of `\"running\"` and set `runningRef` false."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "incomplete-character-class-guard",
+      "theme": "untrusted names carrying invisible and control characters defeat the import guard and reach every name sink (DOM, print slips, CSV, clipboard)",
+      "file": "app/src/io/importGraph.ts",
+      "line": 18,
+      "summary": "importGraph's control-character guard is a hand-written C0+DEL range (`/[\u0000-\u001f]/`), not a Unicode category check, and parseRoster's normalizer (parseRoster.ts:34) has the identical range. The whole C1 control block (U+0080-U+009F, including NEL U+0085) and every Cf format character (U+00AD, U+200B-U+200F, U+202A-U+202E, U+2060-U+206F, ...) pass both. They are not stripped by String.trim() either, so they also survive the parseRoster round-trip check at importGraph.ts:228 that is supposed to be the authority on which names are acceptable. Consequences reproduced from a file: (1) the round-trip check's own promise -- 'Every name must be non-empty, unique (case-insensitively)' -- is false, because zero-width characters make visually identical names distinct; (2) a name that is entirely invisible passes the non-empty check; (3) an unterminated bidi override reaches a shared DOM text node and reverses the rendering of everything after it; (4) 71 leading non-graphic code points sit in front of neutralizeCell's ^-anchored test in download.ts:18, so a formula-leading cell reaches buddies.csv and the clipboard with no apostrophe. Note the inversion in that regex: the only characters it covers beyond =+-@ are \\t and \\r, which import already refuses outright, so those branches are dead -- while the class that can actually get through is uncovered. Spreadsheet formula EXECUTION is not demonstrated (a name cannot contain a comma, and Excel keys detection on the literal first character), so leg (4) is forward-looking; legs (1)-(3) are reproduced today.",
+      "failure": "importGraph({version:1, people:[{id:0,name:\"Alice\"},{id:1,name:\"Alice​\"},{id:2,name:\"​\"},{id:3,name:\"Bob‮drowssap\"}], edges:[[0,1],[1,2],[2,3],[0,3]]}) is ACCEPTED. Resulting view.names === [\"Alice\",\"Alice​\",\"​\",\"Bob‮drowssap\"]: the buddy list shows two rows both reading \"Alice\", one row with a blank name, and buddyLabel(view,0) === \"Alice​, Bob‮drowssap\" -- one DOM text node whose RLO reverses the tail. Separately, importGraph({version:1, people:[{id:0,name:\"=cmd|'/c calc'!A0\"},{id:1,name:\"B\"},{id:2,name:\"C\"}], edges:[[0,1],[1,2],[0,2]]}) is accepted and toCsv emits `\"=cmd|'/c calc'!A0\"` -- no leading apostrophe, because neutralizeCell's /^[=+\\-@\\t\\r]/ sees U+0085, not '='. An exhaustive sweep of code points 0..0x3000 found 71 such leading characters (U+0080-U+009F, U+00AD, U+0600-U+0605, U+061C, U+06DD, U+070F, U+0890-U+0891, U+08E2, U+180E, U+200B-U+200F, U+202A-U+202E, U+2060-U+2064, U+2066-U+206F).",
+      "remediation": "Replace both hand-written ranges with a Unicode-category class: in importGraph.ts use `/[\\p{Cc}\\p{Cf}]/u` for CONTROL_CHARS_TEST (refuse, matching the file's refuse-what-we-cannot-round-trip stance), and in parseRoster.ts use `/[\\p{Cc}\\p{Cf}]/gu` for CONTROL_CHARS (normalize to space, matching the tolerant parser's contract). That single change makes legs (1)-(4) unreachable at once, and keeps the two authorities' round-trip agreement. Independently harden the sink: in download.ts anchor the test after leading non-graphic characters, e.g. `/^[\\p{Cc}\\p{Cf}\\p{Zs}]*[=+\\-@]/u`, so neutralizeCell stays correct for any future producer that does not go through importGraph.",
+      "invariant": "For every GraphView the app can hold, and for every string passed to toCsv or copyText: the string contains no code point in Unicode general category Cc or Cf; it is non-empty after removing all code points in Cc, Cf and Zs; the case-insensitive keys of view.names computed after that removal are pairwise distinct; and after removing any leading Cc/Cf/Zs code points the string does not begin with '=', '+', '-' or '@'.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "style-inconsistency",
+      "theme": "Inconsistent implementation pattern for similar operations",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 7,
+      "summary": "Array equality check functions use different implementations inconsistently",
+      "failure": "sameStrings (line 7-9) uses .every() for array equality, while sameEdges (line 11-17) uses a manual for loop. Both perform identical operations (element-by-element comparison) but with different code patterns.",
+      "remediation": "Standardize on one implementation. Either: (1) rewrite sameEdges to use .every() for consistency with sameStrings, or (2) rewrite sameStrings to use a for loop like sameEdges. Recommend .every() as the more idiomatic React pattern and more concise. A contributor adding sameConstraints would have no consistent model to follow.",
+      "invariant": "Array equality checks that compare two arrays for identical element sequences must use the same implementation pattern across the codebase to avoid confusion when similar functions are added.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "comment-clarity",
+      "theme": "Comment phrasing creates ambiguity about the data flow and timing",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 43,
+      "summary": "Comment about minSeparation and buddies 'becoming generation targets' is unclear about when and how",
+      "failure": "Line 43-47 states: 'buddies' and 'minSeparation' become generation targets a later reroll passes to the core, so both are CLAMPED...'. The phrase 'become generation targets' is vague and could mislead a contributor about the flow: does this mean they are targets for the CURRENT generation, or targets FOR A LATER reroll? A new contributor reading this needs to understand that these values are clamped when imported, then stored in view.settings, then used in any subsequent reroll. The comment obscures this flow.",
+      "remediation": "Replace 'become generation targets a later reroll passes to the core' with more specific language: 'are stored in Settings and may be used in later rerolls, so they must be CLAMPED to the range the UI can express'. This makes clear: (1) they are stored, not immediately used, (2) they may be used later, (3) the clamping is preventative for untrusted input that might get rerolled later.",
+      "invariant": "Comments describing configuration flow must unambiguously indicate whether values are used immediately (current operation) or deferred (future operations), to prevent contributors from misunderstanding when clamping constraints apply.",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unrescued-focus-on-unmount",
+      "theme": "an element is removed from the DOM while it holds keyboard focus, and nothing redirects focus, so it silently falls to <body> and the next Tab restarts the whole page",
+      "file": "app/src/panels/Notice.tsx",
+      "line": 23,
+      "summary": "Notice's dismiss button is wired straight to `clear` (App.tsx:391, `<Notice message={notice} onDismiss={clear} />`) instead of through App's own `closeWithFocus`/`dismissOverlay` rescue helpers that every other self-closing panel in the app uses. A keyboard user who Tabs to the toast and presses Enter/Space removes the button (the ternary in Notice.tsx unmounts it once `message` is null) while it is the focused element, and focus is dropped on `<body>`.",
+      "failure": "Reproduced directly: dispatch a generation, drive `hooks.state.status = 'error'` to raise a toast, `toast.focus()`, `fireEvent.click(toast)` (equivalent to Enter/Space) -> `document.activeElement === document.body` is true. The next Tab press then restarts from the top of the document (the '↻ Different arrangement' button), exactly the 'thrown back to the header' failure the file's own comments describe fixing for the person/route panels and both overlays — but the fix was never applied to Notice itself. Worse, the same removal also happens with NO user action at all: `useNotice.ts`'s `flash()` auto-clears after `AUTO_CLEAR_MS` (4000ms), so a user who tabs to the toast to read it slowly and doesn't act within 4s has focus pulled out from under them by a timer.",
+      "remediation": "Route Notice's dismiss through the same focus-rescue pattern App.tsx already has (e.g. call closeWithFocus-style logic with a stable anchor such as searchRef, or simply .focus() a known-good element such as the search box / roster field) whenever the toast is dismissed by button, and also when the auto-clear timer fires while the toast holds focus.",
+      "invariant": "For every element that can be unmounted or hidden by application code while it holds document.activeElement, some other visible non-inert element must receive focus in the same tick/microtask — document.activeElement must never settle on document.body as a result of an app-triggered removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unrescued-focus-on-unmount",
+      "theme": "an element is removed from the DOM while it holds keyboard focus, and nothing redirects focus, so it silently falls to <body> and the next Tab restarts the whole page",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 104,
+      "summary": "Choosing a search result via `choose()` (PersonSearch.tsx:42-46) clears `query`, which makes `open` false and unmounts the whole `role=\"listbox\"` result list — including whichever `<button role=\"option\">` was just interacted with. The keyboard path (Enter on the input, PersonSearch.tsx:57-61) never moves focus off the input so it is unaffected, but the pointer/hybrid path — clicking a result button directly — leaves the just-clicked button as `document.activeElement` at the moment it is unmounted.",
+      "failure": "Reproduced directly: render App, generate a roster, type 'ali' into the search box, `screen.getByRole('option', {name: /alice/i})`, `.focus()` it, `fireEvent.click(option)` -> `document.activeElement` is `<body>` (`tagName === 'BODY'`) immediately after. Any user who reaches the option by pointer/touch (or via a screen-reader's virtual cursor click-equivalent) and then continues by keyboard restarts Tab from the top of the document instead of continuing from the search UI.",
+      "remediation": "After `choose()` runs, explicitly return focus to the search input (`inputRef`/the input itself) rather than relying on the option button staying mounted.",
+      "invariant": "For every element that can be unmounted or hidden by application code while it holds document.activeElement, some other visible non-inert element must receive focus in the same tick/microtask — document.activeElement must never settle on document.body as a result of an app-triggered removal."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-value-announcement",
+      "theme": "a control's numeric/stateful value changes visually with no accessible-tree counterpart, so a screen-reader user gets no feedback that their action did anything",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 29,
+      "summary": "The 'Buddies each' stepper (SettingsControls.tsx:29-33) is two `<button aria-label=\"fewer/more buddies\">` around a plain `<span className=\"val tabnum\">{settings.buddies}</span>`. The buttons' accessible names are static and do not include the value, the value span is not `aria-live`, and there is no `role=\"spinbutton\"`/`aria-valuenow` pattern. Unlike LayoutToggle's `aria-pressed` (SettingsControls's own sibling pattern for the same 'expose state to AT' concern) or PersonSearch's `role=\"status\"` empty-result region, nothing here tells assistive tech the count changed.",
+      "failure": "A screen-reader user presses '+' repeatedly on the stepper; each press changes the visible digit in `.val` but nothing in the accessible tree changes on the currently-focused button (whose label stays 'more buddies'), so no announcement occurs and the user cannot tell how many buddies-per-person is currently set without leaving the button to inspect the page some other way.",
+      "remediation": "Give the value an `aria-live=\"polite\"` region (or better, mark the stepper as `role=\"group\"` with a live `aria-valuenow`/visually-hidden text appended to each button's accessible name, e.g. `aria-label={`more buddies, currently ${settings.buddies}`}`), matching the pattern the app already uses for LayoutToggle's active state.",
+      "invariant": "Every control whose activation changes an application-visible numeric/textual value must expose that new value somewhere in the accessible tree (a live region, an updated accessible name, or aria-valuenow) in the same update — a value change with no accessible counterpart must not occur."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "naming-scope",
+      "theme": "Function name does not fully describe all its responsibilities",
+      "file": "/home/user/ringweave/app/src/io/download.ts",
+      "line": 17,
+      "summary": "The 'quote' function handles three concerns but the name captures only one",
+      "failure": "The function `quote` (line 17-19) is named as if it only performs quoting (JSON.stringify), but actually: (1) truncates input to max chars, (2) handles the truncation with an ellipsis, (3) serializes to JSON. A contributor reading 'quote(someValue)' would not expect truncation behavior. At line 18, it explicitly slices and appends '…' before calling JSON.stringify, making truncation a first-class responsibility, not an implementation detail.",
+      "remediation": "Rename to `quoteTruncated` or `quoteAndTruncate` to explicitly advertise that truncation happens. Or, if brevity is preferred and the function is only used in this file (it is), add a JSDoc comment: '/** Truncate to max chars and JSON.stringify, for safe untrusted-data interpolation in error messages */'",
+      "invariant": "Public and module-exported utility functions must have names that accurately reflect all their visible behavioral effects, especially when those effects (like truncation) affect the correctness of the result and might be unexpected to callers.",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "PLAUSIBLE",
+      "class": "unrescued-focus-on-inert",
+      "theme": "an element is removed from the DOM while it holds keyboard focus, and nothing redirects focus, so it silently falls to <body> and the next Tab restarts the whole page",
+      "file": "app/src/App.tsx",
+      "line": 156,
+      "summary": "The effect that reacts to `bg.status === 'refused' | 'error'` (App.tsx:156-172) reopens RosterModal (`setModalOpen(true)`) whenever a mid-session generation is refused or errors — e.g. a keyboard reroll dispatched from the '↻ Different arrangement' button, or 'Edit people' -> Generate on an existing view. Setting `modalOpen` true immediately makes `#app` `inert` (App.tsx:281), and per the HTML spec an element that becomes inert while focused is forcibly blurred with no automatic refocus; RosterModal itself has no `autoFocus` and the reopening effect never calls `.focus()` on anything inside it (grepped app/src for `autoFocus`/`.focus()` — the only `.focus()` calls are in `closeWithFocus`/`dismissOverlay`, neither of which this effect goes through). So the control the user was just on (e.g. the reroll button) is blurred with nothing rescuing focus, and the reopened dialog receives no focus either.",
+      "failure": "Could not reproduce the blur itself in jsdom — jsdom does not implement `inert`'s focus-eviction behaviour (the existing test `appErrorRecovery.test.tsx` notes this explicitly: \"jsdom does not implement inert's focus behaviour\"). A scratch test driving `hooks.state.status = 'refused'` after focusing the reroll button left `document.activeElement` unchanged in jsdom, which is jsdom's known gap, not evidence the app is safe in a real browser. The code path — `#app inert={modalOpen}` toggling true with no compensating focus call anywhere in the refused/error branch — matches exactly the pattern the file's own comments (lines 80-127) describe fixing for every OTHER modalOpen transition (user-initiated ones, via dismissOverlay), but this is the one modalOpen transition that is NOT user-initiated and is not wrapped.",
+      "remediation": "In the `bg.status === 'refused' | 'error'` effect, after `setModalOpen(true)`, move focus into the reopened dialog (e.g. focus its heading or first field, matching the ARIA APG dialog pattern) the same way dismissOverlay rescues focus for the user-initiated closes.",
+      "invariant": "For every element that can be unmounted, hidden, or made inert by application code while it holds document.activeElement, some other visible non-inert element must receive focus in the same tick/microtask — document.activeElement must never settle on document.body (or on an element that has just become unfocusable) as a result of an app-triggered state change."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 4,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 4,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 2,
+      "lastRound": 4,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 4,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 4,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 613813,
+    "agents": 6,
+    "toolCalls": 239
+  },
+  "observations": [
+    {
+      "kind": "harness-fix-deployed",
+      "note": "First round run via scriptPath. target is clean, round is 4, saturationDecisions is present and priorSaturationReceived is true — the plumbing committed two rounds earlier finally executed. Every lens still ran: all five were below gate or had a touched surface, which is the gate working, not failing."
+    },
+    {
+      "kind": "theme-not-closed-three-rounds",
+      "note": "Focus-stranding was blocking in app rounds 2, 3 and 4. Rounds 2 and 3 fixed the call sites review had named (panels, then overlays); round 4 named three more (toast dismiss, search result choice, the reopen-modal effect). The per-call-site shape was the defect: each fix required a future author to remember a helper. Round 4 replaces all of it with one commit-boundary effect and DELETES both helpers."
+    },
+    {
+      "kind": "non-monotonic-convergence",
+      "note": "app findings went 14 -> 9 -> 6 -> 9 and blocking 7 -> 6 -> 1 -> 4. The fourth round is up on both, against a target whose previous round had one blocking finding."
+    }
+  ],
+  "targetRaw": "app/src (the BuddyGraph app)"
+}

@@ -1,0 +1,385 @@
+{
+  "target": "lib/src",
+  "round": 20,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 6,
+    "confirmed": 7,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/lib/src/core (graph, metrics, bounds, budgets, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus lib/test/*. `npm test` green (260 tests); `python3 test_core.py` + `gen_fixtures.py` regenerate `lib/test/fixtures/reference.json` byte-identically (oracle parity holds, `git status` clean). Reproduced with scratch harnesses under /home/user/ringweave/.review-scratch/corrx/: (1) `girth` vs an edge-removal brute force over 3000 random graphs \u2014 exact; (2) Set/Map iteration-order dependence: same edge set inserted in permuted order through `polish`, `polishConstrained`, `repairDegrees`, `shortestPath` over 400 random graphs \u2014 no divergence; constraint insertion order through `constrainedGreedy` over 3000 feasible cases \u2014 no divergence; (3) instrumented `constrainedGreedy` over 16,644 feasible random inputs: zero prohibited/required/degree-cap violations, `joinAnyComponents` provably inert (0 firings, so its Set-order-dependent scan is unreachable), and every `swapJoin` application strictly reduced the component count; (4) `buildBuddyGraph` reported aspl/diameter/girth/regular/degreeMin/Max/connected/finalMinSeparation/asplGap recomputed from the returned edges for n\u226422, k\u22646 \u2014 all agree, asplGap never negative; same for `buildConstrainedBuddyGraph` over 600 random constraint sets including `buddies`, `priorsKeptFraction` and `polished` vs a `{polish:false}` rerun; (5) `mooreLowerBounds` vs exhaustive optimal ASPL/diameter over all graphs with max degree \u2264 k for n \u2264 7 \u2014 a true lower bound everywhere; (6) `buildConstrainedBuddyGraph` never throws over a 1,296-cell grid of malformed n/k/options (NaN, Infinity, negative, fractional, seed 2^32, priorWeight -1, polishIters Infinity); (7) `canGenerate` agrees with buildBuddyGraph's throw/no-throw on a 26x9 grid plus malformed inputs; (8) polish/polishConstrained objective monotonicity, degree preservation, connectivity/component-count guards and constraint preservation over 800 random graphs; (9) no Math.random/Date.now/performance.now anywhere in src.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full surface of lib/src (11 modules) plus lib/test, read whole, not diff-scoped; verified against reference-python/constraints.py where parity is claimed. Reproduced with throwaway harnesses in /home/user/ringweave/.review-scratch/ (gitignored): (1) at-budget MAX_CONSTRAINED_WORK sweep \u2014 (5000,4) 23.2s, (3000,11) 29.4s, (2000,25) 32.9s, (1000,100) 35.1s, (700,204) 38.0s, (464,463) 55.9s, a 2.4x spread consistent with the documented 13-46s; (2) prohibited-pair charge at budget (n=2000,k=4,1.04M pairs) 10.7s \u2014 conservative; (3) validate's O(n^2) connectivity walk at n=5000 with one prohibited pair, 0.12s (seen[v] short-circuits before isProhibited); (4) 40,000-case fuzz of buildConstrainedBuddyGraph over NaN/+-Infinity/-0/2.5/2**53/5e9 for n, k, cons.n, constraint endpoints, seed, polishIters, priorWeight, minSeparation, polish, priorHard \u2014 zero throws, refuse-never-throw contract holds; (5) canGenerate(n,k)===true implies buildBuddyGraph does not throw, across a grid; (6) traced that checkPolishSize can never throw out of either builder (max 4*n(n+m) over each accept-set is 3e8/2e8 vs an 8.65e8 budget); (7) completion's legal-edge-maximality making forceConnect and repairConnectivity single-pass \u2014 attempted multi-pass swapJoin with 1666 required triangles at n=4800 (2.26s, dominated by the charged O(n^2) scan); the uncharged isRequired-skip and empty-per[] iterations in swapJoin exist but I could construct no input reaching them repeatedly, since disconnection needs either all-required (unswappable) components or prohibition density the 80-unit charge refuses; (8) MAX_STRUCTURAL_REASONS truncation and per-fault counting vs the Python mirror (faithful); (9) edgeKey/dist[i*n+j] overflow at MAX_CONSTRAINED_N; -0/Infinity through boundedPolishIterations; mooreLowerBounds' denormal-loop guard; girth/allPairsSummary uncapped-diagnostic position (the one live main-thread caller, app/src/io/importGraph.ts, caps node count and density); Constraints.fromTags still has no caller outside lib/test, so its documented deferral stands.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read every file under lib/src/core (graph.ts, budgets.ts, constrainedGreedy.ts, constraints.ts, greedy.ts, index.ts, metrics.ts, polish.ts, rng.ts, swap.ts, bounds.ts) and the test directory listing. Attempted two concrete extensions against real committed roadmap items: (1) added a second TagPolicy case to constraints.ts's declared OCP seam, verified it flows through validate/legalEdge/assertHardConstraints/buildReport with zero caller edits (lib/CLAUDE.md's claimed seam); (2) simulated F9 'recalculate with minimal disruption' (PROJECT_PLAN.md M4) end-to-end via public API only (addPrior/priorWeight/buildConstrainedBuddyGraph) for both roster growth and shrinkage-with-reindexing, confirming the core-side machinery is complete and self-contained with no fan-out. Cross-checked F8/F10 (node explorer, path finder) against already-exported bfsDistances/eccentricity/shortestPath. Scratch scripts left in /home/user/ringweave/.review-scratch/ (seam-test.ts, f9-recalc-test.ts).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (5) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Degree-budget-feasible rosters still get split: constrainedGreedy's completion loop can spend a hub's slots on unconstrained people before reserving edges for scarce, legal-but-not-yet-placed vertices, and the only repair path (two-edge double swap) structurally cannot merge components, leaving forceConnect permanently inert.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "constrainedGreedy's docblock says it sacrifices connectivity only when the degree budget forbids it, but at k=2 with a few prohibitions it still strands a person even though budget allows connection: completion spends the hub's slots on unconstrained people, swapJoin can't repair a single stranded vertex because it needs one edge from each component, and forceConnect never fires (0/16,644 runs)."
+      ],
+      "remediation": "Delete the dead forceConnect path and the swapJoin restriction that requires an edge from each component before it will act; in its place, tighten the completion loop's own boundary check so it refuses to allocate a hub's remaining slots to unconstrained candidates while any deficient, cross-component vertex still has a legal (non-prohibited) partner available \u2014 i.e. remove the premature-exit condition that lets completion finish before scarce vertices are served, rather than bolting on new repair machinery."
+    },
+    {
+      "theme": "validate()'s structural-reasons truncation is keyed to Set insertion order before it sorts, so the same constraint set yields different retained reasons (and diverges from the Python oracle, which truncates over a differently-ordered hash set) depending on history rather than value.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "structuralReasons truncates at MAX_STRUCTURAL_REASONS=16 while scanning insertion-ordered pair sets, then normalize sorts only the already-truncated subset, so which 16 faults survive depends on insertion order, not the constraint set \u2014 breaking the byte-identity the docblocks claim with the Python mirror, and exempting validate from the insertion-order invariance the repo otherwise guards (buildReversed props test)."
+      ],
+      "remediation": "Remove the positional truncation gate (`if (errs.length < MAX) errs.push(r)`) entirely so nothing is discarded during the scan; let normalize's existing sort run over the full set first, and only then drop everything past index 16. This deletes the order-sensitive step instead of adding a new ordering rule, and the same deletion should be mirrored in reference-python's `_structural_errors`."
+    },
+    {
+      "theme": "The constrained polish cost model doesn't reflect the real work the polish loop does: the per-iteration prior-preservation probe (one hasEdge call per prior pair, on by default) isn't a dimension either budget gate can see, and the module's own header understates the loop's true complexity \u2014 both are the cost accounting for the same polish pass being wrong.",
+      "severity": "blocking",
+      "critics": [
+        "critic-security",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "polishWork and boundedPolishIterations don't take priorCount as an argument even though constrainedMeasure charges a hasEdge probe per prior pair every iteration, and the penalty is on by default (DEFAULT_PRIOR_WEIGHT=2 whenever priorCount>0) \u2014 an attacker-chosen prior-pair count buys unbudgeted work, the same class round 18 already closed for prohibitedCount.",
+        "polish.ts's module header claims cost is O(n\u00b7m) per iteration, but the actual dominant cost is O(n\u00b7(n+m)) per iteration from allPairsSummary."
+      ],
+      "remediation": "Remove the default-on prior-preservation charge: drop the implicit DEFAULT_PRIOR_WEIGHT activation so a priorCount-driven probe never runs unless a caller explicitly opts in through a path the gates already bound (prohibitedCount's precedent), rather than adding a new priorCount parameter to two more functions. Delete the stale 'O(n\u00b7m)' line in the header rather than replacing it with fresh prose describing a cost path that should no longer exist by default."
+    },
+    {
+      "theme": "Hard-constraint legality is checked independently in three separate functions with no single source of truth, so a constraint-type change has to be applied three times or silently diverges.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "legalEdge, swapBreaksConstraint, and assertHardConstraints each reimplement required/prohibited-pair logic independently; adding a constraint type requires changes in all three places with no shared abstraction enforcing consistency."
+      ],
+      "remediation": "Delete the duplicate inline required/prohibited checks inside swapBreaksConstraint and assertHardConstraints and have both call legalEdge directly for their per-edge test \u2014 unifying three call sites down to one existing implementation instead of introducing a new shared abstraction."
+    },
+    {
+      "theme": "The same separation concept is spelled two different ways (minSeparation in the public API, mind internally), and nothing in the code itself states they're the same thing.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "index.ts's public API uses 'minSeparation' but ringGreedy's internal parameter is 'mind' for the same concept; the equivalence is documented only in CLAUDE.md, not visible where a maintainer would first encounter both names."
+      ],
+      "remediation": "Remove the internal name entirely: rename ringGreedy's 'mind' parameter to 'minSeparation' so only one spelling of the concept exists anywhere in the call chain, eliminating the alias rather than annotating it."
+    },
+    {
+      "theme": "constrainedGreedy accepts a minSeparation option that choosePartner never applies \u2014 a parameter with no live effect and no caller depending on it.",
+      "severity": "deferral",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "ConstrainedGreedyOptions.minSeparation is accepted but ignored; choosePartner always returns the farthest candidate and never applies a minimum-separation filter, and no current caller relies on it firing."
+      ],
+      "remediation": "Since no caller depends on it, remove the unused minSeparation field from ConstrainedGreedyOptions and its plumbing into choosePartner now, rather than deferring a no-op option for a hypothetical future caller to reinterpret."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "avoidable-fragmentation",
+      "theme": "the constrained generator strands people it had the degree budget to connect, and its own docblock promises it only splits a roster when the degree budget forbids connecting it",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 92,
+      "summary": "`constrainedGreedy`'s docblock says it \"Sacrifices regularity and, when the degree budget won't allow it, connectivity\". At k=2 with a few prohibitions the degree budget DOES allow a connected graph and the generator still returns a split roster: completion spends the hub's slots on unconstrained people, the stranded person's component then has no edge, and `swapJoin` cannot repair it because a double edge swap needs one edge from EACH component. `forceConnect` is inert (verified: 0 firings in 16,644 runs) so nothing else recovers. The metrics that come back read as the complete-graph optimum for the surviving fragment.",
+      "failure": "n=4, k=2, prohibit(1,3) and prohibit(2,3): `validate` returns [] (feasible), and `buildConstrainedBuddyGraph(4,2,cons)` returns edges [[0,1],[0,2],[1,2]] \u2014 person 3 has zero buddies \u2014 with aspl=1, diameter=1, degreeMin=0, connected=false, largestComponentFraction=0.75. The legal connected solution 0-1, 0-3, 1-2 exists at the same k under the same prohibitions. Second witness: n=5, k=2, prohibit (1,2),(2,3),(0,2),(1,4),(0,4) -> edges [[0,1],[0,3],[1,3],[2,4]], again aspl=1/diameter=1 for a roster in two pieces. Brute-force sweep over 3,921 feasible k=2 inputs at n in 4..6: 89 disconnected outputs, 50 of them (56%) had a connected solution at the same k. At k>=3 the rate was 0. The existing suite cannot catch it: `constrained.props.test.ts` DOES assert `expect(isConnected(g)).toBe(true)`, but its generator only draws n in 10..40, k in 3..5 and at most n/8 prohibited pairs, so the k=2/dense-prohibition shape is never generated.",
+      "remediation": "Two independent fixes, either of which closes the witness. (a) Repair: extend `repairConnectivity` past the two-edges-required double swap \u2014 for a vertex v with degree < k in a minority component, find a non-prohibited partner u in another component and free a slot at u by removing one non-required, non-bridge edge (u,w), then add (v,u); that preserves the degree cap and every required edge, and merges the components exactly (non-bridge removal cannot split u's component). (b) Prevent: order `deficientVertices` by scarcity of legal partners (count of non-prohibited, under-k, non-adjacent vertices) before degree, so a person prohibited from most of the roster is served before the hubs saturate. Either way, correct the docblock at line 92 and forceConnect's comment, which currently assert a guarantee the code does not provide, and widen the props-test generator to include k=2 with prohibition density up to ~n/2 so the invariant below is actually exercised.",
+      "invariant": "For every (n, k, cons) for which `validate(cons, k)` returns [], if ANY graph on n vertices with max degree <= k exists that contains every required pair and no prohibited pair and is connected, then `isConnected(constrainedGreedy(n, k, cons))` must be true. (Machine-checkable by exhaustive subset search over the allowed pairs for n <= 7.)"
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "order-dependent-output",
+      "theme": "the same constraint set yields different refusal text depending on the order the pairs were added, so validate is neither reproducible by value nor identical to the Python oracle it claims byte-parity with",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 388,
+      "summary": "`structuralReasons` truncates at MAX_STRUCTURAL_REASONS=16 while scanning `requiredPairs()`/`prohibitedPairs()`/`priorPairs()`, which are `Array.from(Set)` \u2014 i.e. INSERTION order. `normalize` then sorts, but it sorts the already-truncated subset, so WHICH 16 faults survive is a function of insertion history rather than of the constraint set. The Python mirror truncates while iterating a hash-ordered `set`, so it keeps a different 16 for the same input \u2014 breaking the byte-identity `formatReason`/`validate` docblocks claim. This is the one place in the core where an order dependence reaches an output; the repo already treats insertion-order invariance as a required property (`constrained.props.test.ts` has `buildReversed` and asserts `constrainedGreedy` is invariant to it), and the validator is exempt from that guard.",
+      "failure": "n=10 with 25 out-of-range prohibited pairs (100+i, 200+i), i in 0..24 \u2014 an identical pair SET added in two orders: `validate(cons, 4)` returns [summary, 'constraint references unknown person 100 ...', '... 101 ...', ...] for forward insertion and [summary, '... 117 ...', '... 118 ...', ...] for reversed insertion (17 strings each, different contents). `reference-python`'s `validate` on the same input returns [summary, '... 102 ...', '... 103 ...']. All three disagree. The suite cannot catch it: `reasons.test.ts` only pins the single 'N constraints are invalid \u2014 only the first few are listed' string, and nothing asserts which reasons survive truncation.",
+      "remediation": "Make the retained subset canonical rather than positional: have `note()` keep a bounded buffer ordered by rendered text (insert-and-trim at 16) instead of `if (errs.length < MAX_STRUCTURAL_REASONS) errs.push(r)`, so the survivors are the 16 lexicographically smallest reasons regardless of insertion order; the exact count still comes from `invalid`, which is already order-free. Mirror the same rule in `reference-python`'s `_structural_errors` so the two agree. Then add a property test asserting the invariant below (shuffle the insertion order of an identical pair set and compare `validate` outputs), which is the natural sibling of the existing `buildReversed` generator check.",
+      "invariant": "For any n, k and any two `Constraints` c1, c2 with c1.n === c2.n and equal required/prohibited/prior pair SETS, `validate(c1, k)` must deep-equal `validate(c2, k)` \u2014 the output depends only on the pair sets, never on the order in which pairs were added."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unmodelled-cost-dimension",
+      "theme": "a work budget that cannot see a quantity its own inner loop probes, so an attacker-chosen count buys work the gate never charges for",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 273,
+      "summary": "The constrained polish pass charges a prior-preservation term \u2014 one Graph.hasEdge probe per prior pair, on every iteration, via countPresentEdges in constrainedMeasure (constrainedGreedy.ts:539) \u2014 but neither polishWork (the auto-polish gate, budgets.ts:273) nor boundedPolishIterations (the iteration clamp, budgets.ts:238) takes priorCount as an argument, and constrainedWork charges only prohibitedCount, so validate never bounds it either. The penalty is on by DEFAULT (DEFAULT_PRIOR_WEIGHT = 2 whenever priorCount > 0), so no option has to be passed. This is the same class round 18 closed for constrainedWork/prohibitedCount, one module over.",
+      "failure": "buildConstrainedBuddyGraph(268, 1, cons) with cons carrying every pair as a prior. validate(cons, 1) returns [] at every prior count. Measured wall-clock, same (n,k), priors the only variable: 0 priors 3.82s; 8,944 priors 6.58s; 17,889 priors 9.87s; 35,778 priors 18.07s \u2014 a 4.7x overrun of a budget whose stated purpose is to bound the pass's cost, with no refusal and no clamp. At k=4, n=189 the same construction measures 18.00s -> 25.94s. The overrun factor is ~10*P / n(n+m) and is maximised at small k, where m = n*k/2 is smallest.",
+      "remediation": "Give the polish cost model the dimension it probes: add a priorCount parameter to polishWork and boundedPolishIterations (pass 0 from the unconstrained polish, which has no prior term), charging a measured per-probe rate calibrated the way PROHIBITED_PROBE_COST was \u2014 a hasEdge probe measured ~10 modelled units here. buildConstrainedBuddyGraph holds `active` at the resolveWantPolish call site, and polishConstrained holds cons, so both gates can see it without an API change. Mirror the charge in reference-python. Ratchet the monotonicity property into test/optimizer.props.test.ts.",
+      "invariant": "polishWork and boundedPolishIterations must be monotone in every quantity the polish loop's per-iteration work depends on: for all n, m, iters and all p2 >= p1 >= 0, polishWork(n,k,iters,p2) >= polishWork(n,k,iters,p1) and boundedPolishIterations(n,m,req,fallback,p2) <= boundedPolishIterations(n,m,req,fallback,p1). Equivalently and observably: adding prior pairs to a Constraints can only move an input toward fewer polish iterations or toward refusal, never toward more real work at an unchanged modelled cost."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-complexity-claim",
+      "theme": "documented cost complexity is wrong for the entire polish subsystem",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 4,
+      "summary": "Module header states polish cost is O(n\u00b7m) per iteration, but the actual cost model is O(n\u00b7(n+m)) per iteration",
+      "failure": "polish.ts line 4-5 says 'Cost is O(n\u00b7m) per iteration (full re-measure)' but allPairsSummary (called every iteration) is O(n\u00b7(n+m)) \u2014 verified in budgets.ts line 264 'The dominant term is `allPairsSummary`, which is Theta(n\u00b7(n+m))'. For sparse graphs this is a 1000x underestimate.",
+      "remediation": "Change line 4 from 'Cost is O(n\u00b7m) per iteration' to 'Cost is O(n\u00b7(n+m)) per iteration' (allPairsSummary dominates, not edge traversal). Update line 5 to reflect this scales with vertex count squared, not linearly with edges."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "semantic-coupling-no-abstraction",
+      "theme": "three locations must be manually kept in sync when adding constraint types",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 270,
+      "summary": "Hard constraints are checked in three separate functions (legalEdge, swapBreaksConstraint, assertHardConstraints) with no shared abstraction; adding a constraint type requires changes in all three places",
+      "failure": "A new hard constraint category added to legalEdge() at line 270 must also be added to swapBreaksConstraint() at line 551 and assertHardConstraints() at line 692, or the generator will silently permit constraint violations in generation or polish. The comment at line 684 acknowledges this but does not reduce the risk.",
+      "remediation": "Extract a shared constraint-checking function `isLegalSwap(a, b, cons: Constraints): boolean` that encapsulates required/prohibited logic, then call it from all three sites. This reduces the three points of manual sync to one source of truth. Document the invariant: any predicate called by a generator or optimizer must have a corresponding assertion postcondition."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "self-documenting-name-vs-concept-alias",
+      "theme": "same concept spelled with two different names (minSeparation vs mind) creates vocabulary friction",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 87,
+      "summary": "Public API uses 'minSeparation' but internal ringGreedy uses 'mind' for the same concept. While documented as intentional aliases in CLAUDE.md, a maintainer opening this file for the first time encounters both names without prior context, forcing them to look elsewhere to confirm they are the same thing.",
+      "failure": "Line 87 (BuddyOptions) names it minSeparation; line 168 reads options.minSeparation; line 177 passes it to ringGreedy as { mind }. Then in greedy.ts the parameter is called mind (line 33). No comment at line 168 explains why the variable was renamed. A maintainer unfamiliar with CLAUDE.md's vocabulary section has to grep across files to confirm these refer to the same concept.",
+      "remediation": "Add a single-line comment at index.ts line 168: 'const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION; // same as ringGreedy\\'s mind parameter'. This names the concept once rather than hiding the equivalence in CLAUDE.md. Alternatively, rename the ringGreedy parameter to minSeparation to match the public API, but that is a bigger change."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "avoidable-fragmentation",
+      "theme": "the constrained generator strands people it had the degree budget to connect, and its own docblock promises it only splits a roster when the degree budget forbids connecting it",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 92,
+      "summary": "`constrainedGreedy`'s docblock says it \"Sacrifices regularity and, when the degree budget won't allow it, connectivity\". At k=2 with a few prohibitions the degree budget DOES allow a connected graph and the generator still returns a split roster: completion spends the hub's slots on unconstrained people, the stranded person's component then has no edge, and `swapJoin` cannot repair it because a double edge swap needs one edge from EACH component. `forceConnect` is inert (verified: 0 firings in 16,644 runs) so nothing else recovers. The metrics that come back read as the complete-graph optimum for the surviving fragment.",
+      "failure": "n=4, k=2, prohibit(1,3) and prohibit(2,3): `validate` returns [] (feasible), and `buildConstrainedBuddyGraph(4,2,cons)` returns edges [[0,1],[0,2],[1,2]] \u2014 person 3 has zero buddies \u2014 with aspl=1, diameter=1, degreeMin=0, connected=false, largestComponentFraction=0.75. The legal connected solution 0-1, 0-3, 1-2 exists at the same k under the same prohibitions. Second witness: n=5, k=2, prohibit (1,2),(2,3),(0,2),(1,4),(0,4) -> edges [[0,1],[0,3],[1,3],[2,4]], again aspl=1/diameter=1 for a roster in two pieces. Brute-force sweep over 3,921 feasible k=2 inputs at n in 4..6: 89 disconnected outputs, 50 of them (56%) had a connected solution at the same k. At k>=3 the rate was 0. The existing suite cannot catch it: `constrained.props.test.ts` DOES assert `expect(isConnected(g)).toBe(true)`, but its generator only draws n in 10..40, k in 3..5 and at most n/8 prohibited pairs, so the k=2/dense-prohibition shape is never generated.",
+      "remediation": "Two independent fixes, either of which closes the witness. (a) Repair: extend `repairConnectivity` past the two-edges-required double swap \u2014 for a vertex v with degree < k in a minority component, find a non-prohibited partner u in another component and free a slot at u by removing one non-required, non-bridge edge (u,w), then add (v,u); that preserves the degree cap and every required edge, and merges the components exactly (non-bridge removal cannot split u's component). (b) Prevent: order `deficientVertices` by scarcity of legal partners (count of non-prohibited, under-k, non-adjacent vertices) before degree, so a person prohibited from most of the roster is served before the hubs saturate. Either way, correct the docblock at line 92 and forceConnect's comment, which currently assert a guarantee the code does not provide, and widen the props-test generator to include k=2 with prohibition density up to ~n/2 so the invariant below is actually exercised.",
+      "invariant": "For every (n, k, cons) for which `validate(cons, k)` returns [], if ANY graph on n vertices with max degree <= k exists that contains every required pair and no prohibited pair and is connected, then `isConnected(constrainedGreedy(n, k, cons))` must be true. (Machine-checkable by exhaustive subset search over the allowed pairs for n <= 7.)"
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "order-dependent-output",
+      "theme": "the same constraint set yields different refusal text depending on the order the pairs were added, so validate is neither reproducible by value nor identical to the Python oracle it claims byte-parity with",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 388,
+      "summary": "`structuralReasons` truncates at MAX_STRUCTURAL_REASONS=16 while scanning `requiredPairs()`/`prohibitedPairs()`/`priorPairs()`, which are `Array.from(Set)` \u2014 i.e. INSERTION order. `normalize` then sorts, but it sorts the already-truncated subset, so WHICH 16 faults survive is a function of insertion history rather than of the constraint set. The Python mirror truncates while iterating a hash-ordered `set`, so it keeps a different 16 for the same input \u2014 breaking the byte-identity `formatReason`/`validate` docblocks claim. This is the one place in the core where an order dependence reaches an output; the repo already treats insertion-order invariance as a required property (`constrained.props.test.ts` has `buildReversed` and asserts `constrainedGreedy` is invariant to it), and the validator is exempt from that guard.",
+      "failure": "n=10 with 25 out-of-range prohibited pairs (100+i, 200+i), i in 0..24 \u2014 an identical pair SET added in two orders: `validate(cons, 4)` returns [summary, 'constraint references unknown person 100 ...', '... 101 ...', ...] for forward insertion and [summary, '... 117 ...', '... 118 ...', ...] for reversed insertion (17 strings each, different contents). `reference-python`'s `validate` on the same input returns [summary, '... 102 ...', '... 103 ...']. All three disagree. The suite cannot catch it: `reasons.test.ts` only pins the single 'N constraints are invalid \u2014 only the first few are listed' string, and nothing asserts which reasons survive truncation.",
+      "remediation": "Make the retained subset canonical rather than positional: have `note()` keep a bounded buffer ordered by rendered text (insert-and-trim at 16) instead of `if (errs.length < MAX_STRUCTURAL_REASONS) errs.push(r)`, so the survivors are the 16 lexicographically smallest reasons regardless of insertion order; the exact count still comes from `invalid`, which is already order-free. Mirror the same rule in `reference-python`'s `_structural_errors` so the two agree. Then add a property test asserting the invariant below (shuffle the insertion order of an identical pair set and compare `validate` outputs), which is the natural sibling of the existing `buildReversed` generator check.",
+      "invariant": "For any n, k and any two `Constraints` c1, c2 with c1.n === c2.n and equal required/prohibited/prior pair SETS, `validate(c1, k)` must deep-equal `validate(c2, k)` \u2014 the output depends only on the pair sets, never on the order in which pairs were added."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unmodelled-cost-dimension",
+      "theme": "a work budget that cannot see a quantity its own inner loop probes, so an attacker-chosen count buys work the gate never charges for",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 273,
+      "summary": "The constrained polish pass charges a prior-preservation term \u2014 one Graph.hasEdge probe per prior pair, on every iteration, via countPresentEdges in constrainedMeasure (constrainedGreedy.ts:539) \u2014 but neither polishWork (the auto-polish gate, budgets.ts:273) nor boundedPolishIterations (the iteration clamp, budgets.ts:238) takes priorCount as an argument, and constrainedWork charges only prohibitedCount, so validate never bounds it either. The penalty is on by DEFAULT (DEFAULT_PRIOR_WEIGHT = 2 whenever priorCount > 0), so no option has to be passed. This is the same class round 18 closed for constrainedWork/prohibitedCount, one module over.",
+      "failure": "buildConstrainedBuddyGraph(268, 1, cons) with cons carrying every pair as a prior. validate(cons, 1) returns [] at every prior count. Measured wall-clock, same (n,k), priors the only variable: 0 priors 3.82s; 8,944 priors 6.58s; 17,889 priors 9.87s; 35,778 priors 18.07s \u2014 a 4.7x overrun of a budget whose stated purpose is to bound the pass's cost, with no refusal and no clamp. At k=4, n=189 the same construction measures 18.00s -> 25.94s. The overrun factor is ~10*P / n(n+m) and is maximised at small k, where m = n*k/2 is smallest.",
+      "remediation": "Give the polish cost model the dimension it probes: add a priorCount parameter to polishWork and boundedPolishIterations (pass 0 from the unconstrained polish, which has no prior term), charging a measured per-probe rate calibrated the way PROHIBITED_PROBE_COST was \u2014 a hasEdge probe measured ~10 modelled units here. buildConstrainedBuddyGraph holds `active` at the resolveWantPolish call site, and polishConstrained holds cons, so both gates can see it without an API change. Mirror the charge in reference-python. Ratchet the monotonicity property into test/optimizer.props.test.ts.",
+      "invariant": "polishWork and boundedPolishIterations must be monotone in every quantity the polish loop's per-iteration work depends on: for all n, m, iters and all p2 >= p1 >= 0, polishWork(n,k,iters,p2) >= polishWork(n,k,iters,p1) and boundedPolishIterations(n,m,req,fallback,p2) <= boundedPolishIterations(n,m,req,fallback,p1). Equivalently and observably: adding prior pairs to a Constraints can only move an input toward fewer polish iterations or toward refusal, never toward more real work at an unchanged modelled cost."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-complexity-claim",
+      "theme": "documented cost complexity is wrong for the entire polish subsystem",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 4,
+      "summary": "Module header states polish cost is O(n\u00b7m) per iteration, but the actual cost model is O(n\u00b7(n+m)) per iteration",
+      "failure": "polish.ts line 4-5 says 'Cost is O(n\u00b7m) per iteration (full re-measure)' but allPairsSummary (called every iteration) is O(n\u00b7(n+m)) \u2014 verified in budgets.ts line 264 'The dominant term is `allPairsSummary`, which is Theta(n\u00b7(n+m))'. For sparse graphs this is a 1000x underestimate.",
+      "remediation": "Change line 4 from 'Cost is O(n\u00b7m) per iteration' to 'Cost is O(n\u00b7(n+m)) per iteration' (allPairsSummary dominates, not edge traversal). Update line 5 to reflect this scales with vertex count squared, not linearly with edges."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "semantic-coupling-no-abstraction",
+      "theme": "three locations must be manually kept in sync when adding constraint types",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 270,
+      "summary": "Hard constraints are checked in three separate functions (legalEdge, swapBreaksConstraint, assertHardConstraints) with no shared abstraction; adding a constraint type requires changes in all three places",
+      "failure": "A new hard constraint category added to legalEdge() at line 270 must also be added to swapBreaksConstraint() at line 551 and assertHardConstraints() at line 692, or the generator will silently permit constraint violations in generation or polish. The comment at line 684 acknowledges this but does not reduce the risk.",
+      "remediation": "Extract a shared constraint-checking function `isLegalSwap(a, b, cons: Constraints): boolean` that encapsulates required/prohibited logic, then call it from all three sites. This reduces the three points of manual sync to one source of truth. Document the invariant: any predicate called by a generator or optimizer must have a corresponding assertion postcondition."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "self-documenting-name-vs-concept-alias",
+      "theme": "same concept spelled with two different names (minSeparation vs mind) creates vocabulary friction",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 87,
+      "summary": "Public API uses 'minSeparation' but internal ringGreedy uses 'mind' for the same concept. While documented as intentional aliases in CLAUDE.md, a maintainer opening this file for the first time encounters both names without prior context, forcing them to look elsewhere to confirm they are the same thing.",
+      "failure": "Line 87 (BuddyOptions) names it minSeparation; line 168 reads options.minSeparation; line 177 passes it to ringGreedy as { mind }. Then in greedy.ts the parameter is called mind (line 33). No comment at line 168 explains why the variable was renamed. A maintainer unfamiliar with CLAUDE.md's vocabulary section has to grep across files to confirm these refer to the same concept.",
+      "remediation": "Add a single-line comment at index.ts line 168: 'const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION; // same as ringGreedy\\'s mind parameter'. This names the concept once rather than hiding the equivalence in CLAUDE.md. Alternatively, rename the ringGreedy parameter to minSeparation to match the public API, but that is a bigger change."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-seam-no-caller",
+      "theme": "choosePartner in constrainedGreedy accepts minSeparation option but ignores it, with no live caller expecting different behavior",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 68,
+      "summary": "ConstrainedGreedyOptions.minSeparation is accepted but ignored; choosePartner always returns candidates[0] (farthest), never applies a minimum-separation filter",
+      "failure": "Line 68 defines minSeparation as an option; line 364 of index.ts passes it; but line 102 marks _opts as unused and line 331-343 never consults the value. The comment at lines 313-330 explains why the old filtering was a no-op and documents this as kept for compatibility. No live caller in the tree passes a non-default minSeparation to the constrained path expecting behavior change.",
+      "remediation": "This is deferred per REVIEW_PROTOCOL.md section 3(b): the option has no caller relying on it, and removing it is a breaking change. When F9 lands and UI starts passing custom minSeparation, revisit: test whether the callers actually expect it to apply, or document it more prominently as a recognized no-op. The tracked follow-on is in CLAUDE.md line 329."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbuilt-seam-no-caller",
+      "theme": "choosePartner in constrainedGreedy accepts minSeparation option but ignores it, with no live caller expecting different behavior",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 68,
+      "summary": "ConstrainedGreedyOptions.minSeparation is accepted but ignored; choosePartner always returns candidates[0] (farthest), never applies a minimum-separation filter",
+      "failure": "Line 68 defines minSeparation as an option; line 364 of index.ts passes it; but line 102 marks _opts as unused and line 331-343 never consults the value. The comment at lines 313-330 explains why the old filtering was a no-op and documents this as kept for compatibility. No live caller in the tree passes a non-default minSeparation to the constrained path expecting behavior change.",
+      "remediation": "This is deferred per REVIEW_PROTOCOL.md section 3(b): the option has no caller relying on it, and removing it is a breaking change. When F9 lands and UI starts passing custom minSeparation, revisit: test whether the callers actually expect it to apply, or document it more prominently as a recognized no-op. The tracked follow-on is in CLAUDE.md line 329."
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 6,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 20,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 532750,
+    "agents": 5,
+    "toolCalls": 147
+  }
+}

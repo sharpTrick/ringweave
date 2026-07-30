@@ -1,0 +1,637 @@
+{
+  "runId": "wf_4c9a5215-924",
+  "target": "app/src",
+  "round": 1,
+  "tokens": {
+    "subagentTokens": 550993,
+    "agents": 6,
+    "toolCalls": 180
+  },
+  "observations": [
+    {
+      "kind": "lens-value",
+      "note": "critic-interaction filed 5 of the 7 blocking findings \u2014 its first round with a real surface, having returned nothingFound on all five lib rounds. E3's leave-one-out gave it zero unique recall on a corpus of mutation-style boundary flips in lib-adjacent code; pointed at a UI it was the single most productive lens. A lens's value is a property of the surface, not of the lens."
+    },
+    {
+      "kind": "critic-side-effect",
+      "note": "Five more scratch probes left under app/test, one of which (bench5) made `npm test` red BECAUSE importGraph correctly refused a hostile name \u2014 a red suite caused by a probe's wrong expectation, indistinguishable at a glance from a regression. Second occurrence; now closed with a gitignored .review-scratch/ and instructions in all five critic briefs."
+    },
+    {
+      "kind": "gate-hole",
+      "note": "app/tsconfig.json included only `src`, so `npm run typecheck` never looked at app/test. Wiring a test-inclusive config found 9 real type errors, including explorer.test.tsx rendering PersonPanel without the required onFindPath prop \u2014 clicking that button would have thrown, and the test passed only because it never clicked it."
+    }
+  ],
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 14,
+    "confirmed": 14,
+    "blocking": 7,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 11
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Read every file under /home/user/ringweave/app/src plus the whole app/test suite, and cross-read lib/src/core/{metrics,constraints,index}.ts for the contracts the app leans on. Ran `npx vitest run` (29 files / 249 tests green, before and after my scratch probes were removed) and wrote three throwaway probe suites: a timing/behaviour probe on validateDetailed + resolvePerson + resolveNamedPairs, a rendered RosterModal probe for the rule-editor notes, and a full App-level probe using the appErrorRecovery worker harness to drive an async graph swap. Verified as NOT broken: shortestPath's `w < next` tie-break (routes are adjacency-order independent, so the min(from,to) canonicalisation and the export/import route-stability claim both hold); edgeClass's route-edge node-membership proof; every Set consumer in the app (`neighborhood` results are sorted or only `.has`-tested, `buddies` is sorted by both `summarize` and importGraph) so no Set/Map iteration order reaches a displayed value; assembleMetrics/quality/isOptimal/connectionSummary on disconnected, edgeless and n<=1 graphs (nothing reads as optimal or well-linked); constraintSummary's null-means-not-measured path and broken<=total arithmetic against lib's per-pair violation counts; importGraph's n/density/pair caps, id-vs-position check, control-char refusal, parseRoster round-trip and both duplicate-rule passes; sanitizeSettings clamps; runGeneration's constrained/unconstrained fork, refusal channel and off-thread girth; nextRerollSeed wrap, rerollBlockReason, and useBuddyGraph's identical-edges short-circuit adopting settings+constraints+report while reusing the edges identity; useGenerationWorker's id correlation and worker swap; PersonSearch's Escape ownership and arrow-key wrap.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/app/src, plus the lib entry points it calls (`validateDetailed`, `constrainedWork`/`greedyWork` budgets, `Graph`, `allPairsSummary`, `girth`, `shortestPath`).\n\nHostile-file attempts that were REFUSED correctly (traced + executed): `people.length > 1000`; density `2m > 12n` (checked before the per-edge loop, so a 1.1M-edge 8 MB file costs one arithmetic compare); `constraints.required.length + prohibited.length > 200` computed BEFORE any per-pair work and before `validate`'s O(n\u00b2) prohibited walk could ever be reached; non-integer/NaN/Infinity/1e21 edge and pair endpoints; `constraints` as a string/array/null; `settings.buddies = 1e9 / 2.5 / 1`, `minSeparation = 1e9`, `seed = -5`, `polish = \"yes\"` \u2014 all clamped to the stepper range or defaulted, so a reroll from an imported file cannot leave [2,12]; `p.id` mismatch; `version !== 1`; oversized file stopped by `readFileText`'s byte gate BEFORE `JSON.parse`. Measured worst legal import (n=1000, m=6000, star-degree 999): 91 ms synchronous re-measure \u2014 inside the documented budget. `-0`, `Infinity`\u2192null at the export boundary (`finiteOrNull` in model.ts), `JSON.stringify` on metrics: no corruption.\n\nSpreadsheet-sink attempt (executed): imported names `=HYPERLINK(\"http://x\")`, `+1+1`, `-2+3`, `@SUM(A1)`, `=cmd|'/c calc'!A1`, `Alice\"; =cmd`, U+200B-prefixed `=1+1`. Every cell reaching CSV or the clipboard came out either apostrophe-prefixed or with the formula char strictly inside a quoted field. The leading-char-only `neutralizeCell` holds here only because BOTH name entry points enforce the delimiter invariant it depends on: `parseRoster` normalizes C0/DEL to spaces and splits on `,`/`\\n`, and `importGraph` hard-refuses any name with a control char, and then requires a `parseRoster` round-trip (so leading/trailing whitespace forms like `\" =1+1\"` and any embedded `\\t`/`\\r`/`,`/`\\n` are refused \u2014 verified each). No third name producer exists, and no name reaches innerHTML, a URL, or a filename (grepped).\n\nOther attempts that found nothing: `usePathFinder` guards stale `ends` against `graph.n`; `neighborhood`'s real bound is O(2m)=12k per hover, not the 144 its comment claims, but still cheap; worker termination/id-drop on supersede; `forceLayout` tick scaling and its n/edge fallback; `useExplorerHistory` cap; `parseRoster` degenerate all-duplicates 500 K paste = 46 ms.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read the full app/src surface named in scope (model.ts, constraints.ts, search.ts, neighborhood.ts, App.tsx, graph/GraphCanvas.tsx + highlight.ts, io/{constraintMessages,importGraph,exportGraph,feasibility}.ts, panels/{ConstraintsEditor,PersonSearch,PersonPanel,PathPanel,RosterModal,QualityPanel}.tsx, state/{useBuddyGraph,useGenerationWorker,useExplorerHistory,useGraph,useEscape,usePathFinder}.ts, worker/{protocol,generate}.ts) plus docs/PROJECT_PLAN.md, lib/CLAUDE.md, app/CLAUDE.md, docs/REVIEW_PROTOCOL.md. Traced the project's actually-next-committed feature, F9 'Recalculate with minimal disruption' (PROJECT_PLAN.md's flagship M4 item, immediately after the M3 work in scope: 'previous edges become soft-required, report shows kept N of M pairs'), file-by-file against the current code to find where the edit fans out or where a declared seam gives way. Verified the two findings below by reading the exact lines they depend on (RosterModal.tsx:94, constraints.ts:57, model.ts:153-162) and by grepping app/src for any existing prior/preserve/churn support (none \u2014 confirmed unbuilt, matching CLAUDE.md's 'Neither has a caller' note on priors). Also checked the declared GraphCanvas seam (LAYOUT_MODES/FIT_MODES/positionsFor) and highlight.ts's Highlight union against the F10 path-finder work that already shipped through them, and constraintMessages.ts's Reason switch, as counter-examples of the same class of union-extension risk done correctly (exhaustive switch + assertNever, compile-fails under noImplicitReturns:true) to calibrate what 'a seam that pays' looks like here.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 6,
+      "checked": "Traced the full cold-load-to-export path with mouse and screen assumed unavailable: App.tsx orchestration, RosterModal (dialog), ConstraintsEditor, PersonSearch (F8 combobox), PersonPanel (F8 explorer), PathPanel (F10), QualityPanel, BuddyList, Notice/useNotice, useEscape, useExplorerHistory, usePathFinder, useBuddyGraph, useGenerationWorker, GraphCanvas (incl. reduced-motion path), and app.css (layout positioning + the global prefers-reduced-motion rule). Grepped the whole src tree for .focus()/autoFocus/tabIndex/inert/aria-hidden usage to establish whether any component ever manages focus programmatically. Verified DOM order vs CSS visual position for every absolutely-positioned panel. Checked every conditional render boundary (`{cond && <Component/>}`) for whether the thing it mounts carries aria-live text already populated at mount vs added after.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "Person-selection state is torn down when regeneration is dispatched, not when the replacement graph arrives, so a stale index (or unblocked keyboard input during the busy state) can be applied to a smaller/different roster and crash or corrupt the UI",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "App.tsx calls resetSelection() before bg.generate() completes; a selection made during \"Generating\u2026\" survives into the new view, PersonPanel calls eccentricity(graph, index) with an out-of-range index, the core throws, and with no error boundary React unmounts the whole app. The .busy overlay blocks the mouse but not keyboard/focus (no inert/aria-hidden), so rows stay reachable during the async window; usePathFinder has the same root cause but degrades more softly."
+      ],
+      "remediation": "Delete the premature resetSelection() call made at dispatch time; clear/clamp the selection only when the new view is actually swapped in (or have PersonPanel itself refuse to render for any index outside 0..view.names.length-1), removing the separate premature-clear code path entirely rather than adding a second synchronization mechanism."
+    },
+    {
+      "theme": "The 'dropped rule' count/message conflates unresolved-name rules with deduplicated/self-pair rules, so the app tells the user something false about rules it actually applied",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "resolveNamedPairs' dropped = named.length - pairs.length includes rules removed by dedupePairs and self-pairs, not just unresolved names; RosterModal renders this as \"N buddy rule(s) doesn't/don't match anyone in this roster and won't be used\", which is false for a de-duplicated rule.",
+        "Message 'don't match anyone in this roster' misleads when rules are dropped due to deduplication or self-pairing rather than missing names, risking silent divergence if similar logic is extended."
+      ],
+      "remediation": "Remove dedup/self-pair rules from the count that feeds the 'doesn't match anyone' message \u2014 have resolveNamedPairs stop lumping them into `dropped` and derive the RosterModal note solely from genuinely-unresolved names, deleting the single overloaded counter rather than adding new reason categories."
+    },
+    {
+      "theme": "Test sources sit outside the tsconfig include boundary, so no static gate (typecheck/build) ever inspects the test suite",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "tsconfig.json's include is [\"src\", \"vite.config.ts\"], so typecheck/build never look at app/test; a real type error already sits there and F10's entry prop has no test."
+      ],
+      "remediation": "Remove the separate coverage boundary by folding \"test\" into the existing single tsconfig include array, rather than maintaining two independently-gated source domains."
+    },
+    {
+      "theme": "A full-roster name index is rebuilt from scratch on every call/row instead of once per render, making constraint validation superlinear in the roster size at every keystroke",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness",
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "resolvePerson calls indexByName(names), rebuilding a fresh Map over the whole roster, on every invocation; ConstraintsEditor calls it twice per rule row on every render, so the index is rebuilt 2 x pairs.length times per keystroke.",
+        "resolvePerson's per-call indexByName rebuild, combined with resolveNamedPairs building another index and validateDetailed's O(n^2) walk, means at the app's own caps (1000 names, 200 pairs) a single keystroke triggers ~400 full Map rebuilds plus repeated O(n^2) work."
+      ],
+      "remediation": "Delete the per-call indexByName rebuild inside resolvePerson's hot path \u2014 build the name-index Map once per render (e.g. via useMemo on `names` in ConstraintsEditor) and pass that single map into both the row checks and resolveNamedPairs, removing the duplicate rebuild call sites instead of adding a caching layer."
+    },
+    {
+      "theme": "Search query normalization happens per roster candidate instead of once, and the query itself is unbounded, so a pasted string times roster size does uncapped synchronous main-thread work",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "fuzzyMatch normalizes the query (trim/toLowerCase) inside itself and rankMatches calls it once per roster name; the query input has no maxLength/debounce/length gate, making this the one superlinear surface in the app with no size cap."
+      ],
+      "remediation": "Delete the per-candidate normalization call inside fuzzyMatch \u2014 normalize the query once in rankMatches before the loop \u2014 and remove the unbounded-length path by capping the stored query length in PersonSearch the same way capText already caps roster text."
+    },
+    {
+      "theme": "ConstraintKind is a closed union but its consumers branch with if/else/ternary instead of the exhaustive-switch pattern used everywhere else in the codebase, so a new kind silently misroutes instead of failing to compile",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "RosterModal.tsx's if/else and constraints.ts's ternary in splitPairs are non-exhaustive over ConstraintKind, unlike GraphCanvas, highlight.ts, and constraintMessages.ts which all use assertNever/switch, and F9 is about to add a third kind."
+      ],
+      "remediation": "Remove the ad hoc if/else and ternary branches at both consumer sites and replace them with the same exhaustive-switch-with-assertNever pattern already established elsewhere in the codebase, eliminating the divergent branching form rather than adding a new abstraction for it."
+    },
+    {
+      "theme": "The one plain-language constraint-outcome summary is gated on user-authored rule count, a condition that structurally excludes the auto-derived priors report field, so the flagship summary can render nothing in the common case",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "constraintSummary(view) returns null whenever view.constraints.length === 0, but F9's priors are derived from the previous graph's edges, not a ConstraintPair, so a preserve-only regenerate with no manual rules hits the early return even though report.priorsKeptFraction is populated."
+      ],
+      "remediation": "Remove the exclusivity of the current gate \u2014 delete the standalone `total === 0` early return and fold report.priorsKeptFraction into the same gate condition, so one summary path covers both cases instead of adding a second, separate summary function."
+    },
+    {
+      "theme": "The roster dialog declares aria-modal but nothing in the app enforces it: no focus trap, no initial focus placement, no inert/aria-hidden on the background",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "RosterModal is rendered as a sibling after the background view with role=dialog aria-modal=true but no focus trap, no initial focus, and no inert/aria-hidden applied to the background while open; a grep for .focus()/autoFocus/inert/aria-hidden in app/src returns nothing relevant."
+      ],
+      "remediation": "Remove the background's reachability while the dialog is open by applying inert to the sibling content for the duration modalOpen is true, and remove the false aria-modal claim's gap by moving initial focus into the dialog on mount \u2014 tightening the boundary rather than adding a bespoke focus-trap component."
+    },
+    {
+      "theme": "No component in the app restores focus after removing the element that currently holds it, so multiple close/cancel interactions strand focus at document.body",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "PersonPanel Close, PathPanel Clear, RosterModal Generate/Cancel, and the busy overlay's Cancel button all unmount the section containing the currently-focused control with no .focus() call anywhere in app/src to re-target focus, so the browser drops focus to <body> in every case."
+      ],
+      "remediation": "Remove the reliance on default browser focus-drop behavior at each of these four sites by having their close/cancel handlers explicitly move focus to a specific still-mounted element before or as they unmount, unifying the four independent unmount paths under one consistent focus-return rule instead of four separate fixes."
+    },
+    {
+      "theme": "Dynamic/async state changes are announced to assistive tech only in one place (Notice.tsx's always-mounted region); every newer live-region usage either omits the region entirely or mounts it fresh with text already inside, which is unreliable or silent",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "PathPanel's aria-live paragraphs are conditionally mounted with text already present (from/route/unreachable each a fresh DOM node), the exact anti-pattern Notice.tsx's own comments document and avoid.",
+        "PersonSearch's zero-match state has no aria-live region and no aria-activedescendant update, so a screen-reader user gets no signal at all when a search returns nothing.",
+        "The busy overlay's 'Generating\u2026' text has no role=status/aria-live anywhere, unlike Notice.tsx's deliberately always-mounted status region, leaving generation-in-progress with zero accessible signal."
+      ],
+      "remediation": "Remove the three separate, inconsistent live-region implementations in PathPanel, PersonSearch, and the busy overlay and instead route all three through Notice.tsx's single already-existing always-mounted status region, updating its text in place rather than building new region instances per feature."
+    },
+    {
+      "theme": "DOM/tab order for absolutely-positioned panels does not track their on-screen spatial position",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "Side panels are positioned bottom-left/top-right/bottom-left/top-right/bottom in CSS but JSX order makes Tab traversal zigzag between corners instead of following a consistent reading order."
+      ],
+      "remediation": "Remove the mismatch by deleting the current interleaved JSX ordering and placing panels that share a visual quadrant (person/buddies top-right, search/route bottom-left) adjacently in DOM order, rather than introducing a separate tab-index or reordering mechanism."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-index-crash",
+      "theme": "per-person UI state (selection) is cleared when a regeneration is DISPATCHED, not when the new graph ARRIVES, so an index chosen during the async window is applied to a different, possibly smaller roster",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 41,
+      "summary": "App.tsx calls resetSelection() before bg.generate(), but generation is asynchronous. Any person selected while \"Generating\u2026\" is showing survives into the replacement view. PersonPanel then calls eccentricity(graph, index) during render; the core throws for an out-of-range vertex, and there is no error boundary (main.tsx renders <App/> bare), so React unmounts the whole UI and the organizer loses the roster. The .busy overlay (app.css:218) blocks the mouse but sets no inert/aria-hidden, so every buddy-list row, the search combobox and the graph nodes stay focusable and Enter-activatable; under @media (max-width:820px) `main { overflow:auto }` also puts the list outside the overlay's box, making it mouse-reachable. usePathFinder has the analogous guard (a >= graph.n) and degrades to a blank Path panel instead \u2014 the same root cause with a softer symptom.",
+      "failure": "Reproduced through the real App with the appErrorRecovery worker harness: generate an 8-person roster and deliver the result; click \"Edit people\", set the roster to 5 names, click Generate (status becomes running, selection cleared); while running click the buddy-list row for person 8 (PersonPanel opens for \"H\"); deliver generateResult(5, 4, {seed:1}). Render throws `Error: vertex 7 must be an integer in [0, 4]` at src/panels/PersonPanel.tsx:41 and the app unmounts. No test in the 249-test suite selects a person during an in-flight generation, so the suite stays green.",
+      "remediation": "Clear (or clamp) the transient per-person state when the VIEW is replaced, not when generation is dispatched \u2014 e.g. an effect in App keyed on the view identity that runs resetSelection(), or have useBuddyGraph's view swap drive it. Belt-and-braces: make PersonPanel refuse to render for an index outside 0..view.names.length-1 rather than letting a core range error escape a render, and/or block keyboard reach into <main> while the busy overlay is up (inert).",
+      "invariant": "For every render, every index held in transient per-person state is inside the current view: selected === null || selected < view.names.length, hovered === null || hovered < view.names.length, and (path.ends === null || both ends < view.names.length). Equivalently: no core query is ever called with a vertex outside 0..graph.n-1.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misreported-count",
+      "theme": "a displayed count conflates two different outcomes, so the app states something false about the rules the user just wrote",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 137,
+      "summary": "resolveNamedPairs returns `dropped = named.length - pairs.length`, which includes rules removed by dedupePairs (an (a,b)/(b,a) restatement of the same rule) and self-pairs, not just rules naming somebody the roster no longer has. RosterModal renders that number as \"N buddy rule(s) doesn't/don't match anyone in this roster and won't be used\" \u2014 false on both halves for a de-duplicated rule: it matches, and it IS used.",
+      "failure": "Rendered RosterModal with roster [Alice, Ben, Chloe, Dev, Eve, Fran]; added rule 1 = Alice/Ben required and rule 2 = Ben/Alice required. The note \"1 buddy rule doesn't match anyone in this roster and won't be used.\" appears, and clicking Generate still passes [{a:0,b:1,kind:\"required\"}] \u2014 so the rule both matches and is applied. Same false note for a single row Ben/ben (self-pair). The existing test (constraints.test.ts \"de-duplicates, counting the collapse\") pins dropped===1 and therefore locks the wrong number in.",
+      "remediation": "Return the two outcomes separately \u2014 e.g. { pairs, unresolved, deduped } where `unresolved` counts only named pairs that fail to resolve to two distinct roster indices \u2014 and word the note from `unresolved` (optionally mentioning collapsed duplicates as a distinct, non-alarming line).",
+      "invariant": "The count RosterModal presents as \"doesn't match anyone in this roster\" equals exactly |{ p in named : indexOf(p.a) === undefined || indexOf(p.b) === undefined || indexOf(p.a) === indexOf(p.b) }| for all (named, names) \u2014 it never counts a pair that resolved successfully and appears in `pairs`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-coverage-hole",
+      "theme": "the test sources are outside every static gate, so a test can silently drift from the component contract it claims to cover",
+      "file": "/home/user/ringweave/app/tsconfig.json",
+      "line": 22,
+      "summary": "tsconfig.json has \"include\": [\"src\", \"vite.config.ts\"], so `npm run typecheck` and `npm run build` (tsc --noEmit && vite build) never look at app/test. A real type error is already sitting there, and the prop it concerns is F10's entry point from the explorer, which consequently has no test at all.",
+      "failure": "`npx tsc --ignoreConfig --noEmit --strict --jsx react-jsx ... test/explorer.test.tsx` reports: test/explorer.test.tsx(47,6): error TS2741: Property 'onFindPath' is missing ... but required in type 'Props'. The suite is green because vitest transpiles without typechecking. Grepping test/ for \"Find a path\"/onFindPath returns nothing, so PersonPanel's route-start button \u2014 the only way a user starts a path from the explorer \u2014 is exercised by no test, and removing/renaming the prop turns nothing red.",
+      "remediation": "Add a test tsconfig (or extend include to [\"src\", \"test\", \"vite.config.ts\"]) and wire it into the typecheck script so tsc covers the suite; fix the missing onFindPath prop and add a test that clicks \"Find a path from here\" and asserts the pending-pick state.",
+      "invariant": "`npm run typecheck` at app/ type-checks every .ts/.tsx file under app/ (src and test alike) and exits non-zero on any error \u2014 i.e. no source file the test runner transpiles is outside the typechecker's include set.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "quadratic-render-path",
+      "theme": "a per-render helper rebuilds a whole-roster index once per rule row, so editor render cost is rows x roster instead of rows + roster",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 152,
+      "summary": "resolvePerson calls indexByName(names), building a fresh Map over the entire roster, on every invocation. ConstraintsEditor calls it twice per rule row on every render (and the rows render whether the <details> is open or not), so the roster index is rebuilt 2 x pairs.length times per keystroke anywhere in the modal.",
+      "failure": "Measured in-repo: 400 resolvePerson calls against a 1000-name roster took 65 ms (vitest, node). That is the per-render cost at the documented ceilings (MAX_CONSTRAINT_PAIRS = 200 rows, MAX_ROSTER_N = 1000 names) \u2014 ~65 ms of main-thread work for every character typed in the roster textarea or any rule field, on the same render path the file's own comments optimise elsewhere (datalist instead of per-row selects, chosen precisely to avoid ceiling-scale cost).",
+      "remediation": "Build the name index once per render in ConstraintsEditor (useMemo on `names`) and have the rows consult that map, keeping resolvePerson as the single-shot convenience over it \u2014 or memoise indexByName on the names array identity.",
+      "invariant": "For all (names, pairs), one render of ConstraintsEditor constructs the roster name index a number of times independent of pairs.length (O(1) constructions), so total unknown-name resolution work is O(names.length + pairs.length), not O(names.length x pairs.length).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "per-candidate-normalization-of-unbounded-input",
+      "theme": "attacker-sized pasted text multiplied by roster size does synchronous main-thread work with no cap",
+      "file": "app/src/search.ts",
+      "line": 16,
+      "summary": "`fuzzyMatch` normalizes the QUERY (`query.trim().toLowerCase()`) inside itself, and `rankMatches` calls it once per roster name, so a search does O(|query| x names.length) character copies before any matching. The query is an uncapped controlled `<input>` (`PersonSearch`, no maxLength, no debounce, no length gate), so a paste sizes the multiplier. The early-exit in the subsequence loop does not help: the normalization is paid unconditionally per name, even for a query that matches nothing. This is the one place in the app where a size gate is simply absent \u2014 every other superlinear surface (file bytes, roster chars, import n, import density, constraint pairs, force ticks, polish) has one.",
+      "failure": "Reproduced by rendering `PersonSearch` with 1000 names (the app's own ceiling) and firing one change event: a 4,000,000-char value blocks the main thread for 3038 ms, and the NEXT keystroke costs another 2935 ms. Direct `rankMatches` timings on the same 1000 names: 500 K chars 366 ms, 2 M 1345 ms, 8 M 6178 ms \u2014 linear in |query| x names. An equivalent loop with the normalization hoisted out of the per-name call runs the 2 M case in 4 ms, confirming the per-candidate normalization is the whole cost.",
+      "remediation": "Normalize the query once in `rankMatches` and pass the normalized string to the matcher (split `fuzzyMatch` into a pre-normalized inner function, or normalize at the call site). Additionally short-circuit: a query longer than the longest name can never be a subsequence of any name, so return `[]` without touching candidates; and cap the stored query length in `PersonSearch` the way `RosterModal.capText` caps the roster text, so the DOM/state cost is bounded too.",
+      "invariant": "For all `names` and all `query`, the running time of `rankMatches(query, names, limit)` is bounded by O(|query| + sum of |name|) \u2014 i.e. the cost of a fixed query must not scale with `names.length` beyond the per-name matching itself. Machine-checkable as a ratio with no case table: for any large L, elapsed(rankMatches(q of length L, names of length N)) must be within a small constant factor (e.g. 4x) of elapsed(rankMatches(same q, names of length 1)); equivalently, instrument and assert the query is normalized exactly once per `rankMatches` call regardless of `names.length`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "per-row-rebuild-of-a-whole-roster-index",
+      "theme": "per-keystroke superlinear main-thread work in the roster modal at the app's own documented caps",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 53,
+      "summary": "Each rule row validates its two fields with `resolvePerson(p.a, names)` / `resolvePerson(p.b, names)`, and `resolvePerson` builds a fresh `indexByName(names)` Map over the ENTIRE roster on every call (app/src/constraints.ts:153-157). At the app's own caps (1000 names, MAX_CONSTRAINT_PAIRS = 200) that is 400 full O(n) map builds \u2014 400,000 Map inserts \u2014 per render, and the editor re-renders on every keystroke in the roster textarea (the `parsed.names` identity changes) and on every keystroke in any rule field. The same render also pays `resolveNamedPairs` (one more index build) and `validateDetailed`'s O(n^2) prohibited-pair connectivity walk once per keystroke when any \"never buddies\" rule exists. Rule-field inputs are also uncapped, so a large paste into one adds an O(|text|) trim/lowercase per render on top. Both caps are reachable without typing: import a file with 1000 people and 200 rules, then press \"Edit people\".",
+      "failure": "Measured on the real components. Isolated: 400 `resolvePerson` calls over 1000 names = 71 ms of pure JS. `validateDetailed` at n=1000 with a prohibited pair = 16-24 ms (0.7 ms with none). End-to-end through `RosterModal` (jsdom) with a 1000-name roster, one keystroke in the textarea: 31-40 ms with 0 rules vs 166-200 ms with 200 rules \u2014 a ~130 ms marginal cost per keystroke that recurs for every character typed. No freeze, but sustained typing at the documented maximum is continuously janky, and the cost is quadratic in the two knobs an imported file controls.",
+      "remediation": "Build the roster lookup once per render (e.g. `useMemo(() => indexByName(names), [names])` in `ConstraintsEditor`, passing the map to a `resolvePersonIn(map, text)` helper, keeping `resolvePerson` as a thin wrapper for other callers). Reuse that one map in `resolveNamedPairs` as well, and consider memoizing/deferring the `ruleProblems` `validateDetailed` pass so the O(n^2) walk is not re-run on every roster keystroke. Cap rule-field input length like `capText` does for the roster.",
+      "invariant": "For all `names` and all `pairs`, rendering `ConstraintsEditor` constructs the roster name index O(1) times (independent of `pairs.length`); total resolution work is O(names.length + sum of row text lengths), never O(names.length x pairs.length). Machine-checkable as a cost ratio with no case table: for a fixed roster, (render time with R rule rows - render time with 0 rule rows) must not grow with `names.length`; or instrument `indexByName` and assert its call count per render is independent of `pairs.length`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "non-exhaustive-union-branch",
+      "theme": "ConstraintKind is a closed union but its consumers branch on it with if/else and a ternary instead of an exhaustive switch, so it silently misroutes rather than fails to compile when a third kind is added \u2014 and F9 (the actually-next-committed feature) needs exactly a third kind",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 94,
+      "summary": "ConstraintKind consumers (RosterModal.tsx:94's if/else, constraints.ts:57's ternary in splitPairs) are non-exhaustive, unlike every other discriminated union in this codebase (GraphCanvas.positionsFor, highlight.ts's nodeClass/edgeClass, constraintMessages.ts's describeReason), all of which use assertNever or a bare switch under noImplicitReturns so a missed case fails the build.",
+      "failure": "F9's 'previous edges become soft-required' is the minimal-diff fit for the existing NamedPair/ConstraintPair machinery (toNamedPairs/resolveNamedPairs already solve exactly the roster-churn/index-drift problem priors would face), so the natural implementation widens `ConstraintKind` to `\"required\" | \"prohibited\" | \"prior\"`. The moment that happens, `RosterModal.tsx:94`'s `if (p.kind === \"required\") cons.require(p.a,p.b); else cons.prohibit(p.a,p.b);` silently calls `cons.prohibit` on every prior pair \u2014 a soft 'please stay buddies' preference compiles and runs as a hard 'never be buddies' ban in the pre-generate feasibility check. `constraints.ts:57`'s `(p.kind === \"required\" ? required : prohibited).push(...)` does the same in the wire payload sent to the worker.",
+      "remediation": "Before F9 lands, convert both branch sites to an exhaustive switch with an assertNever default (matching the pattern already established in GraphCanvas.tsx and highlight.ts), so adding \"prior\" to ConstraintKind fails to compile at every consumer until handled, instead of silently landing in the `prohibited` bucket.",
+      "invariant": "for every function that branches on ConstraintPair.kind, adding a new ConstraintKind variant must fail to compile at that function until a case is added \u2014 no if/else or ternary may treat an unhandled variant as the same-shaped `else` branch."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-message-hiding-root-causes",
+      "theme": "incomplete messaging masks multiple distinct failure modes, risking silent divergence when similar logic is extended",
+      "file": "/home/user/ringweave/app/src/panels/RosterModal.tsx",
+      "line": 172,
+      "summary": "Message 'don't match anyone in this roster' misleads when rules are dropped due to deduplication or self-pairing, not just missing names.",
+      "failure": "User creates duplicate rules (Alice+Bob, Alice+Bob) or self-pair rules (Alice+Alice). One is dropped and counted in `resolved.dropped`. Message displays as \"X buddy rules don't match anyone\" \u2014 misleading, because the problem is duplication/self-pairing, not missing names.",
+      "remediation": "Split `resolveNamedPairs` to return separate counts for drops by reason (missing_names, self_pairs, duplicates) OR change message to 'don't match anyone or are duplicates/invalid in this roster' to honestly describe all cases. Trace through the drop scenarios to name the theme once, so a later extension doesn't break the message without noticing.",
+      "invariant": "When resolveNamedPairs returns dropped > 0, the user message must accurately describe every reason a rule was dropped (missing roster name, self-pair, or duplicate kind/pair), not just the first one.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unconfined-modal-dialog",
+      "theme": "the roster dialog claims to be modal but nothing in the app actually confines keyboard focus to it or hides the background from the accessibility tree",
+      "file": "app/src/App.tsx",
+      "line": 243,
+      "summary": "RosterModal (app/src/panels/RosterModal.tsx:106, role=\"dialog\" aria-modal=\"true\") is rendered as a sibling AFTER the entire background view (App.tsx:184-241) inside the same <main>, with no focus trap, no initial focus placement, and no `inert`/`aria-hidden` applied to the background while it is open. `aria-modal=\"true\"` is a claim, not an enforcement mechanism \u2014 nothing in the codebase implements the trap (grep of app/src for .focus()/autoFocus/inert/aria-hidden returns nothing relevant).",
+      "failure": "Cold load -> paste roster -> Generate (modal closes, view renders) -> click 'Edit people' (App.tsx:206) to reopen the dialog over the existing graph. A keyboard user now pressing Tab from the top of the page (or a screen-reader user doing a fresh linear read) walks through every background control \u2014 #rail's reroll/edit buttons, the layout toggle, the search combobox, PersonPanel/PathPanel if open, the entire buddy list, and the quality panel's Import/Print/Export buttons \u2014 before ever reaching a single control inside the 'modal' dialog that is visually covering the whole screen (app.css:180, z-index:20, inset:0, background blur). Shift+Tab from the dialog's first control also escapes into that same background rather than wrapping.",
+      "remediation": "Give the dialog a real focus trap (a `useFocusTrap`-style effect that cycles Tab/Shift+Tab among the dialog's own focusable elements) and move initial focus into the dialog (e.g. the textarea) on mount; apply `inert` (or a manual aria-hidden + disabled sweep) to the sibling background content for the duration modalOpen is true.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-dropped-on-unmount",
+      "theme": "no component in the app ever restores focus after removing the element that currently holds it, so several ordinary interactions silently strand keyboard/screen-reader focus at document.body",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 59,
+      "summary": "Every place a currently-focused control's own click handler causes that control to be removed from the DOM leaves focus nowhere: (1) PersonPanel's Close button (PersonPanel.tsx:59) calls onClose -> setSelected(null), unmounting the whole `#person` section (App.tsx:214-225); (2) PathPanel's Clear button (PathPanel.tsx:29) calls onClear -> path.clear(), unmounting `#route` (App.tsx:227-236); (3) RosterModal's Generate/Cancel buttons (RosterModal.tsx:151-158) unmount the entire dialog (App.tsx:243, 116/251); (4) the busy overlay's Cancel button (App.tsx:259) calls cancelGeneration, unmounting `.busy` (App.tsx:255-262). In every case there is no `.focus()` call anywhere in app/src to re-target focus, so per standard DOM behavior the browser drops focus to <body> when the focused element is detached.",
+      "failure": "Select a person, open their PersonPanel, press Enter/Space on 'Close' (focused) \u2014 the panel disappears and focus is now on <body>; the next Tab press starts over from the top of the document instead of continuing from a sensible point (e.g. back to the buddy-list row that was open, or to search). Same for clearing a drawn path, and for closing the roster dialog via Cancel/Generate after edits.",
+      "remediation": "On each of these unmounts, programmatically move focus to a specific, still-mounted element: e.g. Close/Back -> the BuddyList row for the closed person or the search input; PathPanel Clear -> the PersonPanel/search that started the route; dialog Cancel/Generate -> the '#rail' 'Edit people' button that opened it (or the app root on first generation); busy-overlay Cancel -> the control that started generation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-created-with-text",
+      "theme": "an aria-live region only announces reliably if it already exists before its text is written; several regions in this app are mounted and populated in the same render, which is the exact anti-pattern Notice.tsx documents and avoids for its own toast, but the newer F10 path UI repeats it",
+      "file": "app/src/panels/PathPanel.tsx",
+      "line": 33,
+      "summary": "`<p className=\"rt-body\" aria-live=\"polite\">` (PathPanel.tsx:33, :39, :45) is never present in the DOM until the state it describes already exists: PathPanel itself is only mounted when `path.active` becomes true (App.tsx:227, `{path.active && <PathPanel .../>}`), and it starts with `from` already set (usePathFinder.start sets state synchronously before the next render). So the very first paint of 'Starting from X \u2014 now pick the other person' is a brand-new DOM node with text already inside it, not a mutation of a pre-existing live region \u2014 which many screen readers do not announce. The same happens again when `from` flips to `route`/`unreachable`: the 'from' paragraph unmounts and a *different* paragraph mounts fresh with the route/unreachable text, rather than one stable region having its text content updated. Notice.tsx's own comment (lines 9-11) states the correct pattern (\"the region stays mounted even with no message... unmounting and remounting it with text is announced far less reliably\") \u2014 PathPanel does the thing Notice explicitly avoids.",
+      "failure": "Open PersonPanel for a person, press 'Find a path from here' (PersonPanel.tsx:87) \u2014 a screen-reader user gets no reliable announcement that a path pick is now pending, and must discover it by manually navigating to `#route`. Completing the route (selecting the second person) has the same gap for 'No chain \u2014 they're in separate groups' and the resulting chain text.",
+      "remediation": "Render `#route`'s live-region paragraph unconditionally (always mounted, initially empty like Notice's toast-region) and update its text content in place across from/route/unreachable transitions instead of conditionally mounting three different <p aria-live> elements.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-empty-state",
+      "theme": "a UI state transition that is only conveyed by content appearing in the DOM, with no live region and no focus move, is invisible to a non-visual user",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 112,
+      "summary": "The zero-match state (`matches.length === 0`, PersonSearch.tsx:112-114, rendering `<div className=\"search-empty\">Nobody matches \"{query}\"</div>`) sits inside `role=\"listbox\"` (line 95) but nothing about it is exposed to assistive tech: the input's `aria-activedescendant` is `undefined` when there are no matches (line 78, since `activeIndex` is -1), the listbox itself has no `aria-live`, and ArrowUp/ArrowDown are no-ops when `matches.length === 0` (onKeyDown, lines 43-45), so there is no way to arrow into the empty message either. A sighted user sees the text; a screen-reader user typing the same query hears nothing at all.",
+      "failure": "Type a misspelled name into 'Find a person' (e.g. cold-load a roster, then search for a name with a typo) \u2014 the combobox stays silently open with zero perceivable feedback via a screen reader; there is no way to tell the difference between 'still loading', 'nothing typed registered', and 'no one matches'.",
+      "remediation": "Add a visually-hidden `aria-live=\"polite\"` status node (present at mount, alongside or inside the search widget) that is updated with 'No matches' text when `matches.length === 0`, independent of the visual `search-empty` div and independent of `aria-activedescendant`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-region",
+      "theme": "a state that has a live-region pattern used correctly elsewhere in this app (Notice.tsx) is not given one at all for generation-in-progress, so the one visual indicator that anything is happening has no non-visual counterpart",
+      "file": "app/src/App.tsx",
+      "line": 255,
+      "summary": "The `.busy` overlay (App.tsx:255-262, `{bg.status === \"running\" && <div className=\"busy\">...<span>Generating\u2026</span>...`) has no `role=\"status\"`/`aria-live` anywhere, unlike Notice.tsx which deliberately keeps its `role=\"status\"` region always-mounted for exactly this reason. Generation is asynchronous (runs in a Web Worker per app/CLAUDE.md) and can take a non-trivial time at larger roster sizes; there is currently zero accessible signal that a run started, is in progress, or (short of an eventual error toast or the graph silently swapping) that it's still going.",
+      "failure": "Paste a large roster and press 'Generate buddy graph', or press 'Different arrangement' on an existing graph \u2014 a screen-reader user gets no announcement that generation began, and if it takes any perceptible time has no way to know the app is working versus stuck.",
+      "remediation": "Give the busy overlay's text node role=\"status\" (or route the 'Generating\u2026'/done transition through the same always-mounted status-region pattern Notice.tsx already established).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-mismatch",
+      "theme": "DOM/tab order for the absolutely-positioned panels does not track their on-screen spatial position, and the two panels M3 added make the existing zigzag worse",
+      "file": "app/src/App.tsx",
+      "line": 212,
+      "summary": "All side panels are `position: absolute` (app.css: #search bottom-left, #person top-right, #route bottom-left, #buddies top-right, #metrics bottom bar) but DOM/tab order follows App.tsx's JSX order: search (bottom-left) -> person (top-right) -> route (bottom-left) -> buddies (top-right) -> metrics (bottom). A sequential Tab traversal bounces bottom-left/top-right/bottom-left/top-right before reaching the bottom bar, rather than following any consistent reading order (e.g. top-to-bottom, left-to-right).",
+      "failure": "With a person selected and a path active, Tab from the search box lands on the top-right PersonPanel, then back down-left to PathPanel, then back up-right to BuddyList \u2014 a keyboard user has to track focus across the screen in a pattern that doesn't match how a sighted user would scan it.",
+      "remediation": "Reorder the JSX (or use CSS order/flex reordering deliberately, keeping DOM order matching intended reading order) so panels in the same visual column/quadrant are adjacent in tab order; at minimum group #person and #buddies (both top-right) and #search/#route (both bottom-left) consecutively.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-index-crash",
+      "theme": "per-person UI state (selection) is cleared when a regeneration is DISPATCHED, not when the new graph ARRIVES, so an index chosen during the async window is applied to a different, possibly smaller roster",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 41,
+      "summary": "App.tsx calls resetSelection() before bg.generate(), but generation is asynchronous. Any person selected while \"Generating\u2026\" is showing survives into the replacement view. PersonPanel then calls eccentricity(graph, index) during render; the core throws for an out-of-range vertex, and there is no error boundary (main.tsx renders <App/> bare), so React unmounts the whole UI and the organizer loses the roster. The .busy overlay (app.css:218) blocks the mouse but sets no inert/aria-hidden, so every buddy-list row, the search combobox and the graph nodes stay focusable and Enter-activatable; under @media (max-width:820px) `main { overflow:auto }` also puts the list outside the overlay's box, making it mouse-reachable. usePathFinder has the analogous guard (a >= graph.n) and degrades to a blank Path panel instead \u2014 the same root cause with a softer symptom.",
+      "failure": "Reproduced through the real App with the appErrorRecovery worker harness: generate an 8-person roster and deliver the result; click \"Edit people\", set the roster to 5 names, click Generate (status becomes running, selection cleared); while running click the buddy-list row for person 8 (PersonPanel opens for \"H\"); deliver generateResult(5, 4, {seed:1}). Render throws `Error: vertex 7 must be an integer in [0, 4]` at src/panels/PersonPanel.tsx:41 and the app unmounts. No test in the 249-test suite selects a person during an in-flight generation, so the suite stays green.",
+      "remediation": "Clear (or clamp) the transient per-person state when the VIEW is replaced, not when generation is dispatched \u2014 e.g. an effect in App keyed on the view identity that runs resetSelection(), or have useBuddyGraph's view swap drive it. Belt-and-braces: make PersonPanel refuse to render for an index outside 0..view.names.length-1 rather than letting a core range error escape a render, and/or block keyboard reach into <main> while the busy overlay is up (inert).",
+      "invariant": "For every render, every index held in transient per-person state is inside the current view: selected === null || selected < view.names.length, hovered === null || hovered < view.names.length, and (path.ends === null || both ends < view.names.length). Equivalently: no core query is ever called with a vertex outside 0..graph.n-1.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misreported-count",
+      "theme": "a displayed count conflates two different outcomes, so the app states something false about the rules the user just wrote",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 137,
+      "summary": "resolveNamedPairs returns `dropped = named.length - pairs.length`, which includes rules removed by dedupePairs (an (a,b)/(b,a) restatement of the same rule) and self-pairs, not just rules naming somebody the roster no longer has. RosterModal renders that number as \"N buddy rule(s) doesn't/don't match anyone in this roster and won't be used\" \u2014 false on both halves for a de-duplicated rule: it matches, and it IS used.",
+      "failure": "Rendered RosterModal with roster [Alice, Ben, Chloe, Dev, Eve, Fran]; added rule 1 = Alice/Ben required and rule 2 = Ben/Alice required. The note \"1 buddy rule doesn't match anyone in this roster and won't be used.\" appears, and clicking Generate still passes [{a:0,b:1,kind:\"required\"}] \u2014 so the rule both matches and is applied. Same false note for a single row Ben/ben (self-pair). The existing test (constraints.test.ts \"de-duplicates, counting the collapse\") pins dropped===1 and therefore locks the wrong number in.",
+      "remediation": "Return the two outcomes separately \u2014 e.g. { pairs, unresolved, deduped } where `unresolved` counts only named pairs that fail to resolve to two distinct roster indices \u2014 and word the note from `unresolved` (optionally mentioning collapsed duplicates as a distinct, non-alarming line).",
+      "invariant": "The count RosterModal presents as \"doesn't match anyone in this roster\" equals exactly |{ p in named : indexOf(p.a) === undefined || indexOf(p.b) === undefined || indexOf(p.a) === indexOf(p.b) }| for all (named, names) \u2014 it never counts a pair that resolved successfully and appears in `pairs`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-coverage-hole",
+      "theme": "the test sources are outside every static gate, so a test can silently drift from the component contract it claims to cover",
+      "file": "/home/user/ringweave/app/tsconfig.json",
+      "line": 22,
+      "summary": "tsconfig.json has \"include\": [\"src\", \"vite.config.ts\"], so `npm run typecheck` and `npm run build` (tsc --noEmit && vite build) never look at app/test. A real type error is already sitting there, and the prop it concerns is F10's entry point from the explorer, which consequently has no test at all.",
+      "failure": "`npx tsc --ignoreConfig --noEmit --strict --jsx react-jsx ... test/explorer.test.tsx` reports: test/explorer.test.tsx(47,6): error TS2741: Property 'onFindPath' is missing ... but required in type 'Props'. The suite is green because vitest transpiles without typechecking. Grepping test/ for \"Find a path\"/onFindPath returns nothing, so PersonPanel's route-start button \u2014 the only way a user starts a path from the explorer \u2014 is exercised by no test, and removing/renaming the prop turns nothing red.",
+      "remediation": "Add a test tsconfig (or extend include to [\"src\", \"test\", \"vite.config.ts\"]) and wire it into the typecheck script so tsc covers the suite; fix the missing onFindPath prop and add a test that clicks \"Find a path from here\" and asserts the pending-pick state.",
+      "invariant": "`npm run typecheck` at app/ type-checks every .ts/.tsx file under app/ (src and test alike) and exits non-zero on any error \u2014 i.e. no source file the test runner transpiles is outside the typechecker's include set.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "quadratic-render-path",
+      "theme": "a per-render helper rebuilds a whole-roster index once per rule row, so editor render cost is rows x roster instead of rows + roster",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 152,
+      "summary": "resolvePerson calls indexByName(names), building a fresh Map over the entire roster, on every invocation. ConstraintsEditor calls it twice per rule row on every render (and the rows render whether the <details> is open or not), so the roster index is rebuilt 2 x pairs.length times per keystroke anywhere in the modal.",
+      "failure": "Measured in-repo: 400 resolvePerson calls against a 1000-name roster took 65 ms (vitest, node). That is the per-render cost at the documented ceilings (MAX_CONSTRAINT_PAIRS = 200 rows, MAX_ROSTER_N = 1000 names) \u2014 ~65 ms of main-thread work for every character typed in the roster textarea or any rule field, on the same render path the file's own comments optimise elsewhere (datalist instead of per-row selects, chosen precisely to avoid ceiling-scale cost).",
+      "remediation": "Build the name index once per render in ConstraintsEditor (useMemo on `names`) and have the rows consult that map, keeping resolvePerson as the single-shot convenience over it \u2014 or memoise indexByName on the names array identity.",
+      "invariant": "For all (names, pairs), one render of ConstraintsEditor constructs the roster name index a number of times independent of pairs.length (O(1) constructions), so total unknown-name resolution work is O(names.length + pairs.length), not O(names.length x pairs.length).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "per-candidate-normalization-of-unbounded-input",
+      "theme": "attacker-sized pasted text multiplied by roster size does synchronous main-thread work with no cap",
+      "file": "app/src/search.ts",
+      "line": 16,
+      "summary": "`fuzzyMatch` normalizes the QUERY (`query.trim().toLowerCase()`) inside itself, and `rankMatches` calls it once per roster name, so a search does O(|query| x names.length) character copies before any matching. The query is an uncapped controlled `<input>` (`PersonSearch`, no maxLength, no debounce, no length gate), so a paste sizes the multiplier. The early-exit in the subsequence loop does not help: the normalization is paid unconditionally per name, even for a query that matches nothing. This is the one place in the app where a size gate is simply absent \u2014 every other superlinear surface (file bytes, roster chars, import n, import density, constraint pairs, force ticks, polish) has one.",
+      "failure": "Reproduced by rendering `PersonSearch` with 1000 names (the app's own ceiling) and firing one change event: a 4,000,000-char value blocks the main thread for 3038 ms, and the NEXT keystroke costs another 2935 ms. Direct `rankMatches` timings on the same 1000 names: 500 K chars 366 ms, 2 M 1345 ms, 8 M 6178 ms \u2014 linear in |query| x names. An equivalent loop with the normalization hoisted out of the per-name call runs the 2 M case in 4 ms, confirming the per-candidate normalization is the whole cost.",
+      "remediation": "Normalize the query once in `rankMatches` and pass the normalized string to the matcher (split `fuzzyMatch` into a pre-normalized inner function, or normalize at the call site). Additionally short-circuit: a query longer than the longest name can never be a subsequence of any name, so return `[]` without touching candidates; and cap the stored query length in `PersonSearch` the way `RosterModal.capText` caps the roster text, so the DOM/state cost is bounded too.",
+      "invariant": "For all `names` and all `query`, the running time of `rankMatches(query, names, limit)` is bounded by O(|query| + sum of |name|) \u2014 i.e. the cost of a fixed query must not scale with `names.length` beyond the per-name matching itself. Machine-checkable as a ratio with no case table: for any large L, elapsed(rankMatches(q of length L, names of length N)) must be within a small constant factor (e.g. 4x) of elapsed(rankMatches(same q, names of length 1)); equivalently, instrument and assert the query is normalized exactly once per `rankMatches` call regardless of `names.length`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "per-row-rebuild-of-a-whole-roster-index",
+      "theme": "per-keystroke superlinear main-thread work in the roster modal at the app's own documented caps",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 53,
+      "summary": "Each rule row validates its two fields with `resolvePerson(p.a, names)` / `resolvePerson(p.b, names)`, and `resolvePerson` builds a fresh `indexByName(names)` Map over the ENTIRE roster on every call (app/src/constraints.ts:153-157). At the app's own caps (1000 names, MAX_CONSTRAINT_PAIRS = 200) that is 400 full O(n) map builds \u2014 400,000 Map inserts \u2014 per render, and the editor re-renders on every keystroke in the roster textarea (the `parsed.names` identity changes) and on every keystroke in any rule field. The same render also pays `resolveNamedPairs` (one more index build) and `validateDetailed`'s O(n^2) prohibited-pair connectivity walk once per keystroke when any \"never buddies\" rule exists. Rule-field inputs are also uncapped, so a large paste into one adds an O(|text|) trim/lowercase per render on top. Both caps are reachable without typing: import a file with 1000 people and 200 rules, then press \"Edit people\".",
+      "failure": "Measured on the real components. Isolated: 400 `resolvePerson` calls over 1000 names = 71 ms of pure JS. `validateDetailed` at n=1000 with a prohibited pair = 16-24 ms (0.7 ms with none). End-to-end through `RosterModal` (jsdom) with a 1000-name roster, one keystroke in the textarea: 31-40 ms with 0 rules vs 166-200 ms with 200 rules \u2014 a ~130 ms marginal cost per keystroke that recurs for every character typed. No freeze, but sustained typing at the documented maximum is continuously janky, and the cost is quadratic in the two knobs an imported file controls.",
+      "remediation": "Build the roster lookup once per render (e.g. `useMemo(() => indexByName(names), [names])` in `ConstraintsEditor`, passing the map to a `resolvePersonIn(map, text)` helper, keeping `resolvePerson` as a thin wrapper for other callers). Reuse that one map in `resolveNamedPairs` as well, and consider memoizing/deferring the `ruleProblems` `validateDetailed` pass so the O(n^2) walk is not re-run on every roster keystroke. Cap rule-field input length like `capText` does for the roster.",
+      "invariant": "For all `names` and all `pairs`, rendering `ConstraintsEditor` constructs the roster name index O(1) times (independent of `pairs.length`); total resolution work is O(names.length + sum of row text lengths), never O(names.length x pairs.length). Machine-checkable as a cost ratio with no case table: for a fixed roster, (render time with R rule rows - render time with 0 rule rows) must not grow with `names.length`; or instrument `indexByName` and assert its call count per render is independent of `pairs.length`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "non-exhaustive-union-branch",
+      "theme": "ConstraintKind is a closed union but its consumers branch on it with if/else and a ternary instead of an exhaustive switch, so it silently misroutes rather than fails to compile when a third kind is added \u2014 and F9 (the actually-next-committed feature) needs exactly a third kind",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 94,
+      "summary": "ConstraintKind consumers (RosterModal.tsx:94's if/else, constraints.ts:57's ternary in splitPairs) are non-exhaustive, unlike every other discriminated union in this codebase (GraphCanvas.positionsFor, highlight.ts's nodeClass/edgeClass, constraintMessages.ts's describeReason), all of which use assertNever or a bare switch under noImplicitReturns so a missed case fails the build.",
+      "failure": "F9's 'previous edges become soft-required' is the minimal-diff fit for the existing NamedPair/ConstraintPair machinery (toNamedPairs/resolveNamedPairs already solve exactly the roster-churn/index-drift problem priors would face), so the natural implementation widens `ConstraintKind` to `\"required\" | \"prohibited\" | \"prior\"`. The moment that happens, `RosterModal.tsx:94`'s `if (p.kind === \"required\") cons.require(p.a,p.b); else cons.prohibit(p.a,p.b);` silently calls `cons.prohibit` on every prior pair \u2014 a soft 'please stay buddies' preference compiles and runs as a hard 'never be buddies' ban in the pre-generate feasibility check. `constraints.ts:57`'s `(p.kind === \"required\" ? required : prohibited).push(...)` does the same in the wire payload sent to the worker.",
+      "remediation": "Before F9 lands, convert both branch sites to an exhaustive switch with an assertNever default (matching the pattern already established in GraphCanvas.tsx and highlight.ts), so adding \"prior\" to ConstraintKind fails to compile at every consumer until handled, instead of silently landing in the `prohibited` bucket.",
+      "invariant": "for every function that branches on ConstraintPair.kind, adding a new ConstraintKind variant must fail to compile at that function until a case is added \u2014 no if/else or ternary may treat an unhandled variant as the same-shaped `else` branch."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-message-hiding-root-causes",
+      "theme": "incomplete messaging masks multiple distinct failure modes, risking silent divergence when similar logic is extended",
+      "file": "/home/user/ringweave/app/src/panels/RosterModal.tsx",
+      "line": 172,
+      "summary": "Message 'don't match anyone in this roster' misleads when rules are dropped due to deduplication or self-pairing, not just missing names.",
+      "failure": "User creates duplicate rules (Alice+Bob, Alice+Bob) or self-pair rules (Alice+Alice). One is dropped and counted in `resolved.dropped`. Message displays as \"X buddy rules don't match anyone\" \u2014 misleading, because the problem is duplication/self-pairing, not missing names.",
+      "remediation": "Split `resolveNamedPairs` to return separate counts for drops by reason (missing_names, self_pairs, duplicates) OR change message to 'don't match anyone or are duplicates/invalid in this roster' to honestly describe all cases. Trace through the drop scenarios to name the theme once, so a later extension doesn't break the message without noticing.",
+      "invariant": "When resolveNamedPairs returns dropped > 0, the user message must accurately describe every reason a rule was dropped (missing roster name, self-pair, or duplicate kind/pair), not just the first one.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unconfined-modal-dialog",
+      "theme": "the roster dialog claims to be modal but nothing in the app actually confines keyboard focus to it or hides the background from the accessibility tree",
+      "file": "app/src/App.tsx",
+      "line": 243,
+      "summary": "RosterModal (app/src/panels/RosterModal.tsx:106, role=\"dialog\" aria-modal=\"true\") is rendered as a sibling AFTER the entire background view (App.tsx:184-241) inside the same <main>, with no focus trap, no initial focus placement, and no `inert`/`aria-hidden` applied to the background while it is open. `aria-modal=\"true\"` is a claim, not an enforcement mechanism \u2014 nothing in the codebase implements the trap (grep of app/src for .focus()/autoFocus/inert/aria-hidden returns nothing relevant).",
+      "failure": "Cold load -> paste roster -> Generate (modal closes, view renders) -> click 'Edit people' (App.tsx:206) to reopen the dialog over the existing graph. A keyboard user now pressing Tab from the top of the page (or a screen-reader user doing a fresh linear read) walks through every background control \u2014 #rail's reroll/edit buttons, the layout toggle, the search combobox, PersonPanel/PathPanel if open, the entire buddy list, and the quality panel's Import/Print/Export buttons \u2014 before ever reaching a single control inside the 'modal' dialog that is visually covering the whole screen (app.css:180, z-index:20, inset:0, background blur). Shift+Tab from the dialog's first control also escapes into that same background rather than wrapping.",
+      "remediation": "Give the dialog a real focus trap (a `useFocusTrap`-style effect that cycles Tab/Shift+Tab among the dialog's own focusable elements) and move initial focus into the dialog (e.g. the textarea) on mount; apply `inert` (or a manual aria-hidden + disabled sweep) to the sibling background content for the duration modalOpen is true.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-dropped-on-unmount",
+      "theme": "no component in the app ever restores focus after removing the element that currently holds it, so several ordinary interactions silently strand keyboard/screen-reader focus at document.body",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 59,
+      "summary": "Every place a currently-focused control's own click handler causes that control to be removed from the DOM leaves focus nowhere: (1) PersonPanel's Close button (PersonPanel.tsx:59) calls onClose -> setSelected(null), unmounting the whole `#person` section (App.tsx:214-225); (2) PathPanel's Clear button (PathPanel.tsx:29) calls onClear -> path.clear(), unmounting `#route` (App.tsx:227-236); (3) RosterModal's Generate/Cancel buttons (RosterModal.tsx:151-158) unmount the entire dialog (App.tsx:243, 116/251); (4) the busy overlay's Cancel button (App.tsx:259) calls cancelGeneration, unmounting `.busy` (App.tsx:255-262). In every case there is no `.focus()` call anywhere in app/src to re-target focus, so per standard DOM behavior the browser drops focus to <body> when the focused element is detached.",
+      "failure": "Select a person, open their PersonPanel, press Enter/Space on 'Close' (focused) \u2014 the panel disappears and focus is now on <body>; the next Tab press starts over from the top of the document instead of continuing from a sensible point (e.g. back to the buddy-list row that was open, or to search). Same for clearing a drawn path, and for closing the roster dialog via Cancel/Generate after edits.",
+      "remediation": "On each of these unmounts, programmatically move focus to a specific, still-mounted element: e.g. Close/Back -> the BuddyList row for the closed person or the search input; PathPanel Clear -> the PersonPanel/search that started the route; dialog Cancel/Generate -> the '#rail' 'Edit people' button that opened it (or the app root on first generation); busy-overlay Cancel -> the control that started generation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-created-with-text",
+      "theme": "an aria-live region only announces reliably if it already exists before its text is written; several regions in this app are mounted and populated in the same render, which is the exact anti-pattern Notice.tsx documents and avoids for its own toast, but the newer F10 path UI repeats it",
+      "file": "app/src/panels/PathPanel.tsx",
+      "line": 33,
+      "summary": "`<p className=\"rt-body\" aria-live=\"polite\">` (PathPanel.tsx:33, :39, :45) is never present in the DOM until the state it describes already exists: PathPanel itself is only mounted when `path.active` becomes true (App.tsx:227, `{path.active && <PathPanel .../>}`), and it starts with `from` already set (usePathFinder.start sets state synchronously before the next render). So the very first paint of 'Starting from X \u2014 now pick the other person' is a brand-new DOM node with text already inside it, not a mutation of a pre-existing live region \u2014 which many screen readers do not announce. The same happens again when `from` flips to `route`/`unreachable`: the 'from' paragraph unmounts and a *different* paragraph mounts fresh with the route/unreachable text, rather than one stable region having its text content updated. Notice.tsx's own comment (lines 9-11) states the correct pattern (\"the region stays mounted even with no message... unmounting and remounting it with text is announced far less reliably\") \u2014 PathPanel does the thing Notice explicitly avoids.",
+      "failure": "Open PersonPanel for a person, press 'Find a path from here' (PersonPanel.tsx:87) \u2014 a screen-reader user gets no reliable announcement that a path pick is now pending, and must discover it by manually navigating to `#route`. Completing the route (selecting the second person) has the same gap for 'No chain \u2014 they're in separate groups' and the resulting chain text.",
+      "remediation": "Render `#route`'s live-region paragraph unconditionally (always mounted, initially empty like Notice's toast-region) and update its text content in place across from/route/unreachable transitions instead of conditionally mounting three different <p aria-live> elements.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-empty-state",
+      "theme": "a UI state transition that is only conveyed by content appearing in the DOM, with no live region and no focus move, is invisible to a non-visual user",
+      "file": "app/src/panels/PersonSearch.tsx",
+      "line": 112,
+      "summary": "The zero-match state (`matches.length === 0`, PersonSearch.tsx:112-114, rendering `<div className=\"search-empty\">Nobody matches \"{query}\"</div>`) sits inside `role=\"listbox\"` (line 95) but nothing about it is exposed to assistive tech: the input's `aria-activedescendant` is `undefined` when there are no matches (line 78, since `activeIndex` is -1), the listbox itself has no `aria-live`, and ArrowUp/ArrowDown are no-ops when `matches.length === 0` (onKeyDown, lines 43-45), so there is no way to arrow into the empty message either. A sighted user sees the text; a screen-reader user typing the same query hears nothing at all.",
+      "failure": "Type a misspelled name into 'Find a person' (e.g. cold-load a roster, then search for a name with a typo) \u2014 the combobox stays silently open with zero perceivable feedback via a screen reader; there is no way to tell the difference between 'still loading', 'nothing typed registered', and 'no one matches'.",
+      "remediation": "Add a visually-hidden `aria-live=\"polite\"` status node (present at mount, alongside or inside the search widget) that is updated with 'No matches' text when `matches.length === 0`, independent of the visual `search-empty` div and independent of `aria-activedescendant`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-region",
+      "theme": "a state that has a live-region pattern used correctly elsewhere in this app (Notice.tsx) is not given one at all for generation-in-progress, so the one visual indicator that anything is happening has no non-visual counterpart",
+      "file": "app/src/App.tsx",
+      "line": 255,
+      "summary": "The `.busy` overlay (App.tsx:255-262, `{bg.status === \"running\" && <div className=\"busy\">...<span>Generating\u2026</span>...`) has no `role=\"status\"`/`aria-live` anywhere, unlike Notice.tsx which deliberately keeps its `role=\"status\"` region always-mounted for exactly this reason. Generation is asynchronous (runs in a Web Worker per app/CLAUDE.md) and can take a non-trivial time at larger roster sizes; there is currently zero accessible signal that a run started, is in progress, or (short of an eventual error toast or the graph silently swapping) that it's still going.",
+      "failure": "Paste a large roster and press 'Generate buddy graph', or press 'Different arrangement' on an existing graph \u2014 a screen-reader user gets no announcement that generation began, and if it takes any perceptible time has no way to know the app is working versus stuck.",
+      "remediation": "Give the busy overlay's text node role=\"status\" (or route the 'Generating\u2026'/done transition through the same always-mounted status-region pattern Notice.tsx already established).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-mismatch",
+      "theme": "DOM/tab order for the absolutely-positioned panels does not track their on-screen spatial position, and the two panels M3 added make the existing zigzag worse",
+      "file": "app/src/App.tsx",
+      "line": 212,
+      "summary": "All side panels are `position: absolute` (app.css: #search bottom-left, #person top-right, #route bottom-left, #buddies top-right, #metrics bottom bar) but DOM/tab order follows App.tsx's JSX order: search (bottom-left) -> person (top-right) -> route (bottom-left) -> buddies (top-right) -> metrics (bottom). A sequential Tab traversal bounces bottom-left/top-right/bottom-left/top-right before reaching the bottom bar, rather than following any consistent reading order (e.g. top-to-bottom, left-to-right).",
+      "failure": "With a person selected and a path active, Tab from the search box lands on the top-right PersonPanel, then back down-left to PathPanel, then back up-right to BuddyList \u2014 a keyboard user has to track focus across the screen in a pattern that doesn't match how a sighted user would scan it.",
+      "remediation": "Reorder the JSX (or use CSS order/flex reordering deliberately, keeping DOM order matching intended reading order) so panels in the same visual column/quadrant are adjacent in tab order; at minimum group #person and #buddies (both top-right) and #search/#route (both bottom-left) consecutively.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "gated-summary-excludes-new-report-field",
+      "theme": "the one plain-language constraint-outcome sentence is gated on the user-authored rule count, which structurally cannot include F9's auto-derived priors, so the flagship report ('kept 46 of 50 pairs') would render nothing in the common case",
+      "file": "app/src/model.ts",
+      "line": 153,
+      "summary": "constraintSummary(view) returns null whenever view.constraints.length === 0, but F9's priors are derived from the previous graph's edges each regenerate (not a user-authored ConstraintPair), so a preserve-only regenerate with no manually-added required/prohibited rules \u2014 the common F9 case, e.g. 'Dave joins, nobody has typed any buddy rules' \u2014 would hit the early return and silently show nothing, even though view.report.priorsKeptFraction (already plumbed opaquely through GraphView.report from the core's ConstraintReport) is populated.",
+      "failure": "Generate a graph with zero required/prohibited rules and priorWeight-driven priors; report.priorsKeptFraction is a real fraction (e.g. 0.92) but constraintSummary(view) returns null at the total===0 guard, so QualityPanel's `{rules && <div className=\"rules-line\">{rules}</div>}` renders nothing \u2014 F9's acceptance criterion ('report shows kept N of M pairs') is unmet for the case the feature exists for.",
+      "remediation": "Give priors-kept a summary path independent of view.constraints.length \u2014 either fold report.priorsKeptFraction into constraintSummary's gate condition (`total===0 && report?.priorsKeptFraction==null`) or add a sibling summary function/render line in QualityPanel, so the two concerns (rule satisfaction vs. churn preservation) stay the same kind of always-checked-together the file's own comments already argue for with connectionSummary vs constraintSummary.",
+      "invariant": "whenever view.report?.priorsKeptFraction is non-null, some rendered UI string reflects it \u2014 never gated behind view.constraints.length > 0, since priors and named rules are populated independently."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "{\"target\":\"app/src (the BuddyGraph app) \u2014 M3 added F7 constraints UI, F8 fuzzy search + node explorer, F10 path finder\",\"round\":1,\"runId\":\"sextant-m3-app\",\"changedPaths\":[\"app/src/constraints.ts\",\"app/src/search.ts\",\"app/src/neighborhood.ts\",\"app/src/model.ts\",\"app/src/App.tsx\",\"app/src/graph/highlight.ts\",\"app/src/graph/GraphCanvas.tsx\",\"app/src/io/constraintMessages.ts\",\"app/src/io/importGraph.ts\",\"app/src/io/exportGraph.ts\",\"app/src/panels/ConstraintsEditor.tsx\",\"app/src/panels/PersonSearch.tsx\",\"app/src/panels/PersonPanel.tsx\",\"app/src/panels/PathPanel.tsx\",\"app/src/panels/RosterModal.tsx\",\"app/src/panels/QualityPanel.tsx\",\"app/src/state/useBuddyGraph.ts\",\"app/src/state/useGenerationWorker.ts\",\"app/src/state/useExplorerHistory.ts\",\"app/src/state/useGraph.ts\",\"app/src/state/useEscape.ts\",\"app/src/state/usePathFinder.ts\",\"app/src/worker/protocol.ts\",\"app/src/worker/generate.ts\",\"app/src/styles/app.css\"],\"saturation\":{}}"
+}

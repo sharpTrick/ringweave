@@ -1,18 +1,19 @@
 /**
- * Ring-greedy generation with an incrementally maintained all-pairs distance
- * matrix (the cached variant). Deterministic: no RNG. Produces byte-identical
- * edge sets to the Python reference `gen_c_cached.ring_greedy_cached`.
+ * Ring-greedy generation with an incrementally maintained all-pairs distance matrix.
+ * RNG-free, so the edge set is byte-identical to the Python reference
+ * `gen_c_cached.ring_greedy_cached` — change reference-python/ first.
  *
- * Algorithm (Patrick Sharp). Incremental-distance caching applied to it:
- * Patrick Sharp with Claude (Anthropic), 2026. The incremental all-pairs
- * shortest-path identity is classical (see CONCEPT_LINEAGE).
+ * Algorithm: Patrick Sharp; incremental-distance caching with Claude (Anthropic), 2026.
+ * See CONCEPT_LINEAGE.
  */
-import { Graph, ring, DEFAULT_MIN_SEPARATION } from "./graph.js";
+import { Graph, ring } from "./graph.js";
+import {
+  DEFAULT_MIN_SEPARATION, MAX_GREEDY_WORK, MAX_REPAIR_WORK, greedyWork,
+} from "./budgets.js";
 import { bfsDistances } from "./metrics.js";
 
-// Upper bound for ringGreedy's n×n cached-distance matrix (~100 MB at this n,
-// ints capped well below the typed-array limit). Far tighter than MAX_ROSTER,
-// which bounds only the O(n) structures (Graph adjacency, the constrained path).
+// MEMORY bound on ringGreedy's n×n distance matrix (~100 MB here), far tighter than
+// MAX_ROSTER, which bounds only the O(n) structures.
 export const MAX_CACHED_N = 5000;
 
 export interface GreedyResult {
@@ -24,8 +25,7 @@ export interface GreedyResult {
 export interface GreedyOptions {
   /**
    * Minimum degrees of separation to aim for. Default 5, clamped to floor(n/2).
-   * `mind` mirrors the Python reference kwarg; the constrained path spells the
-   * same concept `minSeparation`.
+   * The same concept the constrained path spells `minSeparation` — an alias, not another knob.
    */
   mind?: number;
   /** When no pair is `mind` apart, shrink the target by 1 and retry rather than stop. Default true. */
@@ -34,55 +34,64 @@ export interface GreedyOptions {
   repair?: boolean;
 }
 
+/**
+ * Build a ~k-regular graph on `n` people: a ring seed, then greedily join the pair that is
+ * LEAST CONNECTED first and only then farthest apart — degree outranks distance, which is the
+ * order `reference-python/generators.py` states and `lexLess` implements.
+ *
+ * THROWS rather than refuses (it has no report channel): on `k < 2`, on a malformed `k`/`mind`,
+ * and past `MAX_CACHED_N` or `MAX_GREEDY_WORK`.
+ */
 export function ringGreedy(
   n: number,
   k: number,
   opts: GreedyOptions = {},
 ): GreedyResult {
-  // k must be a real number: `deg >= NaN` is always false, silently disabling the
-  // degree-cap logic in findPair. (The ring seed still gives every vertex degree
-  // 2, so this path targets ~k, not a hard cap — unlike the constrained path.)
+  // `deg >= NaN` is always false, so an unchecked `k` silently disables findPair's degree cap.
   if (!Number.isInteger(k) || k < 0) {
     throw new Error(`buddy count ${k} must be a non-negative integer`);
   }
-  // The ring seed gives every vertex degree 2 and completion only ADDS edges, so
-  // ringGreedy structurally cannot honor k < 2 — it would silently return a
-  // 2-regular graph. Refuse and point to the constrained path, which builds the
-  // empty graph (k=0) / matching (k=1) correctly.
+  // Likewise `ecc < curMind`: a NaN target builds a DIFFERENT graph rather than ignoring an
+  // option, and still propagates out as `finalMinSeparation`.
+  const requestedMind = opts.mind ?? DEFAULT_MIN_SEPARATION;
+  if (!Number.isInteger(requestedMind) || requestedMind < 0) {
+    throw new Error(`minimum separation ${requestedMind} must be a non-negative integer`);
+  }
   if (k < 2) {
     throw new Error(
       `ringGreedy needs k >= 2 (its ring seed floors degree at 2); for k < 2 use buildConstrainedBuddyGraph`,
     );
   }
-  // ringGreedy allocates a flat n×n distance cache (O(n²) memory, and completion
-  // is ~O(n³) time), so it is capped far tighter than MAX_ROSTER — beyond ~a few
-  // thousand the Int32Array allocation would throw a native RangeError. Refuse
-  // with a clear message; a malformed n (non-integer/negative) is left to ring()
-  // → the Graph ctor for the canonical "must be an integer" message.
+  // Both size guards are conditioned on `Number.isInteger(n)` so that a malformed n falls
+  // through to ring() → the Graph ctor for the canonical "must be an integer" message.
   if (Number.isInteger(n) && n > MAX_CACHED_N) {
     throw new Error(
       `ringGreedy supports up to ${MAX_CACHED_N} people (its distance cache is O(n²)); got ${n}`,
     );
   }
-  const mind = opts.mind ?? DEFAULT_MIN_SEPARATION;
+  // MAX_CACHED_N bounds MEMORY; this is the TIME bound it does not provide. Each path needs both.
+  if (Number.isInteger(n) && Number.isInteger(k) && greedyWork(n, k) > MAX_GREEDY_WORK) {
+    throw new Error(
+      `roster size ${n} with ${k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count`,
+    );
+  }
+  const mind = requestedMind;
   const demote = opts.demote ?? true;
   const repair = opts.repair ?? false;
 
-  const g = ring(n); // throws on a non-integer/negative n
+  const g = ring(n);
   const INF = n + 5;
 
-  // Flat n*n distance matrix; dist[i*n + j].
   const dist = new Int32Array(n * n).fill(INF);
   for (let s = 0; s < n; s++) {
     const d = bfsDistances(g, s);
     const base = s * n;
     for (let t = 0; t < n; t++) dist[base + t] = d[t] >= 0 ? d[t] : INF;
   }
-  for (let i = 0; i < n; i++) dist[i * n + i] = 0;
 
   let curMind = Math.min(mind, Math.floor(n / 2));
 
-  // Incremental update: inserting edge (u,v) can only shorten distances.
+  // Inserting (u,v) can only shorten distances, so the cache is repaired rather than rebuilt:
   // new[i,j] = min(old[i,j], old[i,u]+1+old[v,j], old[i,v]+1+old[u,j])
   const updateAfterEdge = (u: number, v: number): void => {
     for (let i = 0; i < n; i++) {
@@ -107,7 +116,6 @@ export function ringGreedy(
   };
 
   const findPair = (): [number, number] | null => {
-    // best key = (neMax, neMin, -ecc, -perim, va, vb); smaller wins lexicographically
     let best: number[] | null = null;
     let bestVa = -1;
     let bestVb = -1;
@@ -115,7 +123,6 @@ export function ringGreedy(
       const vaNe = g.degree(va);
       if (vaNe >= k) continue;
       const rowVa = va * n;
-      // eccentricity over finite entries
       let ecc = 0;
       for (let t = 0; t < n; t++) {
         const d = dist[rowVa + t];
@@ -123,7 +130,7 @@ export function ringGreedy(
       }
       if (ecc < curMind) continue;
       for (let vb = va + 1; vb < n; vb++) {
-        if (dist[rowVa + vb] !== ecc) continue; // only the farthest set
+        if (dist[rowVa + vb] !== ecc) continue;
         const vbNe = g.degree(vb);
         if (vbNe >= k) continue;
         if (g.hasEdge(va, vb)) continue;
@@ -149,8 +156,8 @@ export function ringGreedy(
   for (;;) {
     const pair = findPair();
     if (pair === null) {
-      // Floor demotion at 3: below that the target is smaller than any cycle, so
-      // relaxing it buys nothing (mirrors the Python reference).
+      // Demotion floors at 3: below that the target is smaller than any cycle, so relaxing it
+      // buys nothing (mirrors the Python reference).
       if (demote && curMind > 3) {
         curMind -= 1;
         continue;
@@ -167,7 +174,6 @@ export function ringGreedy(
   return { graph: g, finalMind: curMind };
 }
 
-/** Lexicographic comparison of equal-length numeric tuples: a < b ? */
 function lexLess(a: number[], b: number[]): boolean {
   for (let i = 0; i < a.length; i++) {
     if (a[i] < b[i]) return true;
@@ -177,24 +183,53 @@ function lexLess(a: number[], b: number[]): boolean {
 }
 
 /**
- * Greedily connect lowest-degree vertices at least `minDist` apart to close
- * degree gaps. Deterministic; mirrors Python `_repair_degrees` including its
- * stable ordering and first-max selection.
+ * Greedily connect lowest-degree vertices at least `minDist` apart to close degree gaps.
+ * RNG-free; mirrors Python `_repair_degrees` including its stable ordering and first-max
+ * selection. Throws once the work counter below passes `MAX_REPAIR_WORK`.
  */
+
 export function repairDegrees(g: Graph, k: number, minDist = 3): void {
+  if (!Number.isInteger(k) || k < 0) {
+    throw new Error(`buddy count ${k} must be a non-negative integer`);
+  }
+  if (!Number.isInteger(minDist) || minDist < 0) {
+    // `distv[v] < minDist` is false for every NaN, so a NaN floor drops the separation
+    // constraint and builds a DIFFERENT graph rather than ignoring an option.
+    throw new Error(`minimum separation ${minDist} must be a non-negative integer`);
+  }
+  // COUNTED, NOT PREDICTED: repair's cost depends on graph STRUCTURE, and four successive
+  // (n, k, deficit) models were each wrong in a different direction. All THREE cost centres are
+  // charged — sweeps, per-pass rebuild+sort, per-sweep candidate scan — each exposed by a graph
+  // shape the other two could not see.
+  let work = 0;
+
   let changed = true;
   while (changed) {
     changed = false;
-    // under-degree vertices, ascending vertex order, stable-sorted by degree
     const under: number[] = [];
     for (let v = 0; v < g.n; v++) if (g.degree(v) < k) under.push(v);
     if (under.length < 2) break;
-    under.sort((x, y) => g.degree(x) - g.degree(y)); // stable in ES2019+
+    // Stable (ES2019+): Python parity depends on ties keeping ascending vertex order.
+    under.sort((x, y) => g.degree(x) - g.degree(y));
+    // Per pass, not hoisted: a pass ends the moment it adds an edge, so `m` is constant WITHIN a
+    // pass and grows between them.
+    const sweepCost = g.n + 2 * g.numEdges();
+    work += g.n + under.length * Math.log2(Math.max(2, under.length));
+    if (work > MAX_REPAIR_WORK) {
+      throw new Error(
+        `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
+      );
+    }
 
     for (const va of under) {
       if (g.degree(va) >= k) continue;
+      work += sweepCost + under.length;
+      if (work > MAX_REPAIR_WORK) {
+        throw new Error(
+          `graph too large to repair in reasonable time (n=${g.n}, k=${k}) — reduce the roster or the buddy count`,
+        );
+      }
       const distv = bfsDistances(g, va);
-      // candidates in `under` order (degree-sorted, stable ascending v)
       let vb = -1;
       let bestDist = -1;
       for (const v of under) {
@@ -203,7 +238,7 @@ export function repairDegrees(g: Graph, k: number, minDist = 3): void {
         if (g.hasEdge(va, v)) continue;
         if (distv[v] < minDist) continue;
         if (distv[v] > bestDist) {
-          bestDist = distv[v]; // first-max: strict > keeps the first
+          bestDist = distv[v]; // strict `>` keeps the first max, as Python does
           vb = v;
         }
       }

@@ -1,0 +1,389 @@
+{
+  "target": "lib/src",
+  "round": 6,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 8,
+    "confirmed": 8,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under lib/src/core (graph, metrics, bounds, budgets, constraints, constrainedGreedy, greedy, polish, swap, rng, index) plus all 9 test files, and the app consumers of the exported surface. Ran `npx vitest run` in lib/ (239 pass). Regenerated reference-python fixtures (`python3 gen_fixtures.py`) — byte-identical to both committed copies. Probes in /home/user/ringweave/.review-scratch/: (1) oracle.py/oracle.mjs — TS constrainedGreedy vs Python constrained_greedy over 36 (n,k,scenario) cells incl. n=120,k=4 and n=25,k=2: aspl ratio 1.0000, diameter and connected identical everywhere. (2) moore.json — mooreLowerBounds vs Python for all n in [0,60) x k in [0,12): 0 mismatches. (3) girth.mjs — girth vs a remove-edge/BFS brute-force oracle and shortestPath vs an independent lex-min walk, 3000 random graphs, all ordered pairs: 0 mismatches. (4) det.mjs — same edge SET inserted in permuted order through polish/polishConstrained/girth/shortestPath, 200 graphs: identical output (Set-iteration-order independence confirmed). (5) fuzz.mjs/fuzz2.mjs — 400 buildConstrainedBuddyGraph + 3000 constrainedGreedy random scenarios (prohibited/required/priors/priorHard) asserting prohibited-absent, required-present, degree<=k, legal-edge maximality, aspl/diameter/lcf/connected/satisfied agreement with a rebuilt Graph, rerun determinism, and constraint-insertion-order invariance: 0 violations. (6) frag.mjs — 3000 disconnected inputs through polish in both modes looking for component-count increase or largest-component shrink (the guard polishConstrained has and polish does not): none found. (7) gate.mjs/big.mjs — measured the auto-polish gate at (120,4),(121,4),(121,2),(130,2),(150,2),(100,12),(120,12),(119,8) and the n=5000,k=4 constrained ceiling (21.8s, within its documented budget). Traced by hand: the `stuck` memo's soundness (legalEdge is symmetric, so a stuck vertex can never be selected as a partner either), forceConnect's inertness (completion's exit implies legal-edge maximality, so the Set-order dependence inside joinAnyComponents is unreachable), completionCap never binding, penalizedAspl's dominance argument for polish's connectivity guarantee, repairDegrees' UNREACHABLE handling (matches Python `dist[v] >= min_dist` exactly, so parity-intentional), and the n<=1 aspl=Infinity/asplGap=0 pair (real internal inconsistency in BuddyResult, but every in-tree consumer already guards it explicitly in app/src/model.ts quality()).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under /home/user/ringweave/lib/src/core (index, graph, budgets, constraints, constrainedGreedy, greedy, polish, metrics, bounds, swap, rng) plus lib/test/*. Built dist and ran probes under /home/user/ringweave/.review-scratch/. Reproduced: polish(ring(40000),{maxIters:0}) = 160,246 ms with boundedPolishIterations = 0; polishConstrained(ring(30000),cons,{iters:0}) = 47,770 ms; buildConstrainedBuddyGraph(1e6,...) refusal costs 261 ms / 44 MB. Verified as SOLID: pairKey/keyToPair round-trip under -0, 1e21, negatives and NaN (no key collision; lib/src has no string/CSV/clipboard/DOM sink at all — every interpolation in formatReason and the error messages is a number); validate's O(n^2) prohibited-pair walk sits correctly BEHIND the MAX_CONSTRAINED_N refusal (120 ms at n=5000); MAX_CONSTRAINED_WORK calibration holds ((464,463)=56 s, (5000,4)=21 s, (1000,100)=33 s vs the documented ~46 s worst case); completionCap with k=1e15 at small n terminates via the stuck-vertex path; greedyWork covers the mind-demotion loop (extra n^3/2, inside budget); minSeparation NaN/Infinity/-1/1e9 all inert with identical output and no hang; seed NaN/Infinity/2^53 all collapse to 0 via >>>0 with determinism intact; polishIters -0 and 1e999 clamped; aspl/girth = Infinity at n<=1 -> JSON null is the already-documented F6 export-boundary item; mooreLowerBounds at k=1,2 with n=MAX_ROSTER is O(n) not stalling; forceConnect/joinAnyComponents worst case is one O(n^2) scan, not O(n^3), because completion leaves the graph legal-edge-maximal; ringGreedy's MAX_CACHED_N/MAX_GREEDY_WORK refuse before the O(n^2) Int32Array allocation. Constraints.fromTags has no caller outside lib/test and is already recorded as a deferral in lib/CLAUDE.md, so it is not re-filed. app/src/io/importGraph.ts caps n at 1000, so the lib's deliberately-uncapped main-thread metrics (girth, allPairsSummary, eccentricity, validateDetailed) are bounded by their only live caller.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read every file in the changed set (constrainedGreedy.ts, graph.ts, index.ts, polish.ts, budgets.ts, constraints.ts, metrics.ts) plus their close neighbors (greedy.ts, bounds.ts, swap.ts) in full, not just the diff. Attempted the extension exercise against real, plan-committed changes: (1) the declared OCP seam — added a mental second TagPolicy case and grepped for every place `policy`/`TagPolicy` is referenced (constraints.ts only) to confirm the switch is genuinely the sole touch point; it is — the seam pays as documented. (2) F9 (\"recalculate with minimal disruption\", PROJECT_PLAN.md milestone M4, flagship P1) — traced the priors/priorWeight/priorHard machinery that is F9's actual seam, and reproduced its interaction with the auto-polish cost gate (`resolveWantPolish`/`MAX_POLISH_WORK` in budgets.ts + index.ts) with a live script in .review-scratch/priors_no_polish.mjs against the built dist. (3) F8/F10 (fuzzy search, node explorer, path finder) — confirmed shortestPath/eccentricity/bfsDistances already fully support these with no core change needed. (4) fromTags — confirmed via grep across app/src and lib/src that it still has no caller outside lib/test, matching the already-filed, already-deferred known limitation in lib/CLAUDE.md (not re-filed). Cross-checked findings against docs/findings/churn-priors-weight.md to avoid re-reporting what the team already measured and documented.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Reviewed every file in lib/src/core/ (bounds.ts, budgets.ts, constrainedGreedy.ts, constraints.ts, graph.ts, greedy.ts, index.ts, metrics.ts, polish.ts, rng.ts, swap.ts) for any interaction/accessibility surface: grepped for aria-*, role=, tabIndex, onKeyDown/keyboard handlers, useEffect, document./window. references, and any DOM or JSX presence. Found none. This round's target is the ringweave core algorithmic library (graph construction, constrained greedy assignment, local-search polish, budget/constraint evaluation, and metrics computation) — a pure TypeScript computation layer with no rendered UI, no focus/tab order, no live regions, no reduced-motion handling, and no keyboard event paths. The interaction/accessibility lens has no applicable surface here since none of these files touch the DOM, JSX, or user input; they are consumed by app/ components that were not part of this round's changed-paths set.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "The auto-polish decision (resolveWantPolish, a function of both n and k) is private to lib, so the app re-implements it as its own n-only approximation, and the two now disagree — the UI's reroll-block copy can state something false about what the core will actually do.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "resolveWantPolish decides auto-polish from polishWork(n,k,defaultIters) <= MAX_POLISH_WORK (n AND k), but is module-private and unexported; app/src/model.ts mirrors it as POLISH_MAX_N = 120 (n-only, with a comment still describing the removed n<=120 rule), disagreeing with the real gate in both directions."
+      ],
+      "remediation": "Delete app/src/model.ts's independent POLISH_MAX_N reimplementation entirely; export the actual gate function from lib/src/core/index.ts and have the app call it directly wherever it currently consults POLISH_MAX_N (rerollBlockReason, useBuddyGraph.ts's force-polish guard). This removes the duplicate implementation rather than adding a second synchronized copy."
+    },
+    {
+      "theme": "Constraints.fromTags' null-group check only excludes explicit null, not undefined, so an absent/holed tag entry is treated as an equal, shared group label rather than 'no group' — silently prohibiting all pairs of ungrouped people.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "tagOf can return undefined for holes or out-of-range indices, but fromTags only skips ti === null; since undefined === undefined, every pair of ungrouped people compares equal and gets prohibited, contradicting the documented 'missing tags count as no group' contract. Shorter arrays (which fall through to explicit null) behave correctly, masking the bug."
+      ],
+      "remediation": "Collapse tagOf's branching so it always coalesces missing/out-of-range/undefined entries to the single null sentinel (tags[i] ?? null), and change the guard to the loose ti == null check — removing the separate undefined-producing code path rather than adding a second undefined check alongside the null one."
+    },
+    {
+      "theme": "The polish path's cost gate (MAX_POLISH_WORK / boundedPolishIterations) only prices the loop iterations, while unconditional work that surrounds or substitutes for the loop — pre/post-loop all-pairs sweeps, graph copies, and the refusal-path placeholder allocation — stays unbounded or oversized relative to the input the gate is supposed to control.",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "polish/polishConstrained pay two-to-three full Theta(n*(n+m)) sweeps plus two graph copies before and after the loop that boundedPolishIterations gates; a call priced at zero iterations still runs for minutes.",
+        "refusedResult allocates an n-sized array of arrays sized against MAX_ROSTER (1e6) rather than MAX_CONSTRAINED_N (5000), the largest roster the constrained builder can actually accept, so refusing an oversized roster costs far more allocation than accepting the largest legal one."
+      ],
+      "remediation": "Remove the assumption that boundedPolishIterations is the only gate needed: add one size check — refuse whenever n*(n+m) alone exceeds MAX_POLISH_WORK — before the first sweep/copy in polish and polishConstrained (matching the precondition-throw style already used elsewhere), and drop refusedResult's oversized MAX_ROSTER-based allocation in favor of returning an empty buddies array on refusal. Both changes delete work/allocation that the gate was never actually pricing, instead of adding a second parallel bound."
+    },
+    {
+      "theme": "priorWeight/priors are exercised only inside polishConstrained, but the unrelated, priors-agnostic resolveWantPolish cost gate silently skips polish above a roster-size threshold, turning priors into a complete no-op with no report signal that this happened.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "buildConstrainedBuddyGraph applies priorWeight only when resolveWantPolish (n,k-only, unaware of priors) decides to run polish; above ~n=190 at k=4 priors have zero effect, yet report.priorsKeptFraction still reports a plausible-looking number by incidental survival, with no dedicated field distinguishing 'priors were weighed' from 'priors never ran'."
+      ],
+      "remediation": "Stop computing/reporting priorsKeptFraction for the case where polish did not run — delete that misleading metric path rather than adding a new priorsAttempted field alongside it, so callers can't read a coincidental number as a real signal."
+    },
+    {
+      "theme": "Comments left over from the budgets.ts extraction still cite graph.ts as the location of budget constants/functions, misdirecting readers to the wrong module.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment on index.ts:377 cites boundedPolishIterations as being in graph.ts when it is in budgets.ts.",
+        "Comments on constraints.ts:247 and 259 cite graph.ts for MAX_CONSTRAINED_N's rationale when it is defined in budgets.ts (constrainedGreedy.ts:408 correctly references budgets.ts)."
+      ],
+      "remediation": "Delete the stale '(graph.ts)' / 'in graph.ts' text at index.ts:377 and constraints.ts:247/259 and replace with 'budgets.ts', matching the already-correct reference in constrainedGreedy.ts:408 — one wording fixed in one place instead of three divergent copies."
+    },
+    {
+      "theme": "ConstrainedBuddyOptions.minSeparation is documented as having a default and being an option, but the constrained path never applies it — the doc asserts behavior the code doesn't have.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "minSeparation documents 'Default 5' on index.ts:209 but the value is silently ignored by the constrained path, which maximises separation greedily regardless of the option."
+      ],
+      "remediation": "Remove the false 'Default 5.' claim from the doc comment rather than implementing the option; state plainly that minSeparation is accepted for API compatibility only and has no effect on the constrained path."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "gate-mirror-divergence",
+      "theme": "the core's auto-polish decision is k-aware but not exposed, so the app's copy of that decision is wrong and the UI states something false about what the core will do",
+      "file": "lib/src/core/index.ts",
+      "line": 399,
+      "summary": "`resolveWantPolish` decides auto-polish from `polishWork(n, k, defaultIters) <= MAX_POLISH_WORK` — a function of BOTH n and k — but it is module-private and neither `polishWork` nor `MAX_POLISH_WORK` is exported from the package. `app/src/model.ts` therefore mirrors it as an n-only literal (`POLISH_MAX_N = 120`, whose comment still describes the removed `n <= 120` rule), and the two disagree in both directions. Polish is the only seed-dependent stage, so this mirror is what the reroll UI's user-facing copy is derived from.",
+      "failure": "Measured with `buildBuddyGraph(n, k)` on default options: (130, 2) -> polished === true (true for all n up to ~146 at k=2, since 20000*(64+2n^2) <= 865_280_000 iff n <= 146), yet `rerollBlockReason(130, {polish:'auto'})` returns \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" and App.tsx's handleReroll flashes it and RETURNS without regenerating — a working feature refused with a false explanation for every roster of 121-146 people at 2 buddies (BUDDY_MIN is 2, MAX_ROSTER_N is 1000, so this is reachable from the UI). The opposite direction also reproduces: (100, 12) -> polished === false and (119, 8) -> polished === false, where `rerollBlockReason` returns null and the app promises the arrangement may vary. The pinning test app/test/reroll.test.ts:62-66 only exercises k=4, so it passes by construction and would not catch either case.",
+      "invariant": "For every (n, k) the app can generate (2 <= k <= 12, 0 <= n <= MAX_ROSTER_N), the app's predicted polish-enablement equals the core's actual one: `(rerollBlockReason(n, {...DEFAULT_SETTINGS, polish: 'auto'}) === null) === buildBuddyGraph(n, k, { polish: 'auto', polishIters: 1 }).polished`. Equivalently, once the core exports the predicate: the app contains no independent threshold for polish enablement — the app-side value is a call into the core for the same (n, k).",
+      "remediation": "Export the gate itself from lib rather than a number the app has to re-derive: add `export function autoPolishEnabled(n: number, k: number): boolean` (the body of `resolveWantPolish`'s \"auto\" branch, using DEFAULT_POLISH_ITERS) to lib/src/core/index.ts and re-export it, then replace `POLISH_MAX_N` in app/src/model.ts with a call to it inside `rerollBlockReason` (and in useBuddyGraph.ts:121's force-polish guard), rewording the block copy so the k-dependent case reads correctly. Parameterize the reroll boundary test over k (at least 2, 4, 8, 12) so the k-awareness is pinned, not just one column of it."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "nullish-sentinel-conflation",
+      "theme": "an absent group label is treated as a shared group label, so ungrouped people get silently prohibited from each other",
+      "file": "lib/src/core/constraints.ts",
+      "line": 113,
+      "summary": "`Constraints.fromTags` guards only against `null` (`if (ti === null) continue`) but its `tagOf` helper can return `undefined` — for any index within `tags.length` whose element is a hole or an explicit `undefined`. Since `undefined === undefined`, every pair of ungrouped people compares equal and is prohibited, directly contradicting the method's own documented contract (\"Missing/out-of-range tags count as 'no group' (never grouped)\"). The Python reference is correct here (`tags[i] is not None`), so this is a port defect, and the shape of the bug is invisible in the common case: the same roster expressed with a SHORTER array behaves correctly, because then `tagOf` falls through to the explicit `null`.",
+      "failure": "`Constraints.fromTags(5, [1, 1, undefined, undefined, undefined]).prohibitedPairs()` returns `[[0,1],[2,3],[2,4],[3,4]]` — persons 2, 3 and 4 have no group yet are mutually prohibited. Identical result for the sparse array `const t = new Array(5); t[0]=1; t[1]=1;`. The correct answer, and what `Constraints.fromTags(5, [1, 1])` actually returns, is `[[0,1]]`. Consequences are not cosmetic: the spurious prohibited pairs shrink each ungrouped person's allowed set, can push `validate` into refusing a feasible roster via `prohibited-from-everyone` / `prohibited-splits-group` (e.g. n=4 with all four tags undefined refuses outright), and otherwise degrade ASPL. Existing tests (constrained.test.ts:271, :285) use a dense array and a short array respectively, so neither reaches the hole case.",
+      "invariant": "For all n and all tag arrays, normalizing absent entries must not change the output: `Constraints.fromTags(n, tags).prohibitedPairs()` deep-equals `Constraints.fromTags(n, Array.from({length: n}, (_, i) => tags[i] ?? null)).prohibitedPairs()`. Equivalently: (i, j) is prohibited by fromTags iff `tagOf(i) != null && tagOf(i) === tagOf(j)`.",
+      "remediation": "Make `tagOf` total in the nullish sense — `const tagOf = (i: number): Tag => tags[i] ?? null;` (which also subsumes the `i < tags.length` branch) — and/or change the guard to `if (ti == null) continue;`. Add a test asserting the invariant above for a sparse array and for explicit `undefined` entries."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-before-the-gate",
+      "theme": "a cost gate that only bounds the loop, while the unconditional work around the loop stays unbounded in the input size",
+      "file": "lib/src/core/polish.ts",
+      "line": 64,
+      "summary": "`polish` and `polishConstrained` have a work cap but no size cap, and pay two-to-three full Theta(n*(n+m)) all-pairs sweeps plus two graph copies before and after the loop that `boundedPolishIterations` is the sole gate on — so a call the budget prices at ZERO iterations still runs for minutes.",
+      "failure": "Measured: `polish(ring(40000), { mode: \"hill\", maxIters: 0 })` -> boundedPolishIterations(40000, 40000, 0, 20000) === 0, function returns iters:0, wall time 160,246 ms. Sibling: `polishConstrained(ring(30000), new Constraints(30000), { iters: 0 })` -> bounded iters 0, 47,770 ms (n=10000 -> 3,780 ms). Cost scales as n^2 and `Graph` admits n up to MAX_ROSTER = 1e6, so `polish(new Graph(1e6))` extrapolates to ~10^5 s. The work comes from `energy(g)` at polish.ts:64, `best = g.copy()` at :65, `allPairsSummary(best)` at :139, and the mirror set in polishConstrained (`input.edgeList()` :148, `input.copy()` :163, `measure(g)` :164, `g.copy()` :168) — none of them reachable by the budget. Reachability: through the library's public API (both are exported from index.ts:36/50); NOT through the current app UI, whose only large-graph producer, importGraph, caps n at 1000, and whose in-app polish callers are bounded by MAX_CACHED_N/MAX_CONSTRAINED_N. This is the same defect class the repo already fixed one boundary over (`polish(ring(20), {maxIters: Infinity})` never returned) — the sibling is the graph SIZE rather than the iteration COUNT, and the ratcheted test for it, optimizer.props.test.ts:377 \"A zero budget must buy zero work in BOTH modes\", asserts only that anneal is within 200 ms of hill at n=300, so it passes while the absolute cost is unbounded.",
+      "remediation": "Give the polish path the size cap that budgets.ts:11 says every path needs alongside its work cap (as ringGreedy has MAX_CACHED_N and constrainedGreedy has MAX_CONSTRAINED_N): refuse, in both `polish` and `polishConstrained`, any input graph whose single-sweep cost n*(n+m) alone already exceeds MAX_POLISH_WORK — i.e. throw before the first `energy`/`measure`/`copy`, in the same place and with the same wording style as the existing precondition throws. That closes the theme rather than the case: the guard is stated in terms of the sweep cost the function actually pays, so it covers the pre-loop sweeps, the post-loop `allPairsSummary(best)`, the copies and the anneal calibration together, at every n, for any options object.",
+      "invariant": "For every Graph g and every options object, `polish(g, opts)` and `polishConstrained(g, cons, opts)` either throw before performing any all-pairs sweep, or complete having performed at most a bounded multiple of MAX_POLISH_WORK operations. Machine-checkable form: for all g, if boundedPolishIterations(g.n, g.edgeList().length, opts.maxIters ?? opts.iters, DEFAULT) === 0 then the call throws (it must not run a sweep it cannot afford an iteration of); and for all g and opts where it does not throw, elapsed time is bounded by a constant independent of g.n.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "expensive-refusal",
+      "theme": "a cost gate that only bounds the loop, while the unconditional work around the loop stays unbounded in the input size",
+      "file": "lib/src/core/index.ts",
+      "line": 467,
+      "summary": "`refusedResult` allocates an n-sized array of arrays sized against MAX_ROSTER (1e6) rather than against the largest roster the constrained builder can actually accept (MAX_CONSTRAINED_N = 5000), so refusing an oversized roster costs 200x more allocation than accepting the biggest legal one.",
+      "failure": "Measured: `buildConstrainedBuddyGraph(1_000_000, 4, new Constraints(1_000_000))` is refused with 'roster size 1000000 exceeds the constrained maximum of 5000' and still returns `buddies.length === 1000000`, costing 261 ms and 44 MB of heap. The guard's own comment at index.ts:465-466 states the intent — 'A malformed/oversized n reaches here (that IS what's being refused), so never allocate an n-sized array from it' — but the size clamp uses MAX_ROSTER, and 1e6 IS oversized for this entry point. On a main thread that is a quarter-second of jank plus 44 MB handed back for an input that was refused.",
+      "remediation": "Clamp the placeholder allocation to the largest roster this builder can accept (MAX_CONSTRAINED_N), not to MAX_ROSTER — or return an empty `buddies` on every refusal, since the documented contract already tells callers to read `report.refusals` first and the metric fields are placeholders. Accepted inputs (n <= 5000) are unaffected either way.",
+      "invariant": "For every n, the value returned by buildConstrainedBuddyGraph on a refused input satisfies buddies.length <= MAX_CONSTRAINED_N — no refusal ever allocates more than the largest roster the builder would accept.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "conflated-report-signal",
+      "theme": "F9's soft-preservation seam (priorWeight/priorHard) is entirely routed through polishConstrained; the unrelated general-purpose auto-polish cost gate (resolveWantPolish/MAX_POLISH_WORK) silently turns priors into a complete no-op above a roster size the gate doesn't know priors exist at, and ConstraintReport gives no dedicated signal that this happened",
+      "file": "lib/src/core/index.ts",
+      "line": 318,
+      "summary": "buildConstrainedBuddyGraph only applies priorWeight when `resolveWantPolish` (n,k-only) decides to run polish at all. Above roughly n≈190 at k=4 (polishWork(n,k,DEFAULT_CONSTRAINED_POLISH_ITERS) > MAX_POLISH_WORK), the default 'auto' entry point never reaches constrainedMeasure's prior-penalty term, so cons.addPrior(...) has zero effect on the output — yet report.priorsKeptFraction still reports a plausible-looking number (purely incidental survival from constrainedGreedy, which never looks at priors at all), and the only hint anything is different is the generic `polished: false` flag, which exists for unrelated reasons and isn't documented as a proxy for 'were priors even attempted'.",
+      "failure": "Reproduced in .review-scratch/priors_no_polish.mjs: n=300, k=4, a Constraints with every ring pair (i,(i+1)%n) added as a prior via addPrior. buildConstrainedBuddyGraph(300, 4, cons, {polish:'auto'}) returns polished:false and report.priorsKeptFraction: 0.51 — a number indistinguishable, from the report shape alone, from a real (if partial) preservation outcome. A UI following the plan's own copy ('report shows \"kept 46 of 50 pairs\"') would show a specific, confident-looking number for a run where the preservation mechanism never ran at all.",
+      "remediation": "Either (a) add an explicit report field (e.g. `priorsAttempted: boolean`, true iff polish ran AND priorWeight!=0) so a consumer can distinguish 'priors were weighed and this many survived' from 'priors never had a chance', or (b) make resolveWantPolish's decision aware of whether priors are present (e.g. it is the one case with a real, if modest, quality payoff even outside the general ASPL-only budget, so it could warrant a smaller but nonzero iteration allowance rather than a hard off). Either change is local to index.ts/budgets.ts.",
+      "invariant": "For every (n,k,cons) with cons.priorCount>0, ConstraintReport must let a caller distinguish 'priors were weighed by polish this run' from 'priors could not be weighed because auto-polish was gated off' without cross-referencing the (n,k)-dependent MAX_POLISH_WORK budget themselves; currently both cases produce a priorsKeptFraction computed the same way and neither is flagged."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-module",
+      "theme": "comment references function in wrong module, sending contributor to look in wrong place",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 377,
+      "summary": "Comment incorrectly cites boundedPolishIterations as being in graph.ts when it is actually in budgets.ts",
+      "failure": "Line 377 states: '`boundedPolishIterations` (graph.ts)' but the function is defined in budgets.ts at line 149. A contributor debugging or refactoring will look in the wrong file.",
+      "remediation": "Change '(graph.ts)' to '(budgets.ts)' in the comment on line 377.",
+      "invariant": "Every comment citing a module location must reference the actual module where that symbol is defined.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-module",
+      "theme": "multiple comments reference wrong module for design rationale, causing contributor misdirection",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 247,
+      "summary": "Comment incorrectly directs reader to graph.ts for rationale on MAX_CONSTRAINED_N when the constant and rationale are in budgets.ts",
+      "failure": "Line 247 states: 'rationale on MAX_CONSTRAINED_N in graph.ts' but MAX_CONSTRAINED_N is defined and documented in budgets.ts (lines 16-24). Contributor looking for the design justification will look in the wrong file. Same error occurs on line 259 for MAX_CONSTRAINED_WORK.",
+      "remediation": "Replace 'in graph.ts' with 'in budgets.ts' on line 247 (and similarly on line 259). Consistency: constrainedGreedy.ts line 408 correctly references budgets.ts.",
+      "invariant": "Every cross-file reference in comments must point to the actual module where the referenced symbol or its rationale is defined.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-documentation",
+      "theme": "public interface document claims default value for an option that is never applied and whose value is silently ignored",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 209,
+      "summary": "ConstrainedBuddyOptions.minSeparation documents a 'Default 5' that is not applied, and the value is ignored by the constrained path anyway",
+      "failure": "The JSDoc comment on line 209 states 'Minimum degrees of separation to aim for during completion. Default 5.' But: (a) no default is applied—if omitted, undefined is passed (line 313); (b) constrainedGreedy.ts lines 56–62 explicitly document that minSeparation is 'ACCEPTED AND IGNORED'; (c) the comment claims it 'aims for' a value when choosePartner maximizes separation greedily without a target. A user reading the interface docs will expect minSeparation to behave like polish/seed/polishIters (which have documented defaults that are actually applied), but it has no effect.",
+      "remediation": "Either: (1) remove 'Default 5.' from the comment and clarify that minSeparation is accepted but ignored for API compatibility; or (2) if the constrained path should respect minSeparation, implement it in choosePartner. Option (1) is consistent with constrainedGreedy.ts's contract. Update line 209 to: '/** Minimum degrees of separation. Accepted for API compatibility; the constrained path maximises separation greedily and ignores this value. **/'",
+      "invariant": "Every documented default value in a public option interface must be applied in the corresponding function implementation, or the documentation must explicitly state that the value is accepted but unused.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "gate-mirror-divergence",
+      "theme": "the core's auto-polish decision is k-aware but not exposed, so the app's copy of that decision is wrong and the UI states something false about what the core will do",
+      "file": "lib/src/core/index.ts",
+      "line": 399,
+      "summary": "`resolveWantPolish` decides auto-polish from `polishWork(n, k, defaultIters) <= MAX_POLISH_WORK` — a function of BOTH n and k — but it is module-private and neither `polishWork` nor `MAX_POLISH_WORK` is exported from the package. `app/src/model.ts` therefore mirrors it as an n-only literal (`POLISH_MAX_N = 120`, whose comment still describes the removed `n <= 120` rule), and the two disagree in both directions. Polish is the only seed-dependent stage, so this mirror is what the reroll UI's user-facing copy is derived from.",
+      "failure": "Measured with `buildBuddyGraph(n, k)` on default options: (130, 2) -> polished === true (true for all n up to ~146 at k=2, since 20000*(64+2n^2) <= 865_280_000 iff n <= 146), yet `rerollBlockReason(130, {polish:'auto'})` returns \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" and App.tsx's handleReroll flashes it and RETURNS without regenerating — a working feature refused with a false explanation for every roster of 121-146 people at 2 buddies (BUDDY_MIN is 2, MAX_ROSTER_N is 1000, so this is reachable from the UI). The opposite direction also reproduces: (100, 12) -> polished === false and (119, 8) -> polished === false, where `rerollBlockReason` returns null and the app promises the arrangement may vary. The pinning test app/test/reroll.test.ts:62-66 only exercises k=4, so it passes by construction and would not catch either case.",
+      "invariant": "For every (n, k) the app can generate (2 <= k <= 12, 0 <= n <= MAX_ROSTER_N), the app's predicted polish-enablement equals the core's actual one: `(rerollBlockReason(n, {...DEFAULT_SETTINGS, polish: 'auto'}) === null) === buildBuddyGraph(n, k, { polish: 'auto', polishIters: 1 }).polished`. Equivalently, once the core exports the predicate: the app contains no independent threshold for polish enablement — the app-side value is a call into the core for the same (n, k).",
+      "remediation": "Export the gate itself from lib rather than a number the app has to re-derive: add `export function autoPolishEnabled(n: number, k: number): boolean` (the body of `resolveWantPolish`'s \"auto\" branch, using DEFAULT_POLISH_ITERS) to lib/src/core/index.ts and re-export it, then replace `POLISH_MAX_N` in app/src/model.ts with a call to it inside `rerollBlockReason` (and in useBuddyGraph.ts:121's force-polish guard), rewording the block copy so the k-dependent case reads correctly. Parameterize the reroll boundary test over k (at least 2, 4, 8, 12) so the k-awareness is pinned, not just one column of it."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "nullish-sentinel-conflation",
+      "theme": "an absent group label is treated as a shared group label, so ungrouped people get silently prohibited from each other",
+      "file": "lib/src/core/constraints.ts",
+      "line": 113,
+      "summary": "`Constraints.fromTags` guards only against `null` (`if (ti === null) continue`) but its `tagOf` helper can return `undefined` — for any index within `tags.length` whose element is a hole or an explicit `undefined`. Since `undefined === undefined`, every pair of ungrouped people compares equal and is prohibited, directly contradicting the method's own documented contract (\"Missing/out-of-range tags count as 'no group' (never grouped)\"). The Python reference is correct here (`tags[i] is not None`), so this is a port defect, and the shape of the bug is invisible in the common case: the same roster expressed with a SHORTER array behaves correctly, because then `tagOf` falls through to the explicit `null`.",
+      "failure": "`Constraints.fromTags(5, [1, 1, undefined, undefined, undefined]).prohibitedPairs()` returns `[[0,1],[2,3],[2,4],[3,4]]` — persons 2, 3 and 4 have no group yet are mutually prohibited. Identical result for the sparse array `const t = new Array(5); t[0]=1; t[1]=1;`. The correct answer, and what `Constraints.fromTags(5, [1, 1])` actually returns, is `[[0,1]]`. Consequences are not cosmetic: the spurious prohibited pairs shrink each ungrouped person's allowed set, can push `validate` into refusing a feasible roster via `prohibited-from-everyone` / `prohibited-splits-group` (e.g. n=4 with all four tags undefined refuses outright), and otherwise degrade ASPL. Existing tests (constrained.test.ts:271, :285) use a dense array and a short array respectively, so neither reaches the hole case.",
+      "invariant": "For all n and all tag arrays, normalizing absent entries must not change the output: `Constraints.fromTags(n, tags).prohibitedPairs()` deep-equals `Constraints.fromTags(n, Array.from({length: n}, (_, i) => tags[i] ?? null)).prohibitedPairs()`. Equivalently: (i, j) is prohibited by fromTags iff `tagOf(i) != null && tagOf(i) === tagOf(j)`.",
+      "remediation": "Make `tagOf` total in the nullish sense — `const tagOf = (i: number): Tag => tags[i] ?? null;` (which also subsumes the `i < tags.length` branch) — and/or change the guard to `if (ti == null) continue;`. Add a test asserting the invariant above for a sparse array and for explicit `undefined` entries."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-before-the-gate",
+      "theme": "a cost gate that only bounds the loop, while the unconditional work around the loop stays unbounded in the input size",
+      "file": "lib/src/core/polish.ts",
+      "line": 64,
+      "summary": "`polish` and `polishConstrained` have a work cap but no size cap, and pay two-to-three full Theta(n*(n+m)) all-pairs sweeps plus two graph copies before and after the loop that `boundedPolishIterations` is the sole gate on — so a call the budget prices at ZERO iterations still runs for minutes.",
+      "failure": "Measured: `polish(ring(40000), { mode: \"hill\", maxIters: 0 })` -> boundedPolishIterations(40000, 40000, 0, 20000) === 0, function returns iters:0, wall time 160,246 ms. Sibling: `polishConstrained(ring(30000), new Constraints(30000), { iters: 0 })` -> bounded iters 0, 47,770 ms (n=10000 -> 3,780 ms). Cost scales as n^2 and `Graph` admits n up to MAX_ROSTER = 1e6, so `polish(new Graph(1e6))` extrapolates to ~10^5 s. The work comes from `energy(g)` at polish.ts:64, `best = g.copy()` at :65, `allPairsSummary(best)` at :139, and the mirror set in polishConstrained (`input.edgeList()` :148, `input.copy()` :163, `measure(g)` :164, `g.copy()` :168) — none of them reachable by the budget. Reachability: through the library's public API (both are exported from index.ts:36/50); NOT through the current app UI, whose only large-graph producer, importGraph, caps n at 1000, and whose in-app polish callers are bounded by MAX_CACHED_N/MAX_CONSTRAINED_N. This is the same defect class the repo already fixed one boundary over (`polish(ring(20), {maxIters: Infinity})` never returned) — the sibling is the graph SIZE rather than the iteration COUNT, and the ratcheted test for it, optimizer.props.test.ts:377 \"A zero budget must buy zero work in BOTH modes\", asserts only that anneal is within 200 ms of hill at n=300, so it passes while the absolute cost is unbounded.",
+      "remediation": "Give the polish path the size cap that budgets.ts:11 says every path needs alongside its work cap (as ringGreedy has MAX_CACHED_N and constrainedGreedy has MAX_CONSTRAINED_N): refuse, in both `polish` and `polishConstrained`, any input graph whose single-sweep cost n*(n+m) alone already exceeds MAX_POLISH_WORK — i.e. throw before the first `energy`/`measure`/`copy`, in the same place and with the same wording style as the existing precondition throws. That closes the theme rather than the case: the guard is stated in terms of the sweep cost the function actually pays, so it covers the pre-loop sweeps, the post-loop `allPairsSummary(best)`, the copies and the anneal calibration together, at every n, for any options object.",
+      "invariant": "For every Graph g and every options object, `polish(g, opts)` and `polishConstrained(g, cons, opts)` either throw before performing any all-pairs sweep, or complete having performed at most a bounded multiple of MAX_POLISH_WORK operations. Machine-checkable form: for all g, if boundedPolishIterations(g.n, g.edgeList().length, opts.maxIters ?? opts.iters, DEFAULT) === 0 then the call throws (it must not run a sweep it cannot afford an iteration of); and for all g and opts where it does not throw, elapsed time is bounded by a constant independent of g.n.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "expensive-refusal",
+      "theme": "a cost gate that only bounds the loop, while the unconditional work around the loop stays unbounded in the input size",
+      "file": "lib/src/core/index.ts",
+      "line": 467,
+      "summary": "`refusedResult` allocates an n-sized array of arrays sized against MAX_ROSTER (1e6) rather than against the largest roster the constrained builder can actually accept (MAX_CONSTRAINED_N = 5000), so refusing an oversized roster costs 200x more allocation than accepting the biggest legal one.",
+      "failure": "Measured: `buildConstrainedBuddyGraph(1_000_000, 4, new Constraints(1_000_000))` is refused with 'roster size 1000000 exceeds the constrained maximum of 5000' and still returns `buddies.length === 1000000`, costing 261 ms and 44 MB of heap. The guard's own comment at index.ts:465-466 states the intent — 'A malformed/oversized n reaches here (that IS what's being refused), so never allocate an n-sized array from it' — but the size clamp uses MAX_ROSTER, and 1e6 IS oversized for this entry point. On a main thread that is a quarter-second of jank plus 44 MB handed back for an input that was refused.",
+      "remediation": "Clamp the placeholder allocation to the largest roster this builder can accept (MAX_CONSTRAINED_N), not to MAX_ROSTER — or return an empty `buddies` on every refusal, since the documented contract already tells callers to read `report.refusals` first and the metric fields are placeholders. Accepted inputs (n <= 5000) are unaffected either way.",
+      "invariant": "For every n, the value returned by buildConstrainedBuddyGraph on a refused input satisfies buddies.length <= MAX_CONSTRAINED_N — no refusal ever allocates more than the largest roster the builder would accept.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "conflated-report-signal",
+      "theme": "F9's soft-preservation seam (priorWeight/priorHard) is entirely routed through polishConstrained; the unrelated general-purpose auto-polish cost gate (resolveWantPolish/MAX_POLISH_WORK) silently turns priors into a complete no-op above a roster size the gate doesn't know priors exist at, and ConstraintReport gives no dedicated signal that this happened",
+      "file": "lib/src/core/index.ts",
+      "line": 318,
+      "summary": "buildConstrainedBuddyGraph only applies priorWeight when `resolveWantPolish` (n,k-only) decides to run polish at all. Above roughly n≈190 at k=4 (polishWork(n,k,DEFAULT_CONSTRAINED_POLISH_ITERS) > MAX_POLISH_WORK), the default 'auto' entry point never reaches constrainedMeasure's prior-penalty term, so cons.addPrior(...) has zero effect on the output — yet report.priorsKeptFraction still reports a plausible-looking number (purely incidental survival from constrainedGreedy, which never looks at priors at all), and the only hint anything is different is the generic `polished: false` flag, which exists for unrelated reasons and isn't documented as a proxy for 'were priors even attempted'.",
+      "failure": "Reproduced in .review-scratch/priors_no_polish.mjs: n=300, k=4, a Constraints with every ring pair (i,(i+1)%n) added as a prior via addPrior. buildConstrainedBuddyGraph(300, 4, cons, {polish:'auto'}) returns polished:false and report.priorsKeptFraction: 0.51 — a number indistinguishable, from the report shape alone, from a real (if partial) preservation outcome. A UI following the plan's own copy ('report shows \"kept 46 of 50 pairs\"') would show a specific, confident-looking number for a run where the preservation mechanism never ran at all.",
+      "remediation": "Either (a) add an explicit report field (e.g. `priorsAttempted: boolean`, true iff polish ran AND priorWeight!=0) so a consumer can distinguish 'priors were weighed and this many survived' from 'priors never had a chance', or (b) make resolveWantPolish's decision aware of whether priors are present (e.g. it is the one case with a real, if modest, quality payoff even outside the general ASPL-only budget, so it could warrant a smaller but nonzero iteration allowance rather than a hard off). Either change is local to index.ts/budgets.ts.",
+      "invariant": "For every (n,k,cons) with cons.priorCount>0, ConstraintReport must let a caller distinguish 'priors were weighed by polish this run' from 'priors could not be weighed because auto-polish was gated off' without cross-referencing the (n,k)-dependent MAX_POLISH_WORK budget themselves; currently both cases produce a priorsKeptFraction computed the same way and neither is flagged."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-module",
+      "theme": "comment references function in wrong module, sending contributor to look in wrong place",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 377,
+      "summary": "Comment incorrectly cites boundedPolishIterations as being in graph.ts when it is actually in budgets.ts",
+      "failure": "Line 377 states: '`boundedPolishIterations` (graph.ts)' but the function is defined in budgets.ts at line 149. A contributor debugging or refactoring will look in the wrong file.",
+      "remediation": "Change '(graph.ts)' to '(budgets.ts)' in the comment on line 377.",
+      "invariant": "Every comment citing a module location must reference the actual module where that symbol is defined.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-module",
+      "theme": "multiple comments reference wrong module for design rationale, causing contributor misdirection",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 247,
+      "summary": "Comment incorrectly directs reader to graph.ts for rationale on MAX_CONSTRAINED_N when the constant and rationale are in budgets.ts",
+      "failure": "Line 247 states: 'rationale on MAX_CONSTRAINED_N in graph.ts' but MAX_CONSTRAINED_N is defined and documented in budgets.ts (lines 16-24). Contributor looking for the design justification will look in the wrong file. Same error occurs on line 259 for MAX_CONSTRAINED_WORK.",
+      "remediation": "Replace 'in graph.ts' with 'in budgets.ts' on line 247 (and similarly on line 259). Consistency: constrainedGreedy.ts line 408 correctly references budgets.ts.",
+      "invariant": "Every cross-file reference in comments must point to the actual module where the referenced symbol or its rationale is defined.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-documentation",
+      "theme": "public interface document claims default value for an option that is never applied and whose value is silently ignored",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 209,
+      "summary": "ConstrainedBuddyOptions.minSeparation documents a 'Default 5' that is not applied, and the value is ignored by the constrained path anyway",
+      "failure": "The JSDoc comment on line 209 states 'Minimum degrees of separation to aim for during completion. Default 5.' But: (a) no default is applied—if omitted, undefined is passed (line 313); (b) constrainedGreedy.ts lines 56–62 explicitly document that minSeparation is 'ACCEPTED AND IGNORED'; (c) the comment claims it 'aims for' a value when choosePartner maximizes separation greedily without a target. A user reading the interface docs will expect minSeparation to behave like polish/seed/polishIters (which have documented defaults that are actually applied), but it has no effect.",
+      "remediation": "Either: (1) remove 'Default 5.' from the comment and clarify that minSeparation is accepted but ignored for API compatibility; or (2) if the constrained path should respect minSeparation, implement it in choosePartner. Option (1) is consistent with constrainedGreedy.ts's contract. Update line 209 to: '/** Minimum degrees of separation. Accepted for API compatibility; the constrained path maximises separation greedily and ignores this value. **/'",
+      "invariant": "Every documented default value in a public option interface must be applied in the corresponding function implementation, or the documentation must explicitly state that the value is accepted but unused.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 421533,
+    "agents": 6,
+    "toolCalls": 137
+  }
+}

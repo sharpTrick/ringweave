@@ -1,0 +1,429 @@
+{
+  "target": "app/src",
+  "round": 14,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 7,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of app/src (model, constraints, io/*, worker/*, state/*, graph/*, panels/*) plus app/test. Reproduced with probes under /home/user/ringweave/.review-scratch/r14/: (1) generation->export->import round-trip over n in 3..301 x k in 2..12 x minSeparation in {none,2,5,12} — edges, metrics and settings identical everywhere; (2) a 400-trial constrained fuzz (deduped the way resolveNamedPairs dedupes) checking delivered edges against declared required/prohibited, report.satisfied honesty, degreeMax<=BUDDY_MAX, and round-trip; (3) a 4000-case importGraph fuzz asserting only ImportError escapes and the view obeys quality===0 when aspl===null AND when !connected, buddies-agrees-with-edges, settings clamped to UI range, gauge never 100 while disconnected, and re-import idempotence; (4) tiny-roster boundary sweep n=1,2,3,4,5; (5) an App-level jsdom drive of generate/edit/cancel/reroll/cancel. Also traced: no Math.random/Date.now in app/src; both edge producers use Graph.edgeList() so adj Sets iterate ascending and shortestPath is order-stable across export/import; the constrained report is built from the final polished graph; asplGap's \"no valid Moore bound => gap 0\" collapse to quality 1 is unreachable through assembleMetrics' connected+finite guards; worker id correlation, consumed/pending, cancel/import supersession, and the edgeClass route-membership proof all hold.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface pass over app/src (all 40 source files) plus the lib entry points they call, with executable probes rather than reading alone: bundled app/src through Vite into .review-scratch/out/probe.js and ran hostile inputs under node. Attacks tried and REPELLED: (a) oversized/dense import — star n=1000 refused in 10ms by the per-vertex degree gate, 12-regular n=1000 accepted in 135ms, 6000 duplicate edges 16ms, edgeless n=1000 15ms, path n=1000 68ms; every size/shape gate (MAX_IMPORT_N, 2m<=BUDDY_MAX*n density, degreeMax>BUDDY_MAX, MAX_CONSTRAINT_PAIRS) verified to run BEFORE allPairsSummary/girth. (b) attacker-chosen numbers in settings — buddies:1e9/minSeparation:1e9/seed:-1e9 clamp to {12,12,0}; seed:1e300 (integer-valued double) clamps to SEED_MAX; buddies:2.5 and minSeparation:\"12\" fall back; polish:\"yes\" -> \"auto\"; -0 -> 0; useBuddyGraph downgrades an imported polish:true via autoPolishEnabled. (c) main-thread hangs — validateDetailed's O(n^2) prohibited-pair walk measured 2.6ms at n=1000 (runs per keystroke in RosterModal); parseRoster over 500K chars measured 30-57ms across all-duplicates, one-giant-token, emoji and combining-heavy cases; forceLayout at n=1000/m=6000 measured 347ms with no NaN positions; allPairsSummary+girth+largestComponentFraction at the ceiling ~95ms. (d) spreadsheet/clipboard injection — traced every path a name can take into view.names (only parseRoster or importGraph); both authorities exclude \\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}, TOKEN excludes comma/newline, and importGraph's parseRoster round-trip forbids leading/trailing whitespace, so no embedded delimiter can reach toCsv or the clipboard; CSV fields are RFC-4180 quoted so a semicolon-delimiter locale is also safe; download filenames are literals. (e) export numeric boundary — metrics are Infinity->null before JSON.stringify, minSeparation:undefined is omitted and re-reads as undefined. (f) worker protocol — n/k/options/constraints all bounded by feasibility() and the import clamps before dispatch. Two gaps found, both confirmed by reproduction.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read docs/PROJECT_PLAN.md (F1-F13, milestones M0-M4) and app/CLAUDE.md (which already pre-documents F9's fan-out in detail) to identify the next committed, unbuilt change: M3 (F7/F8/F10) is confirmed done in the tree (ConstraintsEditor.tsx, PersonSearch.tsx, PersonPanel.tsx, PathPanel.tsx, usePathFinder.ts all exist and are wired into App.tsx); M4's flagship F9 'Recalculate with minimal disruption / Preserve current buddies' is the next real committed work (PROJECT_PLAN.md F9, app/CLAUDE.md 'Known follow-ons'). Traced the actual files F9 would touch: app/src/constraints.ts (ConstraintPair/MAX_CONSTRAINT_PAIRS/toConstraints/splitPairs), app/src/worker/protocol.ts (GenerateRequest/GenerateOptions), app/src/worker/generate.ts (runGeneration's routing branch), app/src/state/useBuddyGraph.ts (generate()'s autoPolishEnabled call), app/src/panels/RosterModal.tsx and App.tsx (view/edges plumbing), plus lib/src/core/index.ts's ConstraintReport.priorsKeptFraction (confirms the core already carries the 'kept N of M' number, so that part of F9 is NOT app-side math -- a seam that already pays). Also read app/src/graph/GraphCanvas.tsx and graph/layout.ts (the declared LAYOUT_MODES/FIT_MODES/positionsFor seam) -- no new layout mode is committed (focus/ego is explicitly DEFERRED PAST M3 with 4 named unresolved problems), so there was nothing live to extend it through; the assertNever exhaustiveness check is a real, working OCP mechanism as documented. Skimmed model.ts (420 lines, cohesive single-purpose view-model/display-text module, not a god object) and file sizes across app/src for any component that had silently grown into a composition-root grab-bag (none found beyond the already-reviewed App.tsx).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full keyboard/interaction surface of app/src end to end: App.tsx (focus rescue, inert containment for both the modal and the busy overlay, Escape suspension, dispatch/adoption of names-settings-constraints across generate/reroll/import/cancel), RosterModal.tsx (mount-only focus-into-dialog effect, aria-describedby vs. the note-stack live region, file drop vs. keyboard \"choose a file\", the six-way permanently-mounted note stack), ConstraintsEditor.tsx (datalist-based rule rows, unknown-name flagging, cap notice), SettingsControls.tsx (stepper dual-channel announcement), LayoutToggle.tsx/BuddyList.tsx (aria-pressed/aria-current parity), PersonPanel.tsx/PathPanel.tsx/PersonSearch.tsx (combobox semantics, canonicalised route orientation, zero-match live region), QualityPanel.tsx, Notice.tsx, Slips.tsx, GraphCanvas.tsx (reducedMotion() gating of the JS tween, fixed-frame fit, role=img fallback to the buddy list), and the hooks useFocusRescue.ts, useEscape.ts, useNotice.ts, useExplorerHistory.ts, usePathFinder.ts, useBuddyGraph.ts, useGenerationWorker.ts. Cross-checked claims against app/test/appErrorRecovery.test.tsx, constraintsFlow.test.tsx and buddyListCopy.test.tsx, and against app.css for the prefers-reduced-motion sweep and DOM-vs-visual tab-order layout (#rail/#toggle/#person/#buddies/#route/#search/#metrics positions). Deliberately re-derived (rather than assumed) the inert-as-focus-trap mechanism, the MutationObserver-based rescue's behavior across every removal path (roster-modal self-removal, panel self-close, reroll/cancel/error/refused transitions, first-generation vs. steady-state busy overlay), and the live-region mount-before-text pattern used by all seven regions in the app. Found the overwhelming majority of the surface this lens exists for (focus traps, dead ends, announcement timing, reduced motion, tab order) already hardened by prior review rounds and backed by targeted regression tests (e.g. appErrorRecovery.test.tsx's 'overlays and focus' and 'focus survives a panel closing itself' suites).",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 4,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (4) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Reroll dispatch omits settings from the commit while roster and rule-rows are committed, so the three state copies (roster, rules, settings) can describe two different generations after a reroll that doesn't produce a fresh view",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "handleReroll deliberately commits `names` and `constraintRows` from the view but not `settings` (App.tsx:237-245); the non-seed fields of the excluded value are `view.settings` verbatim, so an abandoned earlier edit to settings can survive alongside a roster/rules pair that was just re-committed from the view. The adoption effect only repairs this if a view actually arrives, so a reroll that doesn't produce one leaves the halves split across dispatches."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Stop special-casing settings out of the reroll commit — delete the exclusion and let `setSettings(view.settings)` land in the same commit as `setNames`/`setConstraintRows`, removing the split-provenance path rather than patching it with new logic."
+    },
+    {
+      "theme": "The rail's buddy-count sentence has its own hand-written plural logic instead of going through the pluralization already computed at every sibling display site",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "The rail hardcodes `{view.names.length} people · {degreeLabel(view.metrics)} buddies each` with fixed plurals, while RosterModal, connectionSummary, and QualityPanel all pluralize person/people and buddy/buddies correctly off the same `view.names.length` and `metrics.regular && metrics.degreeMax===1` predicate; the rail is the sole outlier and nothing in the suite pins it (quality.test.ts only exercises the case where the wrong plural happens to look right)."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the rail's own literal 'people'/'buddies' phrase construction and have it render the same string connectionSummary (or QualityPanel's shortfall line) already produces for these values, removing the duplicate implementation rather than adding a new shared helper."
+    },
+    {
+      "theme": "io/clamp.ts's documented safety contract for untrusted file content (quote() every interpolation, clamp by code point not code unit) is bypassed at two of its own call sites",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "importGraph.ts's malformed-edge ImportError interpolates the raw untrusted endpoint values instead of routing them through quote(), contradicting the module's own docblock claim that every interpolation of untrusted content goes through it, and letting the message scale with the full file budget.",
+        "parseRoster.ts's two bulk MAX_PARSE_CHARS caps slice by UTF-16 code unit rather than code point, reproducing the exact hazard io/clamp.ts's codePointsIfOver was extracted to prevent, and importGraph's NAME_HOSTILE_CHARS omits \\p{Cs} so a hand-authored lone surrogate imports untouched."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Remove the two ad hoc paths that bypass the existing helpers: delete importGraph's raw (unquoted) interpolation of `a`/`b` so quote() is the only way this module ever interpolates a value from `data`, and delete parseRoster's manual code-unit slice so both bulk caps call the already-existing codePointsIfOver instead of re-implementing truncation."
+    },
+    {
+      "theme": "Whether a generation request is 'constrained' is independently re-derived from overlapping fields on both sides of the worker boundary instead of read from one place",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "runGeneration() in worker/generate.ts decides unconstrained-vs-constrained with `constraints.required.length===0 && constraints.prohibited.length===0` over the wire-protocol shape, while useBuddyGraph.ts's generate() decides the same fact with `constraints.length>0` over the app's ConstraintPair[] shape to pick the polish budget; the two agree today only because `ConstraintPair[].length===required.length+prohibited.length` holds by construction in splitPairs(), which nothing enforces at the type level."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "Delete one of the two boolean expressions rather than keep both: have useBuddyGraph read the constrained/unconstrained fact off splitPairs' own required/prohibited output (already computed there for the wire dispatch) instead of re-deriving it from ConstraintPair[].length."
+    },
+    {
+      "theme": "MAX_CONSTRAINT_PAIRS is sized and justified for user-typed rule rows and the O(n^2) prohibited-pair walk; nothing stops it from being reused, as-is, for a system-derived priors edge set an order of magnitude larger with a different cost profile",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "MAX_CONSTRAINT_PAIRS=200 is documented as sized for the editor's rendered rows and the validate() connectivity walk; the planned F9 'preserve current buddies' feature would need to carry up to 6000 previous-view edges as priors, and ConstraintPair/toConstraints/splitPairs/MAX_CONSTRAINT_PAIRS is the only existing pair-set model, making it the path of least resistance to reuse despite neither the UI-cap nor the O(n^2)-safety rationale applying to priors."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "When priors are implemented, keep them out of ConstraintPair/MAX_CONSTRAINT_PAIRS entirely rather than folding a second, larger-scale pair set into the cap built for rule rows — don't extend the existing cap to cover a use it was never sized for."
+    },
+    {
+      "theme": "A comment stating an exact count of shared truncation-display sinks disagrees with the count clamp.ts itself documents",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "model.ts's comment on pathStatusText claims it is 'the FOURTH sink' of the clampList pattern, but clamp.ts's docblock explicitly enumerates only three sinks (de-duplicated names, route members, buddy labels)."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Delete the incorrect ordinal — change 'FOURTH sink' to 'THIRD sink' so the comment stops asserting a count clamp.ts itself contradicts."
+    },
+    {
+      "theme": "The copy-confirmation notice runs its own short-lived timer instead of using the AUTO_CLEAR_MS floor every other transient notice in the app already shares",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "copyAll's 'Copied' confirmation (button label and paired role=status region) reverts after a hardcoded 1100ms measured from after the awaited clipboard write, versus useNotice.ts's AUTO_CLEAR_MS=4000 that every other transient message in the app (reroll explanations, infeasible-reroll, rule-block, import failures) uses; it also has no dismiss affordance, unlike Notice.tsx's toast."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Delete BuddyList.tsx's bespoke 1100ms timer and label-revert logic and route the copy confirmation through the existing useNotice/flash() path instead, removing the one-off implementation rather than adding a second notification mechanism."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "dispatch-state-partial-commit",
+      "theme": "App's three dispatch-time copies (roster, rule rows, settings) can describe two different generations, so the reopened editor contradicts the graph on screen",
+      "file": "app/src/App.tsx",
+      "line": 246,
+      "summary": "handleReroll deliberately commits `names` and `constraintRows` from the view but NOT `settings` (\"...and NOT the settings\", App.tsx:237-245). The stated reason is only the synthesised seed, but the non-seed fields of `s` are `view.settings` verbatim, so leaving all of `settings` uncommitted lets a buddy count from an abandoned earlier edit survive next to a roster that was just re-committed from the view. The adoption effect (App.tsx:124-126) only repairs it if a view actually arrives, so any reroll that does not produce a view leaves the two halves from different dispatches.",
+      "failure": "Reproduced in jsdom (.review-scratch/r14/appstate.probe.tsx): generate 5 people at k=4 -> Edit people, raise buddies 4->8 and change the roster to 9 names, Generate, Cancel -> click \"Different arrangement\" (dispatches n=5,k=4 correctly, and setNames(view.names) overwrites the 9-name roster), Cancel -> reopen \"Edit people\". The dialog shows roster \"A\\nB\\nC\\nD\\nE\" (from the reroll dispatch) with \"more buddies, currently 8\" (from the abandoned edit), the \"Generate buddy graph\" button is DISABLED, and the note reads \"Add at least 4 more — you need more people than buddies.\" about a 5-person graph that is on screen and perfectly generatable at its own k=4.",
+      "remediation": "In handleReroll, commit the settings alongside the other two — `setSettings(view.settings)` (the VIEW's settings, not the seed-advanced `s`), placed with the existing `setNames(view.names)` / `setConstraintRows(...)` calls. That keeps the deliberate exclusion of the synthesised seed while removing the split-provenance.",
+      "invariant": "At every dispatch site (handleGenerate and handleReroll), immediately after dispatch App's `names`, `constraintRows` and the non-seed fields of `settings` ({buddies, minSeparation, polish}) must all originate from the same generation request: for a reroll, `{buddies,minSeparation,polish}` of App `settings` === the same fields of `view.settings`. Equivalently, for every GraphView on screen, reopening RosterModal must never render a disabled \"Generate buddy graph\" whose blocking feasibility note is false of the on-screen view."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "displayed-count-plural-disagreement",
+      "theme": "the same per-person/per-roster count is rendered with the right plural form in three panels and the wrong one in the rail, so two panels state the same number differently",
+      "file": "app/src/App.tsx",
+      "line": 335,
+      "summary": "The rail hardcodes the plural in both of its count phrases: `{view.names.length}` followed by the literal `people · {degreeLabel(view.metrics)} buddies each`. Every sibling site pluralises correctly against the same values — RosterModal (`person`/`people`, RosterModal.tsx:189), connectionSummary (`buddy`/`buddies`, model.ts:211), QualityPanel's shortfall line (QualityPanel.tsx:62) and selectionStatusText (model.ts:313). The rail is the single outlier and nothing in the suite pins it; quality.test.ts's \"every displayed buddy count comes from one seam\" checks only the non-regular 3–4 case, where the plural is right by accident.",
+      "failure": "Reproduced (.review-scratch/r14/rail.probe.tsx). Importing {\"version\":1,\"people\":[{\"id\":0,\"name\":\"A\"},{\"id\":1,\"name\":\"B\"}],\"edges\":[[0,1]]} yields degreeMin=degreeMax=1, regular=true. The rail renders \"2 people · 1 buddies each\" while the connection caption one panel away renders \"everyone's well-linked for 1 buddy each\" — two panels, one graph, disagreeing on the same count. Importing a 1-person file renders \"1 people · 0 buddies each\".",
+      "remediation": "Give the rail the same treatment the other three sites already have: pluralise `people`/`person` off `view.names.length` and `buddies`/`buddy` off the same predicate connectionSummary and QualityPanel use (`metrics.regular && metrics.degreeMax === 1`). Better, hoist that predicate into model.ts next to `degreeLabel` so there is one seam for the noun as there already is for the number.",
+      "invariant": "For any GraphView, every rendered count phrase in the app uses the singular noun if and only if the count it qualifies equals 1 — no two panels may render the same underlying count (view.names.length, or degreeLabel(metrics) when metrics.regular) with different plural forms."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-interpolation-of-untrusted-value",
+      "theme": "untrusted file content reaches a message sink without being bounded at the producer",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 257,
+      "summary": "The malformed-edge ImportError interpolates the raw untrusted endpoint values instead of routing them through `quote()`, so the error message scales with the whole 8 MB file budget — contradicting the module's own docblock claim that \"Every interpolation of untrusted file content goes through this\".",
+      "failure": "Reproduced by running the real importGraph on parsed JSON. Input {\"version\":1,\"people\":[...3],\"edges\":[[\"AAAA…\" (7,900,000 chars), 0]]} -> ImportError whose message is 7,900,042 characters. Input {\"version\":1,\"people\":[...3],\"edges\":[[[0,1,2,…,1299999], 0]]} -> message is 9,288,931 characters, because `${a}` on an array calls String() and joins every element (exactly the case quote() handles with \"a list of N items\"). End-to-end on App.handleImportFile's path: 205 ms to construct/throw plus 161 ms inside useNotice's clampNotice -> codePointsIfOver -> Array.from(9.3M) before it truncates to 301 chars, 170 MB heap. The DOM is saved only by the sink clamp; the producer-side bound the file documents is absent here. Every other interpolation in the file (version, name, id) does go through quote().",
+      "remediation": "Wrap both endpoints: `Edge [${quote(a)}, ${quote(b)}] refers to someone outside 0..${n - 1}.` Close the sibling too rather than just this line — make quote() the only way a value from `data` is interpolated in this module (a scan of the file shows this is the last raw one), and make clampText/codePointsIfOver stop materializing the full code-point array when only the first `max` points are needed, so the sink clamp is O(max) rather than O(input length).",
+      "invariant": "For every input `data`, any ImportError thrown by importGraph satisfies `message.length <= 500` (a fixed bound independent of the size of `data`).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "code-unit-truncation-emits-lone-surrogate",
+      "theme": "character limits measured in UTF-16 code units instead of code points let ill-formed text past every downstream gate",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 76,
+      "summary": "The two bulk MAX_PARSE_CHARS caps still slice by UTF-16 code unit, so a roster file whose 500,000th code unit is the high half of a surrogate pair yields an ill-formed name that no gate rejects — the exact hazard io/clamp.ts's codePointsIfOver docblock says it was extracted to prevent, and importGraph's NAME_HOSTILE_CHARS omits \\p{Cs} so hand-authored lone surrogates import too.",
+      "failure": "Reproduced against the real parseRoster/importGraph/toCsv. Build a roster string whose first 499,999 code units are ordinary text and whose next two are U+1F600; `raw.slice(0, 500_000)` (what parseRoster.ts:76 and RosterModal.tsx:101 both do) ends in a lone high surrogate. parseRoster then emits the last name as \"ab\\uD83D\", for which `isWellFormed()` is false. It is not in Cc/Cf/Zl/Zp so it survives; feeding that same name back through importGraph in a JSON file is ACCEPTED (verified), so the guard whose stated job is to refuse anything it cannot round-trip passes it. It then reaches the DOM, the clipboard and the CSV, where the Blob's UTF-8 encoding turns it into EF BF BD (U+FFFD) — verified on the emitted bytes — so the exported JSON and the exported CSV disagree about the same person's name.",
+      "remediation": "Route both bulk caps through the same code-point predicate the per-name limit uses: cut on code points in parseRoster's MAX_PARSE_CHARS slice and in RosterModal's capText (a shared `clampToPoints(text, max)` next to codePointsIfOver, so there is one truncation authority rather than three). Close the sibling in the same change: add \\p{Cs} to NAME_HOSTILE_CHARS so parseRoster normalizes and importGraph refuses an unpaired surrogate that arrived in a hand-authored file rather than from truncation.",
+      "invariant": "For every input string `s` that is well-formed (`s.isWellFormed()`), every name in `parseRoster(s).names` is well-formed; and importGraph throws ImportError for any file containing a name that is not well-formed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-predicate",
+      "theme": "whether a generation request is 'constrained' (and therefore which builder/polish-budget applies) is independently re-derived from partially-overlapping fields in two different files instead of from one shared predicate",
+      "file": "app/src/worker/generate.ts",
+      "line": 89,
+      "summary": "runGeneration() decides unconstrained-vs-constrained routing with `constraints.required.length === 0 && constraints.prohibited.length === 0` (worker side, over the wire-protocol shape), while useBuddyGraph.ts's generate() decides the same fact with `constraints.length > 0` (main-thread side, over the app's ConstraintPair[] shape) purely to pick the auto-polish budget via `autoPolishEnabled(n, k, { constrained })`. The two expressions are equivalent today only because `ConstraintPair[].length === required.length + prohibited.length` holds by construction in splitPairs() -- nothing enforces that at the type level, and the two sites are on opposite sides of the structured-clone worker boundary, in different files, with different local names for 'the constraint set'.",
+      "failure": "F9 adds a third dimension (priors) that should also make a request 'constrained' for both routing and polish-budget purposes. If only one of the two sites is updated (an easy miss, since they don't look like duplicates of each other), the app either silently routes a priors-only 'preserve current buddies' request through buildBuddyGraph -- which never sees priors at all, so the toggle preserves nothing with no error shown -- or it dispatches an explicit polish=true against the wrong (unconstrained) budget while the worker actually runs the constrained builder, defeating the guard useBuddyGraph.ts's own comment says exists to stop a multi-minute run.",
+      "remediation": "Introduce one function (e.g. isConstrainedRequest(constraints)) that both the worker's routing check and the main-thread polish-downgrade check call, so a future third field (priors) can only be missed at one site, not silently at either.",
+      "invariant": "for any two call sites that must agree on whether a request is 'constrained', both derive the boolean from one exported function operating on the same underlying data -- never two independently-written boolean expressions over structurally different projections of it.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Comment stating impossible fact contradicted by authoritative documentation in same codebase",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 340,
+      "summary": "Comment claims pathStatusText is 'the FOURTH sink' of the clampList pattern, but clamp.ts explicitly documents exactly THREE sinks",
+      "failure": "reader traces the comment to clamp.ts and finds it says 'three separate sinks' (de-duplicated names, route members, buddy labels), making the 'FOURTH' claim false",
+      "invariant": "When a comment references another module's documentation by name, the documented count must agree with the count claimed; specifically, the number of clampList sinks is either 3 (as clamp.ts states) or 4 (as model.ts claims), never both",
+      "remediation": "Correct line 340-341 in model.ts from 'The FOURTH sink of this shape' to 'The THIRD sink of this shape' to match clamp.ts's explicit count of 'three separate sinks have enumerated an unbounded LIST (de-duplicated names, route members, buddy labels)'",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "transient-live-region-underbudgeted",
+      "theme": "a transient confirmation that changes both a visible label and a live-region announcement is given far less on-screen time than every other transient notice the app produces, so it is disproportionately likely to be missed by a slow reader, a screen-reader user whose AT hasn't started speaking yet, or anyone who blinks",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 28,
+      "summary": "copyAll's 'Copied' confirmation (both the button's own visible label and the paired role=status live region at line 47-49) reverts to 'Copy' after a hardcoded 1100ms, timed from AFTER the awaited navigator.clipboard.writeText() completes (app/src/io/download.ts:26-36) - so the effective on-screen/announced window is 1100ms minus whatever the async clipboard write itself took. Every other transient notice in this app (App.tsx's flash() calls for the identical-reroll explanation, the infeasible-reroll block, the rule-block message, and import failures) goes through useNotice.ts's AUTO_CLEAR_MS = 4000, a floor the project itself chose and consistently applies everywhere else a transient message is shown. The copy confirmation is the one outlier at roughly a quarter of that budget, and unlike Notice.tsx's toast (which stays up until dismissed or 4s pass) it has no user-dismiss affordance either - the only signal that the copy worked has a strict ~1s ceiling with no way to extend or re-trigger it short of clicking Copy again.",
+      "failure": "A keyboard/screen-reader user tabs to the Copy button in the buddy list and presses Enter/Space. The clipboard write is awaited (adds latency), then 'Copied' appears in the button label and in the sr-live region for only ~1100ms minus that latency before flipping back to 'Copy'. A screen reader that has not yet started announcing the role=status change by the time the DOM reverts, or a sighted low-vision/slow-reading user who glances at the button a beat late, gets no confirmation the copy succeeded at all - the only observable feedback in the whole app for this action has already vanished.",
+      "remediation": "Use the same AUTO_CLEAR_MS constant (or another value at least in that neighborhood) for the copy confirmation instead of a separate, much shorter, undocumented 1100ms literal - or reuse useNotice's flash() for this confirmation so all transient text in the app shares one floor and one behavior (newer message supersedes an older timer, dismissable, etc.) rather than each call site picking its own duration.",
+      "invariant": "every timer that reverts a role=status/aria-live confirmation text (or the visible label it's paired with) back to its resting state should have a duration >= the app's own established floor for reading a short transient notice (AUTO_CLEAR_MS = 4000ms in useNotice.ts), so no transient confirmation in the app is disproportionately likely to be missed relative to every other one it ships."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "dispatch-state-partial-commit",
+      "theme": "App's three dispatch-time copies (roster, rule rows, settings) can describe two different generations, so the reopened editor contradicts the graph on screen",
+      "file": "app/src/App.tsx",
+      "line": 246,
+      "summary": "handleReroll deliberately commits `names` and `constraintRows` from the view but NOT `settings` (\"...and NOT the settings\", App.tsx:237-245). The stated reason is only the synthesised seed, but the non-seed fields of `s` are `view.settings` verbatim, so leaving all of `settings` uncommitted lets a buddy count from an abandoned earlier edit survive next to a roster that was just re-committed from the view. The adoption effect (App.tsx:124-126) only repairs it if a view actually arrives, so any reroll that does not produce a view leaves the two halves from different dispatches.",
+      "failure": "Reproduced in jsdom (.review-scratch/r14/appstate.probe.tsx): generate 5 people at k=4 -> Edit people, raise buddies 4->8 and change the roster to 9 names, Generate, Cancel -> click \"Different arrangement\" (dispatches n=5,k=4 correctly, and setNames(view.names) overwrites the 9-name roster), Cancel -> reopen \"Edit people\". The dialog shows roster \"A\\nB\\nC\\nD\\nE\" (from the reroll dispatch) with \"more buddies, currently 8\" (from the abandoned edit), the \"Generate buddy graph\" button is DISABLED, and the note reads \"Add at least 4 more — you need more people than buddies.\" about a 5-person graph that is on screen and perfectly generatable at its own k=4.",
+      "remediation": "In handleReroll, commit the settings alongside the other two — `setSettings(view.settings)` (the VIEW's settings, not the seed-advanced `s`), placed with the existing `setNames(view.names)` / `setConstraintRows(...)` calls. That keeps the deliberate exclusion of the synthesised seed while removing the split-provenance.",
+      "invariant": "At every dispatch site (handleGenerate and handleReroll), immediately after dispatch App's `names`, `constraintRows` and the non-seed fields of `settings` ({buddies, minSeparation, polish}) must all originate from the same generation request: for a reroll, `{buddies,minSeparation,polish}` of App `settings` === the same fields of `view.settings`. Equivalently, for every GraphView on screen, reopening RosterModal must never render a disabled \"Generate buddy graph\" whose blocking feasibility note is false of the on-screen view."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "displayed-count-plural-disagreement",
+      "theme": "the same per-person/per-roster count is rendered with the right plural form in three panels and the wrong one in the rail, so two panels state the same number differently",
+      "file": "app/src/App.tsx",
+      "line": 335,
+      "summary": "The rail hardcodes the plural in both of its count phrases: `{view.names.length}` followed by the literal `people · {degreeLabel(view.metrics)} buddies each`. Every sibling site pluralises correctly against the same values — RosterModal (`person`/`people`, RosterModal.tsx:189), connectionSummary (`buddy`/`buddies`, model.ts:211), QualityPanel's shortfall line (QualityPanel.tsx:62) and selectionStatusText (model.ts:313). The rail is the single outlier and nothing in the suite pins it; quality.test.ts's \"every displayed buddy count comes from one seam\" checks only the non-regular 3–4 case, where the plural is right by accident.",
+      "failure": "Reproduced (.review-scratch/r14/rail.probe.tsx). Importing {\"version\":1,\"people\":[{\"id\":0,\"name\":\"A\"},{\"id\":1,\"name\":\"B\"}],\"edges\":[[0,1]]} yields degreeMin=degreeMax=1, regular=true. The rail renders \"2 people · 1 buddies each\" while the connection caption one panel away renders \"everyone's well-linked for 1 buddy each\" — two panels, one graph, disagreeing on the same count. Importing a 1-person file renders \"1 people · 0 buddies each\".",
+      "remediation": "Give the rail the same treatment the other three sites already have: pluralise `people`/`person` off `view.names.length` and `buddies`/`buddy` off the same predicate connectionSummary and QualityPanel use (`metrics.regular && metrics.degreeMax === 1`). Better, hoist that predicate into model.ts next to `degreeLabel` so there is one seam for the noun as there already is for the number.",
+      "invariant": "For any GraphView, every rendered count phrase in the app uses the singular noun if and only if the count it qualifies equals 1 — no two panels may render the same underlying count (view.names.length, or degreeLabel(metrics) when metrics.regular) with different plural forms."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-interpolation-of-untrusted-value",
+      "theme": "untrusted file content reaches a message sink without being bounded at the producer",
+      "file": "/home/user/ringweave/app/src/io/importGraph.ts",
+      "line": 257,
+      "summary": "The malformed-edge ImportError interpolates the raw untrusted endpoint values instead of routing them through `quote()`, so the error message scales with the whole 8 MB file budget — contradicting the module's own docblock claim that \"Every interpolation of untrusted file content goes through this\".",
+      "failure": "Reproduced by running the real importGraph on parsed JSON. Input {\"version\":1,\"people\":[...3],\"edges\":[[\"AAAA…\" (7,900,000 chars), 0]]} -> ImportError whose message is 7,900,042 characters. Input {\"version\":1,\"people\":[...3],\"edges\":[[[0,1,2,…,1299999], 0]]} -> message is 9,288,931 characters, because `${a}` on an array calls String() and joins every element (exactly the case quote() handles with \"a list of N items\"). End-to-end on App.handleImportFile's path: 205 ms to construct/throw plus 161 ms inside useNotice's clampNotice -> codePointsIfOver -> Array.from(9.3M) before it truncates to 301 chars, 170 MB heap. The DOM is saved only by the sink clamp; the producer-side bound the file documents is absent here. Every other interpolation in the file (version, name, id) does go through quote().",
+      "remediation": "Wrap both endpoints: `Edge [${quote(a)}, ${quote(b)}] refers to someone outside 0..${n - 1}.` Close the sibling too rather than just this line — make quote() the only way a value from `data` is interpolated in this module (a scan of the file shows this is the last raw one), and make clampText/codePointsIfOver stop materializing the full code-point array when only the first `max` points are needed, so the sink clamp is O(max) rather than O(input length).",
+      "invariant": "For every input `data`, any ImportError thrown by importGraph satisfies `message.length <= 500` (a fixed bound independent of the size of `data`).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "code-unit-truncation-emits-lone-surrogate",
+      "theme": "character limits measured in UTF-16 code units instead of code points let ill-formed text past every downstream gate",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 76,
+      "summary": "The two bulk MAX_PARSE_CHARS caps still slice by UTF-16 code unit, so a roster file whose 500,000th code unit is the high half of a surrogate pair yields an ill-formed name that no gate rejects — the exact hazard io/clamp.ts's codePointsIfOver docblock says it was extracted to prevent, and importGraph's NAME_HOSTILE_CHARS omits \\p{Cs} so hand-authored lone surrogates import too.",
+      "failure": "Reproduced against the real parseRoster/importGraph/toCsv. Build a roster string whose first 499,999 code units are ordinary text and whose next two are U+1F600; `raw.slice(0, 500_000)` (what parseRoster.ts:76 and RosterModal.tsx:101 both do) ends in a lone high surrogate. parseRoster then emits the last name as \"ab\\uD83D\", for which `isWellFormed()` is false. It is not in Cc/Cf/Zl/Zp so it survives; feeding that same name back through importGraph in a JSON file is ACCEPTED (verified), so the guard whose stated job is to refuse anything it cannot round-trip passes it. It then reaches the DOM, the clipboard and the CSV, where the Blob's UTF-8 encoding turns it into EF BF BD (U+FFFD) — verified on the emitted bytes — so the exported JSON and the exported CSV disagree about the same person's name.",
+      "remediation": "Route both bulk caps through the same code-point predicate the per-name limit uses: cut on code points in parseRoster's MAX_PARSE_CHARS slice and in RosterModal's capText (a shared `clampToPoints(text, max)` next to codePointsIfOver, so there is one truncation authority rather than three). Close the sibling in the same change: add \\p{Cs} to NAME_HOSTILE_CHARS so parseRoster normalizes and importGraph refuses an unpaired surrogate that arrived in a hand-authored file rather than from truncation.",
+      "invariant": "For every input string `s` that is well-formed (`s.isWellFormed()`), every name in `parseRoster(s).names` is well-formed; and importGraph throws ImportError for any file containing a name that is not well-formed.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-predicate",
+      "theme": "whether a generation request is 'constrained' (and therefore which builder/polish-budget applies) is independently re-derived from partially-overlapping fields in two different files instead of from one shared predicate",
+      "file": "app/src/worker/generate.ts",
+      "line": 89,
+      "summary": "runGeneration() decides unconstrained-vs-constrained routing with `constraints.required.length === 0 && constraints.prohibited.length === 0` (worker side, over the wire-protocol shape), while useBuddyGraph.ts's generate() decides the same fact with `constraints.length > 0` (main-thread side, over the app's ConstraintPair[] shape) purely to pick the auto-polish budget via `autoPolishEnabled(n, k, { constrained })`. The two expressions are equivalent today only because `ConstraintPair[].length === required.length + prohibited.length` holds by construction in splitPairs() -- nothing enforces that at the type level, and the two sites are on opposite sides of the structured-clone worker boundary, in different files, with different local names for 'the constraint set'.",
+      "failure": "F9 adds a third dimension (priors) that should also make a request 'constrained' for both routing and polish-budget purposes. If only one of the two sites is updated (an easy miss, since they don't look like duplicates of each other), the app either silently routes a priors-only 'preserve current buddies' request through buildBuddyGraph -- which never sees priors at all, so the toggle preserves nothing with no error shown -- or it dispatches an explicit polish=true against the wrong (unconstrained) budget while the worker actually runs the constrained builder, defeating the guard useBuddyGraph.ts's own comment says exists to stop a multi-minute run.",
+      "remediation": "Introduce one function (e.g. isConstrainedRequest(constraints)) that both the worker's routing check and the main-thread polish-downgrade check call, so a future third field (priors) can only be missed at one site, not silently at either.",
+      "invariant": "for any two call sites that must agree on whether a request is 'constrained', both derive the boolean from one exported function operating on the same underlying data -- never two independently-written boolean expressions over structurally different projections of it.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Comment stating impossible fact contradicted by authoritative documentation in same codebase",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 340,
+      "summary": "Comment claims pathStatusText is 'the FOURTH sink' of the clampList pattern, but clamp.ts explicitly documents exactly THREE sinks",
+      "failure": "reader traces the comment to clamp.ts and finds it says 'three separate sinks' (de-duplicated names, route members, buddy labels), making the 'FOURTH' claim false",
+      "invariant": "When a comment references another module's documentation by name, the documented count must agree with the count claimed; specifically, the number of clampList sinks is either 3 (as clamp.ts states) or 4 (as model.ts claims), never both",
+      "remediation": "Correct line 340-341 in model.ts from 'The FOURTH sink of this shape' to 'The THIRD sink of this shape' to match clamp.ts's explicit count of 'three separate sinks have enumerated an unbounded LIST (de-duplicated names, route members, buddy labels)'",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "transient-live-region-underbudgeted",
+      "theme": "a transient confirmation that changes both a visible label and a live-region announcement is given far less on-screen time than every other transient notice the app produces, so it is disproportionately likely to be missed by a slow reader, a screen-reader user whose AT hasn't started speaking yet, or anyone who blinks",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 28,
+      "summary": "copyAll's 'Copied' confirmation (both the button's own visible label and the paired role=status live region at line 47-49) reverts to 'Copy' after a hardcoded 1100ms, timed from AFTER the awaited navigator.clipboard.writeText() completes (app/src/io/download.ts:26-36) - so the effective on-screen/announced window is 1100ms minus whatever the async clipboard write itself took. Every other transient notice in this app (App.tsx's flash() calls for the identical-reroll explanation, the infeasible-reroll block, the rule-block message, and import failures) goes through useNotice.ts's AUTO_CLEAR_MS = 4000, a floor the project itself chose and consistently applies everywhere else a transient message is shown. The copy confirmation is the one outlier at roughly a quarter of that budget, and unlike Notice.tsx's toast (which stays up until dismissed or 4s pass) it has no user-dismiss affordance either - the only signal that the copy worked has a strict ~1s ceiling with no way to extend or re-trigger it short of clicking Copy again.",
+      "failure": "A keyboard/screen-reader user tabs to the Copy button in the buddy list and presses Enter/Space. The clipboard write is awaited (adds latency), then 'Copied' appears in the button label and in the sr-live region for only ~1100ms minus that latency before flipping back to 'Copy'. A screen reader that has not yet started announcing the role=status change by the time the DOM reverts, or a sighted low-vision/slow-reading user who glances at the button a beat late, gets no confirmation the copy succeeded at all - the only observable feedback in the whole app for this action has already vanished.",
+      "remediation": "Use the same AUTO_CLEAR_MS constant (or another value at least in that neighborhood) for the copy confirmation instead of a separate, much shorter, undocumented 1100ms literal - or reuse useNotice's flash() for this confirmation so all transient text in the app shares one floor and one behavior (newer message supersedes an older timer, dismissable, etc.) rather than each call site picking its own duration.",
+      "invariant": "every timer that reverts a role=status/aria-live confirmation text (or the visible label it's paired with) back to its resting state should have a duration >= the app's own established floor for reading a short transient notice (AUTO_CLEAR_MS = 4000ms in useNotice.ts), so no transient confirmation in the app is disproportionately likely to be missed relative to every other one it ships."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "scale-mismatch-cap",
+      "theme": "a pair-count cap sized for user-typed rule rows would silently under-serve a system-derived edge set an order of magnitude larger, if reused as-is",
+      "file": "app/src/constraints.ts",
+      "line": 34,
+      "summary": "MAX_CONSTRAINT_PAIRS = 200 bounds ConstraintPair[] -- documented as sized for the editor's rendered rows and for the O(n^2) prohibited-pair connectivity walk validate runs on an untrusted imported file. F9's 'preserve current buddies' toggle needs to carry the PREVIOUS view's entire edge set (up to n*BUDDY_MAX/2, i.e. up to 6000 at the roster ceiling n=1000,k=12, and already 300 at a modest n=50,k=12) into the generator as priors. ConstraintPair/toConstraints/splitPairs/MAX_CONSTRAINT_PAIRS are the only existing app-side model for 'a set of index pairs going to the core', so it is the path of least resistance to reuse for priors -- but priors are neither user-authored (so the 200-row UI-cap rationale doesn't apply) nor part of the O(n^2) prohibited-pair walk (so the safety rationale doesn't apply either); they are a different kind of pair set with a different scale and a different cost profile (a soft polish penalty, not a hard-constraint validation walk).",
+      "failure": "n=50, k=12 (comfortably inside the documented roster/buddy ceilings) already produces up to 300 previous edges -- reusing MAX_CONSTRAINT_PAIRS=200 for priors would either refuse the recalc outright or silently truncate which prior buddies are considered, both of which contradict F9's stated acceptance criterion ('adding 1 person to n=50 preserves >= 90% of pairs') for configurations the app already supports today.",
+      "remediation": "When F9 lands, give priors their own type/cap decision (or an explicit widened cap with its own stated rationale) rather than routing them through ConstraintPair/MAX_CONSTRAINT_PAIRS, which app/CLAUDE.md's own follow-on notes as having 'no analogue of resolveNamedPairs' for edges -- this cap-size mismatch is the same gap expressed as a concrete number.",
+      "invariant": "for every (n, k) the app can generate (n <= MAX_ROSTER_N, k <= BUDDY_MAX), the number of previous-graph edges eligible to become priors (up to n*k/2) must not exceed whatever cap the prior-carrying pathway enforces, or the cap's failure mode for the excess must be a stated, deliberate one -- not an accidental inheritance from a UI-row limit.",
+      "caseOnly": false
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 684032,
+    "agents": 6,
+    "toolCalls": 251
+  }
+}

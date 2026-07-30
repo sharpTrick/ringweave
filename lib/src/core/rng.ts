@@ -1,14 +1,32 @@
 /**
- * Deterministic seeded RNG (mulberry32). Same seed -> same sequence, so any
- * pipeline using it (polish) is reproducible within JS. This does NOT match
- * Python's RNG — cross-language identity is only claimed for the deterministic
- * generators (greedy, repair), which use no randomness.
+ * Deterministic seeded RNG (mulberry32): same seed, same sequence, so polish is reproducible
+ * within JS. It does NOT match Python's RNG — cross-language identity is claimed only for the
+ * RNG-free generators.
  */
+
+/** Exclusive upper bound on a seed: mulberry32's state is a uint32. */
+const SEED_MAX = 2 ** 32;
+
+/** Whether `seed` names a distinct stream rather than aliasing onto another one. */
+export function isSeed(seed: number): boolean {
+  return Number.isInteger(seed) && seed >= 0 && seed < SEED_MAX;
+}
+
+export function checkSeed(seed: number): number {
+  if (!isSeed(seed)) {
+    throw new Error(`seed ${seed} must be an integer in [0, ${SEED_MAX})`);
+  }
+  return seed;
+}
+
 export class RNG {
   private state: number;
 
   constructor(seed: number) {
-    this.state = seed >>> 0;
+    // Validated, not coerced: `seed >>> 0` maps `0.9`, `-0`, `NaN`, `2**32` and `s + 2**32` all
+    // onto some other seed's stream, silently refusing the different arrangement the user asked
+    // for.
+    this.state = checkSeed(seed);
   }
 
   /** Float in [0, 1). */

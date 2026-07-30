@@ -1,0 +1,247 @@
+{
+  "target": "app/src",
+  "round": 18,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 3,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 2
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface read of every file under /home/user/ringweave/app/src (App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, all of io/, state/, graph/, panels/, worker/, styles/), plus the parts of /home/user/ringweave/lib/src/core it depends on (graph.ts, metrics.ts, bounds.ts, budgets.ts, index.ts result assembly, greedy.ts repair budget) and the whole app test suite.\n\nReproduced with throwaway harnesses under /home/user/ringweave/.review-scratch/r-corr (gitignored, own vitest config, outside every test glob):\n- Determinism: repeated runGeneration for (12,4)/(40,4)/(60,3) byte-identical. d3-force verified to use its seeded LCG (app/node_modules/d3-force/src/lcg.js), not Math.random; forceSimulation allocates a fresh LCG per call, so forceLayout is deterministic. No Set/Map iteration-order dependence found in app code: importGraph sorts buddies, exportGraph canonicalises+sorts edges, core edges come from g.edgeList() (sorted), PersonPanel sorts neighbourhood Sets, highlight uses Sets for membership only, indexByName/extras iterate insertion order. girth was probed for edge-insertion-order sensitivity over 300 random graphs (0 differences).\n- Displayed vs actual: 330 constrained + 60 unconstrained generations, each re-measured from the DISPLAYED view.edges with the core's own allPairsSummary/girth/largestComponentFraction/degrees, and cross-checked against report.reqViolations/prohViolations by direct hasEdge counting, plus connectionSummary/qualityPercent/isOptimal/constraintSummary. Zero disagreements; no \"satisfied\" claim over a violated edge, no optimal-while-disconnected.\n- importGraph fuzz: 4000 hostile files, 697 accepted; every accepted view checked for well-formedness (edge/buddy index range, canonical u<v, buddies length), metric invariants (quality in [0,1]; aspl===null => quality===0; !connected => quality===0), settings clamping, and export->import->export idempotence of edges/metrics/constraints/settings. Zero failures, zero non-ImportError escapes.\n- Name round-trip: 16,000 fuzzed rosters (C0/C1, Cf, Zl/Zp, lone surrogates, astral, NBSP/MONGOLIAN VOWEL SEPARATOR/BOM, commas, newlines, 100-160 code-point tokens). parseRoster is idempotent on its own output in every case, and every roster it emits imports cleanly — the \"round-trips identically with exportGraph\" contract holds.\n- Reproducibility: exported settings fed back into buildBuddyGraph reproduce the exported edge list for 9 configurations including the polish-downgrade corner (80,12,polish:true) and (200,4,polish:true).\n- Boundaries traced by hand: n=1/n=2 imports, edgeless and star imports, k>=n, MAX_ROSTER_N/MAX_IMPORT_N/MAX_NAME_CHARS/MAX_PARSE_CHARS/MAX_CONSTRAINT_PAIRS/SEED_MAX off-by-ones, seed wrap, the identical-reroll adoption branch (metrics/buddies reuse proven safe since both derive purely from names+edges), useGenerationWorker id/stale-response and swap/reset paths, useBuddyGraph consumed/pending guards under StrictMode, the selected-index guard vs eccentricity's throw, usePathFinder canonicalisation+orientation, edgeClass's \"adjacent path members are consecutive\" proof, GraphCanvas fit/animation/size-key gating and the forceFitRef render-time mutation.\n- Ran `npm test` in app/ before and after (29 files, 293 tests, green); working tree left unmodified.\n\nnpm test would NOT catch either finding below: no test asserts the delivered min separation, and no test pins feasibility against the core's generation budget.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Traced the next actually-committed change against the real files rather than inventing one: F7's documented follow-on \"buddy rules are not re-checked on import\" (app/CLAUDE.md known-follow-ons). Attempted it for real: exported `buildReport` from lib/src/core/index.ts (single `export` keyword, no other lib file touched), then wired app/src/io/importGraph.ts to call `toConstraints(n, constraints)` + the newly-exported `buildReport(g, cons, summary.connected, false)` in place of the hardcoded `report: null`, updated the one pinned assertion in app/test/importExport.roundtrip.test.ts, ran `npm run typecheck` (both lib and app, clean) and `npm test` in app (29 files / 293 tests, all green). Then reverted all three files to leave the tree as found (git checkout), since this was a probe, not a requested implementation. Also exercised the two other seams the task calls out: (1) GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor triple for the deferred focus/ego layout — read the full component and confirmed the four unresolved hazards app/CLAUDE.md records (layout keyed on hover, radius clipping computeFit's frame, undefined focus-with-nothing-selected, positionsFor signature change) are real against current line numbers, and grepped app/src for any live reference to a selection-dependent mode — none exists, correctly filed as deferral in the existing docs, nothing new to add. (2) F9's priorWeight/priorHard groundwork and the tag UI — grepped app/src for `priorWeight|priorHard|addPrior|fromTags|tags` — zero hits, confirming both no-caller claims and that they are correctly filed as deferrals already. Read App.tsx in full (472 lines) as the composition root and worker/generate.ts as the constrained-vs-unconstrained dispatch point to check for a god-component or a leaked pre-check/post-check inconsistency; the refusal-after-build check at worker/generate.ts:106 matches the hazard note in lib/CLAUDE.md exactly. Grepped app/src for any core-owned computation (bfsDistances/shortestPath/eccentricity/aspl/girth/asplGap) done locally — every hit is either a pass-through of a core result or the one documented exception (neighborhood.ts's bounded-degree walk, justified with a measured cost comparison in app/CLAUDE.md).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of app/src including: core state/model management (model.ts, useBuddyGraph.ts, worker protocol), IO layer (importGraph.ts, exportGraph.ts, parseRoster.ts, constraints.ts, clamp.ts), all UI panels (RosterModal, QualityPanel, PersonPanel, ConstraintsEditor, BuddyList, PathPanel, SettingsControls, PersonSearch), layout/rendering (GraphCanvas.tsx, layout.ts, highlight.ts, search.ts, neighborhood.ts), state hooks (usePathFinder, useExplorerHistory, useGenerationWorker, useNotice, useFocusRescue, useEscape). Verified specific documentation claims: \"one scorer\" for quality (only called from assembleMetrics line 241), LAYOUT_MODES as single source, constraint handling isolation. Checked for: TODO/FIXME markers, console/debug code, false comments, silently drifting duplication, misleading names, easy-to-misuse public surfaces. Lint gate passes clean (oxlint, knip, hygiene oracle-check all pass).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Walked the full keyboard scenario end-to-end: cold load (App.tsx focus into RosterModal), roster entry (RosterModal.tsx paste/drop/sample-names), generate (dispatch → worker → busy overlay `inert` containment, useFocusRescue.ts), reading quality numbers (QualityPanel.tsx live gauge + shortfall/rules lines), finding a person (PersonSearch.tsx combobox: ArrowUp/Down, Enter, Escape, empty-result live region), discovering buddies (PersonPanel.tsx neighborhood chips + eccentricity text, BuddyList.tsx aria-current rows), path finding (usePathFinder.ts, PathPanel.tsx text rendering + App.tsx permanently-mounted sr-live regions for path/selection status), export (QualityPanel.tsx Export/CSV/Print, download.ts), and error recovery (refusal/error branches in App.tsx's status effect, RosterModal.tsx aria-describedby reopen-reason, appErrorRecovery.test.tsx). Also traced: LayoutToggle.tsx aria-pressed, SettingsControls.tsx stepper aria-disabled/aria-label-carried-state pattern, GraphCanvas.tsx's JS rAF tween honoring `prefers-reduced-motion` (plus the CSS `* { transition:none; animation:none }` global override), tab order vs. absolute-positioned CSS layout in app.css (rail→toggle→person→buddies top row, route→search bottom-left stack, metrics band — matches the DOM-order comment in App.tsx), useEscape.ts's modal-suppression and search-box stopPropagation interaction, useFocusRescue.ts's MutationObserver-based rescue (including the descendant-state-removal case), Notice.tsx/RosterModal.tsx/ConstraintsEditor.tsx/PersonSearch.tsx's always-mounted live-region pattern, and useNotice.ts/BuddyList.tsx's AUTO_CLEAR_MS-floor timer-supersession logic against a transient message vanishing unread. Cross-checked against the existing test suite (appErrorRecovery.test.tsx, layoutToggle.test.tsx, pathHighlight.test.tsx, explorer.test.tsx, useNotice.test.tsx, graphCanvasDefer.test.tsx) to avoid re-filing already-covered ground truth.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-security",
+      "reason": "saturated (2 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (2 quiet rounds), surface untouched"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "The app layer keeps its own shadow copy of what the core computes or delivers (a mirrored budget constant, a requested-not-delivered value) instead of reading the core's actual output, so the two silently drift apart with nothing to catch it",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The Advanced panel shows the requested minimum separation while the core routinely demotes it, and nothing anywhere discloses the shortfall — the exact gap `targetShortfall` was added to close for buddy count, still open one setting over.",
+        "`feasibility()` promises `canGenerate` for the whole (n <= MAX_ROSTER_N, BUDDY_MIN <= k <= BUDDY_MAX) rectangle from local constants alone, and that promise is true only because the app's densest corner lands exactly on the core's `MAX_GREEDY_WORK` — a coincidence nothing in either package tests."
+      ],
+      "remediation": "Delete the app-side stand-ins for core truth and read the core's real output at both sites: drop the local MAX_ROSTER_N/BUDDY_MIN/BUDDY_MAX-only feasibility rectangle and have `feasibility()` call the core's own exported greedyWork/MAX_GREEDY_WORK check directly (removing the duplicated constant math), and stop rendering the requested minSeparation as if it were the outcome — surface `BuddyResult.finalMinSeparation` (already computed by the core) in the panel in place of the requested value, removing the case where 'what was asked for' stands in for 'what was delivered.'"
+    },
+    {
+      "theme": "A per-field invalid state is signaled through a second, separate channel (an aggregate live-region count, or a visual-only outline) instead of the one channel the app already uses elsewhere to attribute state directly to a control",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "Rule-row name inputs get `aria-invalid` when the typed name doesn't match the roster, but the only explanation is a COUNT in RosterModal's shared live region which never identifies which row(s); a screen-reader user hears 'invalid' with nothing pointing at the cause, while a sighted user sees the red outline directly on the field. SettingsControls.tsx's stepper already avoids this by carrying its own bound state in `aria-label` instead of relying on a distant live region."
+      ],
+      "remediation": "Remove the split between the visual-only per-field cue and the distant aggregate-only live-region text: fold the specific reason directly into each flagged field's own `aria-label`, the same single channel the buddies stepper already uses for its bound state, so the separate generic count no longer needs to stand in as the sole explanation for per-field failures."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "requested-target-shown-as-delivered",
+      "theme": "the UI presents the generation target that was ASKED for as though it described the graph that was DELIVERED",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 83,
+      "summary": "The Advanced panel shows the requested minimum separation while the core routinely demotes it, and nothing anywhere discloses the shortfall — the exact gap `targetShortfall` was added to close for buddy count, still open one setting over.",
+      "failure": "Default settings, roster of 12-30 people, k=4: the Advanced disclosure reads \"Min separation 5\" (settings.minSeparation is undefined, so the input renders SEPARATION_DEFAULT=5) and, if the user types 8, the exported file records 8 too. Measured with buildBuddyGraph(n,4,{seed:12345,polish:false}): finalMinSeparation is 3 at n=12, n=20 and n=30 — the demotion floor, i.e. the default case. Worse, buildBuddyGraph(12,4,{minSeparation:12}) and {minSeparation:5} both deliver finalMinSeparation 3 and the identical graph, so the control appears to have no effect and the app never says why. The core hands the delivered value back as BuddyResult.finalMinSeparation (\"the mind target actually achieved after any demotion\"), but GraphResult in app/src/worker/protocol.ts drops it — protocol.ts explicitly justifies dropping `asplGap` and is silent about this one — so no app surface can see it.",
+      "remediation": "Close the theme, not the field: carry the delivered value across the worker boundary (add `minSeparation` to `GraphResult`, from `BuddyResult.finalMinSeparation`; the constrained builder ignores the option, so report the requested value as unmet or omit the disclosure on that path) and add a `separationShortfall(view)` seam beside `targetShortfall` in model.ts, rendered by QualityPanel's existing `.rules-line` in the same words (\"Buddies are 3 apart, not the 5 in Settings\"). One seam per target, so the next settings knob inherits the disclosure instead of re-opening the theme.",
+      "invariant": "For every GENERATED GraphView, every per-graph generation target the settings surface displays is either met by the delivered graph or accompanied by a shortfall disclosure — i.e. `(view.settings.minSeparation ?? SEPARATION_DEFAULT) <= deliveredMinSeparation(view) || separationShortfall(view) !== null`, holding for all (n, k, minSeparation, seed, polish), exactly as `targetShortfall` already enforces for `settings.buddies`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-mirrors-a-core-budget-instead-of-asking-it",
+      "theme": "an app-side gate predicts what the core will accept from local constants instead of asking the core, so the two can drift apart silently",
+      "file": "app/src/io/feasibility.ts",
+      "line": 19,
+      "summary": "`feasibility()` promises `canGenerate` for the whole (n <= MAX_ROSTER_N, BUDDY_MIN <= k <= BUDDY_MAX) rectangle from local constants alone, and that promise is true only because the app's densest corner lands exactly on the core's `MAX_GREEDY_WORK` — a coincidence nothing in either package tests.",
+      "failure": "No input in the current tree fails — I verified that, which is why this is a suggestion and not blocking: `greedyWork(1000, 12) = 3 * 1000^2 * (1000*12/2 - 1000) = 1.5e10`, and the core refuses on `>` MAX_GREEDY_WORK = 15_000_000_000, so the corner is admitted by exactly zero margin, and I confirmed end-to-end that buildBuddyGraph(1000, 12, {polish:\"auto\"}) returns a connected 12-regular graph in 38.6 s. The coupling is one constant-edit wide in either direction: raising MAX_ROSTER_N to 1001, or BUDDY_MAX to 13, or the core tightening MAX_GREEDY_WORK, makes `feasibility` enable \"Generate buddy graph\" for a configuration `ringGreedy` throws on (and `repairDegrees`'s separate runtime MAX_REPAIR_WORK throw is not modelled at all) — surfacing as the raw library string on the worker error channel. This is the same shape as the retired `POLISH_MAX_N` literal, which `model.ts` replaced with `autoPolishEnabled()` for precisely this reason; `feasibility()` is the one remaining app-side gate over a core budget that still predicts rather than asks.",
+      "remediation": "Do it lib-first, as the polish gate was: export a predicate (e.g. `canGenerate(n, k)` wrapping `greedyWork(n,k) <= MAX_GREEDY_WORK && n <= MAX_CACHED_N`, the sibling of the exported `autoPolishEnabled`) and have `feasibility` call it instead of relying on the rectangle sitting under the budget. Exporting the NUMBER would recreate the drift one release later — the same argument model.ts:56-70 already records.",
+      "invariant": "For every (n, k), `feasibility(n, k).canGenerate === true` implies `buildBuddyGraph(n, k, {})` does not throw — checkable over the app-admissible rectangle and in particular at its corner (MAX_ROSTER_N, BUDDY_MAX), so a change to MAX_ROSTER_N, BUDDY_MAX or the core's budget fails the test instead of shipping a button that promises a generation the core refuses.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-error-description",
+      "theme": "a control that gains invalid state exposes THAT it is invalid but not WHY, so a screen-reader user cannot locate the specific problem among several similar rows",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 64,
+      "summary": "Rule-row name inputs get `aria-invalid={unknownA || undefined}` when the typed name doesn't match the roster, but there is no `aria-describedby` (or any per-field text) tying that state to a reason. The only explanation is a COUNT in RosterModal's shared live region ('2 buddy rules name someone who isn't in this roster and won't be used.') which never identifies which row(s). A sighted user sees the red '.unknown' outline directly on the offending field; a screen-reader user tabbing through, say, 5 rules with 2 flagged hears 'invalid, edit text, Rule 3, first person' with nothing pointing at the cause, and has to cross-reference against a generic count elsewhere in the DOM to even confirm it's one of theirs. The app already has the fix pattern in hand and applies it elsewhere: SettingsControls.tsx's buddies stepper carries its own bound state directly in `aria-label` ('more buddies, currently 12 — the most allowed') rather than relying solely on a distant live region, specifically because the reader has no other way to attribute state to control. This file is the one place in the app that flags per-field invalidity without following that pattern.",
+      "failure": "Add two buddy rules where row 1 names someone in the roster and row 2 names someone not in the roster (e.g. 'Zoe'); focus row 2's second-person input via Tab. A screen reader announces only 'invalid, edit text, Rule 2, second person' — never 'Zoe isn't in this roster.' With 3+ unmatched rows the shared count ('3 buddy rules name someone who isn't in this roster') gives no way to tell which of the 3 is under the user's cursor.",
+      "remediation": "Either fold the specific reason into each field's `aria-label` when unknown (mirroring the stepper's currently-N pattern, e.g. `Rule 2, second person — “Zoe” isn't in this roster`), or add a per-row `id`'d note element and point `aria-describedby` at it for the specific flagged field(s) instead of only at the aggregate count.",
+      "invariant": "for every form control rendered with aria-invalid=true, there exists reachable text (aria-label suffix or aria-describedby target) unique to that control that states the reason it is invalid — not merely an aggregate count shared across all invalid controls of the same kind."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "requested-target-shown-as-delivered",
+      "theme": "the UI presents the generation target that was ASKED for as though it described the graph that was DELIVERED",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 83,
+      "summary": "The Advanced panel shows the requested minimum separation while the core routinely demotes it, and nothing anywhere discloses the shortfall — the exact gap `targetShortfall` was added to close for buddy count, still open one setting over.",
+      "failure": "Default settings, roster of 12-30 people, k=4: the Advanced disclosure reads \"Min separation 5\" (settings.minSeparation is undefined, so the input renders SEPARATION_DEFAULT=5) and, if the user types 8, the exported file records 8 too. Measured with buildBuddyGraph(n,4,{seed:12345,polish:false}): finalMinSeparation is 3 at n=12, n=20 and n=30 — the demotion floor, i.e. the default case. Worse, buildBuddyGraph(12,4,{minSeparation:12}) and {minSeparation:5} both deliver finalMinSeparation 3 and the identical graph, so the control appears to have no effect and the app never says why. The core hands the delivered value back as BuddyResult.finalMinSeparation (\"the mind target actually achieved after any demotion\"), but GraphResult in app/src/worker/protocol.ts drops it — protocol.ts explicitly justifies dropping `asplGap` and is silent about this one — so no app surface can see it.",
+      "remediation": "Close the theme, not the field: carry the delivered value across the worker boundary (add `minSeparation` to `GraphResult`, from `BuddyResult.finalMinSeparation`; the constrained builder ignores the option, so report the requested value as unmet or omit the disclosure on that path) and add a `separationShortfall(view)` seam beside `targetShortfall` in model.ts, rendered by QualityPanel's existing `.rules-line` in the same words (\"Buddies are 3 apart, not the 5 in Settings\"). One seam per target, so the next settings knob inherits the disclosure instead of re-opening the theme.",
+      "invariant": "For every GENERATED GraphView, every per-graph generation target the settings surface displays is either met by the delivered graph or accompanied by a shortfall disclosure — i.e. `(view.settings.minSeparation ?? SEPARATION_DEFAULT) <= deliveredMinSeparation(view) || separationShortfall(view) !== null`, holding for all (n, k, minSeparation, seed, polish), exactly as `targetShortfall` already enforces for `settings.buddies`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-mirrors-a-core-budget-instead-of-asking-it",
+      "theme": "an app-side gate predicts what the core will accept from local constants instead of asking the core, so the two can drift apart silently",
+      "file": "app/src/io/feasibility.ts",
+      "line": 19,
+      "summary": "`feasibility()` promises `canGenerate` for the whole (n <= MAX_ROSTER_N, BUDDY_MIN <= k <= BUDDY_MAX) rectangle from local constants alone, and that promise is true only because the app's densest corner lands exactly on the core's `MAX_GREEDY_WORK` — a coincidence nothing in either package tests.",
+      "failure": "No input in the current tree fails — I verified that, which is why this is a suggestion and not blocking: `greedyWork(1000, 12) = 3 * 1000^2 * (1000*12/2 - 1000) = 1.5e10`, and the core refuses on `>` MAX_GREEDY_WORK = 15_000_000_000, so the corner is admitted by exactly zero margin, and I confirmed end-to-end that buildBuddyGraph(1000, 12, {polish:\"auto\"}) returns a connected 12-regular graph in 38.6 s. The coupling is one constant-edit wide in either direction: raising MAX_ROSTER_N to 1001, or BUDDY_MAX to 13, or the core tightening MAX_GREEDY_WORK, makes `feasibility` enable \"Generate buddy graph\" for a configuration `ringGreedy` throws on (and `repairDegrees`'s separate runtime MAX_REPAIR_WORK throw is not modelled at all) — surfacing as the raw library string on the worker error channel. This is the same shape as the retired `POLISH_MAX_N` literal, which `model.ts` replaced with `autoPolishEnabled()` for precisely this reason; `feasibility()` is the one remaining app-side gate over a core budget that still predicts rather than asks.",
+      "remediation": "Do it lib-first, as the polish gate was: export a predicate (e.g. `canGenerate(n, k)` wrapping `greedyWork(n,k) <= MAX_GREEDY_WORK && n <= MAX_CACHED_N`, the sibling of the exported `autoPolishEnabled`) and have `feasibility` call it instead of relying on the rectangle sitting under the budget. Exporting the NUMBER would recreate the drift one release later — the same argument model.ts:56-70 already records.",
+      "invariant": "For every (n, k), `feasibility(n, k).canGenerate === true` implies `buildBuddyGraph(n, k, {})` does not throw — checkable over the app-admissible rectangle and in particular at its corner (MAX_ROSTER_N, BUDDY_MAX), so a change to MAX_ROSTER_N, BUDDY_MAX or the core's budget fails the test instead of shipping a button that promises a generation the core refuses.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-error-description",
+      "theme": "a control that gains invalid state exposes THAT it is invalid but not WHY, so a screen-reader user cannot locate the specific problem among several similar rows",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 64,
+      "summary": "Rule-row name inputs get `aria-invalid={unknownA || undefined}` when the typed name doesn't match the roster, but there is no `aria-describedby` (or any per-field text) tying that state to a reason. The only explanation is a COUNT in RosterModal's shared live region ('2 buddy rules name someone who isn't in this roster and won't be used.') which never identifies which row(s). A sighted user sees the red '.unknown' outline directly on the offending field; a screen-reader user tabbing through, say, 5 rules with 2 flagged hears 'invalid, edit text, Rule 3, first person' with nothing pointing at the cause, and has to cross-reference against a generic count elsewhere in the DOM to even confirm it's one of theirs. The app already has the fix pattern in hand and applies it elsewhere: SettingsControls.tsx's buddies stepper carries its own bound state directly in `aria-label` ('more buddies, currently 12 — the most allowed') rather than relying solely on a distant live region, specifically because the reader has no other way to attribute state to control. This file is the one place in the app that flags per-field invalidity without following that pattern.",
+      "failure": "Add two buddy rules where row 1 names someone in the roster and row 2 names someone not in the roster (e.g. 'Zoe'); focus row 2's second-person input via Tab. A screen reader announces only 'invalid, edit text, Rule 2, second person' — never 'Zoe isn't in this roster.' With 3+ unmatched rows the shared count ('3 buddy rules name someone who isn't in this roster') gives no way to tell which of the 3 is under the user's cursor.",
+      "remediation": "Either fold the specific reason into each field's `aria-label` when unknown (mirroring the stepper's currently-N pattern, e.g. `Rule 2, second person — “Zoe” isn't in this roster`), or add a per-row `id`'d note element and point `aria-describedby` at it for the specific flagged field(s) instead of only at the aggregate count.",
+      "invariant": "for every form control rendered with aria-invalid=true, there exists reachable text (aria-label suffix or aria-describedby target) unique to that control that states the reason it is invalid — not merely an aggregate count shared across all invalid controls of the same kind."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 18,
+      "skipped": true
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 2,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 2,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 18,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 565753,
+    "agents": 5,
+    "toolCalls": 200
+  }
+}

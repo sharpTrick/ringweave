@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { buildBuddyGraph, type BuddyResult } from "ringweave";
-import { DEFAULT_SETTINGS, POLISH_MAX_N, viewFromResult } from "../src/model";
+import { DEFAULT_SETTINGS, viewFromResult } from "../src/model";
+import { autoPolishEnabled } from "ringweave";
+import type { GraphResult } from "../src/worker/protocol";
+import { generateResult } from "./helpers";
 
-// Drive useBuddyGraph without a real Worker: a controllable stand-in for
-// useGenerationWorker whose state the test mutates, then rerenders to fire the effect.
+// A controllable stand-in for useGenerationWorker: the test mutates its state, then rerenders
+// to fire the effect.
 const hooks = vi.hoisted(() => {
-  const state: { status: "idle" | "running" | "done" | "error"; result: BuddyResult | null; error: string | null } = {
-    status: "idle",
-    result: null,
-    error: null,
-  };
-  const generate = vi.fn(() => {
+  const state: {
+    status: "idle" | "running" | "done" | "error" | "refused";
+    result: GraphResult | null;
+    error: string | null;
+    refusals: never[];
+  } = { status: "idle", result: null, error: null, refusals: [] };
+  // Typed by its ARGS: an untyped mock's `mock.calls` is an empty tuple, so reading calls[0][0]
+  // is a type error whose only escape is a cast asserting an unchecked shape.
+  const generate = vi.fn<(req: { options: { polish: unknown } }) => void>(() => {
     state.status = "running";
   });
   const reset = vi.fn(() => {
@@ -28,6 +33,7 @@ vi.mock("../src/state/useGenerationWorker", () => ({
     status: hooks.state.status,
     result: hooks.state.result,
     error: hooks.state.error,
+    refusals: hooks.state.refusals,
     generate: hooks.generate,
     reset: hooks.reset,
   }),
@@ -45,15 +51,12 @@ beforeEach(() => {
 
 describe("useBuddyGraph result↔state pairing", () => {
   it("an import during in-flight generation survives the late worker result (no clobber)", () => {
-    const imported = viewFromResult(
-      ["A", "B", "C", "D", "E", "F"],
-      DEFAULT_SETTINGS,
-      buildBuddyGraph(6, 2, { seed: 1 }),
+    const imported = viewFromResult(["A", "B", "C", "D", "E", "F"], DEFAULT_SETTINGS, [], [], generateResult(6, 2, { seed: 1 }),
     );
-    const stale = buildBuddyGraph(4, 2, { seed: 2 }); // the superseded generate's eventual result
+    const stale = generateResult(4, 2, { seed: 2 }); // the superseded generate's eventual result
 
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS)); // pending set; mock -> running
+    act(() => result.current.generate(["W", "X", "Y", "Z"], DEFAULT_SETTINGS, [], [])); // pending set; mock -> running
     act(() => rerender());
     expect(result.current.status).toBe("running");
 
@@ -69,9 +72,9 @@ describe("useBuddyGraph result↔state pairing", () => {
   });
 
   it("applies a worker result when nothing superseded it", () => {
-    const gen = buildBuddyGraph(4, 2, { seed: 3 });
+    const gen = generateResult(4, 2, { seed: 3 });
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(["A", "B", "C", "D"], DEFAULT_SETTINGS));
+    act(() => result.current.generate(["A", "B", "C", "D"], DEFAULT_SETTINGS, [], []));
     act(() => rerender());
 
     hooks.state.status = "done";
@@ -84,11 +87,11 @@ describe("useBuddyGraph result↔state pairing", () => {
   it("fires onIdenticalReroll (with the kept view) when a REROLL yields identical edges", () => {
     const onNoop = vi.fn();
     const roster = ["A", "B", "C", "D", "E"];
-    const g1 = buildBuddyGraph(5, 4, { seed: 1 }); // K5 (unique)
-    const g2 = buildBuddyGraph(5, 4, { seed: 2 }); // K5 again — byte-identical edges
+    const g1 = generateResult(5, 4, { seed: 1 }); // K5 (unique)
+    const g2 = generateResult(5, 4, { seed: 2 }); // K5 again — byte-identical edges
 
     const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
@@ -96,7 +99,7 @@ describe("useBuddyGraph result↔state pairing", () => {
     const kept = result.current.view;
     expect(kept?.names).toEqual(roster);
 
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }, { reroll: true }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 2 }, [], [], { reroll: true }));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -112,17 +115,17 @@ describe("useBuddyGraph result↔state pairing", () => {
   it("does NOT fire onIdenticalReroll for an unchanged Edit→Generate (not a reroll request)", () => {
     const onNoop = vi.fn();
     const roster = ["A", "B", "C", "D", "E"];
-    const g1 = buildBuddyGraph(5, 4, { seed: 1 });
-    const g2 = buildBuddyGraph(5, 4, { seed: 1 }); // same seed -> identical, but a plain generate
+    const g1 = generateResult(5, 4, { seed: 1 });
+    const g2 = generateResult(5, 4, { seed: 1 }); // same seed -> identical, but a plain generate
 
     const { result, rerender } = renderHook(() => useBuddyGraph(onNoop));
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
     act(() => rerender());
 
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 })); // no reroll flag
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], [])); // no reroll flag
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -132,26 +135,24 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view?.names).toEqual(roster);
   });
 
-  // Class: an idempotent (identical-edges) generate under CHANGED settings must still adopt the
-  // new settings so export/UI aren't stale — while reusing the laid-out edges (no re-layout).
   it.each([
     ["seed", { buddies: 4, polish: "auto", seed: 2 } as const],
     ["minSeparation", { buddies: 4, polish: "auto", seed: 1, minSeparation: 6 } as const],
     ["polish", { buddies: 4, polish: false, seed: 1 } as const],
   ])("adopts changed %s on an identical-edges regenerate, reusing edges (no re-layout)", (_label, changed) => {
     const roster = ["A", "B", "C", "D", "E"];
-    const g1 = buildBuddyGraph(5, 4, { seed: 1 }); // K5
-    const g2 = buildBuddyGraph(5, 4, { seed: 2 }); // K5 again — identical edges
+    const g1 = generateResult(5, 4, { seed: 1 }); // K5
+    const g2 = generateResult(5, 4, { seed: 2 }); // K5 again — identical edges
 
     const { result, rerender } = renderHook(() => useBuddyGraph());
-    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }));
+    act(() => result.current.generate(roster, { buddies: 4, polish: "auto", seed: 1 }, [], []));
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g1;
     act(() => rerender());
     const priorEdges = result.current.view!.edges;
 
-    act(() => result.current.generate(roster, changed)); // non-reroll, changed settings
+    act(() => result.current.generate(roster, changed, [], [])); // non-reroll, changed settings
     act(() => rerender());
     hooks.state.status = "done";
     hooks.state.result = g2;
@@ -161,17 +162,26 @@ describe("useBuddyGraph result↔state pairing", () => {
     expect(result.current.view!.edges).toBe(priorEdges); // same reference -> no re-layout/animation
   });
 
-  it("never DISPATCHES polish=true above POLISH_MAX_N (cost gate)", () => {
+  it("never DISPATCHES polish=true for a configuration the core would not auto-polish", () => {
     const { result } = renderHook(() => useBuddyGraph());
-    const big = Array.from({ length: POLISH_MAX_N + 50 }, (_, i) => `P${i}`);
-    act(() => result.current.generate(big, { buddies: 4, polish: true, seed: 1 }));
-    const req = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
-    expect(req.options.polish).not.toBe(true); // downgraded to "auto"
+    const firstRefused = (k: number) => {
+      for (let n = 4; n <= 4000; n++) if (!autoPolishEnabled(n, k)) return n;
+      throw new Error(`no non-polishing n for k=${k}`);
+    };
 
-    hooks.generate.mockClear();
-    const small = Array.from({ length: POLISH_MAX_N }, (_, i) => `P${i}`);
-    act(() => result.current.generate(small, { buddies: 4, polish: true, seed: 1 }));
-    const req2 = hooks.generate.mock.calls.at(-1)![0] as { options: { polish: unknown } };
-    expect(req2.options.polish).toBe(true); // honored at/below the cap
+    for (const k of [2, 4, 12]) {
+      const boundary = firstRefused(k);
+      const roster = (count: number) => Array.from({ length: count }, (_, i) => `P${i}`);
+
+      hooks.generate.mockClear();
+      act(() => result.current.generate(roster(boundary), { buddies: k, polish: true, seed: 1 }, [], []));
+      expect(hooks.generate.mock.calls.at(-1)![0].options.polish).not.toBe(true);
+
+      hooks.generate.mockClear();
+      act(() =>
+        result.current.generate(roster(boundary - 1), { buddies: k, polish: true, seed: 1 }, [], []),
+      );
+      expect(hooks.generate.mock.calls.at(-1)![0].options.polish).toBe(true);
+    }
   });
 });

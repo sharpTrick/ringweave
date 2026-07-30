@@ -1,0 +1,299 @@
+{
+  "target": "app/src",
+  "round": 16,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 3,
+    "confirmed": 4,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read every file under /home/user/ringweave/app/src (model, constraints, search, neighborhood, sample, App, graph/{GraphCanvas,layout,highlight}, io/{parseRoster,clamp,importGraph,exportGraph,schema,feasibility,download,readFileText,constraintMessages}, panels/*, state/*, worker/*) plus app/test/*. Ran `npm test` (29 files, 291 tests) green before and after. Probes under /home/user/ringweave/.review-scratch/r9/: (a) generate->export->import metric/buddies/edges/settings parity over 38 unconstrained (n,k) cases and 40 randomized constrained cases — all equal; (b) full App driven in jsdom against a synchronous real runGeneration, comparing QualityPanel/rail numbers to an oracle recomputed from the edges (allPairsSummary/girth/degrees) across generate + 3 rerolls and at (n,k)=(5,4),(4,3),(6,5),(13,12) — all agreed, including the demotion/shortfall line; (c) QualityPanel over six degenerate imports (split graph, isolated vertex, edgeless, n=1, n=2 single edge, star) — none read optimal; (d) BuddyList copy-confirmation timing with fake timers. Determinism swept: no Math.random/Date.now in app/src; the only performance.now is the animation clock and never feeds geometry; every Set/Map is membership-only or sorted before display; the one order-sensitive path (shortestPath route reconstruction) is fed by useGraph rebuilding from view.edges, which is edgeList()-sorted on both the generation and import paths, so adjacency insertion order is identical for the same graph regardless of origin. Boundary checks traced: codePointsIfOver/clampToPoints/clampText/clampList, nextRerollSeed wrap, feasibility n<k+1, parseRoster MAX_NAMES boundary, importGraph per-vertex degree gate and readConstraints duplicate/required-and-prohibited refusals, edgeClass's shortest-path consecutiveness argument.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read every file under /home/user/ringweave/app/src (io/{readFileText,importGraph,exportGraph,schema,parseRoster,clamp,feasibility,download,constraintMessages}, model.ts, constraints.ts, search.ts, neighborhood.ts, graph/{layout,highlight,GraphCanvas}, worker/{protocol,generate,generate.worker}, state/{useBuddyGraph,useGenerationWorker,useGraph,usePathFinder,useNotice,useEscape,useExplorerHistory,useFocusRescue}, all 11 panels, App.tsx, main.tsx) plus the lib code the app calls into (core/constraints.ts validateDetailed + connectivityReasons, core/budgets.ts). Probes written under /home/user/ringweave/app/.review-scratch (gitignored, outside the `test/**` vitest glob).\n\nWHAT I TRIED TO BREAK, AND THE MEASUREMENTS:\n\n1. Import gate ORDER (cost before commitment). Traced importGraph line by line: readFileText rejects on file.size before FileReader runs; version -> people-is-array -> people.length<=1000 -> edges-is-array -> density (2m <= 12n, so m<=6000) -> declaredPairs<=200 — every one of these precedes the per-person map, the per-edge loop, readConstraints, degreeExtent, and allPairsSummary/girth. The per-vertex degreeMax<=12 check precedes the O(n^2) re-measure. No gate sits after the work it bounds.\n\n2. Main-thread re-measure at the ceiling. Measured importGraph on the densest legal file (n=1000, m=6000, 12-circulant): 110 ms; on the worst-diameter file (path graph n=1000): 67 ms. Full App-level import of a 1000-person / 6000-edge / 100-prohibited-rule hostile file through the real React tree (jsdom): 1191 ms including rendering 1000 buddy rows + 1000 slips + 7000 SVG elements; \"Edit people\" reopen 496 ms; one roster keystroke afterwards 41 ms. No hang.\n\n3. Attacker-chosen numbers from the file. settings {buddies: 1e9, minSeparation: Infinity, polish: true, seed: -5} -> clamped to buddies 12 (clamp to [2,12]), minSeparation 5 (Number.isInteger rejects Infinity -> SEPARATION_DEFAULT), seed 0, and polish is downgraded to \"auto\" by useBuddyGraph whenever the core would not auto-polish. Confirmed no import-reachable (n,k,minSeparation,polish,seed) tuple exceeds what the UI's own clamps can produce, so the reroll dispatch is bounded by the app's advertised ceiling; the constrained reroll at n=1000 is refused by the core's constrainedWork budget before its O(n^2) walk.\n\n4. Untrusted names -> spreadsheet/clipboard/DOM. Both name authorities close the embedded-delimiter route: parseRoster normalizes [\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}\\p{Cs}] to spaces, importGraph refuses the same class outright, and importGraph's parseRoster round-trip refuses any name containing a comma or newline or that is blank/duplicate. So a name cannot carry TAB, CR, LF, U+2028/2029, a lone surrogate, or a comma into either sink. Ran the sinks: toCsv neutralizes then RFC-4180-quotes every cell (a buddies cell \"=cmd; Bob\" comes out as \"'=cmd; Bob\"); BuddyList's clipboard neutralizes the leading name and a line has no tab/newline, so it lands in one cell. Tried `=cmd|' /C calc'!A0`, `@SUM(1+1)*cmd`, `-2+3+cmd`, `\"=1+1` end-to-end through import -> buddy list -> CSV -> clipboard; all neutralized or inert.\n\n5. Fuzz. 20,000 randomized importGraph inputs mixing NaN/Infinity/-0/2^53/1.5/null/booleans/100 KB strings/{length:1e9}/malformed pair shapes across version, people, edges, constraints, settings, meta: 0 non-ImportError escapes, max message length 123 chars (clampNotice caps at 300 anyway), worst single call 6.5 ms.\n\n6. Per-keystroke superlinear work in the roster editor. Measured the RosterModal pipeline at the 500,000-char cap: clampToPoints 40 ms (BMP) / 91 ms (all-astral), parseRoster 36 ms (250k duplicate tokens) / 66 ms — jank, but bounded by a constant independent of the 8 MB file, and the user must keep typing to re-incur it. Also benchmarked the main-thread validateDetailed pre-flight (the O(n^2) prohibited-pair connectivity walk) at n=1000 with 1 and 200 prohibited pairs: 4.6 / 3.5 ms.\n\n7. Force settle and animation. forceLayout(1000, 6000) = 264 ms (docblock says \"~200 ms\"; same order, not a hang); FORCE_MAX_EDGES=6000 exactly matches the import density ceiling, and the tween is separately gated at ANIM_MAX_N=400.\n\n8. Export boundary numerics. Traced that Metrics can never carry Infinity/NaN into JSON.stringify: assembleMetrics nulls aspl/diameter unless connected && finite, girth goes through finiteOrNull, quality is clamp(1-asplGap,0,1) with asplGap returning 0 when asplLb<=0. Verified export->import round-trips for generated graphs across k=6..12 including the near-boundary case (n=100,k=12: 2m=1194 vs 12n=1200), so the app can never write a file its own density gate refuses.\n\nThe two things the task named as forward risks have no caller in this tree: `fromTags` (grep across app/src returns nothing) and the priors/priorHard seam — both already recorded as deferrals in app/CLAUDE.md, so re-filing them would be duplication.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the concretely-committed next follow-on named in app/CLAUDE.md (\"Buddy rules are not re-checked on import\") against the real files: app/src/io/importGraph.ts (rehydration path, currently `report: null`), app/src/model.ts (GraphView.report / constraintSummary, already report-shaped and unchanged by this feature), app/src/worker/generate.ts and worker/protocol.ts (the only other ConstraintReport producer/consumer), app/test/importExport.roundtrip.test.ts:430 (locks `report` to null on import today), and lib/src/core/index.ts (ConstraintReport, buildConstrainedBuddyGraph, the private buildReport). Also re-verified the app's declared extension seam (GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor, app/src/graph/GraphCanvas.tsx) against the deferred focus/ego layout already documented in app/CLAUDE.md, and skimmed App.tsx, useBuddyGraph.ts, constraints.ts, neighborhood.ts for responsibility leaks or god-component drift.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface trace of app/src for the scenario (cold load -> roster -> generate -> read quality -> find a person -> buddies -> export -> recover from an error), read every panel and hook: App.tsx, RosterModal.tsx, ConstraintsEditor.tsx, SettingsControls.tsx, PersonSearch.tsx, PersonPanel.tsx, BuddyList.tsx, PathPanel.tsx, QualityPanel.tsx, LayoutToggle.tsx, Notice.tsx, Slips.tsx, GraphCanvas.tsx (+ reduced-motion path), useFocusRescue.ts, useEscape.ts, useNotice.ts, useExplorerHistory.ts, usePathFinder.ts, useBuddyGraph.ts, useGenerationWorker.ts, constraints.ts, importGraph.ts, search.ts, model.ts's announcement-text builders, and app.css for DOM-order-vs-visual-order and prefers-reduced-motion/focus-visible coverage. Cross-checked against the existing adversarial-interaction test suite (appErrorRecovery.test.tsx, layoutToggle.test.tsx, explorer.test.tsx, pathHighlight.test.tsx, buddyListCopy.test.tsx, useNotice.test.tsx) to avoid re-filing what prior rounds already fixed and pinned with a test (focus rescue on removal, inert containment for both overlays, live-region pre-mounting for every transient notice including the dialog reopen reason and per-person selection, aria-pressed on the layout toggle, aria-current on the buddy list, aria-disabled instead of disabled at the buddies stepper's bounds, reduced-motion honored both in CSS and in the JS layout-tween). Traced the reroll/generate/import/refuse/error/cancel state machine end-to-end for focus-loss and dead-end paths, including the interaction between `#app`'s `inert` toggling and the focus-rescue MutationObserver's childList-only observation (every inert-on transition in this app is paired, by construction, with a sibling DOM insertion in the same commit, so the childList-only observer reliably fires — traced, no gap found there). Verified with a small jsdom probe that a real HTML `disabled` attribute blurs a focused control (jsdom itself does not model this, consistent with this codebase's own test comments about jsdom's limited focus/inert fidelity, so the finding rests on documented cross-browser `disabled` semantics plus this codebase's own prior fix for the identical hazard).",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Auto-clearing confirmation timers are not scoped per-invocation, so a stale timer from an earlier action tears down state belonging to a newer one",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`copyAll` in app/src/panels/BuddyList.tsx schedules an AUTO_CLEAR_MS teardown timer on every successful copy without cancelling the previous one, so an earlier press's timer clears a later press's confirmation message before the user reads it."
+      ],
+      "remediation": "Delete the implicit 'let the old timer keep running' behavior: track the pending timeout in a ref, clearTimeout it at the start of every new copy (and on unmount), so only the most recent action's timer can ever fire — the same guard already implemented once in useNotice.flash (app/src/state/useNotice.ts) instead of a second copy in BuddyList."
+    },
+    {
+      "theme": "The core library's canonical constraint-satisfaction computation is not exported, leaving app-side code with no legitimate way to reuse it for a documented follow-on",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "app/CLAUDE.md documents 'buddy rules are not re-checked on import' as a clean app-side follow-on, but the actual satisfied/violation logic is `buildReport` in lib/src/core/index.ts (lines 541-565), a module-private function with a single caller and no export entry, while every primitive it depends on is already public — inviting whoever implements the follow-on to hand-roll a second copy of the satisfaction predicate in app/src/io/importGraph.ts instead of reusing the core's."
+      ],
+      "remediation": "When this follow-on is built, remove the need for a second implementation by exporting `buildReport` (or a minimally renamed public wrapper) from lib/src/core/index.ts's existing export list and having importGraph.ts call it directly — no new abstraction, just widening the existing function's visibility so the app has one source of truth instead of being forced to grow a duplicate."
+    },
+    {
+      "theme": "A code comment asserts behavior (export/import route stability) that the code does not implement",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The comment in app/src/state/usePathFinder.ts claims route canonicalization keeps routes 'stable across an export/import round trip,' but routes are never exported or imported anywhere in the codebase."
+      ],
+      "remediation": "Delete the false clause ('and it also makes the route stable across an export/import round trip') and leave the comment's accurate remaining sentence ('Picking Ana then Ben and picking Ben then Ana are the same question, so they must draw the same line') as the sole justification — no rewrite needed beyond removing the untrue part."
+    },
+    {
+      "theme": "A control that disables itself as the direct result of the click that triggered the disable uses the real `disabled` attribute, which blurs the focused element and hands off focus to a generic rescue that lands far from where the user was working",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "The \"+ Add a buddy rule\" button in app/src/panels/ConstraintsEditor.tsx (lines 104-110) uses `disabled={atCap}`; the click that adds the 200th rule also flips atCap true in the same render, blurring the focused button and sending focus via useFocusRescue's fallback chain to the roster textarea at the top of the dialog — away from the newly added row and the cap notice — even though this exact hazard and its fix already exist elsewhere in the codebase for the buddies-count stepper."
+      ],
+      "remediation": "Remove the native `disabled` attribute on this button in favor of `aria-disabled={atCap}` (inert to activation, still focusable), matching the fix already made once for the buddies-count stepper in app/src/panels/SettingsControls.tsx — eliminating the second occurrence of the pattern rather than adding a new rescue path for it."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-timer-clobbers-newer-feedback",
+      "theme": "a transient confirmation is torn down by a timer belonging to an earlier action instead of its own, so the feedback for the most recent action disappears early",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 40,
+      "summary": "`copyAll` schedules an AUTO_CLEAR_MS teardown timer on every successful copy and never cancels the previous one, so an earlier press's timer clears a later press's confirmation.",
+      "failure": "Reproduced with fake timers (.review-scratch/r9/d.probe.tsx): click Copy at t=0 (label becomes \"Copied\", live region announces), click Copy again at t=3.0 s (label \"Copied\"), then at t=4.2 s — only 1.2 s after the second copy — the first press's 4 s timer fires and the label is back to \"Copy\" with the role=\"status\" region emptied. Expected the confirmation to persist until t=7.0 s. The existing buddyListCopy.test.tsx only ever presses once (and once twice back-to-back within one tick), so it does not see this; nothing else in the suite advances the clock across two presses.",
+      "remediation": "Hold the pending timeouts in a ref and clearTimeout them at the start of each successful copy — the same 'a newer message wins' guard `useNotice.flash` already implements (app/src/state/useNotice.ts) — and clear them in a cleanup effect on unmount so a resolved clipboard write cannot setState after teardown. Closing the theme means the guard lives with every auto-clearing confirmation in the app, not just the toast; `useNotice` and `BuddyList` are the two producers today.",
+      "invariant": "For every successful copy at time t, the confirmation state (button label \"Copied\" and the live-region text) is non-empty for the whole interval [t, t + AUTO_CLEAR_MS) and empty at t + AUTO_CLEAR_MS — for any sequence and spacing of prior copies. Equivalently: no timer scheduled by an earlier copy may mutate confirmation state after a later copy has occurred.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Comment describes export/import behavior that does not exist",
+      "file": "/home/user/ringweave/app/src/state/usePathFinder.ts",
+      "line": 11,
+      "summary": "Comment claims route canonicalization makes routes stable across export/import, but routes are never exported or imported.",
+      "failure": "A maintainer reads the comment: 'always running from the lower index guarantees that, and it also makes the route stable across an export/import round trip.' They then check exportGraph.ts and importGraph.ts expecting to find route handling, find none, and become confused about the actual purpose of canonicalization. The canonical correctness is for UX determinism within a session (if user picks Ana→Ben vs Ben→Ana, show same visual path), not for persistence across export/import.",
+      "remediation": "Replace 'and it also makes the route stable across an export/import round trip' with 'making the route deterministic within the same view/session'. The statement 'Picking Ana then Ben and picking Ben then Ana are the same question, so they must draw the same line' already captures the actual intent.",
+      "invariant": "No exported BuddyGraphFile contains a route field. No importGraph code reads route data. Code grep for 'route' returns zero results in exportGraph.ts, importGraph.ts, and schema.ts (excluding docstrings/comments).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "self-disabling-control-blurs-focus",
+      "theme": "a control that disables itself as the direct result of the very activation that triggered it must not use the real disabled attribute, because disabling a focused element blurs it and hands focus to whatever the app's generic rescue finds next — which here is nowhere near the control the user was just working on",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 104,
+      "summary": "\"+ Add a buddy rule\" (app/src/panels/ConstraintsEditor.tsx:104-110) uses the real `disabled={atCap}` attribute. Reaching the 200-rule cap (`MAX_CONSTRAINT_PAIRS`) happens by clicking this very button while it is focused, and the click that adds the 200th row is also the click that flips `atCap` true in the same render — disabling the button the user's focus is on. Per standard HTML/browser behaviour (documented and relied on elsewhere in this same file's sibling component), disabling a focused control blurs it, so `document.activeElement` becomes `<body>`. `useFocusRescue`'s MutationObserver does fire (the new 200th `.rule-row` is a childList insertion in the same commit), but its anchor order is `searchRef -> the roster textarea (by aria-label) -> \".busy button\"`. Inside RosterModal, `searchRef.current` exists only if a view already exists and is unreachable anyway (`#app` is inert while the modal is open), so the rescue lands focus on the roster textarea at the very top of the dialog — yanking the user out of the `<details className=\"rules-block\">` disclosure they were filling in, away from the row they just added and from the `role=\"status\"` cap notice that explains why (`app/src/panels/ConstraintsEditor.tsx:117-119`). The notice IS announced (it's in a permanently-mounted live region), but the user's focus/task position is discarded and they must re-navigate: Tab past the roster field, past file-drop, back into the Buddy rules disclosure, back down through all 200 rows.",
+      "failure": "Keyboard/screen-reader user: open \"Edit people\", expand \"Buddy rules\", add rows until exactly the 200th \"+ Add a buddy rule\" click (the one that reaches MAX_CONSTRAINT_PAIRS) is pressed while that button has focus. The button is synchronously disabled by React in the same commit, the browser blurs it, and useFocusRescue relocates focus to the \"Roster names\" textarea at the top of the dialog instead of leaving it in the rules block (e.g. on the newly-added row's first input, or on the button's own now-disabled position with a describing sibling in reach).",
+      "remediation": "Use `aria-disabled={atCap}` (keeping the button in the tab order but inert to activation) instead of the native `disabled` attribute, mirroring the fix already applied to the buddies-count stepper in app/src/panels/SettingsControls.tsx:49 and :62 for the identical hazard (documented there at lines 41-45). That keeps focus exactly where the user was, with the already-live `.rule-note` region announcing the cap in place, and avoids invoking the generic top-of-dialog rescue for a case that has a much better local answer.",
+      "invariant": "For every button whose `disabled`/enabled state can be driven to `true` by the very `onClick` that fires while it holds focus, the app must not apply the native `disabled` attribute for that transition (equivalently: activeElement must never become `document.body` as a result of a control's own successful activation) — either aria-disabled is used, or the control's disabling condition cannot become true without an intervening focus move away from it."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-timer-clobbers-newer-feedback",
+      "theme": "a transient confirmation is torn down by a timer belonging to an earlier action instead of its own, so the feedback for the most recent action disappears early",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 40,
+      "summary": "`copyAll` schedules an AUTO_CLEAR_MS teardown timer on every successful copy and never cancels the previous one, so an earlier press's timer clears a later press's confirmation.",
+      "failure": "Reproduced with fake timers (.review-scratch/r9/d.probe.tsx): click Copy at t=0 (label becomes \"Copied\", live region announces), click Copy again at t=3.0 s (label \"Copied\"), then at t=4.2 s — only 1.2 s after the second copy — the first press's 4 s timer fires and the label is back to \"Copy\" with the role=\"status\" region emptied. Expected the confirmation to persist until t=7.0 s. The existing buddyListCopy.test.tsx only ever presses once (and once twice back-to-back within one tick), so it does not see this; nothing else in the suite advances the clock across two presses.",
+      "remediation": "Hold the pending timeouts in a ref and clearTimeout them at the start of each successful copy — the same 'a newer message wins' guard `useNotice.flash` already implements (app/src/state/useNotice.ts) — and clear them in a cleanup effect on unmount so a resolved clipboard write cannot setState after teardown. Closing the theme means the guard lives with every auto-clearing confirmation in the app, not just the toast; `useNotice` and `BuddyList` are the two producers today.",
+      "invariant": "For every successful copy at time t, the confirmation state (button label \"Copied\" and the live-region text) is non-empty for the whole interval [t, t + AUTO_CLEAR_MS) and empty at t + AUTO_CLEAR_MS — for any sequence and spacing of prior copies. Equivalently: no timer scheduled by an earlier copy may mutate confirmation state after a later copy has occurred.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "missing-core-export-for-committed-follow-on",
+      "theme": "the app's canonical decision of whether buddy rules are satisfied lives in a core function the app cannot call, so the one currently-documented next step (re-check rules on import) can only be built by either extending the core's public surface or duplicating the core's satisfied/violation logic inside app/src",
+      "file": "lib/src/core/index.ts",
+      "line": 541,
+      "summary": "app/CLAUDE.md's own known-follow-on entry says closing 'buddy rules are not re-checked on import' is 'a real (cheap) computation and a clean follow-on', framed as app-side work. Tracing it against the actual files shows it is not app-only: the canonical computation (reqViolations/prohViolations/satisfied/largestComponentFraction from a Graph+Constraints pair, with no generation) is `buildReport` in lib/src/core/index.ts:541-565, and it is a module-private function with exactly one caller (`buildConstrainedBuddyGraph`, line ~425) — it is not in the `export { ... }` list at the top of the file (lines 14-49), so `app/src/io/importGraph.ts` cannot reach it. Every primitive `buildReport` uses IS public though: `Graph.hasEdge`, `Constraints.requiredPairs()`/`prohibitedPairs()`, and `largestComponentFraction` (importGraph.ts already imports the last one). That combination is a trap: the path of least resistance for whoever picks up this follow-on is to hand-roll the same two counting loops directly in importGraph.ts using those already-public pieces, rather than doing the lib-first export the project's own architecture rule calls for ('If a number is missing, add it to the core (lib-first), not here' — app/CLAUDE.md). A hand-rolled copy would duplicate the exact predicate that decides what 'all buddy rules satisfied' means (currently `reqViolations === 0 && prohViolations === 0 && connected` at index.ts:557) outside the core, with no shared invariant tying the two together — the same class of drift this codebase has repeatedly hardened against elsewhere (viewFromResult's connectivity fix, the F9 promote-before-validate hazard already recorded in app/CLAUDE.md, the two-copies-of-isConstrainedRequest history in worker/protocol.ts). `app/test/importExport.roundtrip.test.ts:430` currently pins `view.report` to null on import and will need to change alongside whichever path is taken.",
+      "invariant": "for every code path in app/src that determines whether an edge set satisfies a Constraints set (i.e. produces or reads a `satisfied`/`reqViolations`/`prohViolations` value), the counting logic has exactly one implementation, reachable only through an exported ringweave function — never re-derived from `Graph.hasEdge` + `Constraints.requiredPairs()`/`prohibitedPairs()` inside app/src",
+      "failure": "if the follow-on is implemented by writing `for (const [a,b] of cons.requiredPairs()) if (!g.hasEdge(a,b)) reqViolations++` (etc.) directly in importGraph.ts instead of via a core export, then a later change to the core's definition of `satisfied` (e.g. accounting for priors, or a connectivity nuance) updates every generation-time report but silently leaves the import-time report computing the old predicate — the graph and the 'all rules satisfied' text can then disagree for an imported file in exactly the way the codebase's own comments describe as the failure class it exists to prevent",
+      "remediation": "when this follow-on is actually built, export `buildReport` (or a renamed public equivalent, e.g. `checkConstraintReport(g: Graph, cons: Constraints, connected: boolean): ConstraintReport` with priors handling left to callers that need it) from lib/src/core/index.ts's export list, and have importGraph.ts call it instead of reimplementing the counts; update the docblock on `GraphView.report`/`constraintSummary` in model.ts and the pinned null-report assertion in importExport.roundtrip.test.ts in the same change"
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Comment describes export/import behavior that does not exist",
+      "file": "/home/user/ringweave/app/src/state/usePathFinder.ts",
+      "line": 11,
+      "summary": "Comment claims route canonicalization makes routes stable across export/import, but routes are never exported or imported.",
+      "failure": "A maintainer reads the comment: 'always running from the lower index guarantees that, and it also makes the route stable across an export/import round trip.' They then check exportGraph.ts and importGraph.ts expecting to find route handling, find none, and become confused about the actual purpose of canonicalization. The canonical correctness is for UX determinism within a session (if user picks Ana→Ben vs Ben→Ana, show same visual path), not for persistence across export/import.",
+      "remediation": "Replace 'and it also makes the route stable across an export/import round trip' with 'making the route deterministic within the same view/session'. The statement 'Picking Ana then Ben and picking Ben then Ana are the same question, so they must draw the same line' already captures the actual intent.",
+      "invariant": "No exported BuddyGraphFile contains a route field. No importGraph code reads route data. Code grep for 'route' returns zero results in exportGraph.ts, importGraph.ts, and schema.ts (excluding docstrings/comments).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "self-disabling-control-blurs-focus",
+      "theme": "a control that disables itself as the direct result of the very activation that triggered it must not use the real disabled attribute, because disabling a focused element blurs it and hands focus to whatever the app's generic rescue finds next — which here is nowhere near the control the user was just working on",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 104,
+      "summary": "\"+ Add a buddy rule\" (app/src/panels/ConstraintsEditor.tsx:104-110) uses the real `disabled={atCap}` attribute. Reaching the 200-rule cap (`MAX_CONSTRAINT_PAIRS`) happens by clicking this very button while it is focused, and the click that adds the 200th row is also the click that flips `atCap` true in the same render — disabling the button the user's focus is on. Per standard HTML/browser behaviour (documented and relied on elsewhere in this same file's sibling component), disabling a focused control blurs it, so `document.activeElement` becomes `<body>`. `useFocusRescue`'s MutationObserver does fire (the new 200th `.rule-row` is a childList insertion in the same commit), but its anchor order is `searchRef -> the roster textarea (by aria-label) -> \".busy button\"`. Inside RosterModal, `searchRef.current` exists only if a view already exists and is unreachable anyway (`#app` is inert while the modal is open), so the rescue lands focus on the roster textarea at the very top of the dialog — yanking the user out of the `<details className=\"rules-block\">` disclosure they were filling in, away from the row they just added and from the `role=\"status\"` cap notice that explains why (`app/src/panels/ConstraintsEditor.tsx:117-119`). The notice IS announced (it's in a permanently-mounted live region), but the user's focus/task position is discarded and they must re-navigate: Tab past the roster field, past file-drop, back into the Buddy rules disclosure, back down through all 200 rows.",
+      "failure": "Keyboard/screen-reader user: open \"Edit people\", expand \"Buddy rules\", add rows until exactly the 200th \"+ Add a buddy rule\" click (the one that reaches MAX_CONSTRAINT_PAIRS) is pressed while that button has focus. The button is synchronously disabled by React in the same commit, the browser blurs it, and useFocusRescue relocates focus to the \"Roster names\" textarea at the top of the dialog instead of leaving it in the rules block (e.g. on the newly-added row's first input, or on the button's own now-disabled position with a describing sibling in reach).",
+      "remediation": "Use `aria-disabled={atCap}` (keeping the button in the tab order but inert to activation) instead of the native `disabled` attribute, mirroring the fix already applied to the buddies-count stepper in app/src/panels/SettingsControls.tsx:49 and :62 for the identical hazard (documented there at lines 41-45). That keeps focus exactly where the user was, with the already-live `.rule-note` region announcing the cap in place, and avoids invoking the generic top-of-dialog rescue for a case that has a much better local answer.",
+      "invariant": "For every button whose `disabled`/enabled state can be driven to `true` by the very `onClick` that fires while it holds focus, the app must not apply the native `disabled` attribute for that transition (equivalently: activeElement must never become `document.body` as a result of a control's own successful activation) — either aria-disabled is used, or the control's disabling condition cannot become true without an intervening focus move away from it."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "missing-core-export-for-committed-follow-on",
+      "theme": "the app's canonical decision of whether buddy rules are satisfied lives in a core function the app cannot call, so the one currently-documented next step (re-check rules on import) can only be built by either extending the core's public surface or duplicating the core's satisfied/violation logic inside app/src",
+      "file": "lib/src/core/index.ts",
+      "line": 541,
+      "summary": "app/CLAUDE.md's own known-follow-on entry says closing 'buddy rules are not re-checked on import' is 'a real (cheap) computation and a clean follow-on', framed as app-side work. Tracing it against the actual files shows it is not app-only: the canonical computation (reqViolations/prohViolations/satisfied/largestComponentFraction from a Graph+Constraints pair, with no generation) is `buildReport` in lib/src/core/index.ts:541-565, and it is a module-private function with exactly one caller (`buildConstrainedBuddyGraph`, line ~425) — it is not in the `export { ... }` list at the top of the file (lines 14-49), so `app/src/io/importGraph.ts` cannot reach it. Every primitive `buildReport` uses IS public though: `Graph.hasEdge`, `Constraints.requiredPairs()`/`prohibitedPairs()`, and `largestComponentFraction` (importGraph.ts already imports the last one). That combination is a trap: the path of least resistance for whoever picks up this follow-on is to hand-roll the same two counting loops directly in importGraph.ts using those already-public pieces, rather than doing the lib-first export the project's own architecture rule calls for ('If a number is missing, add it to the core (lib-first), not here' — app/CLAUDE.md). A hand-rolled copy would duplicate the exact predicate that decides what 'all buddy rules satisfied' means (currently `reqViolations === 0 && prohViolations === 0 && connected` at index.ts:557) outside the core, with no shared invariant tying the two together — the same class of drift this codebase has repeatedly hardened against elsewhere (viewFromResult's connectivity fix, the F9 promote-before-validate hazard already recorded in app/CLAUDE.md, the two-copies-of-isConstrainedRequest history in worker/protocol.ts). `app/test/importExport.roundtrip.test.ts:430` currently pins `view.report` to null on import and will need to change alongside whichever path is taken.",
+      "invariant": "for every code path in app/src that determines whether an edge set satisfies a Constraints set (i.e. produces or reads a `satisfied`/`reqViolations`/`prohViolations` value), the counting logic has exactly one implementation, reachable only through an exported ringweave function — never re-derived from `Graph.hasEdge` + `Constraints.requiredPairs()`/`prohibitedPairs()` inside app/src",
+      "failure": "if the follow-on is implemented by writing `for (const [a,b] of cons.requiredPairs()) if (!g.hasEdge(a,b)) reqViolations++` (etc.) directly in importGraph.ts instead of via a core export, then a later change to the core's definition of `satisfied` (e.g. accounting for priors, or a connectivity nuance) updates every generation-time report but silently leaves the import-time report computing the old predicate — the graph and the 'all rules satisfied' text can then disagree for an imported file in exactly the way the codebase's own comments describe as the failure class it exists to prevent",
+      "remediation": "when this follow-on is actually built, export `buildReport` (or a renamed public equivalent, e.g. `checkConstraintReport(g: Graph, cons: Constraints, connected: boolean): ConstraintReport` with priors handling left to callers that need it) from lib/src/core/index.ts's export list, and have importGraph.ts call it instead of reimplementing the counts; update the docblock on `GraphView.report`/`constraintSummary` in model.ts and the pinned null-report assertion in importExport.roundtrip.test.ts in the same change"
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 16,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 705650,
+    "agents": 6,
+    "toolCalls": 247
+  }
+}

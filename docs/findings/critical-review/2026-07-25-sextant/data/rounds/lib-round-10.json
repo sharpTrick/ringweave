@@ -1,0 +1,435 @@
+{
+  "target": "lib/src",
+  "round": 10,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 8,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 7
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of `lib/src/core` (graph, metrics, bounds, budgets, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus all 9 files in `lib/test`, and cross-checked against `reference-python/`. Reproduced with throwaway harnesses under `/home/user/ringweave/.review-scratch/`.\n\nRan and passed: `npx vitest run` in `lib/` (247 tests, 9 files); `python3 test_core.py` (ALL PASS); `python3 gen_fixtures.py` regenerated `lib/test/fixtures/reference.json` byte-identically (no oracle drift).\n\nProbes that found nothing (i.e. these are now positively evidenced, not assumed):\n- Determinism / Set-iteration-order: no `Math.random`/`Date.now`/`performance`/`crypto` anywhere in `lib/src`. `girth` records a BFS `parent` (the one place adjacency-Set order is consumed) — 3000 random graphs, each rebuilt with a shuffled edge-insertion order: girth identical every time, and identical to an independent brute-force (remove-edge-and-BFS) girth. `shortestPath` order-invariance and lex-minimality re-checked on a separate fuzz. `constrainedGreedy` and `polishConstrained` re-run with every constraint set rebuilt in reversed insertion order and with reversed endpoint order: byte-identical edge lists. `forceConnect`/`joinAnyComponents` DO consume component-member order (order-dependent in principle) but I traced completion's exit conditions (`stuck` is monotone; a stuck vertex never regains a legal partner) and confirmed the output is legal-edge-maximal, so `forceConnect` is provably inert — the latent order dependence is unreachable.\n- Oracle parity beyond the 9 fixtures: 309-case grid (ringGreedy n∈{3..120}×k∈{2..7} with repair; constrainedGreedy n∈{2..50}×k∈{0..5} bare / with prohibited / with required) compared TS vs Python edge-for-edge, plus aspl/diameter/girth. Zero divergence except the 12 intentional `checkWellFormed` throws (k=0 with a required pair) that Python has no precondition for. `validate` message parity: 3000 randomized cases including out-of-range, negative and self-pair ids — 0 differences in string content and ordering.\n- Hard-constraint guarantees under `NODE_ENV=production` (dev postconditions compiled out, so violations would be silent): 20 000 randomized `buildConstrainedBuddyGraph` cases and 1500 `constrainedGreedy`+`polishConstrained` cases checked externally for prohibited-present, required-missing, degree>k, degree-sequence drift, reported-vs-recomputed aspl/diameter/connected/largestComponentFraction, and `satisfied` implying connected. Zero violations.\n- `validate` false refusals: exhaustive existence search (all graphs with maxdeg ≤ k, containing required, avoiding prohibited, connected) over 1510 refused inputs at n≤6 — no refusal was wrong. Converse: 2490 accepted inputs where a connected graph provably exists — `constrainedGreedy` found a connected one every time.\n- Fragmentation guard: 4 730 014 double-edge swaps over 300 000 random 8-vertex graphs looking for a swap that raises component count OR shrinks the largest component while lowering `penalizedAspl`. None found, corroborating the objective-shape argument the tests rest on.\n- Boundaries walked by hand and by probe: n∈{0,1,2}, k∈{0,1}, k≥n, everyone-under-degree, `mind` demotion floor and `floor(n/2)` clamp, `completionCap`, `RNG.twoDistinct` at len<2, `boundedPolishIterations`/`checkPolishSize`/`polishWork` reachability from both builders (I derived that `checkPolishSize` can never throw from either builder, so it guards direct primitive callers only), `Int32Array` INF headroom in `ringGreedy`'s cache, and `pairKey` round-tripping through `keyToPair`.\n\nTwo issues found, both reproduced.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Read every file under /home/user/ringweave/lib/src/core (graph, budgets, bounds, constraints, constrainedGreedy, greedy, metrics, polish, rng, swap, index) plus lib/test/* to avoid re-filing ratcheted cases, and app/src/constraints.ts + a grep of app callers to judge present-day reachability. Built throwaway probes under /home/user/ringweave/.review-scratch/ against a freshly-built lib/dist and RAN them.\n\nMeasured and found the guards HOLDING (no finding): the constrained accept-set corners — (5000,4)=13.2s, (2000,25)=16.9s, (1000,100)=23.1s, (700,204)=28.6s, (500,400)=40.6s, (464,463)=45.3s — all inside MAX_CONSTRAINED_WORK's documented ~46s ceiling, so `constrainedWork`'s missing k² term is absorbed by the constant. `checkPolishSize` is well calibrated and correctly placed in `polish`: at the exact boundary n=16980 (m=0) the whole call is 1.1s, and ring(16000)/Graph(16986) are refused in 7-13ms. `validate`'s O(n²) prohibited-pair connectivity walk at n=5000 is 49ms, not the hazard it looks like, because `!seen[v]` short-circuits before `isProhibited` builds a string key, so key construction is O(n) not O(n²). ringGreedy's cap ordering is right (MAX_CACHED_N before greedyWork, both before `ring(n)`), so n=70000 is refused rather than admitted by the k=2 work floor. `buildBuddyGraph`/`buildConstrainedBuddyGraph` with `polish: true` cannot make `checkPolishSize` throw for any (n,k) their generators admit — I enumerated the accept-set corners. `constrainedGreedy`'s `completionCap = n*k*6` provably cannot bind (each step adds exactly one edge or terminates), so `forceConnect`'s O(n³) backstop stays inert. Walked -0, NaN, Infinity, 2.5, 5e9 through both builders, `Constraints`, `mooreLowerBounds`, `boundedPolishIterations` and `RNG`; the only non-finite hole left is `repairDegrees`'s `minDist` (filed). No untrusted TEXT exists in lib at all — `formatReason` and every Error message interpolate only numbers, and pair keys are numeric — so there is no CSV/clipboard/DOM sink in this component to attack. `Constraints.fromTags`'s O(n²) materialization remains a genuine deferral: grep confirms no caller outside lib/test, and the app caps pairs at 200 and n at 1000.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read every file in lib/src/core (graph.ts, constraints.ts, constrainedGreedy.ts, polish.ts, swap.ts, metrics.ts, bounds.ts, rng.ts, budgets.ts, greedy.ts, index.ts) plus lib/CLAUDE.md's declared seam and known-limitations list, docs/PROJECT_PLAN.md, and app/CLAUDE.md's follow-on notes (which document the app-side half of the exercise). Confirmed via `git log` that M3 (F7 constraints UI, F8 fuzzy search/explorer, F10 path finder) is already merged, so the actual next committed, core-relevant work is M4/F9 (\"Recalculate with minimal disruption\" — the flagship). Traced F9 against the core end-to-end: built a throwaway harness (.review-scratch/f9-probe.mjs) against the built lib/dist that (1) generates a 10-person graph, (2) simulates a new person joining, remaps the previous edges to the new roster by name (the exact operation app/CLAUDE.md's own follow-on note says the app side still needs), (3) feeds them into `Constraints.addPrior` + `buildConstrainedBuddyGraph({priorWeight})`, and confirmed `report.priorsKeptFraction` correctly reports ~95% preserved with zero lib-side code changes needed — the tag-policy-style seam claim doesn't apply here, but the priors/`priorWeight`/`priorHard`/`priorsKeptFraction` machinery built in M1/M1b is already a seam that pays for F9 without further core work. Also attempted the constraints.ts `TagPolicy` switch extension mentally (only one live case, `prohibit_same`, mirrored 1:1 in reference-python and gen_fixtures.py) and judged a bare one-case switch not to rise to \"gratuitous abstraction\" (no class hierarchy or injected strategy) — not filed. While probing the F9 path I varied `priorWeight` outside the range the property test (`constrained.props.test.ts`) exercises (only 0 and 50) and found a real, reproduced defect (below).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "All core files in lib/src/core: index.ts, graph.ts, budgets.ts, constraints.ts, greedy.ts, constrainedGreedy.ts, metrics.ts, polish.ts, swap.ts, rng.ts, bounds.ts. Examined: false/misleading comments (false claims about what code does), quantitative claims (counts, locations, timing claims), naming for \"how vs what\", duplication of logic, public API surface design, postcondition/precondition guards. Verified findings against actual code implementation and tests. All 247 tests pass; linter clean.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Hard-constraint promotion (priorHard) is applied at only one of several entry points that all claim to honor hard constraints, so the feasibility gate, the primitives, and the builder can disagree about whether a prior is required",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`validateDetailed`/`validate` and the exported primitives `constrainedGreedy`/`polishConstrained` all ignore `Constraints.priorHard`; only `buildConstrainedBuddyGraph` applies `withHardPriors`, so the 'authoritative feasibility gate' passes inputs the builder then refuses, and a direct primitive caller gets soft priors where the flag promises hard."
+      ],
+      "remediation": "Delete the single call to `withHardPriors` in index.ts and instead apply the promotion once, at the point `Constraints` is constructed/normalized (before it reaches validateDetailed, constrainedGreedy, or polishConstrained), so every entry point reads the same already-promoted constraint set instead of each reasoning about priorHard independently."
+    },
+    {
+      "theme": "A metric documented as \"0 = provably optimal\" can go negative because the Moore-bound computation isn't restricted to degree/size combinations where a connected graph actually exists",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`mooreLowerBounds(n, 1)` for n ≥ 3 returns a positive `asplLb` derived from an unrealizable Moore tree, so `asplGap` returns a negative gap ('better than provably optimal') and `diameterLb` exceeds anything achievable."
+      ],
+      "remediation": "Extend the existing degenerate-input guard in `mooreLowerBounds` to also cover `k === 1 && n > 2`, returning the same `{asplLb: 0, diameterLb: 0}` no-bound signal it already returns for other degenerate cases, rather than adding a new special-cased branch."
+    },
+    {
+      "theme": "A bounded iteration budget can be entirely consumed by setup/calibration, leaving zero budget for the work it was granted for, while the result is still reported as having done that work",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "Anneal temperature calibration is capped by `maxIters` and subtracted from it, so budgets ≤100 leave `loopIters === 0`: polish pays the full budget calibrating, makes no accept/reject decision, returns the input unchanged, yet `buildBuddyGraph` still reports `polished: true`."
+      ],
+      "remediation": "Remove calibration's claim on the whole budget: cap it to a bounded fraction (or skip it outright when the budget can't afford calibration plus one loop iteration), and remove the assumption that calling polish implies work happened by deriving `polished` from `PolishResult.iters > 0` instead of from having been called."
+    },
+    {
+      "theme": "Some numeric options in the greedy/constrained-polish pipeline are guarded against silently corrupting behavior (k, mind) while their siblings (minDist, priorWeight) are not, so an unchecked value silently changes an algorithm's semantics instead of being refused",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security",
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "`repairDegrees` validates `k` but not `minDist`, so a NaN or negative separation floor makes `distv[v] < minDist` false for every vertex, silently disabling the separation constraint.",
+        "`priorWeight` is finiteness-checked but never sign-checked; a negative value makes `constrainedMeasure` reward breaking prior edges, inverting the documented 'preserve current buddies' contract with no error and no visible signal."
+      ],
+      "remediation": "Remove the asymmetry instead of adding new checks: extend the same guard statement already used for `k` (and for `mind` elsewhere) to also cover `minDist` (reject non-integer/negative) and `priorWeight` (reject/clamp negative), so every numeric option in this call path is refused the same way rather than only some of them."
+    },
+    {
+      "theme": "A size gate meant to bound the cost of an operation runs after the O(m) work it's supposed to bound, so the refusal path itself pays the cost it exists to prevent",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`polishConstrained` derives `m` from `input.edgeList()` (O(m log m) time, O(m) memory) and only then calls `checkPolishSize`, unlike `polish`, which derives the same `m` from the O(n) degree sum precisely to avoid this."
+      ],
+      "remediation": "Delete `polishConstrained`'s separate `m` derivation via `edgeList()` and reuse `polish`'s existing O(n) degree-sum derivation, called before `checkPolishSize`, `checkConstraintIds`, and `checkInputSatisfiesConstraints`, so the two entry points can't diverge again."
+    },
+    {
+      "theme": "A single work-budget constant prices structurally different per-call-site costs in the same units, so its accept-set contains calls far past the wall-clock ceiling the constant was calibrated to",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`MAX_GREEDY_WORK` admits a 114-second synchronous call because `greedyWork`'s `max(edgesAdded, 1)` floor prices `repairDegrees`'s O(n^2) per-vertex-BFS sweep in the same units as ringGreedy's much cheaper cache updates."
+      ],
+      "remediation": "Remove reliance on the shared floor-based cost model for `repairDegrees`: give it its own n cap (as `ringGreedy` already does with MAX_CACHED_N) instead of pricing it through a work formula calibrated on a different call site's cost shape."
+    },
+    {
+      "theme": "A comment states a numeric fact about the codebase that is no longer true, misleading contributors about scope",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment claims DEFAULT_MIN_SEPARATION is shared by 'three generation entry points' but only two exist (greedy.ts:54 and index.ts:164)."
+      ],
+      "remediation": "Delete the stale count from the comment ('the three generation entry points' → 'the generation entry points'), removing the specific number rather than updating it to a value that can drift again."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "preflight-disagrees-with-generation",
+      "theme": "the priorHard flag that promotes soft priors to hard constraints is honoured by exactly one of the several entry points that claim to honour hard constraints, so the feasibility gate and the low-level generators silently disagree with the builder",
+      "file": "lib/src/core/constraints.ts",
+      "line": 248,
+      "summary": "`validateDetailed`/`validate` and the exported primitives `constrainedGreedy`/`polishConstrained` all ignore `Constraints.priorHard`; only `buildConstrainedBuddyGraph` applies `withHardPriors`, so the documented \"authoritative feasibility gate\" passes inputs the builder then refuses, and a direct primitive caller gets soft priors where the flag promises hard.",
+      "failure": "Reproduced (/home/user/ringweave/.review-scratch/priorhard.mjs).\n(a) `const c = new Constraints(6); c.prohibit(0,1); c.addPrior(0,1); c.priorHard = true;` → `validate(c, 3)` returns `[]` (feasible) but `buildConstrainedBuddyGraph(6,3,c).report.refusals` is `[\"pair 0–1 is both required and prohibited\"]`.\n(b) priors `[[0,1],[0,2],[0,3]]` with `priorHard = true` → `validate(c2, 2)` returns `[]` but the builder refuses with `[\"person 0 has 3 required buddies but each person gets 2\"]`.\n(c) `const c3 = new Constraints(6); c3.addPrior(0,3); c3.priorHard = true;` → `constrainedGreedy(6,2,c3)` returns edges `[[0,1],[0,2],[1,4],[2,3],[3,5],[4,5]]` — `hasEdge(0,3) === false`, i.e. the hard prior is absent; `polishConstrained` then accepts that graph without complaint (its always-on `checkInputSatisfiesConstraints` does not consider promoted priors either), while the builder on the same constraints does produce edge 0–3. A UI that preflights with `validate` (as `app/src/io/feasibility.ts` does) would tell the organizer the roster is feasible and then have generation refuse it — the exact silent preflight/authority disagreement `app/src/constraints.ts` warns about in its own header.",
+      "remediation": "Close it once, at the promotion seam rather than at each caller: move `withHardPriors` out of `index.ts` and apply it inside `validateDetailed` (which already receives the `Constraints` and can read `priorHard`), and inside `constrainedGreedy`/`polishConstrained`'s precondition path, so all four entry points reason about the same effective constraint set. Sibling to name before committing: `polishConstrained`'s `checkInputSatisfiesConstraints` and `swapBreaksConstraint` must treat promoted priors as required too, or a hard prior can be swapped away by a direct caller. Mirror in `reference-python/constraints.py` `validate` and regenerate fixtures.",
+      "invariant": "For all n, k and all Constraints c with c.n === n: validate(c, k).length === 0 implies buildConstrainedBuddyGraph(n, k, c).report.refusals.length === 0; and c.priorHard === true implies every pair in c.priorPairs() is an edge of constrainedGreedy(n, k, c) and of polishConstrained(constrainedGreedy(n, k, c), c).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "lower-bound-is-not-a-lower-bound",
+      "theme": "a metric documented as \"0 = provably optimal\" can report better-than-optimal, because the Moore bound is computed for a degree/size combination in which no connected graph exists",
+      "file": "lib/src/core/bounds.ts",
+      "line": 13,
+      "summary": "`mooreLowerBounds(n, 1)` for n ≥ 3 returns a positive `asplLb` derived from a Moore tree that no max-degree-1 graph can realise (a matching is the best possible and is disconnected), so `asplGap` returns a NEGATIVE gap — \"better than provably optimal\" — for the honest within-group ASPL, and `diameterLb` is likewise above anything achievable.",
+      "failure": "Reproduced (/home/user/ringweave/.review-scratch/moore.mjs). The best max-degree-1 graph on n vertices is a perfect matching, whose within-group `allPairsSummary().aspl` is exactly 1:\n  n=3 k=1: asplLb 1.5000, diameterLb 2 → asplGap(1,3,1) = -0.3333\n  n=4 k=1: asplLb 1.6667, diameterLb 2 → asplGap(1,4,1) = -0.4000\n  n=7 k=1: asplLb 1.8333, diameterLb 2 → asplGap(1,7,1) = -0.4545\nThe function's own docstring reserves the `{asplLb: 0, diameterLb: 0}` \"no bound\" signal for k ≤ 0 / n ≤ 1, but k=1 with n ≥ 3 is equally degenerate — no connected graph with max degree 1 exists there at all. Verified mirrored in `reference-python/core.py` (`moore_lower_bounds(3,1) == (1.5, 2)`), so a fix has to go through the oracle. The existing ratchet does not catch it: `optimizer.props.test.ts:538` only asserts `diameterLb <= n - 1`, and its comment (\"A k-regular graph on n vertices always exists for some parity\") is false for k=1, n ≥ 3. No live caller reaches the negative value today — `buildBuddyGraph` always returns a connected graph and `app/src/model.ts assembleMetrics` gates `quality` on `connected` — which is why this is a suggestion rather than blocking; it is a latent recurrence of the \"a split roster scores optimal\" theme this repo has already been burned by.",
+      "remediation": "Extend the degenerate-input guard in `mooreLowerBounds` to every (n, k) for which no connected graph with max degree ≤ k exists — i.e. also `k === 1 && n > 2` — returning the existing `{asplLb: 0, diameterLb: 0}` \"no bound\" signal so `asplGap` yields 0 rather than a negative number. Change `reference-python/core.py moore_lower_bounds` first, regenerate `reference.json`, then mirror. Replace the `diameterLb <= n - 1` assertion with the invariant below so the property, not the k=1 case, is what is ratcheted.",
+      "invariant": "For all integers n ≥ 0 and k ≥ 0 and every Graph g on n vertices with max degree ≤ k: if allPairsSummary(g).aspl is finite then mooreLowerBounds(n, k).asplLb <= allPairsSummary(g).aspl and mooreLowerBounds(n, k).diameterLb <= allPairsSummary(g).diameter — equivalently, asplGap(allPairsSummary(g).aspl, n, k) >= 0 for every such g.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "budget-consumed-entirely-by-setup",
+      "theme": "a bounded budget is spent entirely on setup, buys zero of the work it was granted for, and the result is still reported as done",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 92,
+      "summary": "The anneal temperature calibration is capped by `maxIters` and then subtracted from it, so any iteration budget of 100 or less leaves `loopIters === 0`: polish pays the full budget in `energy()` sweeps, performs no accept/reject decision, returns the input byte-identical, and `buildBuddyGraph` still reports `polished: true`.",
+      "failure": "`trials = Math.min(100, Math.max(10, edges.length), maxIters)` then `loopIters = Math.max(0, maxIters - calibrationSweeps)` gives 0 for every maxIters in [1,100]. Reproduced: `polish(ring(200), {mode:\"anneal\", maxIters: 100})` -> `iters: 0`, output edge list identical to input, 110 ms burned. Reachable straight through the public builder because `boundedPolishIterations` returns <= 100 whenever n*(n+m) >= 8.32e6: `buildBuddyGraph(3000, 2, {polish:true})` takes 7054 ms against 572 ms for `{polish:false}` (12.3x) and returns a byte-identical edge list with `polished: true` and identical `aspl`; `buildBuddyGraph(1700, 4, {polish:true})` 32464 ms vs 19906 ms; `buildBuddyGraph(316, 315, {polish:true})` 12256 ms vs 5715 ms. The guard that should have stopped this is the very fix that created it: `lib/test/optimizer.props.test.ts:491` (\"charges the anneal calibration against the same budget as the loop\") only exercises `maxIters: 0`, so the case where the calibration takes 100% of a POSITIVE budget is untested, and index.ts:178 sets `polished = true` from the fact that `polish` was called rather than from `PolishResult.iters`.",
+      "remediation": "Give the calibration a bounded FRACTION of the budget instead of the whole of it (e.g. `trials = Math.min(100, Math.max(10, edges.length), Math.floor(maxIters / 2))`), and skip anneal calibration entirely (falling back to hill acceptance or the 0.1 default T0) when the budget cannot afford both calibration and at least one loop iteration. Close the sibling in the same change: derive `BuddyResult.polished` from `PolishResult.iters > 0` rather than from having called `polish`, so the flag cannot claim work that did not happen.",
+      "invariant": "For every graph g with at least 2 edges and every requested budget for which `boundedPolishIterations` returns i >= 1, `polish(g, {mode:\"anneal\", maxIters: i}).iters >= 1` — a positive iteration budget always buys at least one optimization iteration, in both modes. And for all (n, k, options), `BuddyResult.polished === true` implies the polish pass performed at least one accept/reject decision, i.e. `polished` is never true while the returned edge list is identical to the pre-polish graph's for reasons of budget.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-non-finite-option",
+      "theme": "a non-finite numeric option silently changes an algorithm's semantics instead of being refused",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 212,
+      "summary": "`repairDegrees` validates `k` but not `minDist`, so a NaN or negative separation floor makes `distv[v] < minDist` false for every vertex, silently disabling the separation constraint and producing a different graph — the exact failure mode the same file's comments say was closed for `mind` here and for `priorWeight` in the constrained polish.",
+      "failure": "`repairDegrees(ring(20), 4, NaN)` returns a graph with girth 3 and 40 edges; `repairDegrees(ring(20), 4, 3)` (the documented default) returns girth 4 and 39 edges. `-Infinity` and `-5` behave identically to NaN. `repairDegrees` is exported public API (its own doc block says so explicitly and lists this failure mode for `k`), and `minDist` is its only numeric parameter with no guard. The result is a silently WRONG graph — triangles where the caller asked for a distance-3 floor — not an ignored option.",
+      "remediation": "Guard `minDist` in the same statement style as `k` at the top of `repairDegrees`: throw on `!Number.isInteger(minDist) || minDist < 0`. This is a one-line subtraction of a hole, not a new abstraction, and it makes the three numeric options of the greedy path (`k`, `mind`, `minDist`) uniformly refusing.",
+      "invariant": "For every exported entry point in lib/src/core, every numeric option that participates in a comparison is refused (throws, or refuses via `Reason`) when it is not a non-negative integer — no such value may produce output that differs from the output for the documented default. Concretely: for all graphs g, all valid k, and all md with `!Number.isInteger(md) || md < 0`, `repairDegrees(g, k, md)` throws.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "size-gate-after-the-work-it-bounds",
+      "theme": "a size gate runs after the O(m) materialization it is supposed to bound",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 162,
+      "summary": "`polishConstrained` derives `m` from `input.edgeList()` — which allocates m two-element arrays and sorts them — and only then calls `checkPolishSize`, so the refusal path pays O(m log m) time and O(m) memory; `polish` deliberately derives the same `m` from the O(n) degree sum precisely to avoid this.",
+      "failure": "`polishConstrained(ring(1_000_000), new Constraints(1_000_000), {iters: 0})` refuses in 150 ms after materializing and sorting 1e6 pair arrays, while `polish(ring(1_000_000), {maxIters: 0})` refuses the same graph in 41 ms without allocating anything m-sized. The cost is unbounded in m: `Graph` places no cap on edge count, so a denser input scales the pre-refusal allocation linearly with no gate in front of it. polish.ts:60 carries the comment explaining exactly why the cheap derivation was chosen there; the constrained sibling was not brought along. The two O(#constraints) precondition scans (`checkConstraintIds` spreads all three pair arrays into one new array) sit in front of the gate for the same reason.",
+      "remediation": "In `polishConstrained`, compute `m` the way `polish` does (`input.degrees().reduce((a, b) => a + b, 0) / 2`) and call `checkPolishSize` before `input.edgeList()`, `checkConstraintIds` and `checkInputSatisfiesConstraints`. Better still, extract the one derivation both entry points use so the two cannot drift again.",
+      "invariant": "In every polish entry point, `checkPolishSize` is reached without executing any allocation or sort proportional to the edge count: `m` is derived from the degree sum (O(n)), and `edgeList()` is never called on a graph the size gate would refuse.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-numeric-option-sign",
+      "theme": "a numeric option meant only to ever help an objective (a soft-penalty weight) has no sign guard, so a negative value silently makes the optimizer actively fight the goal it names, with no error and no visible signal beyond a suspiciously low reported fraction",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 172,
+      "summary": "`priorWeight` on `polishConstrained`/`buildConstrainedBuddyGraph` (the exact knob F9's 'preserve current buddies' toggle drives) is only finiteness-checked (`Number.isFinite(opts.priorWeight)`), never sign-checked. `constrainedMeasure` (line 362) computes `energy += priorWeight * (priors.length - countPresentEdges(g, priors))`: with a negative weight, breaking a prior edge *lowers* the objective, so the swap-polish optimizer is rewarded for destroying prior buddies rather than preserving them — the exact inverse of the documented contract ('Soft penalty weight for keeping prior buddies'). The codebase has already hardened this exact option against the sibling failure (NaN silently disabling the penalty, per the comment at greedy.ts:210) but not against negative values silently inverting it, which is worse: NaN produces a visible no-op, this produces active, silent harm.",
+      "failure": "Reproduced directly against the built lib/dist: 10-person roster, one new person joins, previous edges added as priors on the new 11-person roster, `buildConstrainedBuddyGraph(11, 4, cons, {priorWeight: 2})` reports `priorsKeptFraction: 0.947`; the identical call with `priorWeight: -5` reports `priorsKeptFraction: 0`. No throw, no refusal entry, `report.satisfied` is unaffected (priors are not part of the hard-constraint satisfied check) — a caller reading only `satisfied` sees nothing wrong.",
+      "remediation": "Guard `priorWeight` the same way `mind`/`k` are guarded elsewhere in this file: reject (throw, matching the direct-call contract of `polishConstrained`) or clamp negative values to 0 in both `polishConstrained` (constrainedGreedy.ts:172) and `buildConstrainedBuddyGraph`'s resolution (index.ts:358-359), and extend the existing property test (`constrained.props.test.ts`'s 'a higher prior weight never keeps fewer priors than zero weight') to sweep negative weights so the invariant is ratcheted rather than re-discovered.",
+      "invariant": "for all real priorWeight < 0 passed to polishConstrained/buildConstrainedBuddyGraph, the number of prior pairs present in the output graph must be >= the number present when priorWeight = 0 (i.e., a negative weight must never be honoured as a preservation instruction — it must be refused or clamped, never applied as-is)."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "False numerical claims in comments mislead contributors searching for code scope",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 257,
+      "summary": "Comment claims DEFAULT_MIN_SEPARATION is shared by 'three generation entry points' but only two exist",
+      "failure": "A contributor searching for all usages of DEFAULT_MIN_SEPARATION, expecting to find three sites as the comment states, will look for a third and get confused when only two exist (buildBuddyGraph and ringGreedy). buildConstrainedBuddyGraph accepts but ignores the constant.",
+      "remediation": "Change the comment from 'Shared so the three generation entry points can't drift apart' to 'Shared so the two generation entry points can't drift apart', or remove the count entirely. Verify: grep -n 'DEFAULT_MIN_SEPARATION' lib/src/core/*.ts shows usage at exactly 2 sites (greedy.ts:54 and index.ts:164).",
+      "invariant": "DEFAULT_MIN_SEPARATION is used as a default value in exactly two entry points (buildBuddyGraph at index.ts:164 and ringGreedy at greedy.ts:54), not three",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "preflight-disagrees-with-generation",
+      "theme": "the priorHard flag that promotes soft priors to hard constraints is honoured by exactly one of the several entry points that claim to honour hard constraints, so the feasibility gate and the low-level generators silently disagree with the builder",
+      "file": "lib/src/core/constraints.ts",
+      "line": 248,
+      "summary": "`validateDetailed`/`validate` and the exported primitives `constrainedGreedy`/`polishConstrained` all ignore `Constraints.priorHard`; only `buildConstrainedBuddyGraph` applies `withHardPriors`, so the documented \"authoritative feasibility gate\" passes inputs the builder then refuses, and a direct primitive caller gets soft priors where the flag promises hard.",
+      "failure": "Reproduced (/home/user/ringweave/.review-scratch/priorhard.mjs).\n(a) `const c = new Constraints(6); c.prohibit(0,1); c.addPrior(0,1); c.priorHard = true;` → `validate(c, 3)` returns `[]` (feasible) but `buildConstrainedBuddyGraph(6,3,c).report.refusals` is `[\"pair 0–1 is both required and prohibited\"]`.\n(b) priors `[[0,1],[0,2],[0,3]]` with `priorHard = true` → `validate(c2, 2)` returns `[]` but the builder refuses with `[\"person 0 has 3 required buddies but each person gets 2\"]`.\n(c) `const c3 = new Constraints(6); c3.addPrior(0,3); c3.priorHard = true;` → `constrainedGreedy(6,2,c3)` returns edges `[[0,1],[0,2],[1,4],[2,3],[3,5],[4,5]]` — `hasEdge(0,3) === false`, i.e. the hard prior is absent; `polishConstrained` then accepts that graph without complaint (its always-on `checkInputSatisfiesConstraints` does not consider promoted priors either), while the builder on the same constraints does produce edge 0–3. A UI that preflights with `validate` (as `app/src/io/feasibility.ts` does) would tell the organizer the roster is feasible and then have generation refuse it — the exact silent preflight/authority disagreement `app/src/constraints.ts` warns about in its own header.",
+      "remediation": "Close it once, at the promotion seam rather than at each caller: move `withHardPriors` out of `index.ts` and apply it inside `validateDetailed` (which already receives the `Constraints` and can read `priorHard`), and inside `constrainedGreedy`/`polishConstrained`'s precondition path, so all four entry points reason about the same effective constraint set. Sibling to name before committing: `polishConstrained`'s `checkInputSatisfiesConstraints` and `swapBreaksConstraint` must treat promoted priors as required too, or a hard prior can be swapped away by a direct caller. Mirror in `reference-python/constraints.py` `validate` and regenerate fixtures.",
+      "invariant": "For all n, k and all Constraints c with c.n === n: validate(c, k).length === 0 implies buildConstrainedBuddyGraph(n, k, c).report.refusals.length === 0; and c.priorHard === true implies every pair in c.priorPairs() is an edge of constrainedGreedy(n, k, c) and of polishConstrained(constrainedGreedy(n, k, c), c).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "lower-bound-is-not-a-lower-bound",
+      "theme": "a metric documented as \"0 = provably optimal\" can report better-than-optimal, because the Moore bound is computed for a degree/size combination in which no connected graph exists",
+      "file": "lib/src/core/bounds.ts",
+      "line": 13,
+      "summary": "`mooreLowerBounds(n, 1)` for n ≥ 3 returns a positive `asplLb` derived from a Moore tree that no max-degree-1 graph can realise (a matching is the best possible and is disconnected), so `asplGap` returns a NEGATIVE gap — \"better than provably optimal\" — for the honest within-group ASPL, and `diameterLb` is likewise above anything achievable.",
+      "failure": "Reproduced (/home/user/ringweave/.review-scratch/moore.mjs). The best max-degree-1 graph on n vertices is a perfect matching, whose within-group `allPairsSummary().aspl` is exactly 1:\n  n=3 k=1: asplLb 1.5000, diameterLb 2 → asplGap(1,3,1) = -0.3333\n  n=4 k=1: asplLb 1.6667, diameterLb 2 → asplGap(1,4,1) = -0.4000\n  n=7 k=1: asplLb 1.8333, diameterLb 2 → asplGap(1,7,1) = -0.4545\nThe function's own docstring reserves the `{asplLb: 0, diameterLb: 0}` \"no bound\" signal for k ≤ 0 / n ≤ 1, but k=1 with n ≥ 3 is equally degenerate — no connected graph with max degree 1 exists there at all. Verified mirrored in `reference-python/core.py` (`moore_lower_bounds(3,1) == (1.5, 2)`), so a fix has to go through the oracle. The existing ratchet does not catch it: `optimizer.props.test.ts:538` only asserts `diameterLb <= n - 1`, and its comment (\"A k-regular graph on n vertices always exists for some parity\") is false for k=1, n ≥ 3. No live caller reaches the negative value today — `buildBuddyGraph` always returns a connected graph and `app/src/model.ts assembleMetrics` gates `quality` on `connected` — which is why this is a suggestion rather than blocking; it is a latent recurrence of the \"a split roster scores optimal\" theme this repo has already been burned by.",
+      "remediation": "Extend the degenerate-input guard in `mooreLowerBounds` to every (n, k) for which no connected graph with max degree ≤ k exists — i.e. also `k === 1 && n > 2` — returning the existing `{asplLb: 0, diameterLb: 0}` \"no bound\" signal so `asplGap` yields 0 rather than a negative number. Change `reference-python/core.py moore_lower_bounds` first, regenerate `reference.json`, then mirror. Replace the `diameterLb <= n - 1` assertion with the invariant below so the property, not the k=1 case, is what is ratcheted.",
+      "invariant": "For all integers n ≥ 0 and k ≥ 0 and every Graph g on n vertices with max degree ≤ k: if allPairsSummary(g).aspl is finite then mooreLowerBounds(n, k).asplLb <= allPairsSummary(g).aspl and mooreLowerBounds(n, k).diameterLb <= allPairsSummary(g).diameter — equivalently, asplGap(allPairsSummary(g).aspl, n, k) >= 0 for every such g.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "budget-consumed-entirely-by-setup",
+      "theme": "a bounded budget is spent entirely on setup, buys zero of the work it was granted for, and the result is still reported as done",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 92,
+      "summary": "The anneal temperature calibration is capped by `maxIters` and then subtracted from it, so any iteration budget of 100 or less leaves `loopIters === 0`: polish pays the full budget in `energy()` sweeps, performs no accept/reject decision, returns the input byte-identical, and `buildBuddyGraph` still reports `polished: true`.",
+      "failure": "`trials = Math.min(100, Math.max(10, edges.length), maxIters)` then `loopIters = Math.max(0, maxIters - calibrationSweeps)` gives 0 for every maxIters in [1,100]. Reproduced: `polish(ring(200), {mode:\"anneal\", maxIters: 100})` -> `iters: 0`, output edge list identical to input, 110 ms burned. Reachable straight through the public builder because `boundedPolishIterations` returns <= 100 whenever n*(n+m) >= 8.32e6: `buildBuddyGraph(3000, 2, {polish:true})` takes 7054 ms against 572 ms for `{polish:false}` (12.3x) and returns a byte-identical edge list with `polished: true` and identical `aspl`; `buildBuddyGraph(1700, 4, {polish:true})` 32464 ms vs 19906 ms; `buildBuddyGraph(316, 315, {polish:true})` 12256 ms vs 5715 ms. The guard that should have stopped this is the very fix that created it: `lib/test/optimizer.props.test.ts:491` (\"charges the anneal calibration against the same budget as the loop\") only exercises `maxIters: 0`, so the case where the calibration takes 100% of a POSITIVE budget is untested, and index.ts:178 sets `polished = true` from the fact that `polish` was called rather than from `PolishResult.iters`.",
+      "remediation": "Give the calibration a bounded FRACTION of the budget instead of the whole of it (e.g. `trials = Math.min(100, Math.max(10, edges.length), Math.floor(maxIters / 2))`), and skip anneal calibration entirely (falling back to hill acceptance or the 0.1 default T0) when the budget cannot afford both calibration and at least one loop iteration. Close the sibling in the same change: derive `BuddyResult.polished` from `PolishResult.iters > 0` rather than from having called `polish`, so the flag cannot claim work that did not happen.",
+      "invariant": "For every graph g with at least 2 edges and every requested budget for which `boundedPolishIterations` returns i >= 1, `polish(g, {mode:\"anneal\", maxIters: i}).iters >= 1` — a positive iteration budget always buys at least one optimization iteration, in both modes. And for all (n, k, options), `BuddyResult.polished === true` implies the polish pass performed at least one accept/reject decision, i.e. `polished` is never true while the returned edge list is identical to the pre-polish graph's for reasons of budget.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-non-finite-option",
+      "theme": "a non-finite numeric option silently changes an algorithm's semantics instead of being refused",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 212,
+      "summary": "`repairDegrees` validates `k` but not `minDist`, so a NaN or negative separation floor makes `distv[v] < minDist` false for every vertex, silently disabling the separation constraint and producing a different graph — the exact failure mode the same file's comments say was closed for `mind` here and for `priorWeight` in the constrained polish.",
+      "failure": "`repairDegrees(ring(20), 4, NaN)` returns a graph with girth 3 and 40 edges; `repairDegrees(ring(20), 4, 3)` (the documented default) returns girth 4 and 39 edges. `-Infinity` and `-5` behave identically to NaN. `repairDegrees` is exported public API (its own doc block says so explicitly and lists this failure mode for `k`), and `minDist` is its only numeric parameter with no guard. The result is a silently WRONG graph — triangles where the caller asked for a distance-3 floor — not an ignored option.",
+      "remediation": "Guard `minDist` in the same statement style as `k` at the top of `repairDegrees`: throw on `!Number.isInteger(minDist) || minDist < 0`. This is a one-line subtraction of a hole, not a new abstraction, and it makes the three numeric options of the greedy path (`k`, `mind`, `minDist`) uniformly refusing.",
+      "invariant": "For every exported entry point in lib/src/core, every numeric option that participates in a comparison is refused (throws, or refuses via `Reason`) when it is not a non-negative integer — no such value may produce output that differs from the output for the documented default. Concretely: for all graphs g, all valid k, and all md with `!Number.isInteger(md) || md < 0`, `repairDegrees(g, k, md)` throws.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "size-gate-after-the-work-it-bounds",
+      "theme": "a size gate runs after the O(m) materialization it is supposed to bound",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 162,
+      "summary": "`polishConstrained` derives `m` from `input.edgeList()` — which allocates m two-element arrays and sorts them — and only then calls `checkPolishSize`, so the refusal path pays O(m log m) time and O(m) memory; `polish` deliberately derives the same `m` from the O(n) degree sum precisely to avoid this.",
+      "failure": "`polishConstrained(ring(1_000_000), new Constraints(1_000_000), {iters: 0})` refuses in 150 ms after materializing and sorting 1e6 pair arrays, while `polish(ring(1_000_000), {maxIters: 0})` refuses the same graph in 41 ms without allocating anything m-sized. The cost is unbounded in m: `Graph` places no cap on edge count, so a denser input scales the pre-refusal allocation linearly with no gate in front of it. polish.ts:60 carries the comment explaining exactly why the cheap derivation was chosen there; the constrained sibling was not brought along. The two O(#constraints) precondition scans (`checkConstraintIds` spreads all three pair arrays into one new array) sit in front of the gate for the same reason.",
+      "remediation": "In `polishConstrained`, compute `m` the way `polish` does (`input.degrees().reduce((a, b) => a + b, 0) / 2`) and call `checkPolishSize` before `input.edgeList()`, `checkConstraintIds` and `checkInputSatisfiesConstraints`. Better still, extract the one derivation both entry points use so the two cannot drift again.",
+      "invariant": "In every polish entry point, `checkPolishSize` is reached without executing any allocation or sort proportional to the edge count: `m` is derived from the degree sum (O(n)), and `edgeList()` is never called on a graph the size gate would refuse.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-admits-past-its-stated-ceiling",
+      "theme": "a work budget's units are not rate-comparable across the shapes it admits, so its accept-set contains calls far past its documented wall-clock ceiling",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 81,
+      "summary": "`MAX_GREEDY_WORK` (1.5e10) admits a 114-second single synchronous call: `greedyWork`'s `max(edgesAdded, 1)` floor prices `repairDegrees`'s O(n^2) per-vertex-BFS sweep in the same units as ringGreedy's cache updates, which run roughly 4x faster per unit.",
+      "failure": "`repairDegrees(new Graph(70710), 2)` measured 113752 ms. It is admitted exactly: `greedyWork(70710, 2) = 3 * 70710^2 * max(0, 70710*2/2 - 70710 -> 1) = 1.5e10 = MAX_GREEDY_WORK`. For comparison the same budget number at a dense shape costs far less — `buildBuddyGraph(1000, 12)` (greedyWork 1.5e10) is 30.8 s and `buildBuddyGraph(316, 315)` (1.48e10) is 5.9 s — so one budget number buys wall clocks spanning 19x, and the constant's own comment states \"1e10 is therefore ~60 s worst case\" while the constant shipped is 1.5e10. n=70710 is the exact peak: k=2 is the only degree that engages the `edgesAdded -> 1` floor, and k>=3 drives n below 2155 where the same sweep is trivial. Not reachable from untrusted input in the current tree (no app caller for `repairDegrees`; `ringGreedy`'s internal call is bounded by MAX_CACHED_N=5000), but it is live exported API of a published package.",
+      "remediation": "Charge the sweep in the units it actually costs rather than papering over it with a floor: when `edgesAdded` is 0, `repairDegrees` still performs n `bfsDistances` calls each allocating and filling an `Int32Array(n)`, so the floor term should be scaled to that per-BFS cost — or `repairDegrees` should carry its own n cap, as `ringGreedy` does with MAX_CACHED_N, instead of relying solely on a work model calibrated on a different shape. Whichever is chosen, restate the constant's wall-clock ceiling from the value actually shipped.",
+      "invariant": "",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-numeric-option-sign",
+      "theme": "a numeric option meant only to ever help an objective (a soft-penalty weight) has no sign guard, so a negative value silently makes the optimizer actively fight the goal it names, with no error and no visible signal beyond a suspiciously low reported fraction",
+      "file": "lib/src/core/constrainedGreedy.ts",
+      "line": 172,
+      "summary": "`priorWeight` on `polishConstrained`/`buildConstrainedBuddyGraph` (the exact knob F9's 'preserve current buddies' toggle drives) is only finiteness-checked (`Number.isFinite(opts.priorWeight)`), never sign-checked. `constrainedMeasure` (line 362) computes `energy += priorWeight * (priors.length - countPresentEdges(g, priors))`: with a negative weight, breaking a prior edge *lowers* the objective, so the swap-polish optimizer is rewarded for destroying prior buddies rather than preserving them — the exact inverse of the documented contract ('Soft penalty weight for keeping prior buddies'). The codebase has already hardened this exact option against the sibling failure (NaN silently disabling the penalty, per the comment at greedy.ts:210) but not against negative values silently inverting it, which is worse: NaN produces a visible no-op, this produces active, silent harm.",
+      "failure": "Reproduced directly against the built lib/dist: 10-person roster, one new person joins, previous edges added as priors on the new 11-person roster, `buildConstrainedBuddyGraph(11, 4, cons, {priorWeight: 2})` reports `priorsKeptFraction: 0.947`; the identical call with `priorWeight: -5` reports `priorsKeptFraction: 0`. No throw, no refusal entry, `report.satisfied` is unaffected (priors are not part of the hard-constraint satisfied check) — a caller reading only `satisfied` sees nothing wrong.",
+      "remediation": "Guard `priorWeight` the same way `mind`/`k` are guarded elsewhere in this file: reject (throw, matching the direct-call contract of `polishConstrained`) or clamp negative values to 0 in both `polishConstrained` (constrainedGreedy.ts:172) and `buildConstrainedBuddyGraph`'s resolution (index.ts:358-359), and extend the existing property test (`constrained.props.test.ts`'s 'a higher prior weight never keeps fewer priors than zero weight') to sweep negative weights so the invariant is ratcheted rather than re-discovered.",
+      "invariant": "for all real priorWeight < 0 passed to polishConstrained/buildConstrainedBuddyGraph, the number of prior pairs present in the output graph must be >= the number present when priorWeight = 0 (i.e., a negative weight must never be honoured as a preservation instruction — it must be refused or clamped, never applied as-is)."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "False numerical claims in comments mislead contributors searching for code scope",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 257,
+      "summary": "Comment claims DEFAULT_MIN_SEPARATION is shared by 'three generation entry points' but only two exist",
+      "failure": "A contributor searching for all usages of DEFAULT_MIN_SEPARATION, expecting to find three sites as the comment states, will look for a third and get confused when only two exist (buildBuddyGraph and ringGreedy). buildConstrainedBuddyGraph accepts but ignores the constant.",
+      "remediation": "Change the comment from 'Shared so the three generation entry points can't drift apart' to 'Shared so the two generation entry points can't drift apart', or remove the count entirely. Verify: grep -n 'DEFAULT_MIN_SEPARATION' lib/src/core/*.ts shows usage at exactly 2 sites (greedy.ts:54 and index.ts:164).",
+      "invariant": "DEFAULT_MIN_SEPARATION is used as a default value in exactly two entry points (buildBuddyGraph at index.ts:164 and ringGreedy at greedy.ts:54), not three",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 10,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 10,
+      "skipped": true
+    }
+  },
+  "tokens": {
+    "subagentTokens": 549959,
+    "agents": 5,
+    "toolCalls": 194
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "observations": [
+    {
+      "kind": "self-induction-third-consecutive",
+      "note": "The blocking finding is the previous round fix. Charging the anneal calibration against the loop was right, but capping it at maxIters meant any budget <=100 vanished into setup: loopIters 0, no accept/reject decision, input returned byte-for-byte, polished:true reported. Three consecutive lib rounds where my fix produced the next round blocking finding (r8 greedyWork floor -> r9, r9 calibration -> r10)."
+    }
+  ]
+}

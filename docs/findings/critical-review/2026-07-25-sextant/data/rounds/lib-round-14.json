@@ -1,0 +1,361 @@
+{
+  "target": "lib/src",
+  "round": 14,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 6,
+    "blocking": 0,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 5
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of all 11 files in /home/user/ringweave/lib/src/core (graph, metrics, bounds, budgets, rng, swap, polish, greedy, constraints, constrainedGreedy, index) plus every file in lib/test and reference-python. Reproduced/executed, not reasoned about: (1) oracle parity — regenerated constrained fixtures via gen_fixtures.py into a shadow tree (byte-equal), and re-derived all 8 greedy fixtures with an independent pure-Python port of ring_greedy_cached (numpy absent) — edges and final_mind match; (2) cross-language byte-identity of constrainedGreedy vs Python constrained_gen over 405 random feasible constraint sets (n 4-26, k 0-5) — zero mismatches, legal-edge-maximality held on all; (3) validate message + ordering parity over 3000 random (n,k,req,proh,prior) sets incl. out-of-range ids and self-pairs — zero mismatches; (4) Set/Map iteration-order determinism — 3000 graphs rebuilt in forward/reverse/shuffled edge order, girth, shortestPath (all pairs), eccentricity, allPairsSummary, largestComponentFraction all bit-identical; constraint-insertion-order invariance of buildConstrainedBuddyGraph over 400 scenarios; traced that `stuck` is permanent (legality symmetric and monotone) so forceConnect — the one site where connectedComponents' Set order could leak into output — is unreachable; (5) shortestPath verified lexicographically minimal against full shortest-path enumeration for every (s,t) over 6000 graphs; (6) girth vs a brute-force per-edge-removal shortest-cycle oracle over 20000 graphs, plus a trace showing the parent[u] !== w skip is order-invariant; (7) fragmentation — exhaustive double-edge-swap enumeration over already-disconnected graphs: 1,503,790 swaps searched for a component-count-raising energy improvement and 1,483,627 for a largest-component-shrinking one, none found (this is the only guard polish has); (8) ringGreedy's incremental n x n distance cache verified against a fresh BFS after every edge insertion across 13 (n,k) configs, plus a proof sketch that the in-place row update can only read values corresponding to real walks; (9) displayed-vs-actual — every field of BuddyResult (n 2-26 x k 2-6) and ConstrainedBuddyResult (500 random sets incl. priorHard) recomputed from the returned edge list: aspl, diameter, girth, connected, largestComponentFraction, degrees, regular, buddies, finalMinSeparation === girth-1, asplGap >= 0, degree cap <= k, polished === autoPolishEnabled, report.satisfied composition, priorsKeptFraction recount, refusal placeholders; (10) boundaries — n and k each over {0,1,2,-1,0.5,NaN,+-Infinity,1e9,5000,5001,1000001} checked for three-way agreement between validate, constrainedGreedy (throws) and buildConstrainedBuddyGraph (refuses, never throws); k>=n, k=0/1, empty constraints, mind clamping to floor(n/2), demotion floor at 3; (11) budget arithmetic solved analytically for the window where checkPolishSize passes but boundedPolishIterations returns 0 (n*(n+m) in (2.16e8, 2.88e8]) and confirmed unreachable from either builder, so `polished: true` always means >=1 real iteration. npm test in lib/ green (250 tests). Two known behaviours were deliberately not filed as re-litigation: the seed normalization asymmetry in buildConstrainedBuddyGraph (documented at index.ts:376-380, unreachable because app SEED_MAX = 2**31-1), and Constraints.fromTags' unguarded n (already a logged deferral in lib/CLAUDE.md with no caller outside lib/test).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/lib/src/core (bounds.ts, budgets.ts, constrainedGreedy.ts, constraints.ts, graph.ts, greedy.ts, index.ts, metrics.ts, polish.ts, rng.ts, swap.ts) plus lib/test, built to dist and exercised from node.\n\nGATE-ORDER TRACE (does every size/shape gate run BEFORE the work it bounds?): ringGreedy checks k, mind, k<2, n>MAX_CACHED_N and greedyWork all before ring(n) and before the Int32Array(n*n) allocation — verified by reading and by feeding n=2.5/-0/1e6/NaN. constrainedGreedy.checkWellFormed runs the n cap, k check and MAX_CONSTRAINED_WORK before `new Graph(n)`. validateDetailed refuses MAX_CONSTRAINED_N before the O(n^2) connectivity walk and before requiredDegree()/prohibitedDegree() allocate Array(n). buildConstrainedBuddyGraph refuses malformed n before the n!==cons.n compare and before any n-sized allocation; refusedResult is bounded by MAX_CONSTRAINED_N not MAX_ROSTER. polish/polishConstrained call checkPolishSize before energy()/copy(). Constraints.fromTags is the one entry point with no n gate at all.\n\nWORK-BUDGET MEASUREMENTS (worst admitted shapes, to test whether documented ceilings still hold): buildBuddyGraph(5000,2) 1.9s; (1500,4) 14.9s; (2100,3) 20.1s at 1.389e10 of a 1.5e10 budget; (1000,12) 36.5s at the calibration point — all inside the \"~60 s worst case\" the constant documents. buildConstrainedBuddyGraph(5000,4) 15.7s and (464,463) 46.1s — matching the documented ~13s/~46s corners exactly. repairDegrees refusals: edgeless(1e6,2) threw at 9.9s, ring(1e6,4) at 6.1s, clique(3000)+200k leaves at 3.0s — every refusal under the documented 10s. polish(ring(40000)) refused instantly; polish(ring(10000),{maxIters:1e9}) 7.5s.\n\nATTACKER-CHOSEN NUMBERS: minSeparation is the one generation knob that escapes the cost model (it drives the demote loop, whose sweeps are not priced by greedyWork). I derived the extra as bounded by n^3/2 against a modelled 1.5*n^3*(k-2), then measured it: (2100,3,minSeparation:1e9) 22.3s vs 20.1s default; (1000,12,minSeparation:1e9) 35.0s vs 36.5s default; (1500,4,minSeparation:1e9) 15.1s vs 14.9s. Not an amplifier. k=2**31, polishIters=2**53/Infinity/NaN, seed=2**32/-0/0.5, priorWeight=-1/NaN/Infinity, n=-0 all resolve through the documented throw/normalise/refuse paths.\n\nFUZZING: 4000 random constrained builds (random prohibited/required/prior sets, priorHard, hostile option values) — zero throws out of the refuse-only entry point, zero prohibited-present, zero required-missing, zero degree>k, no \"satisfied but disconnected\". Exhaustive buildBuddyGraph sweep n in [0,24] x k in [2,7] x 5 option sets — no NaN in aspl/diameter/girth/asplGap/degrees/finalMinSeparation/largestComponentFraction, adjacency symmetric, no negative asplGap, finalMinSeparation === girth-1 wherever girth is finite. 1500 random polish runs — degrees preserved, no connected graph ever returned disconnected, input never mutated. 800 constrainedGreedy+polishConstrained pairs — hard constraints and degree sequence preserved.\n\nALSO CHECKED AND FOUND SOUND: pairKey/keyToPair round-trip under -0, NaN, Infinity and huge magnitudes (all land on structural refusals); connectivityReasons' isProhibited call count is bounded by n + prohibitedCount because !seen[v] is tested first (measured 71ms at n=5000); the constrained completionCap n*k*6 can never bind since every non-breaking step adds exactly one edge; forceConnect is inert because completion is legal-edge-maximal; the uncharged countPresentEdges prior term in constrainedMeasure is provably <= half the modelled per-iteration cost; edgeList's O(m log m) and copy's O(n+m) are dominated by n(n+m) for every n >= 20; mooreLowerBounds' k=2 O(n) branch is capped by MAX_ROSTER and the non-integer-k denormal fixed point is guarded. No recursion anywhere, so no stack-depth hang. Untrusted-text-to-spreadsheet-sink has no surface here: the core handles only numbers and never produces a string from caller data other than error messages.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Read every file under lib/src/core (graph.ts, greedy.ts, polish.ts, swap.ts, rng.ts, metrics.ts, bounds.ts, constraints.ts, constrainedGreedy.ts, budgets.ts, index.ts) and lib/test's oracle/property suites, plus lib/CLAUDE.md and docs/PROJECT_PLAN.md to identify the next actually-committed change. Traced two concrete extension attempts against the real code rather than reading down a checklist: (1) added a second TagPolicy case through the declared constraints.ts OCP seam and grepped the whole repo (lib/ and app/) for every caller of TagPolicy/fromTags to see whether the seam is exercised by anything live; (2) traced what implementing F11 (construction replay — PROJECT_PLAN.md explicitly reclassifies this as core work, not UI-only, because Graph.edgeList() returns a canonical sort, not a construction trace) would require by walking ringGreedy's edge-adding loop, repairDegrees's loop, and both polish.ts's and constrainedGreedy.ts's accept/revert/best-copy loops line by line, then confirmed against PolishResult's actual field set in polish.ts:40-45. Also checked whether Graph itself would need to grow trace-tracking (it would not — the natural design keeps that in the algorithm functions, which is a point in the architecture's favor, not a finding). Did not find a fresh violation of the greedy/polish hot-loop no-comment-hiding-a-bug kind; the code is unusually heavily hardened by prior rounds (visible in the density of \"here's the bug this used to be\" comments), so most remaining surface is either already-documented in lib/CLAUDE.md's Known Limitations (not re-filed) or genuinely clean.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "An attacker-chosen roster size (n) drives O(n) loop trips and O(n^2) Set insertion inside Constraints.fromTags before any size gate can see or refuse it — every sibling entry point in the same module (degreeOf, Graph ctor, validate, ringGreedy, constrainedGreedy) checks n first; fromTags alone does not.",
+      "severity": "deferral",
+      "findingSummaries": [
+        "`Constraints.fromTags` is the only entry point in the core that takes a roster size on faith. `degreeOf` in the same file, the `Graph` constructor, `validate`, `ringGreedy` and `constrainedGreedy` all guard `n` first; `fromTags` runs `for (let i = 0; i < n; i++)` with no validation and inserts one Set key per same-tag pair, so both the loop trip count and the O(n^2) materialization are paid inside the constructor — `validate`'s MAX_CONSTRAINED_N refusal only ever sees the result. This is the documented deferral in lib/CLAUDE.md; re-verified it still reproduces and re-verified the no-caller condition it rests on (grep across app/src and lib/src finds references only in lib/test), so it stays a deferral rather than becoming gating."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Move the same n-guard every other function in the module already has (`Number.isInteger(n) && n >= 0 && n <= MAX_CONSTRAINED_N`) to the first statement of `fromTags`, throwing before the loop instead of letting `validate` catch the result afterward — this removes the double-loop's ability to run on an unchecked n rather than adding a new counting pass."
+    },
+    {
+      "theme": "A polish-budget gate accepts a call whose own derived iteration count is provably zero, so an admitted call still pays the fixed all-pairs sweep and copy cost to return its input unchanged.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`checkPolishSize` and `boundedPolishIterations` split one budget: the size gate charges FIXED_POLISH_SWEEPS * n * (n+m) and the iteration count is derived from what's left of `loopBudget`. For n*(n+m) in the band (MAX_POLISH_WORK-64)/4 < n*(n+m) <= MAX_POLISH_WORK/3, the size gate admits and the derived iteration count is exactly 0, so `polish`/`polishConstrained` pay the full fixed sweeps and two graph copies to return their input byte-for-byte. optimizer.props.test.ts:405 pins the zero-iteration collapse as intended; what's unguarded is that the call is still accepted and still charged for it. Not reachable from either public builder today (their admitted n*(n+m) tops out an order of magnitude below the threshold)."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Fold the two checks into one: have `checkPolishSize` refuse whenever `boundedPolishIterations(n, m, requested, fallback) < 1`, using the same budget in its message — this removes the gap between the two gates rather than adding a combined-check abstraction, since the accept path already computes the derived count and only needs to consult it before returning."
+    },
+    {
+      "theme": "The core's only cited open/closed extension seam (fromTags's TagPolicy switch) has no real caller anywhere, so its claimed 'this seam pays' evidence is structural only and untested by any product usage.",
+      "severity": "deferral",
+      "findingSummaries": [
+        "TagPolicy (line 46) is a union of exactly one string literal (\"prohibit_same\"), and Constraints.fromTags's switch (lines 114-126) has exactly one case plus a default throw. A trial second case (\"require_same\") required touching only this switch and the union — no file in lib/src or app/ references TagPolicy or calls fromTags outside lib/test/constrained.test.ts. The switch is structurally trivial to extend (real evidence for the CLAUDE.md OCP claim), but fromTags itself has no live caller anywhere in app/, and no product requirement (PROJECT_PLAN.md F7) names a second policy today."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "No code change now; when F7 gives fromTags a real caller, drop today's speculative-extension trial rather than keep validating an unused second branch — re-derive the OCP claim only against whichever policy actually ships, at the same time the n-guard hardening (from the unbounded-work theme) is finally added to fromTags."
+    },
+    {
+      "theme": "Both swap-polish loops (polish() and polishConstrained()) return a mid-search energy-best snapshot rather than the terminal state of their own accepted-swap trajectory, and expose no field marking where the two diverge — a gap the project's own next roadmap item (F11 construction replay) will hit if it traces these loops the obvious way.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "polish.ts's `g` (the live mutating graph) keeps advancing after `best` is last updated, because Metropolis accepts non-improving moves that mutate `g` but never touch `best` — the loop can run thousands more accepted swaps on `g` after the swap that produced the returned `best = g.copy()`. `PolishResult`'s `iters` is the total loop count, not the index at which `best` was captured. `polishConstrained` in constrainedGreedy.ts has the identical shape and its return type carries no run-level metrics at all. A naive F11 trace (record every applied swap, replay start-to-finish) reconstructs the fully-mutated final `g`, which is NOT the graph either function actually returns."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "Before any F11 tracing work begins, cut the loops off at the point they already stop mattering: once `best` is last updated in polish()/polishConstrained(), the remaining accepted-but-not-best swaps are wasted work relative to what's returned — truncate the run (or the future trace) at that index rather than letting the search continue past its own answer, removing the divergence instead of exposing a new field to describe it."
+    },
+    {
+      "theme": "Comments in index.ts overstate uniformity of how degraded or refused input is represented across output fields and options, obscuring real per-field and per-option differences a maintainer needs to know.",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "Comment at lines 285-286 falsely claims the `buddies` field is empty when input is refused; it is actually an n-length array of empty arrays, not an empty array.",
+        "Comment at lines 370-371 misleadingly claims `polishIters`, `minSeparation`, and `priorWeight` are all handled identically as 'ignored, not fatal', but they are in fact handled by three different mechanisms."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Delete both blanket 'empty'/'ignored, not fatal' comments and let each field's actual shape speak for itself at its own line (empty edges array; n empty buddy sublists; polishIters falls back to default; minSeparation and priorWeight are dropped) — removing the false generalization is the fix, not writing a longer accurate one to replace it."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-admits-work-that-cannot-produce-a-result",
+      "theme": "a cost gate admits a call that provably cannot do any of the work it is charging for",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 275,
+      "summary": "`checkPolishSize` and `boundedPolishIterations` split one budget: the size gate charges FIXED_POLISH_SWEEPS * n * (n+m) and the iteration count is derived from `loopBudget` — what is left. That correctly stops the two gates summing past MAX_POLISH_WORK, but nothing asks whether anything is left. For n*(n+m) in the band (MAX_POLISH_WORK - 64)/4 < n*(n+m) <= MAX_POLISH_WORK/3, the size gate admits and the derived iteration count is exactly 0, so `polish`/`polishConstrained` pay the full fixed all-pairs sweeps and two graph copies to return their input byte-for-byte. optimizer.props.test.ts:405 pins `boundedPolishIterations(16000, 16000, 20000, 20000) === 0` as the intended collapse, so the zero is deliberate; what is unguarded is that the call is still ACCEPTED and still pays for it. This is public-API-only: I derived that neither builder can reach the band (buildBuddyGraph's admitted set caps n*(n+m) at ~5.2e7 and buildConstrainedBuddyGraph's at 7.5e7, both an order of magnitude below the 2.16e8 threshold), so it is not reachable from an imported file today.",
+      "failure": "`polish(ring(11000), { maxIters: 20000 })` — n*(n+m) = 2.42e8, fixed sweeps 7.26e8 against a budget of 8.65e8, so `checkPolishSize` admits — runs for 6.68 s and returns `iters: 0` with an edge list identical to its input. `polishConstrained(ring(11000), new Constraints(11000), { iters: 8000 })` is the worse half: 3.37 s, input returned unchanged, and because it returns a bare `Graph` with no iteration count there is nothing in the return value that distinguishes it from a pass that did work — the exact 'silent no-op sold as work' shape polish.ts's own numbered comment 3 treats as a defect. By contrast `polish(ring(9500))` (n*(n+m) = 1.805e8, just below the band) spends a comparable 7.18 s and does get its 1 iteration.",
+      "remediation": "Make the accept-set answer the whole question in one place: have `checkPolishSize` (or a single combined `checkPolishBudget(n, m, requested, fallback)`) refuse when `boundedPolishIterations(n, m, requested, fallback) < 1`, with a message naming the same budget — 'the fixed sweeps leave nothing for the loop at (n, m)'. That is not a new constant and it cannot refuse anything the loop would have accepted, since by construction the loop would have run zero times. If refusing is judged too strong for a pass documented as best-effort, return before `energy()`/`copy()` instead, so an admitted-but-idle call is O(1) rather than three all-pairs sweeps.",
+      "invariant": "For all (n, m, requested >= 1): if `checkPolishSize(n, m)` does not throw, then `boundedPolishIterations(n, m, requested, fallback) - calibrationSweeps >= 1`. Equivalently, for every graph and options on which `polish` returns normally, `result.iters >= 1` whenever `maxIters >= 1` — no accepted call performs the O(n*(n+m)) fixed sweeps and then runs zero accept/reject decisions."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "return-value-divergence",
+      "theme": "Both swap-polish passes return a mid-search energy-best snapshot, not the terminal state of their own accepted-swap trajectory, and nothing in their public result exposes where the two diverge — which is exactly the gap the project's own next roadmap item (F11 construction replay) will hit if it instruments these loops the obvious way",
+      "file": "lib/src/core/polish.ts",
+      "line": 134,
+      "summary": "PROJECT_PLAN.md's F11 entry states plainly that replay needs a construction trace and that this is core work, not UI-only, because Graph.edgeList() only returns a canonical sort. I traced what the natural fix looks like: ringGreedy's for(;;) loop (greedy.ts:171-185) and repairDegrees's pass loop (greedy.ts:265-314) each add edges in a genuine causal order that a trace can record cheaply (O(1) per edge, off the O(n²) hot inner loops) and that order IS the graph returned. polish.ts's loop is different in kind: `g` (the live mutating graph, polish.ts:115-150) keeps advancing after `best` is last updated — Metropolis accepts non-improving moves (line 131) that mutate `g` but never touch `best` — so the loop can run thousands of further accepted-and-kept swaps on `g` after the swap that produced the returned `best` (polish.ts:136-140, `best = g.copy()`). The function returns `best`, not `g`. `PolishResult`'s fields are exactly `{ graph, aspl, connected, iters }` (polish.ts:40-45) — `iters` is the total loop count that ran, not the index at which `best` was captured. `polishConstrained` in constrainedGreedy.ts has the identical shape (constrainedGreedy.ts:220-228, `best = g.copy()` on `next.energy < bestEnergy`), and its return type carries no run-level metrics at all (module comment at constrainedGreedy.ts:139-141 explicitly says so). A naive implementation of F11's trace — record every applied (non-reverted) swap in loop order and replay it start-to-finish — reconstructs the fully-mutated final `g`, which is NOT the graph either function actually returns to its caller.",
+      "failure": "Recording swap trace S (every applied, non-reverted swap in polish's loop, in order) and replaying all of S against the input graph produces a graph edge-set-identical to the loop's final `g`, which for a typical anneal run (Metropolis accepts moves worse than best) differs from PolishResult.graph (the returned `best`). Concretely: with mode:'anneal' and enough iterations after the last improving accept, `S` replayed in full will diverge from `res.graph`'s edge set, while no field of `res` names the prefix length of `S` that does reconstruct it.",
+      "remediation": "Before instrumenting these loops for F11, add the missing correspondence explicitly rather than reconstructing it after the fact: track the loop index (or a running prefix pointer into the swap trace) at the moment `best` is updated in both polish() and polishConstrained(), and expose it (e.g. `PolishResult.bestAtIter` or by truncating the trace itself to that point before returning it). This is cheap — it's an integer already implicitly known at `best = g.copy()` — and doing it there avoids a caller having to re-simulate the search or diff two graphs to find where 'the construction of the returned graph' actually ends.",
+      "invariant": "For the ordered list S of every applied-and-not-reverted swap in polish's loop, there exists an index i (0 <= i <= |S|) such that replaying S[0..i] onto the loop's starting graph yields an edge set identical to PolishResult.graph's; today no field of PolishResult (or the constrainedGreedy.ts equivalent) lets a caller recover i without independently re-deriving it."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Documentation states both buddies and edges fields are empty when build fails, but only edges is actually empty; buddies is an array of n empty arrays, creating false expectations",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 285,
+      "summary": "Comment falsely claims buddies field is empty when input is refused; it is actually an n-length array of empty arrays, not empty",
+      "failure": "buildConstrainedBuddyGraph(11, 4, new Constraints(11)) when refused returns result.buddies as [[], [], ...] (length 11), not []; comment claims it should be empty like edges",
+      "remediation": "Change lines 285-286 comment from 'buddies/edges are empty' to 'edges is empty and each person's buddy list is empty (buddies contains n empty arrays)' or similar. Alternatively: provide truly empty buddies array when refused (breaking change for callers checking .length)",
+      "invariant": "When result.report.refusals.length > 0, result.edges must be [] (confirmed) AND result.buddies must either be [] OR contain n empty arrays; documentation must match implementation",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Comment equates three different option handling strategies as equivalent, obscuring actual implementation differences that a maintainer must understand",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 370,
+      "summary": "Comment misleadingly claims polishIters, minSeparation, and priorWeight are all handled identically as 'ignored, not fatal', but they are handled differently",
+      "failure": "polishIters uses boundedPolishIterations which clamps/normalizes via logic; minSeparation passes through to constrainedGreedy which explicitly ignores it with no validation; priorWeight is normalized to 0 here before passing. Comment falsely suggests identical treatment",
+      "remediation": "Replace lines 370-371 with accurate comment naming the actual behaviors: 'this entry point normalises bad input (consistent with how polishIters falls back to default and how minSeparation is ignored), so it never throws'",
+      "invariant": "Each option (polishIters, minSeparation, priorWeight) must have a clear documented behavior in code comments that accurately reflects how it is actually validated/normalized/ignored; no two should be grouped as equivalent unless their handling is actually identical",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-gate",
+      "theme": "an attacker-chosen size drives unbounded work before any gate can refuse it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` is the only entry point in the core that takes a roster size on faith. `degreeOf` in the same file, the `Graph` constructor, `validate`, `ringGreedy` and `constrainedGreedy` all guard `n` first; `fromTags` runs `for (let i = 0; i < n; i++)` with no validation and inserts one Set key per same-tag pair, so both the loop trip count and the O(n^2) materialization are paid inside the constructor — `validate`'s MAX_CONSTRAINED_N refusal only ever sees the result. This is the documented deferral in lib/CLAUDE.md; I re-verified it still reproduces and re-verified the no-caller condition it rests on (grep across app/src and lib/src finds references only in lib/test), so it stays a deferral rather than becoming gating.",
+      "failure": "Measured against the built dist: `Constraints.fromTags(1e9, [])` spins a bare 1e9-iteration loop for 2.8 s and returns — linear in an unvalidated argument, so 1e15 is ~46 days and there is no gate anywhere on the path. `Constraints.fromTags(20000, new Array(20000).fill('A'))` runs 17.1 s and then dies with `RangeError: Set maximum size exceeded` — an uncatchable-by-design failure that happens strictly before any caller could invoke `validate`, which would have refused n=20000 against MAX_CONSTRAINED_N in microseconds. `fromTags(3000, Array(3000).fill('A'))` builds 4,498,500 keys in 4.0 s. Separately, `fromTags(4, [NaN,NaN,NaN,NaN])` yields prohibitedCount 0 because NaN !== NaN, silently inverting the `prohibit_same` policy for a numeric tag column.",
+      "remediation": "Guard `n` as the first statement, with the same predicate the rest of the module uses (`Number.isInteger(n) && n >= 0 && n <= MAX_CONSTRAINED_N`), and throw the module's own message rather than letting the loop run. Then pre-count group sizes in one O(n) pass and refuse against an explicit pair cap BEFORE entering the double loop, so the cost is decided from the counts and never from the insertions. Normalize NaN (and any non-finite numeric tag) to `null` in `tagOf`, so an ungroupable value means \"no group\" instead of silently prohibiting nothing.",
+      "invariant": "For all (n, tags, policy): `Constraints.fromTags` either throws before its first `prohibit()` call, or n is an integer in [0, MAX_CONSTRAINED_N] and the returned `prohibitedCount` is <= a declared pair cap. Equivalently: the number of loop iterations and Set insertions performed by `fromTags` is bounded by a constant independent of the caller's `n`, for every input on which it does not throw."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "gate-admits-work-that-cannot-produce-a-result",
+      "theme": "a cost gate admits a call that provably cannot do any of the work it is charging for",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 275,
+      "summary": "`checkPolishSize` and `boundedPolishIterations` split one budget: the size gate charges FIXED_POLISH_SWEEPS * n * (n+m) and the iteration count is derived from `loopBudget` — what is left. That correctly stops the two gates summing past MAX_POLISH_WORK, but nothing asks whether anything is left. For n*(n+m) in the band (MAX_POLISH_WORK - 64)/4 < n*(n+m) <= MAX_POLISH_WORK/3, the size gate admits and the derived iteration count is exactly 0, so `polish`/`polishConstrained` pay the full fixed all-pairs sweeps and two graph copies to return their input byte-for-byte. optimizer.props.test.ts:405 pins `boundedPolishIterations(16000, 16000, 20000, 20000) === 0` as the intended collapse, so the zero is deliberate; what is unguarded is that the call is still ACCEPTED and still pays for it. This is public-API-only: I derived that neither builder can reach the band (buildBuddyGraph's admitted set caps n*(n+m) at ~5.2e7 and buildConstrainedBuddyGraph's at 7.5e7, both an order of magnitude below the 2.16e8 threshold), so it is not reachable from an imported file today.",
+      "failure": "`polish(ring(11000), { maxIters: 20000 })` — n*(n+m) = 2.42e8, fixed sweeps 7.26e8 against a budget of 8.65e8, so `checkPolishSize` admits — runs for 6.68 s and returns `iters: 0` with an edge list identical to its input. `polishConstrained(ring(11000), new Constraints(11000), { iters: 8000 })` is the worse half: 3.37 s, input returned unchanged, and because it returns a bare `Graph` with no iteration count there is nothing in the return value that distinguishes it from a pass that did work — the exact 'silent no-op sold as work' shape polish.ts's own numbered comment 3 treats as a defect. By contrast `polish(ring(9500))` (n*(n+m) = 1.805e8, just below the band) spends a comparable 7.18 s and does get its 1 iteration.",
+      "remediation": "Make the accept-set answer the whole question in one place: have `checkPolishSize` (or a single combined `checkPolishBudget(n, m, requested, fallback)`) refuse when `boundedPolishIterations(n, m, requested, fallback) < 1`, with a message naming the same budget — 'the fixed sweeps leave nothing for the loop at (n, m)'. That is not a new constant and it cannot refuse anything the loop would have accepted, since by construction the loop would have run zero times. If refusing is judged too strong for a pass documented as best-effort, return before `energy()`/`copy()` instead, so an admitted-but-idle call is O(1) rather than three all-pairs sweeps.",
+      "invariant": "For all (n, m, requested >= 1): if `checkPolishSize(n, m)` does not throw, then `boundedPolishIterations(n, m, requested, fallback) - calibrationSweeps >= 1`. Equivalently, for every graph and options on which `polish` returns normally, `result.iters >= 1` whenever `maxIters >= 1` — no accepted call performs the O(n*(n+m)) fixed sweeps and then runs zero accept/reject decisions."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unexercised-ocp-seam",
+      "theme": "The tag-policy switch that lib/CLAUDE.md names as the core's genuine open/closed seam has never been exercised by a real caller, so its 'this seam pays' claim is asserted, not demonstrated",
+      "file": "lib/src/core/constraints.ts",
+      "line": 46,
+      "summary": "TagPolicy (line 46) is a union of exactly one string literal (\"prohibit_same\"), and Constraints.fromTags's switch (lines 114-126) has exactly one case plus a default throw. I added a second case (\"require_same\", compiling same-tag groups to required rather than prohibited pairs) as a trial extension: it required touching only this one switch and the TagPolicy union — no other file in lib/src or app/ references TagPolicy or calls fromTags outside lib/test/constrained.test.ts (grep across the whole repo confirms zero non-test callers). Structurally the switch is trivial to extend, which is real evidence for the CLAUDE.md claim; but because fromTags itself has no live caller anywhere in app/ (confirmed by grep, and independently noted in lib/CLAUDE.md's own 'fromTags has no caller outside lib/test' line about a different defect), the seam's payoff is currently untested by any real usage pattern, and a second policy has no product requirement to satisfy today (PROJECT_PLAN.md F7 only ever names prohibit_same for households/teams/shifts).",
+      "failure": "Not a functional failure — a documentation/confidence gap: reviewers and future contributors are told 'add a case, don't edit callers' as a proven property of this codebase, but no caller has ever forced that path to prove itself, and TagPolicy's single-literal union type provides no compiler pressure to add anything either.",
+      "invariant": "caseOnly — no behavioural invariant is violated; the observation is that grep for 'fromTags(' outside lib/test/ and lib/src/ returns zero matches, which is mechanically checkable but does not gate correctness.",
+      "remediation": "No action needed now. When F7's tag UI actually lands and fromTags gets a real caller, re-verify the OCP claim against whatever second policy first ships (if any) rather than assuming today's structural ease transfers unchanged once fromTags carries the hardening lib/CLAUDE.md already flags as owed at that point (n-guard, dominant-tag O(n²) cap, NaN handling).",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "return-value-divergence",
+      "theme": "Both swap-polish passes return a mid-search energy-best snapshot, not the terminal state of their own accepted-swap trajectory, and nothing in their public result exposes where the two diverge — which is exactly the gap the project's own next roadmap item (F11 construction replay) will hit if it instruments these loops the obvious way",
+      "file": "lib/src/core/polish.ts",
+      "line": 134,
+      "summary": "PROJECT_PLAN.md's F11 entry states plainly that replay needs a construction trace and that this is core work, not UI-only, because Graph.edgeList() only returns a canonical sort. I traced what the natural fix looks like: ringGreedy's for(;;) loop (greedy.ts:171-185) and repairDegrees's pass loop (greedy.ts:265-314) each add edges in a genuine causal order that a trace can record cheaply (O(1) per edge, off the O(n²) hot inner loops) and that order IS the graph returned. polish.ts's loop is different in kind: `g` (the live mutating graph, polish.ts:115-150) keeps advancing after `best` is last updated — Metropolis accepts non-improving moves (line 131) that mutate `g` but never touch `best` — so the loop can run thousands of further accepted-and-kept swaps on `g` after the swap that produced the returned `best` (polish.ts:136-140, `best = g.copy()`). The function returns `best`, not `g`. `PolishResult`'s fields are exactly `{ graph, aspl, connected, iters }` (polish.ts:40-45) — `iters` is the total loop count that ran, not the index at which `best` was captured. `polishConstrained` in constrainedGreedy.ts has the identical shape (constrainedGreedy.ts:220-228, `best = g.copy()` on `next.energy < bestEnergy`), and its return type carries no run-level metrics at all (module comment at constrainedGreedy.ts:139-141 explicitly says so). A naive implementation of F11's trace — record every applied (non-reverted) swap in loop order and replay it start-to-finish — reconstructs the fully-mutated final `g`, which is NOT the graph either function actually returns to its caller.",
+      "failure": "Recording swap trace S (every applied, non-reverted swap in polish's loop, in order) and replaying all of S against the input graph produces a graph edge-set-identical to the loop's final `g`, which for a typical anneal run (Metropolis accepts moves worse than best) differs from PolishResult.graph (the returned `best`). Concretely: with mode:'anneal' and enough iterations after the last improving accept, `S` replayed in full will diverge from `res.graph`'s edge set, while no field of `res` names the prefix length of `S` that does reconstruct it.",
+      "remediation": "Before instrumenting these loops for F11, add the missing correspondence explicitly rather than reconstructing it after the fact: track the loop index (or a running prefix pointer into the swap trace) at the moment `best` is updated in both polish() and polishConstrained(), and expose it (e.g. `PolishResult.bestAtIter` or by truncating the trace itself to that point before returning it). This is cheap — it's an integer already implicitly known at `best = g.copy()` — and doing it there avoids a caller having to re-simulate the search or diff two graphs to find where 'the construction of the returned graph' actually ends.",
+      "invariant": "For the ordered list S of every applied-and-not-reverted swap in polish's loop, there exists an index i (0 <= i <= |S|) such that replaying S[0..i] onto the loop's starting graph yields an edge set identical to PolishResult.graph's; today no field of PolishResult (or the constrainedGreedy.ts equivalent) lets a caller recover i without independently re-deriving it."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "Documentation states both buddies and edges fields are empty when build fails, but only edges is actually empty; buddies is an array of n empty arrays, creating false expectations",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 285,
+      "summary": "Comment falsely claims buddies field is empty when input is refused; it is actually an n-length array of empty arrays, not empty",
+      "failure": "buildConstrainedBuddyGraph(11, 4, new Constraints(11)) when refused returns result.buddies as [[], [], ...] (length 11), not []; comment claims it should be empty like edges",
+      "remediation": "Change lines 285-286 comment from 'buddies/edges are empty' to 'edges is empty and each person's buddy list is empty (buddies contains n empty arrays)' or similar. Alternatively: provide truly empty buddies array when refused (breaking change for callers checking .length)",
+      "invariant": "When result.report.refusals.length > 0, result.edges must be [] (confirmed) AND result.buddies must either be [] OR contain n empty arrays; documentation must match implementation",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment",
+      "theme": "Comment equates three different option handling strategies as equivalent, obscuring actual implementation differences that a maintainer must understand",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 370,
+      "summary": "Comment misleadingly claims polishIters, minSeparation, and priorWeight are all handled identically as 'ignored, not fatal', but they are handled differently",
+      "failure": "polishIters uses boundedPolishIterations which clamps/normalizes via logic; minSeparation passes through to constrainedGreedy which explicitly ignores it with no validation; priorWeight is normalized to 0 here before passing. Comment falsely suggests identical treatment",
+      "remediation": "Replace lines 370-371 with accurate comment naming the actual behaviors: 'this entry point normalises bad input (consistent with how polishIters falls back to default and how minSeparation is ignored), so it never throws'",
+      "invariant": "Each option (polishIters, minSeparation, priorWeight) must have a clear documented behavior in code comments that accurately reflects how it is actually validated/normalized/ignored; no two should be grouped as equivalent unless their handling is actually identical",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-gate",
+      "theme": "an attacker-chosen size drives unbounded work before any gate can refuse it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` is the only entry point in the core that takes a roster size on faith. `degreeOf` in the same file, the `Graph` constructor, `validate`, `ringGreedy` and `constrainedGreedy` all guard `n` first; `fromTags` runs `for (let i = 0; i < n; i++)` with no validation and inserts one Set key per same-tag pair, so both the loop trip count and the O(n^2) materialization are paid inside the constructor — `validate`'s MAX_CONSTRAINED_N refusal only ever sees the result. This is the documented deferral in lib/CLAUDE.md; I re-verified it still reproduces and re-verified the no-caller condition it rests on (grep across app/src and lib/src finds references only in lib/test), so it stays a deferral rather than becoming gating.",
+      "failure": "Measured against the built dist: `Constraints.fromTags(1e9, [])` spins a bare 1e9-iteration loop for 2.8 s and returns — linear in an unvalidated argument, so 1e15 is ~46 days and there is no gate anywhere on the path. `Constraints.fromTags(20000, new Array(20000).fill('A'))` runs 17.1 s and then dies with `RangeError: Set maximum size exceeded` — an uncatchable-by-design failure that happens strictly before any caller could invoke `validate`, which would have refused n=20000 against MAX_CONSTRAINED_N in microseconds. `fromTags(3000, Array(3000).fill('A'))` builds 4,498,500 keys in 4.0 s. Separately, `fromTags(4, [NaN,NaN,NaN,NaN])` yields prohibitedCount 0 because NaN !== NaN, silently inverting the `prohibit_same` policy for a numeric tag column.",
+      "remediation": "Guard `n` as the first statement, with the same predicate the rest of the module uses (`Number.isInteger(n) && n >= 0 && n <= MAX_CONSTRAINED_N`), and throw the module's own message rather than letting the loop run. Then pre-count group sizes in one O(n) pass and refuse against an explicit pair cap BEFORE entering the double loop, so the cost is decided from the counts and never from the insertions. Normalize NaN (and any non-finite numeric tag) to `null` in `tagOf`, so an ungroupable value means \"no group\" instead of silently prohibiting nothing.",
+      "invariant": "For all (n, tags, policy): `Constraints.fromTags` either throws before its first `prohibit()` call, or n is an integer in [0, MAX_CONSTRAINED_N] and the returned `prohibitedCount` is <= a declared pair cap. Equivalently: the number of loop iterations and Set insertions performed by `fromTags` is bounded by a constant independent of the caller's `n`, for every input on which it does not throw."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unexercised-ocp-seam",
+      "theme": "The tag-policy switch that lib/CLAUDE.md names as the core's genuine open/closed seam has never been exercised by a real caller, so its 'this seam pays' claim is asserted, not demonstrated",
+      "file": "lib/src/core/constraints.ts",
+      "line": 46,
+      "summary": "TagPolicy (line 46) is a union of exactly one string literal (\"prohibit_same\"), and Constraints.fromTags's switch (lines 114-126) has exactly one case plus a default throw. I added a second case (\"require_same\", compiling same-tag groups to required rather than prohibited pairs) as a trial extension: it required touching only this one switch and the TagPolicy union — no other file in lib/src or app/ references TagPolicy or calls fromTags outside lib/test/constrained.test.ts (grep across the whole repo confirms zero non-test callers). Structurally the switch is trivial to extend, which is real evidence for the CLAUDE.md claim; but because fromTags itself has no live caller anywhere in app/ (confirmed by grep, and independently noted in lib/CLAUDE.md's own 'fromTags has no caller outside lib/test' line about a different defect), the seam's payoff is currently untested by any real usage pattern, and a second policy has no product requirement to satisfy today (PROJECT_PLAN.md F7 only ever names prohibit_same for households/teams/shifts).",
+      "failure": "Not a functional failure — a documentation/confidence gap: reviewers and future contributors are told 'add a case, don't edit callers' as a proven property of this codebase, but no caller has ever forced that path to prove itself, and TagPolicy's single-literal union type provides no compiler pressure to add anything either.",
+      "invariant": "caseOnly — no behavioural invariant is violated; the observation is that grep for 'fromTags(' outside lib/test/ and lib/src/ returns zero matches, which is mechanically checkable but does not gate correctness.",
+      "remediation": "No action needed now. When F7's tag UI actually lands and fromTags gets a real caller, re-verify the OCP claim against whatever second policy first ships (if any) rather than assuming today's structural ease transfers unchanged once fromTags carries the hardening lib/CLAUDE.md already flags as owed at that point (n-guard, dominant-tag O(n²) cap, NaN handling).",
+      "caseOnly": true
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 1,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 14,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 14,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 518610,
+    "agents": 5,
+    "toolCalls": 162
+  }
+}

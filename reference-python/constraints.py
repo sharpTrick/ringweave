@@ -93,7 +93,7 @@ def validate(cons, k):
 
     # Dense k blows generation up past the n-cap (one BFS per edge, ~n*min(k,n-1)/2
     # edges); refuse when the estimated work exceeds the budget. Mirrors the TS port.
-    if _constrained_work(cons.n, k) > MAX_CONSTRAINED_WORK:
+    if _constrained_work(cons.n, k, len(cons.prohibited)) > MAX_CONSTRAINED_WORK:
         return [
             f"roster size {cons.n} with {k} buddies each is too large to generate in reasonable time — reduce the roster size or the buddy count"
         ]
@@ -139,10 +139,25 @@ MAX_CONSTRAINED_N = 5000
 # seconds. Mirrors the TS port (see MAX_CONSTRAINED_WORK in graph.ts).
 MAX_CONSTRAINED_WORK = 100_000_000
 
+# Mirrors MAX_STRUCTURAL_REASONS in the TS port — see there for why the list is capped.
+MAX_STRUCTURAL_REASONS = 16
 
-def _constrained_work(n, k):
-    """Estimated constrained-generation cost, proportional to vertices x edges-added."""
-    return n * n * min(k, max(0, n - 1))
+
+# Cost charged per prohibited pair. A FLOOR, not a model of the shape: every legality decision
+# in the generator probes the prohibited set, and a dense set makes more candidates fail, so more
+# are scanned per edge added. Calibrated as a rate on the shape with headroom to measure (n=3000,
+# k=4: 11.7 s more with a million pairs, 77 units/pair at that roster's 6.55e6 units/s, rounded
+# up). Mirrors PROHIBITED_PROBE_COST in the TS port.
+PROHIBITED_PROBE_COST = 80
+
+
+def _constrained_work(n, k, prohibited_count):
+    """Estimated constrained-generation cost: vertices x edges-added, plus the constraint set.
+
+    `prohibited_count` is required rather than defaulted — the caller holds the Constraints, and
+    an optional argument is how the dimension went missing the first time.
+    """
+    return n * n * min(k, max(0, n - 1)) + PROHIBITED_PROBE_COST * prohibited_count
 
 
 def _structural_errors(cons):
@@ -154,18 +169,53 @@ def _structural_errors(cons):
     if n > MAX_ROSTER:
         return [f"roster size {n} exceeds the maximum of {MAX_ROSTER}"]
     errs = []
+    # Faulty CONSTRAINTS, not faulty endpoints: a pair with two unknown people is one invalid
+    # constraint, and counting notes made the refusal say "4 constraints are invalid" about two.
+    faulty = [0]
+    # Set when a distinct message could not be listed, which is the only thing "only some are
+    # listed" can honestly mean. Counting notes fired it whenever duplicates deduped, so a
+    # refusal that listed every distinct reason still claimed it had held some back.
+    suppressed = [False]
+
+    # Counted always, listed up to the cap. The list used to be unbounded in both work and
+    # output; see MAX_STRUCTURAL_REASONS in the TS port for the measurements.
+    # WHICH messages survive the cap is the alphabetically smallest DISTINCT ones, not the first
+    # encountered: this mirror iterates its sets in hash order and the TS port iterates its Sets
+    # in insertion order, so "the first 16" made a refusal's text a function of how the constraint
+    # set was built, breaking the message parity the two are held to. Deduping here also stops a
+    # thousand copies of one fault from filling every slot.
+    def note(msg):
+        if len(errs) == MAX_STRUCTURAL_REASONS and msg >= errs[-1]:
+            suppressed[0] = True
+            return
+        at = 0
+        while at < len(errs) and errs[at] < msg:
+            at += 1
+        if at < len(errs) and errs[at] == msg:
+            return
+        errs.insert(at, msg)
+        if len(errs) > MAX_STRUCTURAL_REASONS:
+            errs.pop()
+            suppressed[0] = True
 
     def scan(pairs):
         for (a, b) in pairs:
+            bad = False
             for x in (a, b):
                 if not isinstance(x, int) or isinstance(x, bool) or x < 0 or x >= n:
-                    errs.append(f"constraint references unknown person {x} (roster has {n})")
+                    note(f"constraint references unknown person {x} (roster has {n})")
+                    bad = True
             if a == b:
-                errs.append(f"person {a} cannot be paired with themselves")
+                note(f"person {a} cannot be paired with themselves")
+                bad = True
+            if bad:
+                faulty[0] += 1
 
     scan(cons.required)
     scan(cons.prohibited)
     scan(cons.priors)
+    if suppressed[0]:
+        errs.append(f"{faulty[0]} constraints are invalid — only some are listed")
     return errs
 
 

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { asplGap, buildBuddyGraph } from "ringweave";
-import { connectionSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, type Metrics } from "../src/model";
+import { generateResult } from "./helpers";
+import {
+  connectionSummary, constraintSummary, qualityPercent, isOptimal, quality, viewFromResult, DEFAULT_SETTINGS, degreeLabel,
+  buddiesLabel, buddiesEachLabel, peopleNoun, separationShortfall, SEPARATION_DEFAULT,
+  targetShortfall, type Metrics, type GraphView,
+} from "../src/model";
 
 function names(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `P${i}`);
@@ -32,8 +37,8 @@ describe("quality score (F5)", () => {
 
   it("the SHIPPED quality (via assembleMetrics/viewFromResult) is scored at degreeMax, regular AND irregular", () => {
     for (const [n, k] of [[24, 4], [25, 3], [15, 3]] as const) {
-      const r = buildBuddyGraph(n, k, { seed: 1 });
-      const v = viewFromResult(names(n), DEFAULT_SETTINGS, r);
+      const r = generateResult(n, k, { seed: 1 });
+      const v = viewFromResult(names(n), DEFAULT_SETTINGS, [], [], r);
       const expected = Math.max(0, Math.min(1, 1 - asplGap(r.aspl, n, r.degreeMax)));
       expect(v.metrics.quality).toBeCloseTo(expected, 12);
     }
@@ -60,9 +65,6 @@ describe("connectionSummary caption never contradicts the gauge", () => {
     expect(connectionSummary(metrics({ connected: true, quality: 0.96 }))).toMatch(/well-linked/);
   });
 
-  // Class: the gauge number (qualityPercent) and the caption must agree in tier at the rounding
-  // boundary — a score can't render "50" with 'loosely' while a hair above renders "50" with
-  // 'well-linked'. Both derive from qualityPercent, so tier flips exactly at gauge 50.
   it("gauge percent and caption agree in tier across the 0.5 boundary", () => {
     for (const q of [0, 0.49, 0.494, 0.495, 0.499, 0.5, 0.501, 0.504, 0.505, 0.51, 0.9, 1]) {
       const m = metrics({ connected: true, aspl: 2, quality: q });
@@ -73,8 +75,6 @@ describe("connectionSummary caption never contradicts the gauge", () => {
     }
   });
 
-  // Class: the "already optimal" claim must fire ONLY at a provably-optimal score (quality === 1),
-  // never merely because the gauge rounds to 100 — a 99.6% graph a reroll could still improve.
   it("isOptimal is exact (quality === 1), not gauge-rounded to 100", () => {
     expect(isOptimal(metrics({ quality: 1 }))).toBe(true);
     for (const q of [0.996, 0.999, 0.9999]) {
@@ -83,5 +83,149 @@ describe("connectionSummary caption never contradicts the gauge", () => {
       expect(isOptimal(m)).toBe(false); // ...but it is NOT claimed optimal
     }
     expect(isOptimal(metrics({ quality: 0.5 }))).toBe(false);
+  });
+});
+
+describe("the delivered graph vs the graph that was asked for", () => {
+  const viewWith = (asked: number, got: number) =>
+    ({
+      names: ["a", "b", "c"],
+      edges: [] as [number, number][],
+      buddies: [] as number[][],
+      settings: { ...DEFAULT_SETTINGS, buddies: asked },
+      constraints: [],
+      report: null,
+      metrics: {
+        aspl: 1, diameter: 1, girth: 3, quality: 1, connected: true,
+        largestComponentFraction: 1, regular: true, degreeMin: got, degreeMax: got,
+      },
+    }) as unknown as GraphView;
+
+  it("reports the shortfall when the roster cannot give what was asked", () => {
+    expect(targetShortfall(viewWith(4, 3))).toEqual({ asked: 4, got: 3 });
+  });
+
+  it("stays silent when the target was met or beaten", () => {
+    expect(targetShortfall(viewWith(4, 4))).toBeNull();
+    expect(targetShortfall(viewWith(3, 4))).toBeNull();
+  });
+
+  it("can be optimal AND short of target at the same time", () => {
+    const v = viewWith(4, 3);
+    expect(isOptimal(v.metrics)).toBe(true);
+    expect(targetShortfall(v)).not.toBeNull();
+  });
+});
+
+describe("every displayed buddy count comes from one seam", () => {
+  it("a non-regular graph never has two panels claiming different counts", () => {
+    const m: Metrics = {
+      aspl: 2, diameter: 3, girth: 4, quality: 0.9, connected: true,
+      largestComponentFraction: 1, regular: false, degreeMin: 3, degreeMax: 4,
+    };
+    const label = degreeLabel(m);
+    expect(label).toBe("3–4");
+    // Must BE the label, not merely contain it: "3–4 buddies each" contains "4 buddies each",
+    // so a negative substring match would be meaningless.
+    const stated = /for (.+?) buddies each/.exec(connectionSummary(m))?.[1];
+    expect(stated).toBe(label);
+    expect(stated).not.toBe(String(m.degreeMax));
+  });
+});
+
+describe("every displayed count phrase agrees about its noun, too", () => {
+  const oneEach: Metrics = {
+    aspl: 1, diameter: 1, girth: Infinity as unknown as number, quality: 1, connected: true,
+    largestComponentFraction: 1, regular: true, degreeMin: 1, degreeMax: 1,
+  };
+  const fourEach: Metrics = { ...oneEach, degreeMin: 4, degreeMax: 4 };
+  const range: Metrics = { ...oneEach, regular: false, degreeMin: 3, degreeMax: 4 };
+
+  it("uses the singular exactly when the count it qualifies is 1", () => {
+    expect(buddiesLabel(oneEach)).toBe("1 buddy");
+    expect(buddiesLabel(fourEach)).toBe("4 buddies");
+    expect(buddiesLabel(range)).toBe("3–4 buddies");
+    expect(peopleNoun(1)).toBe("person");
+    expect(peopleNoun(0)).toBe("people");
+    expect(peopleNoun(2)).toBe("people");
+  });
+
+  it("the caption and the rail render the same phrase for the same graph", () => {
+    // Both go through the seam, so this cannot be satisfied by two strings that happen to agree.
+    for (const m of [oneEach, fourEach, range]) {
+      expect(connectionSummary(m)).toContain(buddiesEachLabel(m));
+    }
+  });
+});
+
+describe("a Settings value shown as delivered is disclosed when it was not", () => {
+  const viewAt = (n: number, k: number, asked?: number): GraphView =>
+    viewFromResult(
+      Array.from({ length: n }, (_, i) => `P${i}`),
+      { ...DEFAULT_SETTINGS, buddies: k, minSeparation: asked, polish: false },
+      [],
+      [],
+      generateResult(n, k, { seed: 12345, polish: false, minSeparation: asked }),
+    );
+
+  it("names the delivered separation whenever it falls short of the request", () => {
+    let disclosed = 0;
+    for (const n of [12, 20, 30]) {
+      const view = viewAt(n, 4);
+      const short = separationShortfall(view);
+      // Derived from girth, which is what the core's own postcondition ties separation to.
+      expect(view.metrics.girth).not.toBeNull();
+      expect(short).not.toBeNull();
+      expect(short!.asked).toBe(SEPARATION_DEFAULT);
+      expect(short!.got).toBe(view.metrics.girth! - 1);
+      expect(short!.got).toBeLessThan(short!.asked);
+      disclosed++;
+    }
+    expect(disclosed).toBe(3);
+  });
+
+  it("says nothing when the request was met", () => {
+    // A disclosure that always fires is not a disclosure.
+    const view = viewAt(20, 4, 2);
+    expect(separationShortfall(view)).toBeNull();
+  });
+});
+
+describe("constraintSummary", () => {
+  const RULES = [{ a: 0, b: 1, kind: "required" as const }];
+  const view = (report: GraphView["report"], constraints = RULES): GraphView => ({
+    ...viewFromResult(names(8), DEFAULT_SETTINGS, constraints, [], generateResult(8, 4)),
+    report,
+  });
+
+  it("never says satisfied when nothing measured the rules", () => {
+    // The disconnected-reads-as-optimal class, one field over: import rehydrates edges without
+    // running a builder, so `report` is null and the only honest answer is that nobody checked.
+    expect(constraintSummary(view(null))).not.toMatch(/satisfied/);
+    expect(constraintSummary(view(null))).toMatch(/not re-checked/);
+  });
+
+  it("says satisfied only when the report says zero violations", () => {
+    // `satisfied` is DERIVED, not hand-set: a mock that can disagree with its own violation
+    // counts tests the summary against a report the core would never produce.
+    const report = (reqViolations: number, prohViolations: number) => ({
+      reqViolations,
+      prohViolations,
+      satisfied: reqViolations + prohViolations === 0,
+      connected: true,
+      largestComponentFraction: 1,
+      refusals: [],
+      priorsKeptFraction: null,
+    });
+    expect(constraintSummary(view(report(0, 0)))).toMatch(/satisfied/);
+    for (const broken of [report(1, 0), report(0, 1)]) {
+      const text = constraintSummary(view(broken)) ?? "";
+      expect(text).not.toMatch(/satisfied/);
+      expect(text).toMatch(/couldn.t be met/);
+    }
+  });
+
+  it("says nothing at all when there are no rules to report on", () => {
+    expect(constraintSummary(view(null, []))).toBeNull();
   });
 });

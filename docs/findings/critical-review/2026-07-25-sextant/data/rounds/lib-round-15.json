@@ -1,0 +1,332 @@
+{
+  "target": "lib/src",
+  "round": 15,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 5,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 5
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of lib/src/core (all 11 modules) plus lib/test. Executed, not just read:\n\n1. `npm test` green (251/251). `python3 test_core.py` ALL PASS. `python3 gen_fixtures.py` regenerated `lib/test/fixtures/reference.json` with NO git diff — oracle parity intact.\n2. Oracle parity beyond the 9 committed fixtures: generated 39 fresh random constrained scenarios (n 20..80, k 2..6, random prohibited+required) in reference-python, ran TS `constrainedGreedy` on the same constraint sets. Worst relative ASPL excess vs Python: 0.000%; no diameter or connectivity divergence.\n3. Metric correctness vs brute force over 4000 random graphs: `girth` vs edge-deletion shortest-cycle; `shortestPath` for contiguity, simplicity, correct endpoints, and `path.length-1 === bfsDistances(g,s)[t]` for every (s,t). Zero mismatches.\n4. Hard-constraint guarantees with dev postconditions COMPILED OUT (NODE_ENV=production), so the guarantee had to hold by construction: 178 built graphs over dense tag-block prohibitions + required pairs + priorHard + explicit polish + priorWeight. No prohibited edge present, no required edge missing, no hard prior dropped, no vertex over k, and report.reqViolations/prohViolations always matched a recomputation.\n5. Displayed-vs-actual: rebuilt the returned `edges` into a fresh Graph and recomputed every reported field for both builders across n=2..34 x k=2..7 and 400 constrained fuzz cases. aspl, diameter, girth, connected, largestComponentFraction, degreeMin/Max, buddies, satisfied all matched. `finalMinSeparation` checked against the true min over edges of dist_{G-e}(u,v) (= girth-1). `asplGap` never negative.\n6. Determinism / Set-iteration-order: reran both builders; rebuilt equal Constraints with pairs inserted in reverse order AND reversed endpoints; rebuilt input Graphs with edges inserted in reverse order and fed them to `polish` and `polishConstrained` (incl. polish:true paths). Identical edgeList() every time. Hand-traced that the only Set-order-consuming site (forceConnect/joinAnyComponents) is unreachable: completion exits only when every under-k vertex is `stuck`, `stuck` is monotone because edges are only added, and completionCap=6nk cannot bind since at most nk/2 edges are added.\n7. Boundaries: n in {0,1,2,3,4} x k in {0,1,2,5,10} for both builders; k>=n; mind in {0,1,2,3,4,5,9,50} x demote x repair over n=2..40 (ring seed always survives, degree never exceeds k, finalMind never above min(mind, floor(n/2)) and never moves when demote:false).\n8. \"Refuses, never throws\" contract: 243-cell malformed matrix for buildConstrainedBuddyGraph (NaN, +/-Infinity, -1, 0.5, 1e18, MAX_ROSTER+1, MAX_CONSTRAINED_N+1, 2**53, mismatched cons.n) plus 15 malformed option objects (seed, polishIters, priorWeight, minSeparation). Nothing threw. Traced that `checkPolishSize` cannot fire from either builder (MAX_CONSTRAINED_WORK / MAX_GREEDY_WORK bound n*(n+m) far below the polish size gate) and that loopIters = maxIters - floor(maxIters/2) >= 1 once checkPolishSize passes, so a \"polished: true\" no-op is unreachable from the public builders.\n9. polish/polishConstrained invariants over 400 random graphs x both modes: degree sequence preserved, penalizedAspl(best) <= penalizedAspl(input), component count never rises, largest component never shrinks, input never mutated, PolishResult.aspl/connected equal allPairsSummary(best).\n10. Two hand proofs where a wrong answer would hide behind passing fixtures. (a) greedy.ts `updateAfterEdge` mutates dist in place and `continue`s when the first shortcut wins: rows u/v are only ever partially updated to valid new-graph distances, and a case analysis on (u<i, v<i) shows a < cur implies b >= a, so the short-circuit never stores a non-minimal distance — the cache is exact. (b) `girth` is the exact-girth all-sources BFS variant (no early BFS truncation; only a best===3 exit) and best >= 3 always because a source's neighbours are all discovered from the source; confirmed against brute force.\n11. Also verified: pairKey/keyToPair round-trip is injective (numbers cannot contain commas); withHardPriors cannot reach Constraints.merge's n-mismatch throw because the builder refuses n !== cons.n first; validate's accept-set is a superset of constrainedGreedy's checkWellFormed throw conditions, so no post-validate throw path exists; repairDegrees never removes an edge, never self-loops, and never pushes a vertex above max(k, its starting degree).\n\nProbes are in /home/user/ringweave/.review-scratch/ (gitignored; git status clean).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/lib/src (graph.ts, budgets.ts, greedy.ts, constrainedGreedy.ts, constraints.ts, polish.ts, metrics.ts, bounds.ts, rng.ts, swap.ts, index.ts) plus lib/test fixtures, reviewed as it stands rather than as a diff. Measured (probes in /home/user/ringweave/.review-scratch/): (1) MAX_GREEDY_WORK accept-set boundary sweep for the historically-underpriced dense-k shapes — worst admitted wall clock 49.3s at (700,25), 46.7s at (500,60), 45.0s at (1000,12), all inside the documented ~60s envelope; the max(edgesAdded,1) floor case k=2 is safe because the ring seed leaves nobody under-degree, so findPair degrades to O(n) and the uncharged demote loop is O(n^2) not O(n^3). (2) MAX_CONSTRAINED_WORK — buildConstrainedBuddyGraph(5000,4)=16.6s, (464,463)=49.3s; I derived the real cost as n^2*k/2*log n + n^2*k^2/4 and maximised it under n^2*min(k,n-1)<=1e8, confirming n~464,k=n-1 IS the true worst corner the constant claims. (3) checkPolishSize/boundedPolishIterations — polish(ring(20),{maxIters:Infinity}) returns in 0.6s, polish(ring(11000)) and polish(ring(40000),{maxIters:0}) refuse in ~0s, buildBuddyGraph(3,2,{polishIters:1e9}) is 0.02s; I also proved the size gate can never fire from either builder (actual m <= n*k/2 <= the gate's estimate), so the 'refuses, never throws' contract on buildConstrainedBuddyGraph holds. (4) validate's O(n^2) prohibited-pair connectivity walk = 57.8ms at n=5000, and I proved you cannot force n^2 isProhibited calls with O(n) prohibited pairs (the unseen set after popping u is bounded by prohibitedDegree(u)), so walk cost is linear in pairs the caller already paid to build; a P-scaling probe to P=1.6M kept the generate/build ratio <=3.2. (5) Fuzzed validate (never throws) and buildConstrainedBuddyGraph (never throws, always refuses) over {-1,-0,0.5,NaN,+/-Infinity,2**31,2**53,1e6,5000,5001,1e15}^2 — the only non-finite outputs are aspl=Infinity when reachablePairs===0, always paired with connected:false. (6) Termination — every loop is bounded by a degree cap, an edge count, or a counted budget; completionCap provably never binds (each step adds exactly one edge, max n*k/2 << n*k*6) and forceConnect's O(n^2) joinAnyComponents runs at most once because completion's output is legal-edge-maximal. (7) Determinism under constraint-insertion-order permutation — adjacency Set order reaches only bfsDistances (order-invariant result), connectedComponents (counts/sizes only) and the inert forceConnect, while edgeList() is sorted, so no leak. (8) pairKey/keyToPair string round-trip attacked with -0, 1e21, 2**53 and comma-bearing strings — no forgeable cross-pair key. (9) Numeric overflow in greedyWork/constrainedWork/polishWork — doubles never lose enough magnitude to flip an oversized product below a budget, and Infinity compares greater. No CSV/clipboard/filename/DOM sink exists in lib/; the only untrusted-text-to-string path is formatReason, which interpolates numbers.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of every file under lib/src/core (graph.ts, budgets.ts, constraints.ts, greedy.ts, polish.ts, constrainedGreedy.ts, swap.ts, metrics.ts, bounds.ts, rng.ts, index.ts) against the project's actually-next-committed change. docs/PROJECT_PLAN.md's status block shows M3 (F7/F8/F10) already shipped in app/; the live next commitment is M4, specifically F9 \"Recalculate with minimal disruption\" (flagship), which is explicitly core-enabled (priors/priorWeight/priorHard machinery already lives in lib/src/core/constraints.ts and lib/src/core/index.ts) but has no app caller yet per app/CLAUDE.md's \"F9's worker-protocol groundwork is DEFERRED\" note.\n\nI traced the extension by actually building it: wrote three throwaway harnesses under .review-scratch/ (f9probe.mjs, f9probe2.mjs, f9probe3.mjs) that exercise the exact F9 shape — build a base graph, add one person, seed a new Constraints with the previous edges as addPrior() pairs, and call buildConstrainedBuddyGraph on the grown roster, both with an explicit priorWeight and with zero config (relying on the DEFAULT_PRIOR_WEIGHT=2 auto-selection at index.ts:366). Ran against n=10→11, n=30→31, and n=50→51 at k=4. All three refused nothing and preserved 89–97% of prior edges (matching the churn-priors-weight.md benchmark's documented curve), confirming the priors seam (Constraints.addPrior/priorWeight/priorHard, withHardPriors, buildReport's priorsKeptFraction) already fully supports the app's next flagship feature with zero fan-out into unrelated core modules — a caller only needs Constraints + buildConstrainedBuddyGraph, both already public API. This is a case where the declared extension point pays exactly as designed, worth recording per the review protocol's instruction to say so when a seam works.\n\nAlso checked: the tag-policy switch in constraints.ts (single case, \"prohibit_same\" — TagPolicy type already trimmed to just that literal, so no undead second case survives from the earlier round-08 finding); constrainedGreedy.ts's precondition/postcondition trio (legalEdge/swapBreaksConstraint/assertHardConstraints) for consistency across the three sync points CLAUDE.md calls out; budgets.ts's per-path size+work cap pairing (MAX_CONSTRAINED_N/WORK, MAX_GREEDY_WORK, MAX_REPAIR_WORK, MAX_POLISH_WORK/checkPolishSize) for the documented failure shapes; graph.ts's guard-before-mutate ordering in addEdge/removeEdge/hasEdge; metrics.ts's penalizedAspl fragmentation-guard shape; rng.ts's validated (not coerced) seed. Did not find a new SRP/OCP/DIP violation, an over-engineered abstraction with no caller beyond what CLAUDE.md already discloses as deferrals, or a responsibility leak (no graph math outside the core, no view concerns inside it). legalEdge and constrainedMeasure remain intentionally non-injectable per the stated determinism/postcondition rationale, and that reasoning holds up against the F9 extension attempt — nothing about implementing F9 needed an injectable predicate.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 1,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "MAX_POLISH_ITERS ceiling constant does not match the constrained path's own default, so the documented invariant that polishIters can only reduce work below default is false on that path",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "MAX_POLISH_ITERS (20000) is documented as the ceiling that guarantees polishIters can only ask for LESS work than the default, but the constrained path's default is DEFAULT_CONSTRAINED_POLISH_ITERS = 8000, so boundedPolishIterations lets a caller-supplied polishIters reach 20000 (2.5x that path's own default) whenever the work budget isn't the binding term. Absolute cost is still capped by MAX_POLISH_WORK, so this is not a hang, but the stated safety argument for the ceiling is false on this path."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "In boundedPolishIterations, clamp the requested value to the path's own `fallback` instead of the shared MAX_POLISH_ITERS constant (`Math.min(requested, fallback)`), removing MAX_POLISH_ITERS as a separate ceiling; if 2.5x headroom on the constrained path is intentional, instead delete the 'can only ask for LESS work than default' sentence and its hang-can't-happen conclusion from the comment."
+    },
+    {
+      "theme": "Constraints.fromTags materializes an O(n^2) structure before any size guard runs, so the size gate that exists elsewhere in the same file (degreeOf, Graph constructor, validate/MAX_CONSTRAINED_N) never gets a chance to refuse this call path",
+      "severity": "deferral",
+      "findingSummaries": [
+        "Constraints.fromTags takes n on faith and runs a double loop materializing a Set key per same-tag pair before validate's MAX_CONSTRAINED_N refusal can run; reproduced both halves. Filed as a deferral: fromTags has no caller outside lib/test, app/src only reaches Constraints via toConstraints, and it's already a recorded known limitation in lib/CLAUDE.md."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Add the same n guard degreeOf already uses (Number.isInteger(n) && n>=0 && n<=MAX_ROSTER) at the top of fromTags, and refuse before the double loop using an O(n) pre-count of group sizes against a pair-count cap, rather than letting the double loop run first."
+    },
+    {
+      "theme": "Distance matrix diagonal is set twice in greedy.ts with no comment explaining whether the second assignment is required for correctness or is dead code",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "Distance matrix diagonal is initialized twice without explanation, leaving it unclear whether the repeat is defensive or safely removable."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Delete the redundant second diagonal initialization at line 103 unless it is proven necessary for the incremental cache-update logic that follows; if it is necessary, that need is itself evidence the first initialization is the redundant one, so remove whichever assignment is not load-bearing rather than keeping both."
+    },
+    {
+      "theme": "The same 'minimum degrees of separation' concept is named `mind` in one option surface and `minSeparation` in another with no link between them, so readers must track two names for one knob",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`mind` option name mirrors the Python reference kwarg but is aliased to `minSeparation` elsewhere; no doc ties the two names together."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Drop one of the two names at the API surface — retire `mind` in favor of `minSeparation` (or vice versa) so there is a single field name to trace across modules, rather than adding cross-referencing documentation to keep both alive."
+    },
+    {
+      "theme": "ConstrainedBuddyResult's refused and accepted outcomes share one return shape, so a refusal (empty buddies/edges) is structurally indistinguishable from success and can be consumed silently without checking report.refusals",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "ConstrainedBuddyResult always returns a shape with buddies array and metrics even when input was refused, making it easy for callers that only check for thrown errors to silently accept empty data as if it were a real result."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Remove the shared empty-but-valid-looking buddies/edges shape for the refusal case — e.g. omit buddies/edges entirely from the refusal branch (undefined rather than []) so callers get a type/runtime error on the field access they forgot to guard, instead of adding a new discriminated-union type or a wasAccepted() helper that callers must remember to call."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-knob-raises-cost-above-default",
+      "theme": "an attacker-supplied tuning option increases work beyond what the enforcement point's own safety argument permits",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 203,
+      "summary": "MAX_POLISH_ITERS (20000) is documented as being 'simply the documented default, which makes polishIters an option that can only ask for LESS work than the default — never more', and the safety argument that follows is 'a knob that can only reduce cost cannot be turned into a hang'. That premise holds only for the unconstrained path, whose default IS 20000. The constrained path's default is DEFAULT_CONSTRAINED_POLISH_ITERS = 8000, so boundedPolishIterations caps a caller-supplied polishIters at 20000 — 2.5x the default — whenever the work budget is not the binding term (small n). Absolute cost is still bounded by MAX_POLISH_WORK, so this is not a hang, and polishIters is not carried by the app's sanitizeSettings today; it is the stated invariant that is false, and the ceiling chosen to make it true does not.",
+      "failure": "boundedPolishIterations(n, m, 20000, 8000) vs boundedPolishIterations(n, m, undefined, 8000), read from lib/dist/core/budgets.js: n=30,m=60 -> 20000 vs 8000; n=60,m=120 -> 20000 vs 8000; n=120,m=240 -> 19997 vs 8000 (ratio 2.50 each). End-to-end through the public API on a 150-person roster with one prohibited pair: buildConstrainedBuddyGraph(150,4,cons) takes 11.71s (aspl 3.7036) with polishIters undefined and 18.98s (aspl 3.6925) with polishIters:20000 — a 1.6x wall-clock increase from a single option value the enforcement point's comment says cannot increase cost at all.",
+      "remediation": "Make the ceiling per-path instead of one constant: clamp `asked` to `fallback` inside boundedPolishIterations (`const asked = Number.isInteger(requested) && requested >= 0 ? Math.min(requested, fallback) : fallback`), which makes MAX_POLISH_ITERS redundant on both paths and makes the comment's claim true by construction. If the 2.5x headroom is deliberate on the constrained path, delete the 'can only ask for LESS work than the default' sentence and its 'cannot be turned into a hang' conclusion, and state that the bound is MAX_POLISH_WORK alone.",
+      "invariant": "For all n, m, fallback and all requested: boundedPolishIterations(n, m, requested, fallback) <= boundedPolishIterations(n, m, undefined, fallback). No value of polishIters/maxIters may yield more loop iterations than omitting the option does at the same (n, m, fallback).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "redundant-code-undocumented",
+      "theme": "Redundant code with no explanation creates friction when maintainers need to decide whether it is necessary, leaving them unable to safely refactor.",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 103,
+      "summary": "Distance matrix diagonal is initialized twice without explanation",
+      "failure": "Line 103 sets `dist[i * n + i] = 0` immediately after the BFS loop (lines 98-102) that already sets these same entries when copying from bfsDistances(). Since bfsDistances explicitly sets dist[s]=0 (metrics.ts:17) and the copy at line 101 assigns `d[t] >= 0 ? d[t] : INF`, when t equals s the condition `d[s]=0 >= 0` is true, placing 0 at that diagonal position. This makes line 103 structurally redundant—the diagonal was already 0 from the earlier loop. Yet there is no comment explaining why this defensive reinitilization exists.",
+      "invariant": "After the loop at lines 98-102, dist[i*n+i] must equal 0 for all i in [0,n); adding line 103 does not change this invariant, making the line redundant unless there is an undocumented reason (e.g., defensive programming against a subtle algorithm property, or necessary for cache coherence in the incremental update logic that follows).",
+      "remediation": "Either (1) remove line 103 if truly redundant, or (2) add a comment explaining why the diagonal must be re-set even after the BFS loop. For example: `// Defensive: ensure diagonal is definitely 0 before incremental updates begin, accounting for [any edge case]` or document why it is necessary for correctness of the cache-update logic that follows (line 109)."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "vocabulary-aliasing-underdocumented",
+      "theme": "Same concept referred to by different names (`mind` vs `minSeparation`) creates friction when tracing code across modules; callers must remember both names refer to the same knob.",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 31,
+      "summary": "`mind` option name mirrors Python but is aliased to `minSeparation` in other paths; no function-level JSDoc ties the pieces together",
+      "failure": "A contributor adding a new feature that touches both greedy and constrained paths must understand that GreedyOptions.mind and ConstrainedBuddyOptions.minSeparation refer to the same concept. The alias is documented in prose comments (greedy.ts:31-32: 'mind mirrors the Python reference kwarg; the constrained path spells the same concept minSeparation'), but the function `ringGreedy` itself has NO JSDoc to make this connection clear at the call site. A maintainer reading the GreedyOptions interface sees two identically-named fields with the same semantics but no explanation why one is called `mind` and not the other.",
+      "invariant": "For any two entry points accepting a minimum-separation parameter, the documentation at the interface level must clearly state if they are aliases. Currently, the statement exists only in prose comments inside function bodies, not in the exported type interface JSDoc.",
+      "remediation": "Add a JSDoc comment to the `mind` field in GreedyOptions (line 28-32) stating: `@remarks This option name mirrors the Python reference (python kwarg=mind); the constrained path uses the name minSeparation for the same concept. Both refer to 'minimum degrees of separation to aim for'.` Or unify the naming at the public API level if this is a long-term goal."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "easy-to-misuse-return-shape",
+      "theme": "A refusal return shape (empty graph) looks identical to an accepted return shape (also holds graph, buddies arrays, etc.), making it easy to forget to check the report; code that only throws on error will silently get empty data.",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 284,
+      "summary": "ConstrainedBuddyResult always returns a shape with buddies array and metrics, even when input was refused; misuse is easy",
+      "failure": "The docstring at lines 284-288 warns: 'When report.refusals is non-empty the input was refused: edges is empty, buddies holds one EMPTY list per person (so buddies.length is still the roster size, not 0), and the metric fields are placeholders — read report first.' However, buddies[i].length === 0 is not visually distinct from a valid result where person i happens to have zero buddies. Code that writes `if (result.report.refusals.length === 0) use result` is correct, but code that writes `if (result.edges.length > 0) use result` will silently mis-handle refused inputs where n is valid but constraints were infeasible. The return type permits both patterns equally.",
+      "invariant": "Any call to buildConstrainedBuddyGraph must check result.report.refusals before using result.buddies or result.edges; however, the type system does not enforce this—a TypeScript-only caller cannot distinguish a refused result at the type level.",
+      "remediation": "Consider a discriminated union: `ConstrainedBuddySuccess { report: { refusals: [] } & ConstraintReport; buddies: number[][]; edges: [...] } | ConstrainedBuddyRefusal { report: ConstraintReport & { refusals: string[] }; buddies: []; edges: [] }` so TypeScript can catch missing checks. Until then, add an explicit guard function export: `export function wasAccepted(result: ConstrainedBuddyResult): boolean { return result.report.refusals.length === 0; }` with a JSDoc recommending its use in every call site."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-knob-raises-cost-above-default",
+      "theme": "an attacker-supplied tuning option increases work beyond what the enforcement point's own safety argument permits",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 203,
+      "summary": "MAX_POLISH_ITERS (20000) is documented as being 'simply the documented default, which makes polishIters an option that can only ask for LESS work than the default — never more', and the safety argument that follows is 'a knob that can only reduce cost cannot be turned into a hang'. That premise holds only for the unconstrained path, whose default IS 20000. The constrained path's default is DEFAULT_CONSTRAINED_POLISH_ITERS = 8000, so boundedPolishIterations caps a caller-supplied polishIters at 20000 — 2.5x the default — whenever the work budget is not the binding term (small n). Absolute cost is still bounded by MAX_POLISH_WORK, so this is not a hang, and polishIters is not carried by the app's sanitizeSettings today; it is the stated invariant that is false, and the ceiling chosen to make it true does not.",
+      "failure": "boundedPolishIterations(n, m, 20000, 8000) vs boundedPolishIterations(n, m, undefined, 8000), read from lib/dist/core/budgets.js: n=30,m=60 -> 20000 vs 8000; n=60,m=120 -> 20000 vs 8000; n=120,m=240 -> 19997 vs 8000 (ratio 2.50 each). End-to-end through the public API on a 150-person roster with one prohibited pair: buildConstrainedBuddyGraph(150,4,cons) takes 11.71s (aspl 3.7036) with polishIters undefined and 18.98s (aspl 3.6925) with polishIters:20000 — a 1.6x wall-clock increase from a single option value the enforcement point's comment says cannot increase cost at all.",
+      "remediation": "Make the ceiling per-path instead of one constant: clamp `asked` to `fallback` inside boundedPolishIterations (`const asked = Number.isInteger(requested) && requested >= 0 ? Math.min(requested, fallback) : fallback`), which makes MAX_POLISH_ITERS redundant on both paths and makes the comment's claim true by construction. If the 2.5x headroom is deliberate on the constrained path, delete the 'can only ask for LESS work than the default' sentence and its 'cannot be turned into a hang' conclusion, and state that the bound is MAX_POLISH_WORK alone.",
+      "invariant": "For all n, m, fallback and all requested: boundedPolishIterations(n, m, requested, fallback) <= boundedPolishIterations(n, m, undefined, fallback). No value of polishIters/maxIters may yield more loop iterations than omitting the option does at the same (n, m, fallback).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-any-size-gate",
+      "theme": "a size gate runs after the O(n^2) materialization it is meant to bound",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "Constraints.fromTags takes `n` on faith — unlike degreeOf in the same file, the Graph constructor, and validate, all of which guard it — and then runs a double loop materializing one Set key per same-tag pair. The cost is paid inside the constructor, so validate's MAX_CONSTRAINED_N refusal never gets a chance to run. This is exactly the 'cost before commitment' shape, and I reproduced both halves. Filed as a DEFERRAL, not blocking: grep confirms fromTags has no caller outside lib/test (app/src reaches Constraints only via toConstraints in app/src/constraints.ts), and it is already recorded as a known limitation in lib/CLAUDE.md. Reported so the runner can dedupe against that existing record rather than because it is new.",
+      "failure": "Constraints.fromTags(2e8, []) spins for 0.60s with no allocation and no guard — the loop bound is the raw `n`, so 1e15 never returns. Constraints.fromTags(3000, Array(3000).fill('A')) spends 4.35s building 4,498,500 prohibited keys, and n=3000 is BELOW MAX_CONSTRAINED_N=5000, so validate would have accepted that roster — the expensive step is unconditionally paid before any gate can see it, and at tens of millions of pairs the Set construction itself throws before validate is reached.",
+      "remediation": "Guard `n` first with the same predicate degreeOf uses (Number.isInteger(n) && n >= 0 && n <= MAX_ROSTER), then pre-count group sizes in one O(n) pass and refuse against a pair cap (sum over groups of size*(size-1)/2) BEFORE entering the double loop. Both checks are O(n) and run before any Set insert.",
+      "invariant": "Constraints.fromTags(n, tags) either throws or returns in work bounded by O(n + emitted pairs), and never emits more pairs than a declared cap; equivalently, for every (n, tags) fromTags accepts, validate(fromTags(n, tags), k) must be reachable — no input may make fromTags itself the point of failure.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "redundant-code-undocumented",
+      "theme": "Redundant code with no explanation creates friction when maintainers need to decide whether it is necessary, leaving them unable to safely refactor.",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 103,
+      "summary": "Distance matrix diagonal is initialized twice without explanation",
+      "failure": "Line 103 sets `dist[i * n + i] = 0` immediately after the BFS loop (lines 98-102) that already sets these same entries when copying from bfsDistances(). Since bfsDistances explicitly sets dist[s]=0 (metrics.ts:17) and the copy at line 101 assigns `d[t] >= 0 ? d[t] : INF`, when t equals s the condition `d[s]=0 >= 0` is true, placing 0 at that diagonal position. This makes line 103 structurally redundant—the diagonal was already 0 from the earlier loop. Yet there is no comment explaining why this defensive reinitilization exists.",
+      "invariant": "After the loop at lines 98-102, dist[i*n+i] must equal 0 for all i in [0,n); adding line 103 does not change this invariant, making the line redundant unless there is an undocumented reason (e.g., defensive programming against a subtle algorithm property, or necessary for cache coherence in the incremental update logic that follows).",
+      "remediation": "Either (1) remove line 103 if truly redundant, or (2) add a comment explaining why the diagonal must be re-set even after the BFS loop. For example: `// Defensive: ensure diagonal is definitely 0 before incremental updates begin, accounting for [any edge case]` or document why it is necessary for correctness of the cache-update logic that follows (line 109)."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "vocabulary-aliasing-underdocumented",
+      "theme": "Same concept referred to by different names (`mind` vs `minSeparation`) creates friction when tracing code across modules; callers must remember both names refer to the same knob.",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 31,
+      "summary": "`mind` option name mirrors Python but is aliased to `minSeparation` in other paths; no function-level JSDoc ties the pieces together",
+      "failure": "A contributor adding a new feature that touches both greedy and constrained paths must understand that GreedyOptions.mind and ConstrainedBuddyOptions.minSeparation refer to the same concept. The alias is documented in prose comments (greedy.ts:31-32: 'mind mirrors the Python reference kwarg; the constrained path spells the same concept minSeparation'), but the function `ringGreedy` itself has NO JSDoc to make this connection clear at the call site. A maintainer reading the GreedyOptions interface sees two identically-named fields with the same semantics but no explanation why one is called `mind` and not the other.",
+      "invariant": "For any two entry points accepting a minimum-separation parameter, the documentation at the interface level must clearly state if they are aliases. Currently, the statement exists only in prose comments inside function bodies, not in the exported type interface JSDoc.",
+      "remediation": "Add a JSDoc comment to the `mind` field in GreedyOptions (line 28-32) stating: `@remarks This option name mirrors the Python reference (python kwarg=mind); the constrained path uses the name minSeparation for the same concept. Both refer to 'minimum degrees of separation to aim for'.` Or unify the naming at the public API level if this is a long-term goal."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "easy-to-misuse-return-shape",
+      "theme": "A refusal return shape (empty graph) looks identical to an accepted return shape (also holds graph, buddies arrays, etc.), making it easy to forget to check the report; code that only throws on error will silently get empty data.",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 284,
+      "summary": "ConstrainedBuddyResult always returns a shape with buddies array and metrics, even when input was refused; misuse is easy",
+      "failure": "The docstring at lines 284-288 warns: 'When report.refusals is non-empty the input was refused: edges is empty, buddies holds one EMPTY list per person (so buddies.length is still the roster size, not 0), and the metric fields are placeholders — read report first.' However, buddies[i].length === 0 is not visually distinct from a valid result where person i happens to have zero buddies. Code that writes `if (result.report.refusals.length === 0) use result` is correct, but code that writes `if (result.edges.length > 0) use result` will silently mis-handle refused inputs where n is valid but constraints were infeasible. The return type permits both patterns equally.",
+      "invariant": "Any call to buildConstrainedBuddyGraph must check result.report.refusals before using result.buddies or result.edges; however, the type system does not enforce this—a TypeScript-only caller cannot distinguish a refused result at the type level.",
+      "remediation": "Consider a discriminated union: `ConstrainedBuddySuccess { report: { refusals: [] } & ConstraintReport; buddies: number[][]; edges: [...] } | ConstrainedBuddyRefusal { report: ConstraintReport & { refusals: string[] }; buddies: []; edges: [] }` so TypeScript can catch missing checks. Until then, add an explicit guard function export: `export function wasAccepted(result: ConstrainedBuddyResult): boolean { return result.report.refusals.length === 0; }` with a JSDoc recommending its use in every call site."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-before-any-size-gate",
+      "theme": "a size gate runs after the O(n^2) materialization it is meant to bound",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "Constraints.fromTags takes `n` on faith — unlike degreeOf in the same file, the Graph constructor, and validate, all of which guard it — and then runs a double loop materializing one Set key per same-tag pair. The cost is paid inside the constructor, so validate's MAX_CONSTRAINED_N refusal never gets a chance to run. This is exactly the 'cost before commitment' shape, and I reproduced both halves. Filed as a DEFERRAL, not blocking: grep confirms fromTags has no caller outside lib/test (app/src reaches Constraints only via toConstraints in app/src/constraints.ts), and it is already recorded as a known limitation in lib/CLAUDE.md. Reported so the runner can dedupe against that existing record rather than because it is new.",
+      "failure": "Constraints.fromTags(2e8, []) spins for 0.60s with no allocation and no guard — the loop bound is the raw `n`, so 1e15 never returns. Constraints.fromTags(3000, Array(3000).fill('A')) spends 4.35s building 4,498,500 prohibited keys, and n=3000 is BELOW MAX_CONSTRAINED_N=5000, so validate would have accepted that roster — the expensive step is unconditionally paid before any gate can see it, and at tens of millions of pairs the Set construction itself throws before validate is reached.",
+      "remediation": "Guard `n` first with the same predicate degreeOf uses (Number.isInteger(n) && n >= 0 && n <= MAX_ROSTER), then pre-count group sizes in one O(n) pass and refuse against a pair cap (sum over groups of size*(size-1)/2) BEFORE entering the double loop. Both checks are O(n) and run before any Set insert.",
+      "invariant": "Constraints.fromTags(n, tags) either throws or returns in work bounded by O(n + emitted pairs), and never emits more pairs than a declared cap; equivalently, for every (n, tags) fromTags accepts, validate(fromTags(n, tags), k) must be reachable — no input may make fromTags itself the point of failure.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 2,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 15,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 529723,
+    "agents": 5,
+    "toolCalls": 149
+  }
+}

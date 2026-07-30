@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildBuddyGraph } from "ringweave";
 
-// The worker is a 5-line shell around buildBuddyGraph; jsdom can't host a module
-// worker, so we test the payload — the core call — directly. This guards the two
-// properties the worker relies on: determinism and structured-clone-safe output.
+// jsdom cannot host a module worker, so the payload — the core call the worker wraps — is tested
+// directly: determinism and structured-clone-safe output are what the worker relies on.
 describe("buildBuddyGraph (worker payload)", () => {
   it("is deterministic for identical inputs", () => {
     const a = buildBuddyGraph(30, 4, { seed: 12345 });
@@ -22,6 +21,8 @@ describe("buildBuddyGraph (worker payload)", () => {
   });
 
   it("throws on k<2 (surfaced over the worker error channel)", () => {
-    expect(() => buildBuddyGraph(10, 1, {})).toThrow();
+    // Assert the contract, not merely "something threw" — a bare .toThrow() would also pass on a
+    // TypeError from a mistyped call, hiding whether the k<2 guard actually fired.
+    expect(() => buildBuddyGraph(10, 1, {})).toThrow(/k >= 2/);
   });
 });

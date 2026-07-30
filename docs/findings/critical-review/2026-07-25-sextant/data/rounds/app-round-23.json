@@ -1,0 +1,445 @@
+{
+  "target": "app/src",
+  "round": 23,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 9,
+    "confirmed": 9,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full-surface read of every file under /home/user/ringweave/app/src (App.tsx, model.ts, constraints.ts, neighborhood.ts, search.ts, sample.ts, graph/*, io/*, panels/*, state/*, worker/*, styles/app.css, styles/print.css), plus app/test/responsiveCss.test.ts, app/test/cssTokens.test.ts and scripts/e2e/drive.mjs. Ran `npx vitest run` in app/ (32 files, 341 tests, green) and the full `scripts/e2e/drive.mjs` against a locally-served production build (46/46 checks pass). Wrote throwaway Playwright/Chromium probes under .review-scratch/ to measure real geometry at 14 viewports (1400, 1365, 1361, 1360, 1180, 1024, 900, 830, 821, 820, 768, 390, 360, 320) with both the person card and the route panel open, and to inspect computed styles under `@media print`. Fuzzed the core's constrained builder (~2000 rule sets) via lib/dist looking for a report with reqViolations>0 and empty refusals, and for degreeMax===k hiding degreeMin<=k-2 \u2014 found none. Determinism: grepped for Math.random/Date.now/new Date (none outside the animation's performance.now); traced every Set/Map consumer (neighborhood/relatedChips sort ascending, importGraph sorts g.adj, parseRoster's extras is insertion-ordered, indexByName is membership-only, usePathFinder canonicalises shortestPath on the lower index). Traced stale-index reachability into eccentricity/shortestPath through all four view-replacing paths. Verified disconnected-reads-as-optimal is closed (n=6,k=2 with a required triangle splits into two triangles and correctly renders quality 0 plus the \"not everyone's connected\" caption).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read app/CLAUDE.md, docs/PROJECT_PLAN.md, app/src/App.tsx (full), app/src/styles/app.css (full), app/test/responsiveCss.test.ts, scripts/e2e/drive.mjs, app/src/graph/GraphCanvas.tsx, app/src/graph/layout.ts, app/src/panels/LayoutToggle.tsx, .github/workflows/ci.yml, .github/workflows/pages.yml, root package.json, app/package.json. Attempted the extension the general lens calls out: added a third LAYOUT_MODES entry (\"grid\") to a scratch copy of GraphCanvas's positionsFor switch and compiled it with tsc --strict \u2014 confirms the exhaustiveness seam genuinely fails to compile until the new case is handled (verified in .review-scratch/seamtest.ts), and LayoutToggle/`#toggle button.on` need zero changes for a new position-stable mode since both are already generic over LAYOUT_MODES \u2014 this seam pays exactly as documented. Also probed responsiveCss.test.ts's stylesheet-derived `positioned` set against an injected unmarked panel (.review-scratch/probe.mjs) and confirmed it would be flagged. Checked the focus/ego-layout deferral, F9/F12 known follow-ons, and the girth/minSeparation/dropped-count deferrals already recorded in app/CLAUDE.md \u2014 all correctly filed as no-caller deferrals already, not re-filed. Ran scripts/e2e/drive.mjs directly against the running sandbox preview server (passed) and then against a deliberately unreachable BASE (crashed with an uncaught ERR_CONNECTION_REFUSED) to determine what actually happens when nothing is pre-serving the build.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Traced the whole interactive surface for keyboard-only / screen-reader reachability and mouse-first least-astonishment: App.tsx's render tree and all effects (useFocusRescue, useEscape, useNotice, useExplorerHistory, usePathFinder, useBuddyGraph, useGenerationWorker); every panel (RosterModal, ConstraintsEditor, SettingsControls, PersonPanel, PathPanel, BuddyList, QualityPanel, PersonSearch, LayoutToggle, Notice, Slips, GraphCanvas); the live-region/aria-live wiring; app.css for reduced-motion coverage and responsive reflow; download.ts/exportGraph.ts for the CSV/clipboard sinks. Verified the previously-known failure shapes from the prompt (path-widget placement, mode legibility/exit, Back-to-a-stranger) are already fixed in the current tree: PathPanel sits above PersonPanel in the same #sidecol the \"Find a path from here\" toggle lives in, `usePathFinder.toggle` exits the mode on a second press with `aria-pressed` carrying state, and `useExplorerHistory`'s `isRelated` guard means a \"jump\" (search/buddy-list/canvas pick unconnected to the card on screen) replaces the stack rather than pushing onto it, so Back can never land on an unconnected stranger. Traced GraphCanvas's deliberate keyboard non-interactivity (delegated to BuddyList) and confirmed it's the sole path, which is documented and consistent. Confirmed reduced-motion is honored both in CSS (global `* { transition:none; animation:none }` under the media query) and in the one JS-driven tween (GraphCanvas checks `matchMedia` before animating). Grepped the whole src tree for any Tab-key handling to check for a modal focus trap, and for any `open`/state wiring on the `<details className=\\\"rules-block\\\">` disclosure.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-security",
+      "reason": "saturated (2 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (2 quiet rounds), surface untouched"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Print stylesheet hides `#app` only, so overlays that were deliberately mounted as siblings of `#app` (to keep `inert` from cascading onto them) are never covered by the print-hiding rule and leak onto the printed slips.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`@media print { #app { display: none } }` hides only `#app`, but the toast, the setup dialog and the busy scrim are siblings of `#app` (they must be, so `inert` does not cascade to them), so they print on top of the buddy slips."
+      ],
+      "remediation": "Replace `#app { display: none !important }` with an inverse rule scoped to the actual print boundary \u2014 `@media print { #root > *:not(.slips) { display: none !important } }` \u2014 so every current and future sibling overlay is excluded by construction instead of being individually enumerated."
+    },
+    {
+      "theme": "The layout/inert/focus contract is documented as guaranteed by the `drive.mjs` e2e check, but nothing in CI or in the `npm run e2e` script chain actually invokes it end-to-end, so the claimed guarantee is unenforced.",
+      "severity": "blocking",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "app/CLAUDE.md claims the layout/inert/focus contract is guaranteed jointly by responsiveCss.test.ts and scripts/e2e/drive.mjs, calling the latter 'the only place either question can be asked' \u2014 but neither ci.yml nor pages.yml ever calls drive.mjs, and the root `npm run e2e` script itself never starts the preview server drive.mjs depends on, so the check cannot even complete when run as documented."
+      ],
+      "remediation": "Collapse the two divergent, incomplete definitions of 'run e2e' into one: fix the root `e2e` script to actually start and tear down `vite preview` around the `drive.mjs` call, and make that the single script CI's app job invokes \u2014 removing the standalone, non-functional script and the silent assumption that a preview server is running, rather than documenting a manual workaround alongside it."
+    },
+    {
+      "theme": "Two checks that back the responsive-layout contract each derive their verdict from a partial view of the value being tested \u2014 a clipped intersection built without clamping negative width/height, and a single media-query block read in isolation from the cascade it's part of \u2014 so both can pass on inputs they exist to catch.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`painted()` in scripts/e2e/drive.mjs builds a DOMRect from an unclamped intersection; a negative width/height gets normalised by DOMRect into a swapped, relocated box instead of an empty one, letting a fully-clipped element reappear as a phantom overlap.",
+        "responsiveCss.test.ts's `placement(narrow.body, sel)` reads only the narrowest `@media` block's own declarations instead of the full cascade, so an offset inherited from a wider tier \u2014 or a `position: absolute` introduced only at the narrowest tier \u2014 is invisible to the `relative \u21d2 no offsets` guard."
+      ],
+      "remediation": "In both places, stop deriving the verdict from a partial slice of the input and force use of the complete, boundary-clamped value: clamp each intersection's width/height to zero before constructing the DOMRect in drive.mjs, and build the narrowest tier's effective declarations from `rest` plus every applicable wider tier merged in cascade order in responsiveCss.test.ts \u2014 removing the implicit 'this one block/one rect is the whole answer' shortcut in each, rather than adding new special-case handling on top of it."
+    },
+    {
+      "theme": "Comments in the codebase assert a guarantee about the code's own behavior that the code does not actually keep \u2014 one claims a CSS design principle that a hardcoded value violates, the other claims a test path is uncovered when a unit test already covers it.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "app.css's comment 'Every offset measured across that column derives from these [--gutter, --col-w]' is contradicted by #sidecol's `calc(var(--gutter) + var(--col-w) + 16px)`, which bakes in an unlisted hardcoded 16px.",
+        "scripts/e2e/drive.mjs's docblock states 'none of the constrained generation path is exercised anywhere else,' but app/test/generateWorker.test.ts already exercises that path via runGeneration, including constraint satisfaction and girth measurement."
+      ],
+      "remediation": "Delete the overreaching claim from each comment rather than adding caveats to preserve it: drop 'Every offset \u2026 derives from these' (or fold the 16px into a variable so the claim becomes true) in app.css, and drop 'none of the constrained generation path is exercised anywhere else' from drive.mjs's docblock, leaving each comment stating only what the code actually and verifiably does."
+    },
+    {
+      "theme": "RosterModal's focus handling is built around an implicit assumption \u2014 that hiding everything else via `inert`/unmount is sufficient \u2014 so it never manages where focus goes or is allowed to go within its own bounds: Tab is not trapped at the dialog's edges, and on the specific reopen-after-refusal path focus and disclosure state both default to targets unrelated to the rule conflict the message names.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "RosterModal has no Tab-cycling handler; `inert` on sibling `#app` stops Tab from entering the background but doesn't wrap Tab at the dialog's own last/first focusable control, so a keyboard user can Tab straight out of the document into browser chrome.",
+        "On the `bg.status === \"refused\"` reopen, the dialog autofocuses the roster textarea and the rules-editing `<details>` stays collapsed by default even though most refusal reasons name a specific buddy rule the user must edit inside that disclosure."
+      ],
+      "remediation": "Fold both gaps into RosterModal's single focus-management path (mirroring the existing `useEscape` hook) instead of leaving native DOM order to stand in for it: have that path both trap Tab at the dialog's real first/last focusable element and choose the initial focus target (and the `rules-block` `open` state) from the reopen reason, removing the untargeted `rosterRef` autofocus effect as a separate, unconditional step."
+    },
+    {
+      "theme": "A transient notice's auto-dismiss timer is a single fixed duration used for every message, even though the same code path produces messages ranging up to the app's 300-char cap, so longer messages can be unmounted before a normal reading pace finishes them.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "`AUTO_CLEAR_MS = 4000` is applied uniformly by `flash()` regardless of message length, while `MAX_NOTICE_CHARS = 300` caps how long a message can be; import-error messages routinely run 100+ characters, needing well over the fixed 4s window at normal reading pace, and the toast unmounts the instant the timer fires with no way to re-read it."
+      ],
+      "remediation": "Remove the single fixed `AUTO_CLEAR_MS` constant and derive the dismiss delay from the message actually being shown (a floor plus a per-character allowance up to the existing `MAX_NOTICE_CHARS`), so one constant no longer has to serve every producer regardless of length."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "print-output-includes-app-chrome",
+      "theme": "overlays that were deliberately moved outside #app so that `inert` could not cascade onto them also escaped the print rule that hides app chrome, so they land on the paper deliverable",
+      "file": "app/src/styles/print.css",
+      "line": 7,
+      "summary": "`@media print { #app { display: none } }` hides only `#app`, but the toast, the setup dialog and the busy scrim are siblings of `#app` (they must be, so `inert` does not cascade to them), so they print on top of the buddy slips.",
+      "failure": "Measured in Chromium against the production build with `emulateMedia({media:'print'})`. (a) Generate a 12-person roster, press \"\u21bb Different arrangement\" until the \"Couldn't find a different arrangement\u2026\" toast appears, then press \"Print slips\" within the 4 s auto-clear: `.toast` computes `display:block; position:fixed; z-index:40` with box 513x38 @443,14, directly over the first slip (1400x90 @0,0). (b) Press \"Edit people\" then Ctrl+P: `#modal` computes `display:flex; position:fixed; z-index:20` with box 1400x900 @0,0 \u2014 a translucent scrim plus the whole setup sheet covering every slip on the page. Nothing in app/test/ or drive.mjs asserts anything about print media, so the suite is silent on both.",
+      "remediation": "Fix by subtraction rather than by enumerating the overlays: replace `#app { display: none !important }` with a rule that hides every root child except the slips, e.g. `@media print { #root > *:not(.slips) { display: none !important } }`. That closes the siblings the reported case does not name \u2014 `.busy`, `.busy-live`, the two `.sr-live` regions, the hidden file `<input>` and the `<div inert>` wrapping the toast \u2014 in one rule, and stays correct when the next overlay is added outside `#app`. The docblock at the top of print.css claims \"app chrome \u2026 never reaches paper\", which is currently false; it becomes true again with the rule above.",
+      "invariant": "Under `@media print`, every element in the document that is neither `.slips` nor a descendant of `.slips` has computed `display: none` (equivalently: generates no painted box).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "clip-arithmetic-fabricates-box",
+      "theme": "the layout oracle's clipping arithmetic can report a panel occupying a region it does not occupy, so the only check that can answer the geometry question can both false-fail and mask a real overlap",
+      "file": "scripts/e2e/drive.mjs",
+      "line": 55,
+      "summary": "`painted()` builds `new DOMRect(x, y, w, h)` from an intersection whose width/height can be negative; DOMRect normalises a negative dimension by swapping top/bottom (left/right), so a fully-clipped element is relocated instead of emptied, and the next clipping ancestor turns the swap into a positive phantom box.",
+      "failure": "Reproduced with drive.mjs's exact `painted()` at 390x640 after Playwright's own auto-scroll of `<main>` (the same `getByLabel('Find a person').fill(...)` drive.mjs performs). `#rail`'s real rect is top \u2212261..\u221262, entirely above `<main>`'s 76..640 box, so it paints nothing \u2014 yet `painted(#rail)` returns y 0..76, height 76: the `main` step yields `DOMRect(x, 76, w, \u2212138)`, which normalises to top \u221262 / bottom 76, and the `body` step (0..640) then intersects that swapped rect into a positive 0..76 box. `#toggle` (real \u221254..\u221217) maps to the identical phantom, so the overlap pass reports `#rail\u00d7#toggle share 390\u00d776px` for two panels that are both scrolled out of view. The inverse is equally available: two negatively-clipped panels that genuinely do overlap are moved apart and the overlap goes unreported.",
+      "remediation": "Clamp each intersection to zero before constructing the rect \u2014 `const w = Math.max(0, Math.min(box.right, r.right) - x), h = Math.max(0, Math.min(box.bottom, r.bottom) - y)` \u2014 so a fully-clipped element yields an empty box and is dropped by the existing `flat.w < 1 || flat.h < 1` guards rather than being relocated. The sibling is the same expression used for `x`/`y`: `Math.max(box.left, r.left)` is fine, but only because the width clamp makes the pair consistent.",
+      "invariant": "For every measured selector, the box returned by `painted(el)` has non-negative width and height AND is contained (within 1px) in `el.getBoundingClientRect()`: painted.left >= rect.left - 1, painted.right <= rect.right + 1, painted.top >= rect.top - 1, painted.bottom <= rect.bottom + 1.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tier-local-placement-check",
+      "theme": "the completeness test for phone-width layout reads one media block instead of the cascade, so an offset inherited from a wider tier is invisible to the guard that exists to catch exactly that",
+      "file": "app/test/responsiveCss.test.ts",
+      "line": 100,
+      "summary": "`placement(narrow.body, sel)` reads only the `@media (max-width: 820px)` block, so the `relative \u21d2 no offsets` assertion is made against that block's own declarations rather than against the value the browser computes at 820px.",
+      "failure": "Traced against the current stylesheet: `#stage` is `position: absolute; inset: 0` in the base tier (app.css:68) and `position: relative; height: 46vh` at \u2264820px (app.css:310). `simpleRules(narrow.body).get('#stage')` contains no inset declaration, so `insets` is `[]` and `expect(insets).toEqual([])` passes \u2014 while the cascaded value at 390px is `position: relative; inset: 0`. It is benign only because `inset: 0` resolves to a zero displacement. Add `left: 300px` to the base `#stage` rule and the graph is displaced 300px right and off the phone viewport, `npm test` stays green, and only `scripts/e2e/drive.mjs` \u2014 which `npm test` does not run \u2014 can see it. The same hole applies to any future panel that keeps a wide-tier offset and is merely demoted to `relative` at \u2264820px.",
+      "remediation": "Build the narrowest tier's declarations from the CASCADE rather than from one block: concatenate `rest` plus every tier whose max-width is >= the narrowest width, widest first, and run `placement` over that. That also closes the sibling case the current construction misses \u2014 a panel that first becomes `position: absolute` inside the narrowest tier itself is never added to `positioned`, because that set is built from `wider` tiers only.",
+      "invariant": "For every selector in `positioned`, the placement evaluated over the full cascade at the narrowest tier's width (base tier plus every `@media (max-width: N)` block with N >= that width, in source order) is `static`, or `relative` with each of top/right/bottom/left/inset either absent or `auto`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unenforced-verification-seam",
+      "theme": "the only real check of the responsive-layout/inert/focus-rescue invariants this review is scoped around never actually runs",
+      "file": "scripts/e2e/drive.mjs, package.json, .github/workflows/ci.yml, .github/workflows/pages.yml, app/CLAUDE.md",
+      "summary": "app/CLAUDE.md states the layout/inert/focus contract is guaranteed by two mechanisms together: `responsiveCss.test.ts` (a stylesheet-text completeness check) plus `scripts/e2e/drive.mjs`, described as measuring real containment/overlap/inert-cascade/focus-rescue/keyboard-raising at five viewports and called out as 'the only place either question can be asked' since jsdom computes no layout. In the actual repo, `drive.mjs` is wired into exactly one place: the root `npm run e2e` script. Neither `.github/workflows/ci.yml` (the `app` job runs `npm test`/`npm run build`, no e2e) nor `.github/workflows/pages.yml` (builds and deploys, no e2e) ever invokes it, and grepping every workflow/json/md file in the repo for `drive.mjs` turns up only `app/CLAUDE.md` and `package.json` itself. Worse, the root `e2e` script itself is incomplete: `\"e2e\": \"npm --prefix lib run build && npm --prefix app run build && node scripts/e2e/drive.mjs\"` never starts `vite preview` (or any server) on the port `drive.mjs` defaults to (127.0.0.1:4173) or documents that one must be started separately \u2014 nothing in `app/package.json`'s scripts or in `app/CLAUDE.md`'s Commands section mentions `preview` or an e2e prerequisite.",
+      "failure": "Reproduced directly: the sandbox happened to have a `vite preview --port 4173` process already running (started externally, not by `npm run e2e`), against which `node scripts/e2e/drive.mjs` passed all checks. Running `BASE=http://127.0.0.1:59999 node scripts/e2e/drive.mjs` (simulating the state after a bare `npm run e2e` on a machine with nothing pre-serving the build) crashed with an uncaught `page.goto: net::ERR_CONNECTION_REFUSED` instead of a clean, actionable failure \u2014 confirming that on a clean checkout, following the repo's own documented command (`npm run e2e`) does not actually exercise the suite it claims to run; it just throws. So a change to `app/src/App.tsx`, `app/src/styles/app.css`, or the DOM structure/ids they share (e.g. renaming `#sidecol` in JSX without updating the CSS selector, or vice versa) has NO automated path that catches it: `npm test`/`typecheck`/`build` (all CI-run) never render real CSS layout, `responsiveCss.test.ts` only parses the stylesheet text for internal consistency and never looks at the rendered DOM at all, and the one tool built to check the rendered geometry against real ids is not wired to run and does not run cleanly on its own when invoked as documented.",
+      "remediation": "Either (a) add an e2e job to ci.yml (or a scheduled/PR-triggered workflow) that builds, starts `vite preview` on the app's dist, waits for it to be reachable, then runs `node scripts/e2e/drive.mjs` and fails the build on nonzero exit, or (b) if e2e is deliberately kept manual/local-only, fix `npm run e2e` to actually start and tear down a preview server (e.g. wrap it with a `concurrently`/wait-on/spawn+kill sequence) and say explicitly in app/CLAUDE.md that this check is NOT part of CI and must be run by hand before merging a layout change \u2014 as it stands the docs assert a guarantee ('the only place either question can be asked') that nothing currently enforces.",
+      "invariant": "For every push/PR event that can change app/src/**, app/src/styles/app.css, or scripts/e2e/drive.mjs, some CI job invokes `node scripts/e2e/drive.mjs` (or an equivalent) against a live server and the workflow fails on its nonzero exit code \u2014 mechanically checkable by grepping every file under .github/workflows for a reference to `drive.mjs` (currently zero); and `npm run e2e` on a clean checkout with no manually pre-started server exits nonzero with an actionable message rather than an uncaught exception."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment-violates-stated-principle",
+      "theme": "CSS comment claims a design principle that the code does not follow",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 156,
+      "summary": "Comment at lines 24-27 states 'Every offset measured across that column derives from these' (referring to --gutter and --col-w custom properties), but #sidecol at line 156 uses hardcoded 16px in calc(var(--gutter) + var(--col-w) + 16px), violating the principle.",
+      "failure": "Developer reading the comment believes all panel spacing derives from custom properties. When trying to adjust the gap between #sidecol (250px wide, at right: 314px) and #buddies (280px wide, at right: 18px), they would look in the custom properties block and miss the hardcoded 16px that creates the 314 - (18 + 280) = 16px gap.",
+      "remediation": "Either (1) extract the gap as a custom property (--sidecol-gap: 16px) and use calc(var(--gutter) + var(--col-w) + var(--sidecol-gap)) in the rule, or (2) update the comment at lines 24-27 to acknowledge that some offsets include hardcoded values not listed in the variables, with an explanation of which ones."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-about-test-coverage",
+      "theme": "Comment claims code path is untested when tests actually exist",
+      "file": "/home/user/ringweave/scripts/e2e/drive.mjs",
+      "line": 3,
+      "summary": "Lines 3-4 state 'The unit suite mocks the worker hook, so none of the constrained generation path is exercised anywhere else.' This is false\u2014app/test/generateWorker.test.ts exercises the constrained path via runGeneration, including lines 66-80 (constraint satisfaction) and 82-88 (girth measurement for constrained builder).",
+      "failure": "Developer reading this comment believes the constrained generation path has zero unit test coverage and only e2e testing verifies it. This misrepresents the test landscape and could lead them to: (1) write redundant e2e tests when unit tests already exist, (2) overlook existing unit test coverage when debugging constraint issues, (3) miss the opportunity to start with cheaper unit tests for new constraint features.",
+      "remediation": "Update lines 3-4 to acknowledge existing unit test coverage: 'End-to-end verification in the real app. The unit suite tests the constrained path via runGeneration (app/test/generateWorker.test.ts), but this e2e test verifies the full integration in the production build and measures layout containment across viewports.'"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "modal-focus-not-trapped",
+      "theme": "an aria-modal dialog relies on `inert` to keep focus from entering the background page, but nothing cycles Tab back into the dialog once it reaches the dialog's own last (or first) control, so a keyboard user can Tab straight out of the app into browser chrome",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 123,
+      "summary": "RosterModal (`role=\"dialog\" aria-modal=\"true\"`) has no Tab-cycling handler. `inert` on the sibling `#app` div (App.tsx:257) correctly stops Tab from walking INTO the background content, but that is a different guarantee from the standard WAI-ARIA modal-dialog focus trap, which requires Tab from the last focusable descendant to wrap to the first (and Shift+Tab from the first to wrap to the last) while the dialog is open. Grepping the whole app/src tree for any keydown-based Tab handling (`Tab|trapFocus|focustrap|keydown`) turns up only useEscape's Escape listener \u2014 no code anywhere manages Tab. Concretely: on cold load, or whenever `Generate buddy graph` is disabled (`disabled={!feas.canGenerate || ruleProblems.length > 0}`, RosterModal.tsx:180-186, a REAL `disabled` so it is skipped by Tab entirely), the last focusable element inside the dialog becomes `Cancel` (or nothing, on first load where `canCancel` is false and the disabled Generate button is the last DOM node with no focusable neighbour after it). Since every other focusable thing in the document is either `inert` (`#app`, and `<div inert={modalOpen}><Notice/></div>`) or unmounted (the busy overlay, when not running), the browser's native (non-cyclic) Tab order has nowhere left to go but out of the document into the browser's own UI (address bar / toolbar), and the same happens in reverse with Shift+Tab from the roster textarea (the first control).",
+      "failure": "Cold load with the roster left empty (so `feas.canGenerate` is false and Generate is really `disabled`): Tab from the roster textarea through the file/example buttons, the collapsed Buddy-rules summary, and SettingsControls lands on nothing further inside the dialog (Cancel is absent on first load since `canCancel=view!==null` is false) \u2014 the next Tab exits the page into the browser chrome with no script-driven return path, even though the dialog is still the only thing the user is supposed to be able to interact with.",
+      "remediation": "Add a small focus-trap handler in RosterModal's keydown (or a shared `useFocusTrap` hook mirroring `useEscape`'s pattern) that, while the dialog is mounted, intercepts Tab on the last focusable descendant to wrap to the first, and Shift+Tab on the first to wrap to the last \u2014 the standard WAI-ARIA APG dialog pattern that `inert` alone does not provide.",
+      "invariant": "While an `aria-modal=\"true\"` dialog is the only non-inert focusable region in the document, pressing Tab with focus on the dialog's last focusable descendant moves focus to its first focusable descendant (and Shift+Tab on the first moves to the last) \u2014 focus never leaves the set of the dialog's own focusable descendants."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "actionable-fix-hidden-behind-closed-disclosure",
+      "theme": "an error/refusal message names a specific buddy-rule conflict and directs the user to fix it, but the editor row that needs fixing is inside a `<details>` disclosure that is always collapsed by default, including on the very reopen the message describes",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 161,
+      "summary": "`<details className=\"rules-block\">` (wrapping `ConstraintsEditor`) has no `open` prop bound to anything \u2014 it is a fresh, always-collapsed mount every time RosterModal remounts, including the specific reopen App.tsx performs when `bg.status === \"refused\"` (App.tsx:144-150, sets `reopenReason` from `describeReasons(bg.refusals, names)` and reopens the dialog). Most of the core's refusal `Reason` codes are specifically about buddy rules and name a person with an instruction to act on the rule (`constraintMessages.ts`: `unknown-person` \u2192 \"remove it and try again\"; `required-and-prohibited` \u2192 \"pick one\"; `required-degree-exceeds-k`, `required-within-prohibited`, `prohibited-from-everyone`, `prohibited-splits-group`, `too-many-invalid-constraints` are all rule-shaped). The reopened dialog announces that message via `aria-describedby` on the dialog and autofocuses the roster textarea (`useEffect(() => rosterRef.current?.focus(), [])`, RosterModal.tsx:63-65) \u2014 nowhere near the rules editor \u2014 while the rows that need editing sit inside a disclosure the user must separately notice and expand. `appErrorRecovery.test.tsx`'s own refusal tests (`required-degree-exceeds-k`, `self-pair`, `prohibited-splits-group`) only assert the message text and dialog role; none of them assert or rely on `.rules-block` being open, and every OTHER test in the same file that touches rules explicitly clicks `.rules-block > summary` first \u2014 confirming the collapsed-by-default behavior is real and unhandled for this path, not incidentally covered.",
+      "failure": "Roster \"Alice, Bob, Carol\" with a buddy rule requiring Alice+Bob and a second rule prohibiting Alice+Bob, then Generate (or, per the app's own comment at appErrorRecovery.test.tsx:121-122, a reroll that resurfaces the same conflict): the dialog reopens, the user hears/reads \"Alice and Bob are set to be buddies and to never be buddies \u2014 pick one\", focus is in the roster textarea, and the two conflicting rule rows are invisible behind a collapsed \"Buddy rules\" summary with no automatic disclosure and no cue that expanding it is where the fix lives.",
+      "remediation": "Thread whether the current `reopenReason`'s underlying refusal codes are rule-related into an `open` (or `defaultOpen`) prop on the `rules-block` `<details>`, or move focus to the first affected row instead of the roster textarea when the reason names a specific person/rule.",
+      "invariant": "Whenever RosterModal reopens with a `reopenReason` derived from a rule-related refusal code (unknown-person, self-pair, required-and-prohibited, required-within-prohibited, required-degree-exceeds-k, prohibited-from-everyone, prohibited-splits-group, too-many-invalid-constraints), the `.rules-block` disclosure containing the flagged row is open on that render, without requiring an extra manual expand step."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fixed-timeout-vs-variable-length-message",
+      "theme": "a transient notice's auto-dismiss delay is a fixed constant chosen for a short message, but the same code path can produce much longer messages up to the app's own character cap, so the notice can be removed from the DOM well before a typical reading pace finishes it",
+      "file": "app/src/state/useNotice.ts",
+      "line": 6,
+      "summary": "`AUTO_CLEAR_MS = 4000` is a single constant used by `flash()` for every message regardless of length, while `MAX_NOTICE_CHARS = 300` is the cap the same hook clamps to (useNotice.ts:6-15, 27-34). The comment at line 4-5 calls 4000ms \"long enough to read\", but that isn't true uniformly: `App.tsx:244` flashes `Couldn't import that file: ${err.message}` where `err.message` comes straight from `importGraph.ts`'s validation errors (e.g. `That file has too many edges for ${f.people.length} people \u2014 it's denser than a buddy graph.`), producing a combined message around 100+ characters \u2014 at a common screen-reader/reading pace of roughly 13-15 chars/sec that needs 7-8 seconds, nearly double the fixed window, and a message near the 300-char cap would need 20+ seconds. The underlying `<button className=\"toast\">` (Notice.tsx) is unmounted the instant the timer fires (`setNotice((n) => (n === text ? null : n))`), taking with it the only way to re-read or dismiss it deliberately.",
+      "failure": "Drop-import a JSON file that fails `importGraph`'s density check: the toast reads \"Couldn't import that file: That file has too many edges for 1000 people \u2014 it's denser than a buddy graph.\" (~108 characters) and is gone from the DOM (visually and from the accessibility tree) 4000ms after it appears \u2014 well short of the time needed to read or hear the whole sentence at an ordinary pace, and with no way to bring it back.",
+      "remediation": "Scale the auto-clear delay with message length (e.g. a floor plus a per-character allowance, capped at some maximum) instead of one constant used for every producer up to `MAX_NOTICE_CHARS`, or extend the fixed floor to comfortably cover the cap.",
+      "invariant": "For every message `flash()` can display (up to `MAX_NOTICE_CHARS`), the auto-clear delay is at least long enough to read the message at an ordinary reading pace \u2014 the delay must not be a constant chosen for the shortest producers while longer producers share the same cap."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "print-output-includes-app-chrome",
+      "theme": "overlays that were deliberately moved outside #app so that `inert` could not cascade onto them also escaped the print rule that hides app chrome, so they land on the paper deliverable",
+      "file": "app/src/styles/print.css",
+      "line": 7,
+      "summary": "`@media print { #app { display: none } }` hides only `#app`, but the toast, the setup dialog and the busy scrim are siblings of `#app` (they must be, so `inert` does not cascade to them), so they print on top of the buddy slips.",
+      "failure": "Measured in Chromium against the production build with `emulateMedia({media:'print'})`. (a) Generate a 12-person roster, press \"\u21bb Different arrangement\" until the \"Couldn't find a different arrangement\u2026\" toast appears, then press \"Print slips\" within the 4 s auto-clear: `.toast` computes `display:block; position:fixed; z-index:40` with box 513x38 @443,14, directly over the first slip (1400x90 @0,0). (b) Press \"Edit people\" then Ctrl+P: `#modal` computes `display:flex; position:fixed; z-index:20` with box 1400x900 @0,0 \u2014 a translucent scrim plus the whole setup sheet covering every slip on the page. Nothing in app/test/ or drive.mjs asserts anything about print media, so the suite is silent on both.",
+      "remediation": "Fix by subtraction rather than by enumerating the overlays: replace `#app { display: none !important }` with a rule that hides every root child except the slips, e.g. `@media print { #root > *:not(.slips) { display: none !important } }`. That closes the siblings the reported case does not name \u2014 `.busy`, `.busy-live`, the two `.sr-live` regions, the hidden file `<input>` and the `<div inert>` wrapping the toast \u2014 in one rule, and stays correct when the next overlay is added outside `#app`. The docblock at the top of print.css claims \"app chrome \u2026 never reaches paper\", which is currently false; it becomes true again with the rule above.",
+      "invariant": "Under `@media print`, every element in the document that is neither `.slips` nor a descendant of `.slips` has computed `display: none` (equivalently: generates no painted box).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "clip-arithmetic-fabricates-box",
+      "theme": "the layout oracle's clipping arithmetic can report a panel occupying a region it does not occupy, so the only check that can answer the geometry question can both false-fail and mask a real overlap",
+      "file": "scripts/e2e/drive.mjs",
+      "line": 55,
+      "summary": "`painted()` builds `new DOMRect(x, y, w, h)` from an intersection whose width/height can be negative; DOMRect normalises a negative dimension by swapping top/bottom (left/right), so a fully-clipped element is relocated instead of emptied, and the next clipping ancestor turns the swap into a positive phantom box.",
+      "failure": "Reproduced with drive.mjs's exact `painted()` at 390x640 after Playwright's own auto-scroll of `<main>` (the same `getByLabel('Find a person').fill(...)` drive.mjs performs). `#rail`'s real rect is top \u2212261..\u221262, entirely above `<main>`'s 76..640 box, so it paints nothing \u2014 yet `painted(#rail)` returns y 0..76, height 76: the `main` step yields `DOMRect(x, 76, w, \u2212138)`, which normalises to top \u221262 / bottom 76, and the `body` step (0..640) then intersects that swapped rect into a positive 0..76 box. `#toggle` (real \u221254..\u221217) maps to the identical phantom, so the overlap pass reports `#rail\u00d7#toggle share 390\u00d776px` for two panels that are both scrolled out of view. The inverse is equally available: two negatively-clipped panels that genuinely do overlap are moved apart and the overlap goes unreported.",
+      "remediation": "Clamp each intersection to zero before constructing the rect \u2014 `const w = Math.max(0, Math.min(box.right, r.right) - x), h = Math.max(0, Math.min(box.bottom, r.bottom) - y)` \u2014 so a fully-clipped element yields an empty box and is dropped by the existing `flat.w < 1 || flat.h < 1` guards rather than being relocated. The sibling is the same expression used for `x`/`y`: `Math.max(box.left, r.left)` is fine, but only because the width clamp makes the pair consistent.",
+      "invariant": "For every measured selector, the box returned by `painted(el)` has non-negative width and height AND is contained (within 1px) in `el.getBoundingClientRect()`: painted.left >= rect.left - 1, painted.right <= rect.right + 1, painted.top >= rect.top - 1, painted.bottom <= rect.bottom + 1.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "tier-local-placement-check",
+      "theme": "the completeness test for phone-width layout reads one media block instead of the cascade, so an offset inherited from a wider tier is invisible to the guard that exists to catch exactly that",
+      "file": "app/test/responsiveCss.test.ts",
+      "line": 100,
+      "summary": "`placement(narrow.body, sel)` reads only the `@media (max-width: 820px)` block, so the `relative \u21d2 no offsets` assertion is made against that block's own declarations rather than against the value the browser computes at 820px.",
+      "failure": "Traced against the current stylesheet: `#stage` is `position: absolute; inset: 0` in the base tier (app.css:68) and `position: relative; height: 46vh` at \u2264820px (app.css:310). `simpleRules(narrow.body).get('#stage')` contains no inset declaration, so `insets` is `[]` and `expect(insets).toEqual([])` passes \u2014 while the cascaded value at 390px is `position: relative; inset: 0`. It is benign only because `inset: 0` resolves to a zero displacement. Add `left: 300px` to the base `#stage` rule and the graph is displaced 300px right and off the phone viewport, `npm test` stays green, and only `scripts/e2e/drive.mjs` \u2014 which `npm test` does not run \u2014 can see it. The same hole applies to any future panel that keeps a wide-tier offset and is merely demoted to `relative` at \u2264820px.",
+      "remediation": "Build the narrowest tier's declarations from the CASCADE rather than from one block: concatenate `rest` plus every tier whose max-width is >= the narrowest width, widest first, and run `placement` over that. That also closes the sibling case the current construction misses \u2014 a panel that first becomes `position: absolute` inside the narrowest tier itself is never added to `positioned`, because that set is built from `wider` tiers only.",
+      "invariant": "For every selector in `positioned`, the placement evaluated over the full cascade at the narrowest tier's width (base tier plus every `@media (max-width: N)` block with N >= that width, in source order) is `static`, or `relative` with each of top/right/bottom/left/inset either absent or `auto`.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unenforced-verification-seam",
+      "theme": "the only real check of the responsive-layout/inert/focus-rescue invariants this review is scoped around never actually runs",
+      "file": "scripts/e2e/drive.mjs, package.json, .github/workflows/ci.yml, .github/workflows/pages.yml, app/CLAUDE.md",
+      "summary": "app/CLAUDE.md states the layout/inert/focus contract is guaranteed by two mechanisms together: `responsiveCss.test.ts` (a stylesheet-text completeness check) plus `scripts/e2e/drive.mjs`, described as measuring real containment/overlap/inert-cascade/focus-rescue/keyboard-raising at five viewports and called out as 'the only place either question can be asked' since jsdom computes no layout. In the actual repo, `drive.mjs` is wired into exactly one place: the root `npm run e2e` script. Neither `.github/workflows/ci.yml` (the `app` job runs `npm test`/`npm run build`, no e2e) nor `.github/workflows/pages.yml` (builds and deploys, no e2e) ever invokes it, and grepping every workflow/json/md file in the repo for `drive.mjs` turns up only `app/CLAUDE.md` and `package.json` itself. Worse, the root `e2e` script itself is incomplete: `\"e2e\": \"npm --prefix lib run build && npm --prefix app run build && node scripts/e2e/drive.mjs\"` never starts `vite preview` (or any server) on the port `drive.mjs` defaults to (127.0.0.1:4173) or documents that one must be started separately \u2014 nothing in `app/package.json`'s scripts or in `app/CLAUDE.md`'s Commands section mentions `preview` or an e2e prerequisite.",
+      "failure": "Reproduced directly: the sandbox happened to have a `vite preview --port 4173` process already running (started externally, not by `npm run e2e`), against which `node scripts/e2e/drive.mjs` passed all checks. Running `BASE=http://127.0.0.1:59999 node scripts/e2e/drive.mjs` (simulating the state after a bare `npm run e2e` on a machine with nothing pre-serving the build) crashed with an uncaught `page.goto: net::ERR_CONNECTION_REFUSED` instead of a clean, actionable failure \u2014 confirming that on a clean checkout, following the repo's own documented command (`npm run e2e`) does not actually exercise the suite it claims to run; it just throws. So a change to `app/src/App.tsx`, `app/src/styles/app.css`, or the DOM structure/ids they share (e.g. renaming `#sidecol` in JSX without updating the CSS selector, or vice versa) has NO automated path that catches it: `npm test`/`typecheck`/`build` (all CI-run) never render real CSS layout, `responsiveCss.test.ts` only parses the stylesheet text for internal consistency and never looks at the rendered DOM at all, and the one tool built to check the rendered geometry against real ids is not wired to run and does not run cleanly on its own when invoked as documented.",
+      "remediation": "Either (a) add an e2e job to ci.yml (or a scheduled/PR-triggered workflow) that builds, starts `vite preview` on the app's dist, waits for it to be reachable, then runs `node scripts/e2e/drive.mjs` and fails the build on nonzero exit, or (b) if e2e is deliberately kept manual/local-only, fix `npm run e2e` to actually start and tear down a preview server (e.g. wrap it with a `concurrently`/wait-on/spawn+kill sequence) and say explicitly in app/CLAUDE.md that this check is NOT part of CI and must be run by hand before merging a layout change \u2014 as it stands the docs assert a guarantee ('the only place either question can be asked') that nothing currently enforces.",
+      "invariant": "For every push/PR event that can change app/src/**, app/src/styles/app.css, or scripts/e2e/drive.mjs, some CI job invokes `node scripts/e2e/drive.mjs` (or an equivalent) against a live server and the workflow fails on its nonzero exit code \u2014 mechanically checkable by grepping every file under .github/workflows for a reference to `drive.mjs` (currently zero); and `npm run e2e` on a clean checkout with no manually pre-started server exits nonzero with an actionable message rather than an uncaught exception."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-comment-violates-stated-principle",
+      "theme": "CSS comment claims a design principle that the code does not follow",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 156,
+      "summary": "Comment at lines 24-27 states 'Every offset measured across that column derives from these' (referring to --gutter and --col-w custom properties), but #sidecol at line 156 uses hardcoded 16px in calc(var(--gutter) + var(--col-w) + 16px), violating the principle.",
+      "failure": "Developer reading the comment believes all panel spacing derives from custom properties. When trying to adjust the gap between #sidecol (250px wide, at right: 314px) and #buddies (280px wide, at right: 18px), they would look in the custom properties block and miss the hardcoded 16px that creates the 314 - (18 + 280) = 16px gap.",
+      "remediation": "Either (1) extract the gap as a custom property (--sidecol-gap: 16px) and use calc(var(--gutter) + var(--col-w) + var(--sidecol-gap)) in the rule, or (2) update the comment at lines 24-27 to acknowledge that some offsets include hardcoded values not listed in the variables, with an explanation of which ones."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-about-test-coverage",
+      "theme": "Comment claims code path is untested when tests actually exist",
+      "file": "/home/user/ringweave/scripts/e2e/drive.mjs",
+      "line": 3,
+      "summary": "Lines 3-4 state 'The unit suite mocks the worker hook, so none of the constrained generation path is exercised anywhere else.' This is false\u2014app/test/generateWorker.test.ts exercises the constrained path via runGeneration, including lines 66-80 (constraint satisfaction) and 82-88 (girth measurement for constrained builder).",
+      "failure": "Developer reading this comment believes the constrained generation path has zero unit test coverage and only e2e testing verifies it. This misrepresents the test landscape and could lead them to: (1) write redundant e2e tests when unit tests already exist, (2) overlook existing unit test coverage when debugging constraint issues, (3) miss the opportunity to start with cheaper unit tests for new constraint features.",
+      "remediation": "Update lines 3-4 to acknowledge existing unit test coverage: 'End-to-end verification in the real app. The unit suite tests the constrained path via runGeneration (app/test/generateWorker.test.ts), but this e2e test verifies the full integration in the production build and measures layout containment across viewports.'"
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "modal-focus-not-trapped",
+      "theme": "an aria-modal dialog relies on `inert` to keep focus from entering the background page, but nothing cycles Tab back into the dialog once it reaches the dialog's own last (or first) control, so a keyboard user can Tab straight out of the app into browser chrome",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 123,
+      "summary": "RosterModal (`role=\"dialog\" aria-modal=\"true\"`) has no Tab-cycling handler. `inert` on the sibling `#app` div (App.tsx:257) correctly stops Tab from walking INTO the background content, but that is a different guarantee from the standard WAI-ARIA modal-dialog focus trap, which requires Tab from the last focusable descendant to wrap to the first (and Shift+Tab from the first to wrap to the last) while the dialog is open. Grepping the whole app/src tree for any keydown-based Tab handling (`Tab|trapFocus|focustrap|keydown`) turns up only useEscape's Escape listener \u2014 no code anywhere manages Tab. Concretely: on cold load, or whenever `Generate buddy graph` is disabled (`disabled={!feas.canGenerate || ruleProblems.length > 0}`, RosterModal.tsx:180-186, a REAL `disabled` so it is skipped by Tab entirely), the last focusable element inside the dialog becomes `Cancel` (or nothing, on first load where `canCancel` is false and the disabled Generate button is the last DOM node with no focusable neighbour after it). Since every other focusable thing in the document is either `inert` (`#app`, and `<div inert={modalOpen}><Notice/></div>`) or unmounted (the busy overlay, when not running), the browser's native (non-cyclic) Tab order has nowhere left to go but out of the document into the browser's own UI (address bar / toolbar), and the same happens in reverse with Shift+Tab from the roster textarea (the first control).",
+      "failure": "Cold load with the roster left empty (so `feas.canGenerate` is false and Generate is really `disabled`): Tab from the roster textarea through the file/example buttons, the collapsed Buddy-rules summary, and SettingsControls lands on nothing further inside the dialog (Cancel is absent on first load since `canCancel=view!==null` is false) \u2014 the next Tab exits the page into the browser chrome with no script-driven return path, even though the dialog is still the only thing the user is supposed to be able to interact with.",
+      "remediation": "Add a small focus-trap handler in RosterModal's keydown (or a shared `useFocusTrap` hook mirroring `useEscape`'s pattern) that, while the dialog is mounted, intercepts Tab on the last focusable descendant to wrap to the first, and Shift+Tab on the first to wrap to the last \u2014 the standard WAI-ARIA APG dialog pattern that `inert` alone does not provide.",
+      "invariant": "While an `aria-modal=\"true\"` dialog is the only non-inert focusable region in the document, pressing Tab with focus on the dialog's last focusable descendant moves focus to its first focusable descendant (and Shift+Tab on the first moves to the last) \u2014 focus never leaves the set of the dialog's own focusable descendants."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "actionable-fix-hidden-behind-closed-disclosure",
+      "theme": "an error/refusal message names a specific buddy-rule conflict and directs the user to fix it, but the editor row that needs fixing is inside a `<details>` disclosure that is always collapsed by default, including on the very reopen the message describes",
+      "file": "app/src/panels/RosterModal.tsx",
+      "line": 161,
+      "summary": "`<details className=\"rules-block\">` (wrapping `ConstraintsEditor`) has no `open` prop bound to anything \u2014 it is a fresh, always-collapsed mount every time RosterModal remounts, including the specific reopen App.tsx performs when `bg.status === \"refused\"` (App.tsx:144-150, sets `reopenReason` from `describeReasons(bg.refusals, names)` and reopens the dialog). Most of the core's refusal `Reason` codes are specifically about buddy rules and name a person with an instruction to act on the rule (`constraintMessages.ts`: `unknown-person` \u2192 \"remove it and try again\"; `required-and-prohibited` \u2192 \"pick one\"; `required-degree-exceeds-k`, `required-within-prohibited`, `prohibited-from-everyone`, `prohibited-splits-group`, `too-many-invalid-constraints` are all rule-shaped). The reopened dialog announces that message via `aria-describedby` on the dialog and autofocuses the roster textarea (`useEffect(() => rosterRef.current?.focus(), [])`, RosterModal.tsx:63-65) \u2014 nowhere near the rules editor \u2014 while the rows that need editing sit inside a disclosure the user must separately notice and expand. `appErrorRecovery.test.tsx`'s own refusal tests (`required-degree-exceeds-k`, `self-pair`, `prohibited-splits-group`) only assert the message text and dialog role; none of them assert or rely on `.rules-block` being open, and every OTHER test in the same file that touches rules explicitly clicks `.rules-block > summary` first \u2014 confirming the collapsed-by-default behavior is real and unhandled for this path, not incidentally covered.",
+      "failure": "Roster \"Alice, Bob, Carol\" with a buddy rule requiring Alice+Bob and a second rule prohibiting Alice+Bob, then Generate (or, per the app's own comment at appErrorRecovery.test.tsx:121-122, a reroll that resurfaces the same conflict): the dialog reopens, the user hears/reads \"Alice and Bob are set to be buddies and to never be buddies \u2014 pick one\", focus is in the roster textarea, and the two conflicting rule rows are invisible behind a collapsed \"Buddy rules\" summary with no automatic disclosure and no cue that expanding it is where the fix lives.",
+      "remediation": "Thread whether the current `reopenReason`'s underlying refusal codes are rule-related into an `open` (or `defaultOpen`) prop on the `rules-block` `<details>`, or move focus to the first affected row instead of the roster textarea when the reason names a specific person/rule.",
+      "invariant": "Whenever RosterModal reopens with a `reopenReason` derived from a rule-related refusal code (unknown-person, self-pair, required-and-prohibited, required-within-prohibited, required-degree-exceeds-k, prohibited-from-everyone, prohibited-splits-group, too-many-invalid-constraints), the `.rules-block` disclosure containing the flagged row is open on that render, without requiring an extra manual expand step."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fixed-timeout-vs-variable-length-message",
+      "theme": "a transient notice's auto-dismiss delay is a fixed constant chosen for a short message, but the same code path can produce much longer messages up to the app's own character cap, so the notice can be removed from the DOM well before a typical reading pace finishes it",
+      "file": "app/src/state/useNotice.ts",
+      "line": 6,
+      "summary": "`AUTO_CLEAR_MS = 4000` is a single constant used by `flash()` for every message regardless of length, while `MAX_NOTICE_CHARS = 300` is the cap the same hook clamps to (useNotice.ts:6-15, 27-34). The comment at line 4-5 calls 4000ms \"long enough to read\", but that isn't true uniformly: `App.tsx:244` flashes `Couldn't import that file: ${err.message}` where `err.message` comes straight from `importGraph.ts`'s validation errors (e.g. `That file has too many edges for ${f.people.length} people \u2014 it's denser than a buddy graph.`), producing a combined message around 100+ characters \u2014 at a common screen-reader/reading pace of roughly 13-15 chars/sec that needs 7-8 seconds, nearly double the fixed window, and a message near the 300-char cap would need 20+ seconds. The underlying `<button className=\"toast\">` (Notice.tsx) is unmounted the instant the timer fires (`setNotice((n) => (n === text ? null : n))`), taking with it the only way to re-read or dismiss it deliberately.",
+      "failure": "Drop-import a JSON file that fails `importGraph`'s density check: the toast reads \"Couldn't import that file: That file has too many edges for 1000 people \u2014 it's denser than a buddy graph.\" (~108 characters) and is gone from the DOM (visually and from the accessibility tree) 4000ms after it appears \u2014 well short of the time needed to read or hear the whole sentence at an ordinary pace, and with no way to bring it back.",
+      "remediation": "Scale the auto-clear delay with message length (e.g. a floor plus a per-character allowance, capped at some maximum) instead of one constant used for every producer up to `MAX_NOTICE_CHARS`, or extend the fixed floor to comfortably cover the cap.",
+      "invariant": "For every message `flash()` can display (up to `MAX_NOTICE_CHARS`), the auto-clear delay is at least long enough to read the message at an ordinary reading pace \u2014 the delay must not be a constant chosen for the shortest producers while longer producers share the same cap."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 23,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 23,
+      "skipped": true
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 23,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 23,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 23,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app) plus its layout tests \u2014 app/src/styles/app.css, app/src/App.tsx, app/test/responsiveCss.test.ts and scripts/e2e/drive.mjs",
+  "tokens": {
+    "subagentTokens": 483285,
+    "agents": 5,
+    "toolCalls": 194
+  }
+}

@@ -1,0 +1,568 @@
+{
+  "runId": "wf_400a620b-ab0",
+  "target": "lib/src",
+  "round": 5,
+  "tokens": {
+    "subagentTokens": 456875,
+    "agents": 6,
+    "toolCalls": 119
+  },
+  "observations": [
+    {
+      "kind": "non-monotonic-convergence",
+      "note": "Findings went UP: 5 -> 12 confirmed, 1 -> 5 blocking, 4 -> 9 themes, after four rounds of decline. The loop is NOT monotonically converging. This matches E1's own shape and Calboreanu's published sequence (15, 8, 12, 2, 8, 1, 4, 1, 0), and it is the single strongest argument for the two-consecutive-clean-rounds stopping rule: a round-4-style quiet round is not evidence of convergence."
+    },
+    {
+      "kind": "self-induction",
+      "note": "A blocking finding again targets an earlier fix in this same loop: polishConstrained's fragmentation guard compares COMPONENT COUNT, which is strictly weaker than the largest-component-size property the unconstrained pass enforces \u2014 a swap that splits the largest group while merging two small ones keeps the count flat and passes. Fifth consecutive round."
+    }
+  ],
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 11,
+    "confirmed": 12,
+    "blocking": 5,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 9
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 4,
+      "checked": "Full surface of /home/user/ringweave/lib/src/core (graph, budgets, metrics, bounds, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus lib/test/*. Ran `npm test` (237 pass, 103 s). Regenerated the oracle (`cd reference-python && python3 test_core.py && python3 gen_fixtures.py`) \u2014 both reference.json copies came back byte-identical, so ASPL/diameter parity is intact. Wrote and ran five throwaway probe suites (all removed afterwards; `git status` clean): (1) 240-config sweep varying `minSeparation` on the constrained path; (2) 400-instance hard-constraint fuzz over buildConstrainedBuddyGraph (required present, prohibited absent, degree<=k, priorHard promotion, report/graph parity for connected/aspl/largestComponentFraction, rerun determinism) \u2014 clean; (3) 300-instance edge-insertion-order invariance for girth, allPairsSummary, largestComponentFraction, eccentricity, shortestPath (every s,t pair), polish and polishConstrained \u2014 all order-invariant, so no Set/Map iteration-order leak; (4) 3000-instance polishConstrained fragmentation probe; (5) ~1500 builder-level churn/prohibition scenarios chasing builder reachability of (4). Also traced by hand: forceConnect really is inert (completion's stuck-marking is monotone, so its output is legal-edge-maximal), girth's BFS cross-edge rule is exact and order-free, boundedPolishIterations clamping, mooreLowerBounds recurrence at k=1,2 and n<=2, penalizedAspl at reachablePairs===0, and the n=0/1/2 and k>=n boundaries of both builders.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of lib/src/core (index, budgets, graph, constraints, constrainedGreedy, greedy, polish, swap, metrics, bounds, rng) plus lib/test, built to dist and executed hostile inputs.\n\nAttacked and HELD: (a) worst admitted constrained configs \u2014 n=5000/k=4 23.5s, n=464/k=463 57.8s, n=1000/k=100 35.2s, n=2000/k=25 29.7s, n=3000/k=11 27.0s \u2014 all consistent with MAX_CONSTRAINED_WORK's calibration, no outlier where the model under-charges; (b) n=5000 with k=0 (constrainedWork models it as literally 0 work) \u2192 2.17s, bounded by MAX_CONSTRAINED_N as documented; (c) worst admitted unconstrained configs (1000,12) 51s, (376,375) 17.8s, (2154,2) 0.8s, and with minSeparation driven to floor(n/2) \u2014 47.6s / 19.1s, no blow-up from the demotion loop (bounded by n/2 extra findPair calls = n^3/2 <= greedyWork for k>=2); (d) refusal path at n=1e6 \u2192 0.14s / 114MB, so refusedResult's n-sized allocation is not a hang; (e) option fuzzing through both public builders: polishIters Infinity/1e15/NaN/-1/1.5/-0, minSeparation +/-Infinity/NaN/1e308/0.5, seed NaN/-1e308, priorWeight +/-Infinity/NaN/-1e308, polish 1/\"yes\"/\"auto\", n = -0/0/1, k = 1e9 at n=2,3 \u2014 all terminate with sane output, no NaN energy, no silent no-op; (f) traced that forceConnect's O(n^3) shape is genuinely inert (legality only shrinks as edges are added, so `stuck` is permanent and completion's output is legal-edge-maximal); (g) traced that validate's O(n^2) connectivity walk only builds ~n pair keys in the common case because the `!seen[v]` short-circuit precedes isProhibited; (h) traced pairKey/keyToPair for delimiter ambiguity \u2014 numeric endpoints never stringify with a comma, so the key encoding is unambiguous for all `number` inputs; (i) traced boundedPolishIterations, polishWork, constrainedWork, greedyWork, mooreLowerBounds for overflow/NaN/Infinity/non-integer/-0 \u2014 all bounded, mooreLowerBounds terminates for k=1,2,>=3 and refuses n>MAX_ROSTER; (j) confirmed determinism is not order-dependent on the one Set-iteration-order-sensitive path (joinAnyComponents), because that path never fires.\n\nNo untrusted-text-to-sink surface exists in lib: the only strings produced are formatReason's number interpolations and pairKey's numeric keys. Spreadsheet/CSV/clipboard sinks live in app/, out of this target.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface read of lib/src/core (graph.ts, budgets.ts, greedy.ts, polish.ts, constrainedGreedy.ts, constraints.ts, metrics.ts, index.ts) plus lib/test/optimizer.props.test.ts, lib/CLAUDE.md and docs/PROJECT_PLAN.md. Traced the declared OCP seam (TagPolicy switch in constraints.ts) against a hypothetical new policy, traced the deliberate non-seams (legalEdge/constrainedMeasure) against their stated rationale, traced fromTags' documented-but-deferred hardening against a live-caller grep (app/src has zero references to Constraints/fromTags/TagPolicy \u2014 F7 tag UI is still P2/unbuilt, confirming the CLAUDE.md deferral is still correctly a deferral and not yet due), and diffed the polish default-iteration-count wiring across polish.ts/constrainedGreedy.ts/index.ts/budgets.ts against git history (round-3's 'put the budget where the work is' commit) to see whether the refactor that moved iteration-clamping into the primitives left a single source of truth behind.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 5,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Read the round's target file list (lib/src/core/budgets.ts, graph.ts, polish.ts, constrainedGreedy.ts, index.ts, lib/test/optimizer.props.test.ts) and confirmed via directory listing that lib/src/core/* is a pure TypeScript computation library (RNG, greedy/constrained-greedy assignment, local-search polish, budget/metric calculations) with no JSX, no DOM APIs, no event handlers, and no rendering. It is consumed by app/src but contains no UI surface of its own. My lens (keyboard reachability, focus order, ARIA/live-region announcement, reduced motion, error/empty-path UX) has no attachment point in this target: there are no interactive elements, dialogs, toggles, or live regions to trace here at all.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "polishConstrained's fragmentation guard checks only component COUNT, a strictly weaker property than the largest-component-size invariant the unconstrained pass already enforces, so a swap can shrink the largest group while count stays flat and still pass",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "polishConstrained's fragmentation guard only compares COMPONENT COUNT, so a swap that simultaneously splits the largest group and merges two small ones passes it \u2014 the largest group shrinks while the count is unchanged, at the library's own DEFAULT_PRIOR_WEIGHT of 2."
+      ],
+      "remediation": "Delete the count-only guard and replace it with the same largest-component-size comparison the unconstrained pass uses (connectedComponents is already computed in constrainedMeasure, so the size is free) \u2014 one guard, one invariant, both passes."
+    },
+    {
+      "theme": "minSeparation is wired into the constrained-completion API and documented as a generation dial, but the candidate-selection ordering makes the distance scan unreachable \u2014 the option can never change output",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`minSeparation` is extensionally inert on the entire constrained path: choosePartner sorts candidates by farness DESCENDING and then scans for the first candidate at distance >= minSep, but candidates[0] already maximises farness, so the scan can only ever return candidates[0] \u2014 the same value the fallback returns."
+      ],
+      "remediation": "Delete `minSeparation` from ConstrainedGreedyOptions/ConstrainedBuddyOptions and delete the dead scan in choosePartner; state in the module header that constrained completion is unconditionally farthest-first, and hide the separation control in the app when constraints are present."
+    },
+    {
+      "theme": "checkWellFormed, the always-on precondition, omits the required-and-prohibited check that validateDetailed performs, so the guarantee it claims to give holds only when assertHardConstraints (dev-only) is compiled in",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "checkWellFormed (the always-on precondition) mirrors only constraints.ts `structuralReasons` and the caps, omitting the required-and-prohibited check; required edges are then laid unconditionally at line 89, so under NODE_ENV=production \u2014 where assertHardConstraints is compiled out \u2014 constrainedGreedy silently returns a graph containing a prohibited edge."
+      ],
+      "remediation": "Add the one missing check to checkWellFormed itself (iterate cons.requiredPairs() and throw when cons.isProhibited(a,b)) instead of relying on assertHardConstraints to catch it \u2014 the postcondition then reverts to being a backstop, not the only enforcement, and nothing new needs to be added elsewhere."
+    },
+    {
+      "theme": "asplGap collapses 'no valid Moore bound exists' into the same 0 value that means 'provably optimal', so a degenerate (disconnected/Infinity-ASPL) roster reports a perfect quality score",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "asplGap returns 0 \u2014 its documented meaning is 'provably optimal' \u2014 whenever mooreLowerBounds yields no bound, including when the ASPL passed in is Infinity, so BuddyResult.asplGap is 0 for the degenerate rosters where BuddyResult.aspl is Infinity."
+      ],
+      "remediation": "Remove the fallback-to-0 branch in asplGap; return NaN when `aspl` is not finite so 'no bound' can never render as 'zero gap', matching the guard `quality()` already applies at the app layer instead of duplicating it there."
+    },
+    {
+      "theme": "work-budget caps for size-unbounded, caller-supplied-graph algorithms are enforced only inside the high-level wrapper (ringGreedy's MAX_GREEDY_WORK) or only around a sub-loop (boundedPolishIterations), leaving the exported primitives' actual O(n^2)/O(n\u00b7(n+m)) work \u2014 framing all-pairs sweeps, repairDegrees, Constraints.fromTags \u2014 reachable by any direct caller with no gate at all",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`boundedPolishIterations` bounds the polish LOOP but not the two full O(n*(n+m)) `allPairsSummary` sweeps that frame it; when the budget affords ZERO iterations the call still pays both sweeps in full \u2014 the same shape as an already-recorded anneal-calibration defect where framing measurements sit outside the budget.",
+        "`repairDegrees` is exported from the public API with no size cap and no work cap of any kind, O(passes * |under| * (n+m)) on graphs up to MAX_ROSTER = 1,000,000, despite lib/CLAUDE.md's claim that the untrusted-surface generators are all capped like `ringGreedy` is.",
+        "`Constraints.fromTags` materializes O(n^2) prohibited-pair Set entries in the constructor before `validate`'s MAX_CONSTRAINED_N / MAX_CONSTRAINED_WORK refusals ever run, so the size gate cannot stop the cost it exists to bound (currently deferred only because it has no non-test caller yet)."
+      ],
+      "remediation": "Delete the per-primitive ad hoc guards (the loop-only budget in boundedPolishIterations, the absent guard in repairDegrees, the post-hoc validate() in Constraints.fromTags) and replace them with one pre-work size/work check \u2014 mirroring ringGreedy's `greedyWork(n,k) > MAX_GREEDY_WORK` refusal \u2014 called as the first statement of each primitive, before any O(n^2) or O(n\u00b7(n+m)) pass, so the cap and the work it bounds live at the same call site."
+    },
+    {
+      "theme": "comments still tell a maintainer that MAX_CONSTRAINED_N/MAX_CONSTRAINED_WORK (and DEFAULT_MIN_SEPARATION) live in graph.ts, but the round-3 extraction moved them to budgets.ts, so both the origin comment and its cross-reference now point to the wrong file",
+      "severity": "blocking",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Comment claims graph.ts is home to MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, and DEFAULT_MIN_SEPARATION, but these constants have been moved to budgets.ts.",
+        "Comment references 'MAX_CONSTRAINED_N in graph.ts' but the constant and its rationale are in budgets.ts."
+      ],
+      "remediation": "Delete both stale references (graph.ts lines 11-15 and constrainedGreedy.ts line 384) and replace each with a single accurate pointer to budgets.ts as the true dependency-leaf home for the cross-cutting work bounds, so there is one comment to keep in sync instead of two drifting copies."
+    },
+    {
+      "theme": "DEFAULT_POLISH_ITERS and DEFAULT_CONSTRAINED_POLISH_ITERS are declared twice \u2014 once where each primitive actually uses them as its runtime fallback, and again as separate literals in index.ts purely to feed resolveWantPolish's cost model \u2014 so the next ordinary tuning edit to one copy silently stops matching the other",
+      "severity": "blocking",
+      "critics": [
+        "critic-solid",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "DEFAULT_POLISH_ITERS (20000) and DEFAULT_CONSTRAINED_POLISH_ITERS (8000) are each declared twice: once in the module that actually uses them as the runtime fallback (polish.ts:22, constrainedGreedy.ts:60), and once more in index.ts (lines 370, 372) purely to feed resolveWantPolish's cost model \u2014 a byproduct of round 3 moving budget enforcement into the primitives but leaving index.ts's copies behind.",
+        "DEFAULT_POLISH_ITERS and DEFAULT_CONSTRAINED_POLISH_ITERS are defined twice: once in their source modules and again in index.ts without importing from the source; changes to one will not propagate to the other."
+      ],
+      "remediation": "Delete the two literal redeclarations in index.ts (lines 370, 372) and import DEFAULT_POLISH_ITERS from polish.ts and DEFAULT_CONSTRAINED_POLISH_ITERS from constrainedGreedy.ts instead, so resolveWantPolish's cost model is structurally guaranteed to price the default the primitive will actually run."
+    },
+    {
+      "theme": "the iteration-budget concept has three different option-field names (polishIters / maxIters / iters) across the four public option interfaces that all mean the same thing",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The iteration budget option is inconsistently named: 'polishIters' in BuddyOptions and ConstrainedBuddyOptions, but 'maxIters' in PolishOptions and 'iters' in PolishConstrainedOptions."
+      ],
+      "remediation": "Drop maxIters and iters as separate names \u2014 rename both to polishIters so the concept has exactly one name across all four interfaces, removing the need to remember which surface uses which word."
+    },
+    {
+      "theme": "the minimum-separation concept is called 'mind' on the ringGreedy/buildBuddyGraph path and 'minSeparation' on the constrainedGreedy path for the same concept",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "The minimum separation concept uses the name 'mind' in ringGreedy (and internally in buildBuddyGraph) but 'minSeparation' in constrainedGreedy, even though they are the same concept."
+      ],
+      "remediation": "Remove one of the two names \u2014 rename GreedyOptions.mind (and its internal uses in greedy.ts and index.ts) to minSeparation so only one name for the concept remains in the codebase, and note the historical Python 'mind' kwarg in CLAUDE.md instead of in code."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "weak-fragmentation-guard",
+      "theme": "the polish objective lets a soft preference buy a structurally more broken roster, and the guard that is supposed to stop it is weaker than the property the repo claims",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 176,
+      "summary": "polishConstrained's fragmentation guard only compares COMPONENT COUNT, so a swap that simultaneously splits the largest group and merges two small ones passes it \u2014 the largest group shrinks while the count is unchanged, at the library's own DEFAULT_PRIOR_WEIGHT of 2.",
+      "failure": "polishConstrained(g, cons, { seed: 45, iters: 500, priorWeight: 2 }) with n=11, g.edgeList()=[[0,2],[1,4],[1,6],[2,4],[3,8]] and cons priors [[4,10],[3,4],[0,1]] returns a graph whose largestComponentFraction fell from 5/11 (0.4545) to 4/11 (0.3636) with the component count identical at 6 -> 6. A 3000-instance sweep found 7 such cases, several at priorWeight 2 (the value index.ts injects by default whenever priors exist) and priorWeight 5. The arithmetic is why: charging one newly-unreachable pair costs ~ (n - d) / (n(n-1)) < 1 at these sizes, while gaining one prior is worth `priorWeight`, so the prior term added on top of penalizedAspl outweighs it. I could NOT reproduce it through buildConstrainedBuddyGraph in ~1500 targeted scenarios, so the defect is confirmed at the exported primitive, not (yet) at the builder. The existing suite cannot catch it: optimizer.props.test.ts holds `polish` to `largestComponentFraction(out) >= largestComponentFraction(g)` (line 122) but holds polishConstrained only to `components(out) <= components(g)` (line 160) \u2014 the sibling property was never carried across.",
+      "remediation": "Hold polishConstrained to the same property its unconstrained sibling already satisfies: reject any swap whose result has a smaller largest component than the pass started with (compare largest-component size alongside, or instead of, the component count \u2014 connectedComponents is already being computed in constrainedMeasure, so the size is free). Then add the largestComponentFraction assertion to the polishConstrained block of optimizer.props.test.ts so the two passes are held to one invariant.",
+      "invariant": "For all g, cons and opts: largestComponentFraction(polishConstrained(g, cons, opts)) >= largestComponentFraction(g), and connectedComponents(polishConstrained(g, cons, opts)).length <= connectedComponents(g).length \u2014 i.e. exactly the pair of properties `polish` is already held to, for every priorWeight.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "inert-public-option",
+      "theme": "a documented generation dial that provably cannot change the output, so a user turning it gets silence",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 262,
+      "summary": "`minSeparation` is extensionally inert on the entire constrained path: choosePartner sorts candidates by farness DESCENDING and then scans for the first candidate at distance >= minSep, but candidates[0] already maximises farness, so the scan can only ever return candidates[0] \u2014 the same value the fallback returns.",
+      "failure": "constrainedGreedy(n, k, cons, { minSeparation: s }) returns a byte-identical edge list for s in {2,3,4,5,8,20} across all 240 configurations swept (n = 6..40 even, k in {2,3,4,5}, with sprinkled prohibitions): zero differences. The same option is re-exported as ConstrainedBuddyOptions.minSeparation on buildConstrainedBuddyGraph and is wired through app/src/panels/SettingsControls.tsx to a user-facing separation slider, so with any constraint set active a user moving that slider from 2 to 8 gets exactly the same graph, and useBuddyGraph will treat it as a settings change requiring regeneration. The existing suite cannot catch it: constrained.props.test.ts and constrained.test.ts pass `minSeparation: 5` at every call site and never vary it. (The Python reference has the identical vacuous `good or cands` at constrained_gen.py:92-93, so this is a faithful port of a reference no-op, not a divergence \u2014 the oracle will not flag it either.)",
+      "remediation": "Close it by subtraction or by implementation, but not by leaving it documented as a dial. Subtraction: drop `minSeparation` from ConstrainedGreedyOptions/ConstrainedBuddyOptions (and drop the dead scan in choosePartner), state in the module header that constrained completion is unconditionally farthest-first, and have the app hide/disable the separation control when constraints are present. Implementation: mirror ringGreedy's shape \u2014 skip a vertex whose eccentricity is below the current target and demote the target when nothing qualifies \u2014 which changes outputs and so has to go through reference-python plus a fixture regeneration first.",
+      "invariant": "No option declared in a public generation Options interface may be extensionally inert: for each such option there must exist inputs in its documented range for which varying it alone changes the returned edgeList(). Concretely for this one \u2014 either constrainedGreedy(n,k,cons,{minSeparation:s}) is a non-constant function of s over [1, floor(n/2)], or `minSeparation` does not appear in the exported option types.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "guarantee-only-in-dev",
+      "theme": "a hard-constraint guarantee stated unconditionally but enforced only by an assertion that production builds compile out",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 379,
+      "summary": "checkWellFormed (the always-on precondition) mirrors only constraints.ts `structuralReasons` and the caps, omitting the required-and-prohibited check; required edges are then laid unconditionally at line 89, so under NODE_ENV=production \u2014 where assertHardConstraints is compiled out \u2014 constrainedGreedy silently returns a graph containing a prohibited edge.",
+      "failure": "NODE_ENV=production, `const c = new Constraints(6); c.require(1,4).prohibit(1,4); constrainedGreedy(6, 3, c)` returns edges [[0,1],[0,2],[0,5],[1,3],[1,4],[2,3],[2,4],[3,5],[4,5]] with hasEdge(1,4) === true \u2014 a prohibited pair seated as buddies, no error, no report channel. Under the default NODE_ENV the same call throws `constrainedGreedy: prohibited edge 1\u20134 present`, i.e. the behaviour of a documented hard guarantee depends on an environment variable. The suite runs only in dev, so it cannot see this. buildConstrainedBuddyGraph is unaffected (it calls validate first), but constrainedGreedy is exported public API and its module header states flatly that 'prohibited edges never are' present.",
+      "remediation": "Add the one missing always-on precondition to checkWellFormed: after checkConstraintIds, iterate cons.requiredPairs() and throw when cons.isProhibited(a,b) \u2014 O(#required), off the hot path, and it brings the throw-mirror genuinely 'in step' with validateDetailed as its comment claims. The postcondition then goes back to being a backstop rather than the only enforcement.",
+      "invariant": "For all n, k and cons, the graph returned by constrainedGreedy either does not exist (the call threw) or contains no edge (a,b) with cons.isProhibited(a,b) \u2014 and this holds identically under NODE_ENV=production and NODE_ENV=development.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "optimal-score-for-a-degenerate-graph",
+      "theme": "a headline quality number reads 'provably optimal' for a graph whose average separation is not even defined",
+      "file": "/home/user/ringweave/lib/src/core/bounds.ts",
+      "line": 64,
+      "summary": "asplGap returns 0 \u2014 its documented meaning is 'provably optimal' \u2014 whenever mooreLowerBounds yields no bound, including when the ASPL passed in is Infinity, so BuddyResult.asplGap is 0 for the degenerate rosters where BuddyResult.aspl is Infinity.",
+      "failure": "buildBuddyGraph(0, 2) and buildBuddyGraph(1, 2) both return { aspl: Infinity, asplGap: 0, girth: Infinity, connected: true }. A consumer reading asplGap on its own \u2014 which is what it is exported for \u2014 reports a 0% gap, i.e. optimal, for a roster with no measurable separation at all. app/src/model.ts already defends against exactly this (`quality()` returns 0 unless Number.isFinite(aspl), with a comment saying so), which shows the hazard is understood but is being patched at each consumer instead of at the source; a second consumer of the exported asplGap would have to rediscover it. This is the same shape as the recorded 'disconnected reads as optimal' defect, one degenerate input over.",
+      "remediation": "Make the guard live in the core the way `quality()` does in the app: have asplGap return NaN (or Infinity) rather than 0 when `aspl` is not finite, so 'no valid Moore bound' can never render as 'zero gap'. Ratchet it in bounds/optimizer props rather than in each consumer.",
+      "invariant": "asplGap(aspl, n, k) === 0 implies Number.isFinite(aspl); equivalently, for every (n, k) accepted by buildBuddyGraph, BuddyResult.asplGap is never 0 while BuddyResult.aspl is not finite.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-outside-the-budget",
+      "theme": "an exported primitive performs superlinear work on a caller-supplied graph that no budget bounds, because the size/work cap lives only in the wrapper above it",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 58,
+      "summary": "`boundedPolishIterations` bounds the polish LOOP but not the two full O(n*(n+m)) `allPairsSummary` sweeps that frame it (`energy(g)` before the loop at polish.ts:59, `allPairsSummary(best)` after it at polish.ts:134; `measure(g)` at constrainedGreedy.ts:155). When the budget affords ZERO iterations the call still pays both sweeps in full. This is the same shape as the anneal-calibration defect already recorded in budgets.ts (\"work before the loop that the budget cannot reach is work the budget does not bound\") \u2014 the calibration was moved inside the budget, the framing measurements were not.",
+      "failure": "Reproduced against the built lib: `polish(ring(20000), { maxIters: 0 })` returns after 31.66 s with `result.iters === 0`; `polishConstrained(ring(20000), new Constraints(20000), { iters: 0 })` takes 15.39 s. Scaling is quadratic and confirmed (n=5000 -> 2.19s, n=10000 -> 6.75s, n=20000 -> 31.66s), so at `MAX_ROSTER` (1e6, which the `Graph` constructor permits) the same zero-iteration call is hours. `optimizer.props.test.ts`'s guard for this class states \"A zero budget must buy zero work in BOTH modes\" but only asserts `annealMs < hillMs + 200` \u2014 it compares the two modes to each other, so it passes while both perform unbounded work.",
+      "remediation": "Compute the affordable iteration count from `input.n` and `input.numEdges()` BEFORE `input.copy()` and before the first energy/measure call. If it is 0, return the input unchanged (or throw a `too large to polish` refusal mirroring `ringGreedy`'s work cap) without any all-pairs sweep. Alternatively charge the framing sweeps against the same constant by refusing when `n * (n + m) > MAX_POLISH_WORK`. Then strengthen the existing test to assert an absolute wall-clock/sweep-count bound on a large graph rather than a delta between two modes.",
+      "invariant": "For every Graph g and every options object o, the total work performed by `polish(g, o)` / `polishConstrained(g, cons, o)` is bounded by MAX_POLISH_WORK + O(n + m). Machine-checkable form: whenever `boundedPolishIterations(g.n, g.numEdges(), requestedIters, default) === 0`, the call performs zero `allPairsSummary` invocations (instrument/spy on it), for all g including g.n far above any generator cap.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "uncapped-generator-entry-point",
+      "theme": "an exported primitive performs superlinear work on a caller-supplied graph that no budget bounds, because the size/work cap lives only in the wrapper above it",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 195,
+      "summary": "`repairDegrees` is exported from the public API (`index.ts:30`) and has no size cap and no work cap of any kind. It is O(passes * |under| * (n+m)) on whatever graph it is handed, and `Graph` permits n up to MAX_ROSTER = 1_000_000. `lib/CLAUDE.md` states that uncapped O(n^2) exports are acceptable because they are \"pure diagnostics\" and that \"the generators that ARE the untrusted surface are capped (MAX_CACHED_N and MAX_GREEDY_WORK on the unconstrained path...)\" \u2014 but MAX_GREEDY_WORK is enforced only inside `ringGreedy`, so this exported generator sits outside the claim.",
+      "failure": "Reproduced against the built lib: `repairDegrees(new Graph(40000), 4)` runs for 75.27 s and adds ZERO edges \u2014 on an edgeless graph every candidate is unreachable so `distv[v] < minDist` skips it, but only after a full pass of n BFS at O(n) each. Quadratic scaling confirmed: n=5000 -> 1.13s, n=10000 -> 4.65s, n=20000 -> 19.88s, n=40000 -> 75.27s. At the roster size `Graph` actually allows (1e6) the same do-nothing call runs for hours. No in-tree caller passes an unbounded graph (`ringGreedy` applies MAX_CACHED_N and MAX_GREEDY_WORK before calling it), so this is forward-looking reachability, not a present-day hang from a file.",
+      "remediation": "Apply the same pre-work refusal `ringGreedy` already uses: at the top of `repairDegrees`, throw when `greedyWork(g.n, k) > MAX_GREEDY_WORK` (or a repair-specific budget), before the first `bfsDistances`. Also validate `k` there \u2014 `repairDegrees(g, NaN)` currently makes `g.degree(v) < k` always false and exits, which is benign but is the same unvalidated-k class `ringGreedy` guards against explicitly.",
+      "invariant": "Every exported generator entry point (`ringGreedy`, `repairDegrees`, `constrainedGreedy`) refuses \u2014 before performing any per-vertex work \u2014 any input whose modelled work exceeds its budget. Machine-checkable form: for all graphs g and all k, if `greedyWork(g.n, k) > MAX_GREEDY_WORK` then `repairDegrees(g, k)` throws, and it does so having invoked `bfsDistances` zero times.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-source-of-truth",
+      "theme": "the auto-polish gate models a default iteration count that lives in a second, independently-edited copy of the constant the primitive actually uses, so the two can silently diverge on the next ordinary tuning edit",
+      "file": "lib/src/core/index.ts",
+      "summary": "DEFAULT_POLISH_ITERS (20000) and DEFAULT_CONSTRAINED_POLISH_ITERS (8000) are each declared twice: once in the module that actually uses them as the runtime fallback (polish.ts:22, constrainedGreedy.ts:60), and once more in index.ts (lines 370, 372) purely to feed resolveWantPolish's cost model. Neither module imports the other's constant; they are separate literals that happen to agree today. This split is a direct byproduct of round 3 ('put the budget where the work is'), which moved boundedPolishIterations enforcement into polish.ts/constrainedGreedy.ts (correctly \u2014 they're public API) but left index.ts's copies behind for the unrelated gating decision, where before the refactor there was only one copy serving both purposes.",
+      "failure": "Tune polish.ts's DEFAULT_POLISH_ITERS down (e.g. to 10000, a plausible next perf edit given rounds 2-4's intense budget tuning) without touching index.ts. Nothing catches it: the pinned boundary test (`buildBuddyGraph(120,4,{polishIters:1}).polished===true` / `121\u2192false`) calls resolveWantPolish with index.ts's untouched local constant (still 20000), so it passes unchanged and gives zero signal that the model now disagrees with reality. resolveWantPolish keeps deciding on/off based on the cost of 20000 iterations while the actual default run is now 10000 iterations \u2014 the gate becomes needlessly conservative (or, if the edit goes the other way, needlessly permissive up to whatever MAX_POLISH_ITERS still allows) relative to what `boundedPolishIterations` will actually do. Traced: `git log -p -- lib/src/core/index.ts` shows the pre-round-3 version had one constant feeding both the gate and the iteration bound; the post-round-3 version (current HEAD) has two.",
+      "remediation": "Export DEFAULT_POLISH_ITERS from polish.ts and DEFAULT_CONSTRAINED_POLISH_ITERS from constrainedGreedy.ts (they're already the fallback each primitive uses internally) and import them into index.ts instead of redeclaring, so resolveWantPolish's cost model is structurally guaranteed to price the same default the primitive will actually run.",
+      "invariant": "the `defaultIters` argument index.ts passes to resolveWantPolish for a given generator equals the fallback value that generator's own boundedPolishIterations call uses when `maxIters`/`iters` is undefined \u2014 checkable by making the former import the latter rather than restate it.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-location",
+      "theme": "documentation pointing maintainer to the wrong file for a constant's definition",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 11,
+      "summary": "Comment claims graph.ts is home to MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, and DEFAULT_MIN_SEPARATION, but these constants have been moved to budgets.ts",
+      "invariant": "A comment describing a module's exports must remain true; if constants are moved, the comment must move or be deleted. When a maintainer reads 'this module is home to MAX_CONSTRAINED_N', they must find MAX_CONSTRAINED_N defined in that module.",
+      "failure": "graph.ts lines 11-15 state that graph.ts is 'home to the cross-cutting roster/work bounds... MAX_ROSTER, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, DEFAULT_MIN_SEPARATION, and the constrainedWork estimate'. However, only MAX_ROSTER is actually in graph.ts (line 23). MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, DEFAULT_MIN_SEPARATION, and constrainedWork are exported from budgets.ts, not graph.ts. A maintainer looking for the definition of these constants per the comment will not find them.",
+      "remediation": "Update lines 11-15 of graph.ts to reflect the current module structure. Replace the claim that graph.ts is home to the work bounds with an accurate statement: 'As the dependency leaf (it imports nothing from the core), this module contains only MAX_ROSTER, the upper bound on roster size for the O(n) structures. Cross-cutting work bounds (MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, etc.) were extracted to budgets.ts as the true dependency leaf, which imports nothing.' Alternatively, if the comment is meant to be historical context, rename it to avoid confusion with current reality.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-location",
+      "theme": "stale file reference in comment after constants moved",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 384,
+      "summary": "Comment references 'MAX_CONSTRAINED_N in graph.ts' but the constant and its rationale are in budgets.ts",
+      "invariant": "Any inline comment referencing the definition location of a constant must reference the actual location. When a maintainer reads a comment saying 'rationale on MAX_CONSTRAINED_N in graph.ts', following that direction must lead to the definition.",
+      "failure": "constrainedGreedy.ts line 384 contains the comment 'rationale on MAX_CONSTRAINED_N in graph.ts' immediately before checking and throwing on MAX_CONSTRAINED_N. However, MAX_CONSTRAINED_N is defined in budgets.ts (line 25), not graph.ts. Its detailed rationale (lines 16-25 of budgets.ts, explaining the O(n\u00b2) baseline and prohibited-pair connectivity walk) is also in budgets.ts. A maintainer following the stale reference will not find the rationale.",
+      "remediation": "Change line 384 to read '(rationale on MAX_CONSTRAINED_N in budgets.ts)' to match the actual location of the constant and its documentation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-constant-definitions",
+      "theme": "constants duplicated between module and index, creating silent-drift risk when values change",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 370,
+      "summary": "DEFAULT_POLISH_ITERS and DEFAULT_CONSTRAINED_POLISH_ITERS are defined twice: once in their source modules and again in index.ts without importing from the source. Changes to one will not propagate to the other.",
+      "invariant": "Every constant that is used in multiple modules must have a single source of truth. If a constant is defined in module A and also in module B, either one import it from A or both files document that they are independently chosen (and the test suite verifies they remain consistent). Here, DEFAULT_POLISH_ITERS is logically tied to polish.ts and should not be redefined in index.ts; DEFAULT_CONSTRAINED_POLISH_ITERS is logically tied to constrainedGreedy.ts.",
+      "failure": "DEFAULT_POLISH_ITERS is defined in polish.ts line 22 as `const DEFAULT_POLISH_ITERS = 20000;` and again in index.ts line 370 as `const DEFAULT_POLISH_ITERS = 20000;`. Similarly, DEFAULT_CONSTRAINED_POLISH_ITERS is defined in constrainedGreedy.ts line 60 and again in index.ts line 372. These are not imports; they are separate definitions with the same value. If polish.ts's DEFAULT_POLISH_ITERS is changed to 25000, index.ts's copy remains 20000. This is verified: index.ts does not import these constants\u2014searching shows no `from './polish.js'` or `from './constrainedGreedy.js'` importing them. The default values are part of the contract between the module and its callers, and duplicating them creates a maintenance hazard.",
+      "remediation": "In index.ts, import DEFAULT_POLISH_ITERS from ./polish.js and DEFAULT_CONSTRAINED_POLISH_ITERS from ./constrainedGreedy.ts at the top of the file (around line 57 where other imports are). Remove the duplicate const definitions at lines 370 and 372. This ensures a single source of truth. If index.ts needs to reference these defaults for documentation or other reasons, import them once and reference the imported names.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "vocabulary-drift-public-api",
+      "theme": "iteration budget parameter has three different names across option interfaces for the same concept",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 88,
+      "summary": "The iteration budget option is inconsistently named: 'polishIters' in BuddyOptions and ConstrainedBuddyOptions, but 'maxIters' in PolishOptions and 'iters' in PolishConstrainedOptions",
+      "invariant": "Each distinct concept in a public API should have a single name. When a user provides an iteration budget to any of the four option interfaces (BuddyOptions, PolishOptions, ConstrainedBuddyOptions, PolishConstrainedOptions), they are setting the same semantic concept (the iteration budget for a polish pass). The name used to pass this value should be consistent across all entry points, or the choice should be justified and documented at each interface.",
+      "failure": "BuddyOptions.polishIters (line 88), ConstrainedBuddyOptions.polishIters (line 219), PolishOptions.maxIters (line 32 in polish.ts), and PolishConstrainedOptions.iters (line 66 in constrainedGreedy.ts) are all iteration budgets for polish passes. A caller using buildBuddyGraph passes `polishIters`, which buildBuddyGraph then converts to `maxIters` for the polish function. A caller using buildConstrainedBuddyGraph passes `polishIters`, which is converted to `iters` for polishConstrained. Direct callers of polish() must use `maxIters`, and direct callers of polishConstrained() must use `iters`. This forces a user of the library to remember four different names for the same value depending on which function they call.",
+      "remediation": "Choose one name and use it consistently across all four interfaces. 'polishIters' is clear and used in the two high-level builders. Rename PolishOptions.maxIters to polishIters (and update the rationale comment if it refers to the name), and rename PolishConstrainedOptions.iters to polishIters. If there is a reason the old names were chosen (e.g., PolishResult has an iters field and maxIters was used to avoid confusion), state that rationale in a comment rather than using inconsistent names.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "weak-fragmentation-guard",
+      "theme": "the polish objective lets a soft preference buy a structurally more broken roster, and the guard that is supposed to stop it is weaker than the property the repo claims",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 176,
+      "summary": "polishConstrained's fragmentation guard only compares COMPONENT COUNT, so a swap that simultaneously splits the largest group and merges two small ones passes it \u2014 the largest group shrinks while the count is unchanged, at the library's own DEFAULT_PRIOR_WEIGHT of 2.",
+      "failure": "polishConstrained(g, cons, { seed: 45, iters: 500, priorWeight: 2 }) with n=11, g.edgeList()=[[0,2],[1,4],[1,6],[2,4],[3,8]] and cons priors [[4,10],[3,4],[0,1]] returns a graph whose largestComponentFraction fell from 5/11 (0.4545) to 4/11 (0.3636) with the component count identical at 6 -> 6. A 3000-instance sweep found 7 such cases, several at priorWeight 2 (the value index.ts injects by default whenever priors exist) and priorWeight 5. The arithmetic is why: charging one newly-unreachable pair costs ~ (n - d) / (n(n-1)) < 1 at these sizes, while gaining one prior is worth `priorWeight`, so the prior term added on top of penalizedAspl outweighs it. I could NOT reproduce it through buildConstrainedBuddyGraph in ~1500 targeted scenarios, so the defect is confirmed at the exported primitive, not (yet) at the builder. The existing suite cannot catch it: optimizer.props.test.ts holds `polish` to `largestComponentFraction(out) >= largestComponentFraction(g)` (line 122) but holds polishConstrained only to `components(out) <= components(g)` (line 160) \u2014 the sibling property was never carried across.",
+      "remediation": "Hold polishConstrained to the same property its unconstrained sibling already satisfies: reject any swap whose result has a smaller largest component than the pass started with (compare largest-component size alongside, or instead of, the component count \u2014 connectedComponents is already being computed in constrainedMeasure, so the size is free). Then add the largestComponentFraction assertion to the polishConstrained block of optimizer.props.test.ts so the two passes are held to one invariant.",
+      "invariant": "For all g, cons and opts: largestComponentFraction(polishConstrained(g, cons, opts)) >= largestComponentFraction(g), and connectedComponents(polishConstrained(g, cons, opts)).length <= connectedComponents(g).length \u2014 i.e. exactly the pair of properties `polish` is already held to, for every priorWeight.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "inert-public-option",
+      "theme": "a documented generation dial that provably cannot change the output, so a user turning it gets silence",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 262,
+      "summary": "`minSeparation` is extensionally inert on the entire constrained path: choosePartner sorts candidates by farness DESCENDING and then scans for the first candidate at distance >= minSep, but candidates[0] already maximises farness, so the scan can only ever return candidates[0] \u2014 the same value the fallback returns.",
+      "failure": "constrainedGreedy(n, k, cons, { minSeparation: s }) returns a byte-identical edge list for s in {2,3,4,5,8,20} across all 240 configurations swept (n = 6..40 even, k in {2,3,4,5}, with sprinkled prohibitions): zero differences. The same option is re-exported as ConstrainedBuddyOptions.minSeparation on buildConstrainedBuddyGraph and is wired through app/src/panels/SettingsControls.tsx to a user-facing separation slider, so with any constraint set active a user moving that slider from 2 to 8 gets exactly the same graph, and useBuddyGraph will treat it as a settings change requiring regeneration. The existing suite cannot catch it: constrained.props.test.ts and constrained.test.ts pass `minSeparation: 5` at every call site and never vary it. (The Python reference has the identical vacuous `good or cands` at constrained_gen.py:92-93, so this is a faithful port of a reference no-op, not a divergence \u2014 the oracle will not flag it either.)",
+      "remediation": "Close it by subtraction or by implementation, but not by leaving it documented as a dial. Subtraction: drop `minSeparation` from ConstrainedGreedyOptions/ConstrainedBuddyOptions (and drop the dead scan in choosePartner), state in the module header that constrained completion is unconditionally farthest-first, and have the app hide/disable the separation control when constraints are present. Implementation: mirror ringGreedy's shape \u2014 skip a vertex whose eccentricity is below the current target and demote the target when nothing qualifies \u2014 which changes outputs and so has to go through reference-python plus a fixture regeneration first.",
+      "invariant": "No option declared in a public generation Options interface may be extensionally inert: for each such option there must exist inputs in its documented range for which varying it alone changes the returned edgeList(). Concretely for this one \u2014 either constrainedGreedy(n,k,cons,{minSeparation:s}) is a non-constant function of s over [1, floor(n/2)], or `minSeparation` does not appear in the exported option types.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "guarantee-only-in-dev",
+      "theme": "a hard-constraint guarantee stated unconditionally but enforced only by an assertion that production builds compile out",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 379,
+      "summary": "checkWellFormed (the always-on precondition) mirrors only constraints.ts `structuralReasons` and the caps, omitting the required-and-prohibited check; required edges are then laid unconditionally at line 89, so under NODE_ENV=production \u2014 where assertHardConstraints is compiled out \u2014 constrainedGreedy silently returns a graph containing a prohibited edge.",
+      "failure": "NODE_ENV=production, `const c = new Constraints(6); c.require(1,4).prohibit(1,4); constrainedGreedy(6, 3, c)` returns edges [[0,1],[0,2],[0,5],[1,3],[1,4],[2,3],[2,4],[3,5],[4,5]] with hasEdge(1,4) === true \u2014 a prohibited pair seated as buddies, no error, no report channel. Under the default NODE_ENV the same call throws `constrainedGreedy: prohibited edge 1\u20134 present`, i.e. the behaviour of a documented hard guarantee depends on an environment variable. The suite runs only in dev, so it cannot see this. buildConstrainedBuddyGraph is unaffected (it calls validate first), but constrainedGreedy is exported public API and its module header states flatly that 'prohibited edges never are' present.",
+      "remediation": "Add the one missing always-on precondition to checkWellFormed: after checkConstraintIds, iterate cons.requiredPairs() and throw when cons.isProhibited(a,b) \u2014 O(#required), off the hot path, and it brings the throw-mirror genuinely 'in step' with validateDetailed as its comment claims. The postcondition then goes back to being a backstop rather than the only enforcement.",
+      "invariant": "For all n, k and cons, the graph returned by constrainedGreedy either does not exist (the call threw) or contains no edge (a,b) with cons.isProhibited(a,b) \u2014 and this holds identically under NODE_ENV=production and NODE_ENV=development.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "optimal-score-for-a-degenerate-graph",
+      "theme": "a headline quality number reads 'provably optimal' for a graph whose average separation is not even defined",
+      "file": "/home/user/ringweave/lib/src/core/bounds.ts",
+      "line": 64,
+      "summary": "asplGap returns 0 \u2014 its documented meaning is 'provably optimal' \u2014 whenever mooreLowerBounds yields no bound, including when the ASPL passed in is Infinity, so BuddyResult.asplGap is 0 for the degenerate rosters where BuddyResult.aspl is Infinity.",
+      "failure": "buildBuddyGraph(0, 2) and buildBuddyGraph(1, 2) both return { aspl: Infinity, asplGap: 0, girth: Infinity, connected: true }. A consumer reading asplGap on its own \u2014 which is what it is exported for \u2014 reports a 0% gap, i.e. optimal, for a roster with no measurable separation at all. app/src/model.ts already defends against exactly this (`quality()` returns 0 unless Number.isFinite(aspl), with a comment saying so), which shows the hazard is understood but is being patched at each consumer instead of at the source; a second consumer of the exported asplGap would have to rediscover it. This is the same shape as the recorded 'disconnected reads as optimal' defect, one degenerate input over.",
+      "remediation": "Make the guard live in the core the way `quality()` does in the app: have asplGap return NaN (or Infinity) rather than 0 when `aspl` is not finite, so 'no valid Moore bound' can never render as 'zero gap'. Ratchet it in bounds/optimizer props rather than in each consumer.",
+      "invariant": "asplGap(aspl, n, k) === 0 implies Number.isFinite(aspl); equivalently, for every (n, k) accepted by buildBuddyGraph, BuddyResult.asplGap is never 0 while BuddyResult.aspl is not finite.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-outside-the-budget",
+      "theme": "an exported primitive performs superlinear work on a caller-supplied graph that no budget bounds, because the size/work cap lives only in the wrapper above it",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 58,
+      "summary": "`boundedPolishIterations` bounds the polish LOOP but not the two full O(n*(n+m)) `allPairsSummary` sweeps that frame it (`energy(g)` before the loop at polish.ts:59, `allPairsSummary(best)` after it at polish.ts:134; `measure(g)` at constrainedGreedy.ts:155). When the budget affords ZERO iterations the call still pays both sweeps in full. This is the same shape as the anneal-calibration defect already recorded in budgets.ts (\"work before the loop that the budget cannot reach is work the budget does not bound\") \u2014 the calibration was moved inside the budget, the framing measurements were not.",
+      "failure": "Reproduced against the built lib: `polish(ring(20000), { maxIters: 0 })` returns after 31.66 s with `result.iters === 0`; `polishConstrained(ring(20000), new Constraints(20000), { iters: 0 })` takes 15.39 s. Scaling is quadratic and confirmed (n=5000 -> 2.19s, n=10000 -> 6.75s, n=20000 -> 31.66s), so at `MAX_ROSTER` (1e6, which the `Graph` constructor permits) the same zero-iteration call is hours. `optimizer.props.test.ts`'s guard for this class states \"A zero budget must buy zero work in BOTH modes\" but only asserts `annealMs < hillMs + 200` \u2014 it compares the two modes to each other, so it passes while both perform unbounded work.",
+      "remediation": "Compute the affordable iteration count from `input.n` and `input.numEdges()` BEFORE `input.copy()` and before the first energy/measure call. If it is 0, return the input unchanged (or throw a `too large to polish` refusal mirroring `ringGreedy`'s work cap) without any all-pairs sweep. Alternatively charge the framing sweeps against the same constant by refusing when `n * (n + m) > MAX_POLISH_WORK`. Then strengthen the existing test to assert an absolute wall-clock/sweep-count bound on a large graph rather than a delta between two modes.",
+      "invariant": "For every Graph g and every options object o, the total work performed by `polish(g, o)` / `polishConstrained(g, cons, o)` is bounded by MAX_POLISH_WORK + O(n + m). Machine-checkable form: whenever `boundedPolishIterations(g.n, g.numEdges(), requestedIters, default) === 0`, the call performs zero `allPairsSummary` invocations (instrument/spy on it), for all g including g.n far above any generator cap.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "uncapped-generator-entry-point",
+      "theme": "an exported primitive performs superlinear work on a caller-supplied graph that no budget bounds, because the size/work cap lives only in the wrapper above it",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 195,
+      "summary": "`repairDegrees` is exported from the public API (`index.ts:30`) and has no size cap and no work cap of any kind. It is O(passes * |under| * (n+m)) on whatever graph it is handed, and `Graph` permits n up to MAX_ROSTER = 1_000_000. `lib/CLAUDE.md` states that uncapped O(n^2) exports are acceptable because they are \"pure diagnostics\" and that \"the generators that ARE the untrusted surface are capped (MAX_CACHED_N and MAX_GREEDY_WORK on the unconstrained path...)\" \u2014 but MAX_GREEDY_WORK is enforced only inside `ringGreedy`, so this exported generator sits outside the claim.",
+      "failure": "Reproduced against the built lib: `repairDegrees(new Graph(40000), 4)` runs for 75.27 s and adds ZERO edges \u2014 on an edgeless graph every candidate is unreachable so `distv[v] < minDist` skips it, but only after a full pass of n BFS at O(n) each. Quadratic scaling confirmed: n=5000 -> 1.13s, n=10000 -> 4.65s, n=20000 -> 19.88s, n=40000 -> 75.27s. At the roster size `Graph` actually allows (1e6) the same do-nothing call runs for hours. No in-tree caller passes an unbounded graph (`ringGreedy` applies MAX_CACHED_N and MAX_GREEDY_WORK before calling it), so this is forward-looking reachability, not a present-day hang from a file.",
+      "remediation": "Apply the same pre-work refusal `ringGreedy` already uses: at the top of `repairDegrees`, throw when `greedyWork(g.n, k) > MAX_GREEDY_WORK` (or a repair-specific budget), before the first `bfsDistances`. Also validate `k` there \u2014 `repairDegrees(g, NaN)` currently makes `g.degree(v) < k` always false and exits, which is benign but is the same unvalidated-k class `ringGreedy` guards against explicitly.",
+      "invariant": "Every exported generator entry point (`ringGreedy`, `repairDegrees`, `constrainedGreedy`) refuses \u2014 before performing any per-vertex work \u2014 any input whose modelled work exceeds its budget. Machine-checkable form: for all graphs g and all k, if `greedyWork(g.n, k) > MAX_GREEDY_WORK` then `repairDegrees(g, k)` throws, and it does so having invoked `bfsDistances` zero times.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "materialization-before-the-gate",
+      "theme": "a constructor materializes O(n^2) state before any size gate can run, so the gate that should refuse the input never gets to see it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` validates `n` not at all and materializes one prohibited-pair Set key per same-tag pair inside the constructor, so the O(n^2) cost is paid before `validate`'s MAX_CONSTRAINED_N / MAX_CONSTRAINED_WORK refusals can run. Already tracked as a known limitation in `lib/CLAUDE.md`; re-filed only as a deferral because it is still exported public API of a published package and still has no non-test caller in the tree (grep: only `lib/test/constrained.test.ts`), which is the mechanical test for deferral.",
+      "failure": "Reproduced against the built lib: `Constraints.fromTags(3000, Array(3000).fill('A'))` takes 4.63 s and builds 4,498,500 Set keys; `Constraints.fromTags(1e9, [])` loops with no `n` guard at all (6.34 s and still running its outer loop \u2014 `degreeOf` in the same file, the `Graph` constructor and `validate` all guard `n`, this does not). At tens of millions of pairs the `Set` construction itself throws before `validate` can refuse.",
+      "remediation": "When the tag UI lands (F6): guard `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, pre-count group sizes in a single O(n) pass, and refuse against an explicit pair cap BEFORE entering the double loop. Also normalize tags so `NaN` (which never equals itself and so silently never groups, inverting `prohibit_same`) is treated as `null`.",
+      "invariant": "`Constraints.fromTags(n, tags, policy)` either throws or returns having allocated at most C pair keys, for a fixed constant C, for ALL n and all tag arrays \u2014 i.e. the number of Set insertions it performs is bounded independently of the input, and the bound is checked before the first insertion.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-source-of-truth",
+      "theme": "the auto-polish gate models a default iteration count that lives in a second, independently-edited copy of the constant the primitive actually uses, so the two can silently diverge on the next ordinary tuning edit",
+      "file": "lib/src/core/index.ts",
+      "summary": "DEFAULT_POLISH_ITERS (20000) and DEFAULT_CONSTRAINED_POLISH_ITERS (8000) are each declared twice: once in the module that actually uses them as the runtime fallback (polish.ts:22, constrainedGreedy.ts:60), and once more in index.ts (lines 370, 372) purely to feed resolveWantPolish's cost model. Neither module imports the other's constant; they are separate literals that happen to agree today. This split is a direct byproduct of round 3 ('put the budget where the work is'), which moved boundedPolishIterations enforcement into polish.ts/constrainedGreedy.ts (correctly \u2014 they're public API) but left index.ts's copies behind for the unrelated gating decision, where before the refactor there was only one copy serving both purposes.",
+      "failure": "Tune polish.ts's DEFAULT_POLISH_ITERS down (e.g. to 10000, a plausible next perf edit given rounds 2-4's intense budget tuning) without touching index.ts. Nothing catches it: the pinned boundary test (`buildBuddyGraph(120,4,{polishIters:1}).polished===true` / `121\u2192false`) calls resolveWantPolish with index.ts's untouched local constant (still 20000), so it passes unchanged and gives zero signal that the model now disagrees with reality. resolveWantPolish keeps deciding on/off based on the cost of 20000 iterations while the actual default run is now 10000 iterations \u2014 the gate becomes needlessly conservative (or, if the edit goes the other way, needlessly permissive up to whatever MAX_POLISH_ITERS still allows) relative to what `boundedPolishIterations` will actually do. Traced: `git log -p -- lib/src/core/index.ts` shows the pre-round-3 version had one constant feeding both the gate and the iteration bound; the post-round-3 version (current HEAD) has two.",
+      "remediation": "Export DEFAULT_POLISH_ITERS from polish.ts and DEFAULT_CONSTRAINED_POLISH_ITERS from constrainedGreedy.ts (they're already the fallback each primitive uses internally) and import them into index.ts instead of redeclaring, so resolveWantPolish's cost model is structurally guaranteed to price the same default the primitive will actually run.",
+      "invariant": "the `defaultIters` argument index.ts passes to resolveWantPolish for a given generator equals the fallback value that generator's own boundedPolishIterations call uses when `maxIters`/`iters` is undefined \u2014 checkable by making the former import the latter rather than restate it.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-location",
+      "theme": "documentation pointing maintainer to the wrong file for a constant's definition",
+      "file": "/home/user/ringweave/lib/src/core/graph.ts",
+      "line": 11,
+      "summary": "Comment claims graph.ts is home to MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, and DEFAULT_MIN_SEPARATION, but these constants have been moved to budgets.ts",
+      "invariant": "A comment describing a module's exports must remain true; if constants are moved, the comment must move or be deleted. When a maintainer reads 'this module is home to MAX_CONSTRAINED_N', they must find MAX_CONSTRAINED_N defined in that module.",
+      "failure": "graph.ts lines 11-15 state that graph.ts is 'home to the cross-cutting roster/work bounds... MAX_ROSTER, MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, DEFAULT_MIN_SEPARATION, and the constrainedWork estimate'. However, only MAX_ROSTER is actually in graph.ts (line 23). MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, DEFAULT_MIN_SEPARATION, and constrainedWork are exported from budgets.ts, not graph.ts. A maintainer looking for the definition of these constants per the comment will not find them.",
+      "remediation": "Update lines 11-15 of graph.ts to reflect the current module structure. Replace the claim that graph.ts is home to the work bounds with an accurate statement: 'As the dependency leaf (it imports nothing from the core), this module contains only MAX_ROSTER, the upper bound on roster size for the O(n) structures. Cross-cutting work bounds (MAX_CONSTRAINED_N, MAX_CONSTRAINED_WORK, etc.) were extracted to budgets.ts as the true dependency leaf, which imports nothing.' Alternatively, if the comment is meant to be historical context, rename it to avoid confusion with current reality.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "false-comment-wrong-location",
+      "theme": "stale file reference in comment after constants moved",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 384,
+      "summary": "Comment references 'MAX_CONSTRAINED_N in graph.ts' but the constant and its rationale are in budgets.ts",
+      "invariant": "Any inline comment referencing the definition location of a constant must reference the actual location. When a maintainer reads a comment saying 'rationale on MAX_CONSTRAINED_N in graph.ts', following that direction must lead to the definition.",
+      "failure": "constrainedGreedy.ts line 384 contains the comment 'rationale on MAX_CONSTRAINED_N in graph.ts' immediately before checking and throwing on MAX_CONSTRAINED_N. However, MAX_CONSTRAINED_N is defined in budgets.ts (line 25), not graph.ts. Its detailed rationale (lines 16-25 of budgets.ts, explaining the O(n\u00b2) baseline and prohibited-pair connectivity walk) is also in budgets.ts. A maintainer following the stale reference will not find the rationale.",
+      "remediation": "Change line 384 to read '(rationale on MAX_CONSTRAINED_N in budgets.ts)' to match the actual location of the constant and its documentation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-constant-definitions",
+      "theme": "constants duplicated between module and index, creating silent-drift risk when values change",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 370,
+      "summary": "DEFAULT_POLISH_ITERS and DEFAULT_CONSTRAINED_POLISH_ITERS are defined twice: once in their source modules and again in index.ts without importing from the source. Changes to one will not propagate to the other.",
+      "invariant": "Every constant that is used in multiple modules must have a single source of truth. If a constant is defined in module A and also in module B, either one import it from A or both files document that they are independently chosen (and the test suite verifies they remain consistent). Here, DEFAULT_POLISH_ITERS is logically tied to polish.ts and should not be redefined in index.ts; DEFAULT_CONSTRAINED_POLISH_ITERS is logically tied to constrainedGreedy.ts.",
+      "failure": "DEFAULT_POLISH_ITERS is defined in polish.ts line 22 as `const DEFAULT_POLISH_ITERS = 20000;` and again in index.ts line 370 as `const DEFAULT_POLISH_ITERS = 20000;`. Similarly, DEFAULT_CONSTRAINED_POLISH_ITERS is defined in constrainedGreedy.ts line 60 and again in index.ts line 372. These are not imports; they are separate definitions with the same value. If polish.ts's DEFAULT_POLISH_ITERS is changed to 25000, index.ts's copy remains 20000. This is verified: index.ts does not import these constants\u2014searching shows no `from './polish.js'` or `from './constrainedGreedy.js'` importing them. The default values are part of the contract between the module and its callers, and duplicating them creates a maintenance hazard.",
+      "remediation": "In index.ts, import DEFAULT_POLISH_ITERS from ./polish.js and DEFAULT_CONSTRAINED_POLISH_ITERS from ./constrainedGreedy.ts at the top of the file (around line 57 where other imports are). Remove the duplicate const definitions at lines 370 and 372. This ensures a single source of truth. If index.ts needs to reference these defaults for documentation or other reasons, import them once and reference the imported names.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "vocabulary-drift-public-api",
+      "theme": "iteration budget parameter has three different names across option interfaces for the same concept",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 88,
+      "summary": "The iteration budget option is inconsistently named: 'polishIters' in BuddyOptions and ConstrainedBuddyOptions, but 'maxIters' in PolishOptions and 'iters' in PolishConstrainedOptions",
+      "invariant": "Each distinct concept in a public API should have a single name. When a user provides an iteration budget to any of the four option interfaces (BuddyOptions, PolishOptions, ConstrainedBuddyOptions, PolishConstrainedOptions), they are setting the same semantic concept (the iteration budget for a polish pass). The name used to pass this value should be consistent across all entry points, or the choice should be justified and documented at each interface.",
+      "failure": "BuddyOptions.polishIters (line 88), ConstrainedBuddyOptions.polishIters (line 219), PolishOptions.maxIters (line 32 in polish.ts), and PolishConstrainedOptions.iters (line 66 in constrainedGreedy.ts) are all iteration budgets for polish passes. A caller using buildBuddyGraph passes `polishIters`, which buildBuddyGraph then converts to `maxIters` for the polish function. A caller using buildConstrainedBuddyGraph passes `polishIters`, which is converted to `iters` for polishConstrained. Direct callers of polish() must use `maxIters`, and direct callers of polishConstrained() must use `iters`. This forces a user of the library to remember four different names for the same value depending on which function they call.",
+      "remediation": "Choose one name and use it consistently across all four interfaces. 'polishIters' is clear and used in the two high-level builders. Rename PolishOptions.maxIters to polishIters (and update the rationale comment if it refers to the name), and rename PolishConstrainedOptions.iters to polishIters. If there is a reason the old names were chosen (e.g., PolishResult has an iters field and maxIters was used to avoid confusion), state that rationale in a comment rather than using inconsistent names.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "materialization-before-the-gate",
+      "theme": "a constructor materializes O(n^2) state before any size gate can run, so the gate that should refuse the input never gets to see it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` validates `n` not at all and materializes one prohibited-pair Set key per same-tag pair inside the constructor, so the O(n^2) cost is paid before `validate`'s MAX_CONSTRAINED_N / MAX_CONSTRAINED_WORK refusals can run. Already tracked as a known limitation in `lib/CLAUDE.md`; re-filed only as a deferral because it is still exported public API of a published package and still has no non-test caller in the tree (grep: only `lib/test/constrained.test.ts`), which is the mechanical test for deferral.",
+      "failure": "Reproduced against the built lib: `Constraints.fromTags(3000, Array(3000).fill('A'))` takes 4.63 s and builds 4,498,500 Set keys; `Constraints.fromTags(1e9, [])` loops with no `n` guard at all (6.34 s and still running its outer loop \u2014 `degreeOf` in the same file, the `Graph` constructor and `validate` all guard `n`, this does not). At tens of millions of pairs the `Set` construction itself throws before `validate` can refuse.",
+      "remediation": "When the tag UI lands (F6): guard `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, pre-count group sizes in a single O(n) pass, and refuse against an explicit pair cap BEFORE entering the double loop. Also normalize tags so `NaN` (which never equals itself and so silently never groups, inverting `prohibit_same`) is treated as `null`.",
+      "invariant": "`Constraints.fromTags(n, tags, policy)` either throws or returns having allocated at most C pair keys, for a fixed constant C, for ALL n and all tag arrays \u2014 i.e. the number of Set insertions it performs is bounded independently of the input, and the bound is checked before the first insertion.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "vocabulary-drift-internal-aliases",
+      "theme": "minimum separation concept called 'mind' in one generation path and 'minSeparation' in another, increasing cognitive load when extending both",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 155,
+      "summary": "The minimum separation concept uses the name 'mind' in ringGreedy (and internally in buildBuddyGraph) but 'minSeparation' in constrainedGreedy, even though they are the same concept",
+      "invariant": "When the same semantic concept appears in parallel code paths, using different names for it creates a vocabulary drift risk. A maintainer extending both paths must keep track of two names for the same idea, increasing the chance of a mistake (e.g., passing 'mind' where 'minSeparation' is expected).",
+      "failure": "In index.ts line 155, buildBuddyGraph converts the user-facing option minSeparation to an internal variable named mind: `const mind = options.minSeparation ?? DEFAULT_MIN_SEPARATION;`. This mind is passed to ringGreedy, which expects the GreedyOptions.mind parameter (greedy.ts line 31). Meanwhile, buildConstrainedBuddyGraph passes minSeparation directly to constrainedGreedy, which expects ConstrainedGreedyOptions.minSeparation (constrainedGreedy.ts line 56). The CLAUDE.md file (line 177) even calls them aliases: '`mind` (min separation; mirrors the Python kwarg)' and '`minSeparation`'. This is documented but still a vocabulary inconsistency\u2014if a future contributor is asked to add a third generation path, they must decide which name to use, and their choice might not match the existing precedent.",
+      "remediation": "Unify the internal naming. Either: (1) rename GreedyOptions.mind to minSeparation to match constrainedGreedy, updating greedy.ts lines 28-32 and index.ts line 155-159 to use minSeparation consistently. This breaks the parallel with Python's 'mind' kwarg, which is acceptable if the code is TS-only. Or (2) rename constrainedGreedy's use of minSeparation to mind, updating constrainedGreedy.ts lines 56 and 92 and index.ts line 309. Option (1) is recommended as minSeparation is more self-documenting. Document the Python parallel in CLAUDE.md rather than in the code.",
+      "caseOnly": true
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "{\"target\":\"lib/src (the ringweave core)\",\"round\":5,\"runId\":\"sextant-m3-lib\",\"changedPaths\":[\"lib/src/core/budgets.ts\",\"lib/src/core/graph.ts\",\"lib/src/core/polish.ts\",\"lib/src/core/constrainedGreedy.ts\",\"lib/src/core/index.ts\",\"lib/test/optimizer.props.test.ts\"],\"saturation\":{\"critic-correctness\":{\"nothingFoundStreak\":0},\"critic-security\":{\"nothingFoundStreak\":0},\"critic-solid\":{\"nothingFoundStreak\":0},\"critic-maintainability\":{\"nothingFoundStreak\":0},\"critic-interaction\":{\"nothingFoundStreak\":3}}}"
+}

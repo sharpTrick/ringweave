@@ -1,0 +1,276 @@
+{
+  "target": "app/src",
+  "round": 20,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 3,
+    "confirmed": 3,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 3
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full-surface read of every file under `/home/user/ringweave/app/src` (App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts, all of io/, worker/, state/, graph/, panels/, styles/) plus the app test suite and the relevant `lib/src/core` internals it consumes (metrics.ts, bounds.ts, graph.ts, index.ts, budgets.ts).\n\nReproduced with scratch harnesses under `/home/user/ringweave/.review-scratch/rc` (vitest, root=app, gitignored, outside every app test glob):\n- Determinism / iteration order: audited every `Set`/`Map` use in `app/src`. `neighborhood` returns Sets but every consumer either sorts (`PersonPanel`) or does membership tests only (`highlight`); `parseRoster`'s `extras`/`keptByKey` are iterated in insertion order over a deterministic scan; `importGraph` sorts `g.adj` and uses `g.edgeList()` (sorted). `usePathFinder` uses the core's `shortestPath`, which is order-free (min tie-break) and canonicalised on `min(from,to)`. No `Math.random`/`Date.now` anywhere; `performance.now` is animation-only; `forceLayout` seeds from the ring and d3-force's default random source is a fixed LCG.\n- Degree/density contract: swept `buildBuddyGraph` for k=2..12, n=k+1..120 — no vertex ever exceeds `BUDDY_MAX`, and `2m <= BUDDY_MAX*n` always holds, so the export→import degree/density gates never refuse a graph the app generated.\n- Round trips: generate → `exportGraphJson` → `JSON.parse` → `importGraph` over k=2..12 x n in {k+1,k+2,13,20,33,50} unconstrained, and n in {6,9,12,20,33} x k in {2,3,4,6} x three constraint sets with `polish:\"auto\"`, `minSeparation:5` — metrics, edges, buddies, constraints and settings all preserved, nothing refused.\n- Fuzz: 5,000 random unicode inputs (emoji, lone surrogates, U+2028/2029, NBSP, ideographic space, combining marks, commas, CR/LF/TAB) proved `parseRoster` idempotent, and 4,000 more proved `importGraph` accepts every roster `parseRoster` emits (the per-name 120-code-point gate and the round-trip gate agree at the boundary).\n- Display-vs-actual: traced `assembleMetrics`/`quality`/`qualityPercent`/`isOptimal`/`connectionSummary`/`targetShortfall`/`separationShortfall`/`constraintSummary` over the disconnected, n=1, n=2, edgeless, star, matching and non-regular cases. `quality===0` whenever `aspl===null` holds; the only way `mooreLowerBounds` returns a zero bound (k=1,n>2) is unreachable for a connected graph, so a split graph can never read as optimal. `edgeClass`'s \"node membership implies a path edge\" argument is sound for a shortest path.\n- Boundaries: `feasibility` vs the core's `canGenerate`/`autoPolishEnabled`; the polish downgrade in `useBuddyGraph.generate`; `nextRerollSeed` at SEED_MAX; `clampList`/`clampText`/`codePointsIfOver` at exactly `max`; `checkJsonShape` node/depth accounting; `PersonSearch` active-row clamping; `useExplorerHistory` back/cap; `computeFit` at n=1.\n- Drove App under jsdom with a stubbed generation worker across generate / abandoned-edit / cancel / reroll / refusal / error / import sequences. `npm test` in `app/` is green (300 tests) before and after.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial pass over app/src (every file under io/, panels/, state/, graph/, worker/, plus App.tsx, model.ts, constraints.ts, search.ts, neighborhood.ts, main.tsx, sample.ts), plus lib/src/core/constraints.ts and bounds.ts where the app calls them synchronously on the main thread. Probes under /home/user/ringweave/app/.review-scratch/aa-{perf,json,sink,force}.test.ts.\n\nCOST-BEFORE-COMMITMENT: traced every gate ordering in importGraph by hand — MAX_IMPORT_N -> density (2m <= BUDDY_MAX*n) -> declaredPairs cap -> per-name code-point cap -> control-char refusal -> joined length -> parseRoster round-trip -> edge loop -> PER-VERTEX degree cap -> readConstraints -> allPairsSummary/girth. Every gate precedes the work it bounds. Confirmed by running: max-legal file (n=1000, m=6000) imports in 130 ms; 1000-node path graph 87 ms; 1M-entry edge list at n=2 refused by the density gate; people=1001 refused in 0.2 ms; constraints.required as a 1M-char string refused by the declaredPairs gate in 0.4 ms; constraints=null, and a 10,000-deep nested `version` both refused via quote()'s input-bounding (not output-slicing).\n\nPRE-PARSE GATE: built five 8 MB files designed to pass checkJsonShape (<=400k structural chars, depth<=32) and still be parse-heavy — 1.3M \\uXXXX escapes (11.7 ms parse), 4M \\n escapes (30.3 ms), 400k-node number array (5.3 ms), 100k distinct object keys (76.0 ms), 6000x depth-30 nests (14.1 ms). Shape scan itself 65-112 ms on 8 MB. No file found that passes the shape gate and costs more than ~80 ms to parse.\n\nATTACKER-CHOSEN NUMBERS: {buddies:1e9, minSeparation:1e9, seed:-1e9, polish:\"yes\"} sanitizes to {12,12,0,\"auto\"}; {buddies:2.5, minSeparation:null, seed:1.5, polish:1} to {2,5,12345,\"auto\"}. -0 edge endpoints and -0/0 self-pairs behave correctly. fromTags/priorHard/priorWeight have zero references in app/src (grep clean), so the lib's recorded O(n^2) tag hazard is unreachable from this component.\n\nMAIN-THREAD HANGS: validateDetailed's O(n^2) prohibited-connectivity walk runs synchronously in RosterModal per keystroke — measured 5.1-10.7 ms at n=500/1000 with 1 and 200 prohibited pairs, and skipped entirely when prohibitedCount===0. forceLayout measured flat at 145-210 ms across n=120/121/200/400/1000 because forceIters holds n*ticks constant past the knee; ANIM_MAX_N gates the tween that consumes it. rankMatches bounded by maxLength=200 x 1000 names. neighborhood is degree-bounded and the degree cap IS enforced on the import path. No catastrophic-backtracking regex exists (grepped every RegExp/test/replace/split site).\n\nSPREADSHEET/CLIPBOARD SINK: fuzzed 24 sneaky leading characters (​ ‎ ﻿ ­ ᠎     lone \\uD800   　   − ＝ ‐  ؜ ⁦ ' \" \\ TAB CR LF \u0001) x 5 formula payloads (=1+1, +1, -1, @SUM(1), =cmd|'/C calc'!A0) through BOTH name authorities, then asserted no resulting cell begins with =,+,-,@ after splitting the CSV on any of , ; TAB LF and after the same split on the clipboard line. 36 distinct survivor names, 0 violations. It holds structurally: parseRoster replaces the whole \\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}\\p{Cs} class with a space and THEN trims (so ​=1+1 collapses to =1+1 and gets neutralized), importGraph refuses that class outright, and Zs leaders die on the parseRoster round-trip because JS trim() eats them — so only visible characters can lead a name in a sink, and neutralizeCell covers the formula set. Both download filenames are literals; no untrusted text reaches a filename. Both buddy separators (\", \" and \"; \") carry a trailing space, so even a locale-delimiter or Text-to-Columns split yields a space-led cell.\n\nNUMERIC EDGES / EXPORT: Infinity normalized to null in model.ts before JSON.stringify; quality cannot be NaN (quality() gates on Number.isFinite(aspl), asplGap returns 0 when asplLb<=0); minSeparation:undefined round-trips as an omitted key; seeds clamped to [0, 2^31-1] so nextRerollSeed always advances at float precision.\n\nLARGEST RESIDUAL, NAMED NOT FILED: dropping an 8 MB .txt of duplicate names leaves 500k chars in the RosterModal textarea, and parseRoster re-scans all of it per keystroke — 111-127 ms measured for the all-duplicates degenerate case, plus a 500k-char controlled textarea re-render. Degradation, not a hang; it sits inside the bound MAX_PARSE_CHARS was deliberately chosen to impose (its docblock names this exact case); the fix is a preference about where the cap sits, with no durable invariant to ratchet.\n\nI could not construct an input that hangs the tab, escapes ImportError handling into the generic catch, or turns a name into a live spreadsheet formula.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface SOLID/architecture pass over app/src (all 42 source files) as it stands after commit 3659afb (app round 19). Two concrete extension attempts, per the review scenario: (1) F9's 'Preserve current buddies' (priors) toggle — traced the full fan-out (worker/protocol.ts GenerateRequest.constraints/isConstrainedRequest, worker/generate.ts routing, constraints.ts's ConstraintPair/resolveNamedPairs, RosterModal.tsx's props, useBuddyGraph.ts's wire construction, App.tsx's dispatch site) and confirmed lib/src/core already has full prior support from M1 (Constraints#addPrior/priorHard, buildConstrainedBuddyGraph's priorWeight), so this is genuinely app-side-only work — matching app/CLAUDE.md's own recorded analysis exactly, with no new fan-out surfacing. The wire-shape construction/consumption is single-sited (one construction site in useBuddyGraph.ts, one consumption site in worker/generate.ts), so the seam this change would extend is well-contained rather than scattered. (2) GraphCanvas's declared LAYOUT_MODES/FIT_MODES/positionsFor seam (graph/layout.ts, graph/GraphCanvas.tsx) — re-verified the exhaustive switch (assertNever), the FIT_MODES/LAYOUT_MODES split for a hypothetical selection-dependent mode, and the animation/fit consumers both routing through positionsFor so they cannot disagree; holds cleanly for the two built modes, and the one gap (focus/ego layout) has no caller (grepped for a third LayoutMode consumer — none) and is already correctly filed as a deferral in app/CLAUDE.md with its four unresolved problems named. Also read the round-19 diff itself (App.tsx, model.ts's separationShortfall, SettingsControls.tsx's separationApplies prop, io/readFileText.ts's checkJsonShape) end to end for new SRP/OCP leaks introduced by the latest fixes — the separationApplies wiring is single-sited (RosterModal.tsx:222, one caller), checkJsonShape is a narrowly-scoped structural pre-parse gate with no coupling to importGraph's own gates beyond ordering, and useCallback-wrapping setSelected in App.tsx is a memoization fix, not a responsibility change. Read constraints.ts, worker/generate.ts and worker/protocol.ts in full for coupling between the app's editable rule model and the core's Constraints class — confirmed the app deliberately does not reuse Constraints as its UI model (documented, justified: no removal API, not structured-clone-safe) and reimplements no constraint semantics, only plain-data shuttling. Cross-checked app/CLAUDE.md's 'Known follow-ons' list (F9 groundwork, CSV constraint import, import re-check, focus/ego layout, force-settle threading, hover memoization) against the current tree and found all still accurately described and correctly filed as deferrals with no caller. Did not find any responsibility leak (no graph math relocated into the UI beyond the one documented, measured neighborhood.ts exception), no over-engineered indirection with a single live variant beyond what's already filed as no-caller deferrals in app/CLAUDE.md, and no new god-component growth in App.tsx (487 lines, but composition-mostly: 5 handler functions plus wiring, with the actual state logic extracted into 9 focused hooks).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of app/src: model.ts (Settings, Metrics, quality scoring, label generation, shortfall disclosure), constraints.ts (roster-edit hazard prevention, pair resolution, name-keying), state management (useBuddyGraph.ts orchestration, useExplorerHistory.ts navigation, usePathFinder.ts routing, all hooks), worker protocol (GenerateRequest/GenerateResponse shape, builder routing predicate), worker generation (unconstrained/constrained normalization, feasibility pre-check), import/export (importGraph.ts bounds and validation, exportGraph.ts serialization, parseRoster.ts de-duplication and normalization), App.tsx (modal management, settings sync on view changes, reroll seed handling, focus rescue logic), UI components (RosterModal constraint editor integration, QualityPanel metric display, BuddyList memoization, PersonPanel selection, GraphCanvas layout animation), utility modules (neighborhood.ts degree-bounded adjacency, io/clamp.ts unified text truncation, feasibility.ts core-predicate delegation). All 300 tests passing, lint clean.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Walked the full cold-load → roster → generate → read-quality → find-person → buddies → export → error-recovery path across app/src/App.tsx and every panel/hook it wires (RosterModal, ConstraintsEditor, SettingsControls, PersonSearch, PersonPanel, BuddyList, PathPanel, QualityPanel, LayoutToggle, Notice, GraphCanvas, useFocusRescue, useEscape, useNotice, useBuddyGraph, useGenerationWorker, usePathFinder, useExplorerHistory) plus the CSS reduced-motion rule and existing test suite (appErrorRecovery.test.tsx, buddyListCopy.test.tsx, layoutToggle.test.tsx). Traced DOM tab order against the CSS absolute-position layout for #rail/#toggle/#person/#buddies/#route/#search/#metrics, confirmed it matches the documented visual left-to-right/top-to-bottom intent. Confirmed with scratch jsdom probes under app/.review-scratch (and a throwaway copy under app/test/, removed after each run) that (a) a failed clipboard write in BuddyList produces zero DOM change in either the button label or its live region, and (b) a successful generation only changes the busy-live region from \\\"Generating…\\\" to \\\"\\\" — no live region ever states the outcome (roster size / quality), the only cue being an implicit focus move into the (empty) search box. Also checked: RosterModal's note-stack live region and reopen-reason wiring, the inert/focus-rescue containment tests (all pass, all already covered), aria-pressed/aria-current on the two stateful toggle-like controls, prefers-reduced-motion gating on GraphCanvas's rAF tween (checked at effect-run time, correctly re-evaluated per layout change) and the global CSS kill-switch, PersonSearch's combobox semantics and Escape/Enter handling, ConstraintsEditor's per-row aria-describedby error routing, and the settings stepper's aria-disabled (not disabled) pattern at its bounds. Did not find defects in those — they are already hardened by many prior review rounds, several with dedicated regression tests.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 3,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (3) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 3,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (3) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "App.tsx keeps three independent, hand-copied slices of dispatch-time state (names, settings, constraintRows); reroll only re-commits two of them, so the setup dialog can reopen showing rules from an abandoned edit next to the roster actually on screen.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`handleReroll` re-commits `names` and `settings` from the view but deliberately leaves `constraintRows` untouched, so after an abandoned Edit→Generate the reopened roster editor shows the view's roster next to the abandoned edit's buddy rules — and pressing Generate silently applies rules that were never in force on the graph on screen."
+      ],
+      "remediation": "Eliminate the third independently-written copy instead of adding a reminder to update it: carry the typed rule rows on `GraphView` itself (alongside `constraints`) so `viewFromResult`/`loadView` produce them and every dispatch-time consumer, including reroll, reads rows from the one view object rather than a parallel `constraintRows` slot in App state. Do not rebuild rows from `view.constraints` via `toNamedPairs` — that reintroduces the silent-row-deletion defect already fixed in round 15."
+    },
+    {
+      "theme": "Live-region elements exist for key async/state-changing actions (clipboard copy, roster generation) but are left empty or merely cleared on completion, so keyboard/screen-reader users get no announced outcome — success, failure, or otherwise.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "BuddyList's Copy button awaits copyText() and only handles the ok===true branch; when the clipboard write rejects, copyAll() does nothing observable — no label change, no live-region text, no toast — leaving a screen-reader user with no signal the export failed or that CSV/Export exist as an alternative.",
+        "On successful generate/reroll, the only live-region change is `.busy-live` going from \"Generating…\" to \"\" — an emptying that most screen readers announce as nothing — while `.sr-live` stays empty too, so the sole accessible cue that the graph exists is an incidental focus move into an empty search box rather than any stated result."
+      ],
+      "remediation": "Stop treating 'clear the live region' as the terminal state for these two flows: in both `copyAll()` and the generate/reroll completion handler, replace the empty-string end state with a short outcome sentence written into the existing live region (failure message for copy, result summary for generate) using the same region and commit pattern already in place — do not introduce new live-region elements or a shared announcement abstraction."
+    },
+    {
+      "theme": "A blob-backed download can be silently dropped because the object URL is revoked in the same synchronous task as the click that consumes it, on an anchor never attached to the document.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`downloadBlob` calls `URL.revokeObjectURL(url)` synchronously right after `a.click()`, on an anchor that is never attached to the document — either condition alone can cause a browser to drop the download silently, with no error surfaced, and both are present here."
+      ],
+      "remediation": "In the one shared `downloadBlob` helper, attach the anchor before clicking and defer the revoke to a later task: `document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);` — no new helper, just correcting the existing single call site that all export sinks already share."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-dispatch-copy",
+      "theme": "the setup dialog can be opened showing state from two different generation attempts, because only two of App's three dispatch-time copies are re-committed by a reroll",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 265,
+      "summary": "`handleReroll` re-commits `names` and `settings` from the view but deliberately leaves `constraintRows` untouched, so after an abandoned Edit→Generate the reopened roster editor shows the view's roster next to the abandoned edit's buddy rules — and pressing Generate silently applies rules that were never in force on the graph on screen.",
+      "failure": "Reproduced in `.review-scratch/rc/appRules.test.tsx` and `appRules2.test.tsx` (App + stubbed worker). (1) Generate roster `Alice..Fay` with no rules → view A. (2) Edit people → roster `Zed..Uma`, add rule `Zed`/`Yan`, Generate, then cancel (status→idle; view is still A). (3) Click \"Different arrangement\" — the dispatch carries `{required:[],prohibited:[]}` and `names`/`settings` are re-committed to A. (4) Click \"Edit people\": the roster textarea correctly reads `Alice\\nBob\\nCarol\\nDan\\nEve\\nFay`, but the disclosure reads \"Buddy rules (1)\" and Rule 1 is `Zed`/`Yan`, flagged unknown — a rule count for a graph that has none. Second variant: with the abandoned edit's rule naming two people who ARE in roster A (`Alice`/`Bob`, kind `prohibited`), the reopened editor shows roster A plus that rule, and the very next Generate dispatches `constraints: {required: [], prohibited: [[0,1]]}` — a constraint the user never applied to this roster. App.tsx's own comment at the RosterModal call site (\"All three RosterModal inputs are DISPATCH-time\") is false after any reroll. This is the unfixed sibling of the `names` bug closed in round 15 and the `settings`/seed bug closed in round 13; the existing suite pins both of those and nothing pins the rows across a reroll.",
+      "remediation": "Close the theme rather than the case: make the rule rows travel with the roster they were submitted against instead of living in a separate, independently-written state. Either carry the typed `NamedPair[]` on `GraphView` (alongside `constraints`, so `viewFromResult` and `loadView` both produce it and an adopted view carries its own rows), or have `handleReroll` write `constraintRows` from the same source it writes `names` from. The second is a one-line addition but re-creates the \"remember to write all three\" instruction that already failed twice here; the first removes the third copy entirely, which is the subtraction the two earlier fixes were each half of. Do NOT rebuild rows from `view.constraints` via `toNamedPairs` — that is the silent-row-deletion defect closed in round 15.",
+      "invariant": "Whenever RosterModal is opened with a roster text equal to `view.names.join(\"\\n\")`, resolving the rule rows it is opened with against that roster (`resolveNamedPairs(rows, view.names).pairs`) must equal `view.constraints` exactly. More generally: no App state transition may write `names` from one origin and leave `constraintRows` describing a different origin — the roster text, the settings and the rule rows handed to RosterModal always describe one and the same submission or adopted view."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-failure-no-feedback",
+      "theme": "an action that can fail produces literally nothing observable when it does — a keyboard/screen-reader user cannot distinguish \"it worked\" from \"nothing happened\" from \"it's still running\"",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 38,
+      "summary": "BuddyList's Copy button awaits copyText() and only handles the ok===true branch; when navigator.clipboard.writeText rejects (permission denied, insecure context, no Clipboard API, focus-not-in-document at write time, etc.) copyText() resolves false and copyAll() does nothing at all — no button-label change, no live-region text, no toast. Reproduced with a scratch test (app/.review-scratch/copyfail.test.tsx, mocking copyText to resolve false): after the click and a settle, the button's chipbtn text is still \"Copy\" and the .sr-live region is still \"\". A screen-reader user who presses Copy in this state hears and sees nothing whatsoever, and has no way to know the export failed or that CSV/Export exist as an alternative — this is precisely the 'recover from an error along the way' step in the task scenario, and there is no recovery surface at all.",
+      "failure": "Mock copyText() to resolve false (as it legitimately does on any clipboard-write failure/rejection) and click the Copy button in BuddyList: the chipbtn label stays \"Copy\" and the adjacent role=\"status\" region's textContent stays \"\" — confirmed by running the reproduction script (see below) against the real component.",
+      "remediation": "Add an else branch in copyAll() (app/src/panels/BuddyList.tsx:47) that surfaces a failure the same way the success path does — e.g. set the `announced` live-region text to a message like \"Couldn't copy — try CSV instead\" (and optionally a transient error class on the button), following the same empty-then-refill two-commit pattern already used for the success announcement so it is reliably re-announced on a repeated failed press too.",
+      "invariant": "For every resolution of copyText() (true or false), copyAll() must produce a DOM mutation in a live region or focused control that is observably different depending on the outcome — i.e. the accessible-text state after a failed copy must differ from both the pre-press state and the successful-copy state.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-outcome-announcement",
+      "theme": "a major, page-replacing state transition (roster submitted -> graph ready) has no textual live-region announcement of its own outcome; the only accessible signal is an implicit focus move into an unrelated, empty control",
+      "file": "app/src/App.tsx",
+      "line": 437,
+      "summary": "On a successful generate/reroll, the only live-region change is `.busy-live` going from \"Generating…\" to \"\" (App.tsx:438) — an emptying, which most screen readers either do not announce or announce as nothing useful. Neither `.sr-live` region (path status, selection status) gains text at this transition, since nothing is selected and no path is active yet. The sole accessible cue that the graph exists is `useFocusRescue` moving focus into the (empty) \"Find a person\" search box once the busy overlay's Cancel button is removed from the DOM. Reproduced with a scratch test (app/.review-scratch tree) dumping every `[aria-live]` region's textContent immediately before and after the running->done transition: busy-live is the only element whose content differs, and it differs by becoming empty, not by stating a result. A screen-reader user who has just submitted a roster and is waiting is told nothing like \"Graph ready — 5 people, quality 100%\"; they must independently discover the new content by exploring from the search box.",
+      "failure": "Drive App() through dispatchGenerate() then transition the mocked worker to status \"done\": diff every element matching `[aria-live]` before/after — only `.busy-live` changes, and only to the empty string; no region states roster size, quality, or any positive outcome.",
+      "remediation": "Fold a short result sentence (e.g. reusing `peopleNoun`/`buddiesEachLabel`/`connectionSummary`, already computed for the rail and quality panel) into the same permanently-mounted `.busy-live` region on a successful completion, instead of clearing it to empty text, so the transition itself is announced rather than only inferable from where focus lands next.",
+      "invariant": "On every transition of generation status into \"done\" (view becomes non-null from null, or a reroll adopts a new view), at least one already-mounted live region's text must change to a non-empty string describing the outcome, not merely revert to empty.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-dispatch-copy",
+      "theme": "the setup dialog can be opened showing state from two different generation attempts, because only two of App's three dispatch-time copies are re-committed by a reroll",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 265,
+      "summary": "`handleReroll` re-commits `names` and `settings` from the view but deliberately leaves `constraintRows` untouched, so after an abandoned Edit→Generate the reopened roster editor shows the view's roster next to the abandoned edit's buddy rules — and pressing Generate silently applies rules that were never in force on the graph on screen.",
+      "failure": "Reproduced in `.review-scratch/rc/appRules.test.tsx` and `appRules2.test.tsx` (App + stubbed worker). (1) Generate roster `Alice..Fay` with no rules → view A. (2) Edit people → roster `Zed..Uma`, add rule `Zed`/`Yan`, Generate, then cancel (status→idle; view is still A). (3) Click \"Different arrangement\" — the dispatch carries `{required:[],prohibited:[]}` and `names`/`settings` are re-committed to A. (4) Click \"Edit people\": the roster textarea correctly reads `Alice\\nBob\\nCarol\\nDan\\nEve\\nFay`, but the disclosure reads \"Buddy rules (1)\" and Rule 1 is `Zed`/`Yan`, flagged unknown — a rule count for a graph that has none. Second variant: with the abandoned edit's rule naming two people who ARE in roster A (`Alice`/`Bob`, kind `prohibited`), the reopened editor shows roster A plus that rule, and the very next Generate dispatches `constraints: {required: [], prohibited: [[0,1]]}` — a constraint the user never applied to this roster. App.tsx's own comment at the RosterModal call site (\"All three RosterModal inputs are DISPATCH-time\") is false after any reroll. This is the unfixed sibling of the `names` bug closed in round 15 and the `settings`/seed bug closed in round 13; the existing suite pins both of those and nothing pins the rows across a reroll.",
+      "remediation": "Close the theme rather than the case: make the rule rows travel with the roster they were submitted against instead of living in a separate, independently-written state. Either carry the typed `NamedPair[]` on `GraphView` (alongside `constraints`, so `viewFromResult` and `loadView` both produce it and an adopted view carries its own rows), or have `handleReroll` write `constraintRows` from the same source it writes `names` from. The second is a one-line addition but re-creates the \"remember to write all three\" instruction that already failed twice here; the first removes the third copy entirely, which is the subtraction the two earlier fixes were each half of. Do NOT rebuild rows from `view.constraints` via `toNamedPairs` — that is the silent-row-deletion defect closed in round 15.",
+      "invariant": "Whenever RosterModal is opened with a roster text equal to `view.names.join(\"\\n\")`, resolving the rule rows it is opened with against that roster (`resolveNamedPairs(rows, view.names).pairs`) must equal `view.constraints` exactly. More generally: no App state transition may write `names` from one origin and leave `constraintRows` describing a different origin — the roster text, the settings and the rule rows handed to RosterModal always describe one and the same submission or adopted view."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-failure-no-feedback",
+      "theme": "an action that can fail produces literally nothing observable when it does — a keyboard/screen-reader user cannot distinguish \"it worked\" from \"nothing happened\" from \"it's still running\"",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 38,
+      "summary": "BuddyList's Copy button awaits copyText() and only handles the ok===true branch; when navigator.clipboard.writeText rejects (permission denied, insecure context, no Clipboard API, focus-not-in-document at write time, etc.) copyText() resolves false and copyAll() does nothing at all — no button-label change, no live-region text, no toast. Reproduced with a scratch test (app/.review-scratch/copyfail.test.tsx, mocking copyText to resolve false): after the click and a settle, the button's chipbtn text is still \"Copy\" and the .sr-live region is still \"\". A screen-reader user who presses Copy in this state hears and sees nothing whatsoever, and has no way to know the export failed or that CSV/Export exist as an alternative — this is precisely the 'recover from an error along the way' step in the task scenario, and there is no recovery surface at all.",
+      "failure": "Mock copyText() to resolve false (as it legitimately does on any clipboard-write failure/rejection) and click the Copy button in BuddyList: the chipbtn label stays \"Copy\" and the adjacent role=\"status\" region's textContent stays \"\" — confirmed by running the reproduction script (see below) against the real component.",
+      "remediation": "Add an else branch in copyAll() (app/src/panels/BuddyList.tsx:47) that surfaces a failure the same way the success path does — e.g. set the `announced` live-region text to a message like \"Couldn't copy — try CSV instead\" (and optionally a transient error class on the button), following the same empty-then-refill two-commit pattern already used for the success announcement so it is reliably re-announced on a repeated failed press too.",
+      "invariant": "For every resolution of copyText() (true or false), copyAll() must produce a DOM mutation in a live region or focused control that is observably different depending on the outcome — i.e. the accessible-text state after a failed copy must differ from both the pre-press state and the successful-copy state.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-outcome-announcement",
+      "theme": "a major, page-replacing state transition (roster submitted -> graph ready) has no textual live-region announcement of its own outcome; the only accessible signal is an implicit focus move into an unrelated, empty control",
+      "file": "app/src/App.tsx",
+      "line": 437,
+      "summary": "On a successful generate/reroll, the only live-region change is `.busy-live` going from \"Generating…\" to \"\" (App.tsx:438) — an emptying, which most screen readers either do not announce or announce as nothing useful. Neither `.sr-live` region (path status, selection status) gains text at this transition, since nothing is selected and no path is active yet. The sole accessible cue that the graph exists is `useFocusRescue` moving focus into the (empty) \"Find a person\" search box once the busy overlay's Cancel button is removed from the DOM. Reproduced with a scratch test (app/.review-scratch tree) dumping every `[aria-live]` region's textContent immediately before and after the running->done transition: busy-live is the only element whose content differs, and it differs by becoming empty, not by stating a result. A screen-reader user who has just submitted a roster and is waiting is told nothing like \"Graph ready — 5 people, quality 100%\"; they must independently discover the new content by exploring from the search box.",
+      "failure": "Drive App() through dispatchGenerate() then transition the mocked worker to status \"done\": diff every element matching `[aria-live]` before/after — only `.busy-live` changes, and only to the empty string; no region states roster size, quality, or any positive outcome.",
+      "remediation": "Fold a short result sentence (e.g. reusing `peopleNoun`/`buddiesEachLabel`/`connectionSummary`, already computed for the rail and quality panel) into the same permanently-mounted `.busy-live` region on a successful completion, instead of clearing it to empty text, so the transition itself is announced rather than only inferable from where focus lands next.",
+      "invariant": "On every transition of generation status into \"done\" (view becomes non-null from null, or a reroll adopts a new view), at least one already-mounted live region's text must change to a non-empty string describing the outcome, not merely revert to empty.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "object-url-revoked-too-early",
+      "theme": "a file the organizer asked for can silently fail to arrive because the blob URL backing it is torn down in the same task as the click that consumes it",
+      "file": "/home/user/ringweave/app/src/io/download.ts",
+      "line": 9,
+      "summary": "`downloadBlob` calls `URL.revokeObjectURL(url)` synchronously on the line after `a.click()`, on an anchor that is never attached to the document — the two conditions under which a browser can drop the download entirely, silently, with no error to surface.",
+      "failure": "Not reproducible under jsdom (which stubs `URL.createObjectURL`/`click`) and not covered by `app/test/download.test.ts`, which exercises only `neutralizeCell`/`toCsv`. Traced statically: `const url = URL.createObjectURL(blob); a.href = url; a.click(); URL.revokeObjectURL(url);` — the click queues the download task, and the revoke runs before that task can read the blob. In engines that fetch the blob asynchronously (this is why MDN's own guidance is to revoke on a later task) Export ↓ and CSV produce no file and no message; both are the organizer's only way to get the roster off the device, and the e2e driver runs Chromium only, where the pattern happens to work. Marked PLAUSIBLE because the failure is engine-dependent and I could not observe it in this environment.",
+      "remediation": "Revoke on a later task and attach the anchor before clicking: `document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);`. Both spreadsheet-bound sinks and the JSON export already share this one helper, so the fix lands once.",
+      "invariant": "An object URL created to back a download is never revoked in the same task as the click that consumes it — i.e. no synchronous `URL.revokeObjectURL` may follow the `click()` that reads it within one turn of the event loop."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 1,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 4,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 4,
+      "lastRound": 20,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 20,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 725748,
+    "agents": 6,
+    "toolCalls": 213
+  }
+}

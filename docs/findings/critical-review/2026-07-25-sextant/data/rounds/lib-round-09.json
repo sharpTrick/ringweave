@@ -1,0 +1,322 @@
+{
+  "target": "lib/src",
+  "round": 9,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 5,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface read of lib/src/core (graph, metrics, bounds, budgets, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus all 9 test files. Reproduced rather than reasoned: (1) oracle parity — regenerated a 1400-case ringGreedy sweep from reference-python/generators.py (n 3-30, k 2-6, mind in {2,3,4,5,7}, repair on/off) with byte-identical edge sets, final_mind, ASPL, diameter and girth, 0 diffs; a 348-case constrained sweep vs constrained_gen.constrained_greedy with max ASPL ratio 1.0000 and no connectivity regressions; a 2000-case validate() message sweep over malformed n/k and out-of-range/self-pair ids with 0 wording or ordering diffs. (2) Set-iteration-order dependence — rebuilt 1500 random graphs from identical edge sets in forward/reversed/shuffled insertion order and compared girth, all-pairs shortestPath, eccentricity, allPairsSummary, largestComponentFraction, edgeList, polish (hill+anneal) and polishConstrained outputs; zero order-dependence. (3) Brute force — girth vs exhaustive shortest-cycle, shortestPath vs full enumeration of lexicographically smallest shortest paths, eccentricity vs recomputation over 3000 random graphs; 0 mismatches. (4) Displayed vs actual — every BuddyResult and ConstrainedBuddyResult field recomputed from the returned edges over a full (n,k) sweep and 1200 randomized constrained scenarios, including the priorsKeptFraction-null-unless-weighed rule, satisfied implying connected, polished vs autoPolishEnabled, degree caps, and hard-constraint presence; all agreed. (5) Refusal contract — buildConstrainedBuddyGraph fuzzed over {0,1,2,3,-1,2.5,NaN,+/-Infinity,1e7,5001,\"3\",null,undefined,true} for n, k and cons.n; never throws. (6) Fragmentation — could not make polish (no components/largest guard, unlike polishConstrained) fragment a disconnected input. (7) Budget arithmetic in budgets.ts checked against every calibration point in its own comments (polishWork(120,4,20000)=865280000 admitted exactly, 121 refused; greedyWork(1000,12)=1.5e10 admitted exactly, (1000,20) and (800,39) refused; constrainedWork(5000,4)=1e8 admitted exactly) — all exact. (8) Verified the auto-polish gate always affords the full default iteration count, so polished:true never means zero iterations on either builder path. (9) Verified completionCap in constrainedGreedy can never bind and that the `stuck` memo is sound (legalEdge is symmetric and monotone). npm test green 246/246; working tree unmodified; harnesses under .review-scratch/ (gitignored).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full-surface read of all 11 files in /home/user/ringweave/lib/src/core (index, budgets, graph, greedy, constrainedGreedy, constraints, metrics, polish, bounds, swap, rng) plus lib/test, then executed hostile inputs against a fresh `npm run build` of lib/dist under /home/user/ringweave/.review-scratch/ (gitignored, outside every vitest include glob — lib/vitest.config.ts pins include to test/**).\n\nAttacks RUN and found solid: (1) validate's O(n^2) prohibited-pair connectivity walk at the n cap with one prohibited pair — 146 ms, genuinely bounded by MAX_CONSTRAINED_N; (2) constrained generation at the two cap corners — buildConstrainedBuddyGraph(5000,4)=22.4 s and (464,463)=79.0 s, ~1.7x the documented figures but exactly proportional to this container's measured 4.7M vs documented 7.5M work-units/s, i.e. machine variance, not a model defect (the sparse/dense rate ratio 3.7 matches the documented 3.4); (3) polishConstrained's pre-gate `input.edgeList()` vs polish's cheaper degree-sum — 0.07 s vs 0.02 s to refuse a 400k-vertex ring, so the gate is NOT meaningfully after the work it bounds; (4) cross-gate consistency — proved algebraically and by construction that no (n,k) admitted by resolveWantPolish/greedyWork can then throw from checkPolishSize, so the builders' refuse-vs-throw contract holds; (5) numeric edges — n=-0 (Array.from clamps to [], harmless), n=1e21 (Number.isInteger true, caught by the size cap), non-integer n=4999.5 (falls through to the Graph ctor message), maxIters/polishIters = Infinity/NaN/-0 (all rejected by Number.isInteger in boundedPolishIterations), seed=NaN (>>>0 = 0, still deterministic), k>=n silently capped, mooreLowerBounds shell overflow to Infinity (terminates in one iteration), shortestPath with a poisoned predecessor (bounded by `steps`, cannot spin), aspl/total precision at n=5000 (1.25e11, well inside 2^53); (6) asplGap can never be Infinity — aspl=Infinity requires zero reachable pairs, which forces mooreLowerBounds to return 0 and short-circuit; (7) connectivityReasons' `seen.indexOf(0) === -1` degenerate case is unreachable, gated by `k > 0 && n > 1`; (8) determinism — every sort in the hot paths (choosePartner, deficientVertices, edgeList, findPair's lexLess) is a total order on indices, no Set-iteration-order dependence reaches an output.\n\nNot applicable to this component: there is no untrusted-text sink in lib/src at all. The core deals exclusively in integer vertex indices — no CSV, clipboard, filename, DOM or JSON.stringify boundary anywhere in the 11 files — so the spreadsheet-formula half of the scenario has no surface here (it lives in app/src/io).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the next explicitly-committed change (PROJECT_PLAN.md M3/M4, flagship F9 \"recalculate with minimal disruption\") against lib/src as it stands (not a diff). Confirmed via app/CLAUDE.md's \"known follow-ons\" that F9's app-side plumbing is genuinely unbuilt (grep for priorWeight/priorHard/addPrior across app/src returns nothing), so this is a real, not invented, next step. Built lib/dist and empirically drove the core's public API (buildBuddyGraph, buildConstrainedBuddyGraph, Constraints.addPrior/priorHard, ConstraintReport.priorsKeptFraction) through three F9 scenarios in .review-scratch/f9_probe.mjs: (1) a person leaving mid-roster with remapped prior edges, (2) a person joining and appending an index, (3) heavy prior weight on a small roster. All ran without exception, refusal, or contract violation, and priorsKeptFraction reported sensible values (0.96, 0.95). Also compared aspl between buildBuddyGraph (ring-greedy) and buildConstrainedBuddyGraph with an empty Constraints (the algorithm F9 would have to route every recalc through, even absent explicit rules) across n=30..500 at k=4 (.review-scratch/quality_compare.mjs) — gap stays under 0.5%, so routing F9 through the constrained path is not a hidden quality regression. Read graph.ts, constraints.ts, constrainedGreedy.ts, greedy.ts, polish.ts, swap.ts, bounds.ts, metrics.ts, budgets.ts, rng.ts, index.ts in full. Attempted the declared OCP seam (tag-policy switch in constraints.ts) by tracing what a new TagPolicy case would touch — confirmed it is a single switch-arm addition with no caller changes, i.e. the seam pays as documented. Cross-checked lib/CLAUDE.md's stated sync-list for a hypothetical new hard-constraint category (legalEdge, swapBreaksConstraint, assertHardConstraints, buildReport) against every call site of Constraints.requiredPairs()/prohibitedPairs()/isRequired/isProhibited in the tree (grep, all hits enumerated). Ran `npm test` (246/246 green) and `npm run build` (clean tsc) in lib/ to confirm the baseline is sound before judging anything against it.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of lib/src: all source files (graph.ts, constraints.ts, greedy.ts, constrainedGreedy.ts, metrics.ts, polish.ts, budgets.ts, bounds.ts, rng.ts, swap.ts, index.ts); documentation against implementation verification for major functions; edge case testing (n=0, oversized inputs, parameter validation); naming patterns; duplication analysis; public API misuse surface; historical context validation; lint cleanliness",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Two representations of roster size (`n` parameter vs `cons.n`) can diverge, silently defeating the degree-cap precondition check",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`checkWellFormed` validates constraint endpoints against parameter `n` but reads required-degree vectors sized by `cons.n`; when `cons.n < n` the vector has holes for the checked vertices, `undefined > k` is false, and the required-degree refusal never fires — `constrainedGreedy` can return a graph exceeding k with the postcondition silently compiled out."
+      ],
+      "remediation": "In `checkWellFormed`, refuse whenever `n !== cons.n` (the same rule `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce) and make `degreeOf` throw on any endpoint outside [0, n) instead of silently extending the array, so `requiredDegree()`/`prohibitedDegree()` can never return a hole-y vector for any caller — eliminating the second, divergent source of roster size rather than patching the one call site that exposed it."
+    },
+    {
+      "theme": "Entry points that perform O(n) or O(n^2) construction/repair work rely on a computed or absent gate instead of the roster-size cap the rest of the codebase already enforces, so attacker-chosen n slips through ungated",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`repairDegrees` is guarded only by `greedyWork(g.n, k) > MAX_GREEDY_WORK`, but `greedyWork` returns exactly 0 for every k<=2 at every n, so this exported entry point accepts a graph of any size up to MAX_ROSTER and then runs unbounded O(n^2) work — unlike its sibling `constrainedWork`, whose k=0 zero case is safely backed by the MAX_CONSTRAINED_N cap applied elsewhere.",
+        "`Constraints.fromTags` never validates `n` — unlike `degreeOf`, the `Graph` constructor, and `validate`, all of which guard it in the same file — and runs an unconditional O(n^2) double loop sizing both the loop trip count and a Set from untrusted `n`, before `validate`'s MAX_CONSTRAINED_N refusal can ever run."
+      ],
+      "remediation": "Delete the estimator-only gating path in `repairDegrees` and the no-gate path in `Constraints.fromTags`; make both call the same unconditional `n > MAX_ROSTER`/`MAX_CONSTRAINED_N` check that `Graph`'s constructor and `validate` already perform, as the first statement, before any loop or array allocation runs — unifying every O(n)+-work entry point onto the one cap that already exists instead of leaving some gated only by a derivable-to-zero cost estimate."
+    },
+    {
+      "theme": "A work budget subtracts a claimed-fixed allowance for a calibration step whose real cost scales with the same loop count the budget is trying to bound, so the pass can cost up to 2x its stated cap",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`polish`'s anneal temperature calibration runs up to `min(100, max(10, m), maxIters)` full `energy()` evaluations — each costing the same as one loop iteration — but `loopBudget()` only subtracts a fixed FIXED_POLISH_SWEEPS=3, whose comment claims it already covers the calibration's amortised share; when `maxIters<=100` (the large-n regime the budget exists for), calibration actually costs `maxIters` sweeps, not ~1, so the default mode performs ~2x MAX_POLISH_WORK."
+      ],
+      "remediation": "Compute the calibration's actual `trials` count first, subtract that real number from the loop allowance (`maxIters - trials`) instead of the flat FIXED_POLISH_SWEEPS estimate, and shrink FIXED_POLISH_SWEEPS to only the 2 sweeps that are genuinely constant (starting energy + final summary) — removing the fixed constant's false claim to cover variable-cost calibration rather than adding a second budget term."
+    },
+    {
+      "theme": "The documented checklist for extending the hard-constraint OCP seam omits a fifth, code-verified sync point, so following the docs literally reproduces the exact production precondition gap the fifth point was added to close",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "lib/CLAUDE.md tells implementers of a new hard-constraint category to keep four functions in sync (legalEdge, swapBreaksConstraint, assertHardConstraints, buildReport), but `constrainedGreedy.ts`'s `checkInputSatisfiesConstraints` does the same required/prohibited-pair enumeration as an undocumented fifth sync point, added specifically because `assertHardConstraints` is compiled out in production; a new category added by touching only the documented four leaves this function blind to it in production."
+      ],
+      "remediation": "Remove the duplicate enumeration in `checkInputSatisfiesConstraints` and have it iterate the same required/prohibited-pair source that `legalEdge`/`swapBreaksConstraint` already use, collapsing the fifth touchpoint into the documented ones instead of adding it as a fifth line to the checklist."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "precondition-reads-wrong-roster-size",
+      "theme": "two sources of roster size (the `n` parameter and `cons.n`) can disagree, so the guard that enforces the degree cap silently no-ops and a hard guarantee is broken without an error",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 458,
+      "summary": "`checkWellFormed` validates constraint endpoints against the parameter `n` but reads the required-degree vector from `cons.requiredDegree()`, which is sized by `cons.n`; when `cons.n < n` the vector has holes for the very vertices being checked, `undefined > k` is false, and the documented \"required-degree over k\" refusal never fires — so `constrainedGreedy` returns a graph exceeding k in production builds where the postcondition is compiled out.",
+      "failure": "NODE_ENV=production; `const c = new Constraints(2); c.require(3,4); c.require(3,5); constrainedGreedy(6, 1, c)` returns degrees [1,1,0,2,1,1] — vertex 3 has 2 buddies at k=1 — with no error, violating the module header's unconditional \"no vertex exceeds k buddies\". Larger: `new Constraints(3)` with require(5,6),(5,7),(5,8) and `constrainedGreedy(10, 1, cons)` yields degree(5)=3 at k=1. In dev the only signal is `constrainedGreedy: degree of 5 is 3 > k=1`, a postcondition that blames the callee for a caller precondition that should have fired first. Mechanism: `degreeOf` (constraints.ts:38) allocates `new Array(cons.n)` and does `d[a] += 1` for endpoints >= cons.n, extending the array with holes/NaN instead of refusing; `requiredDegree()` then returns e.g. [0,0,0,null,null,null,null,null,null].",
+      "remediation": "Close the size-disagreement at its source rather than the one symptom. In `checkWellFormed`, refuse `n !== cons.n` with a clear message (the same rule `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce — the primitive is the only entry point that does not), and make `degreeOf` throw on an endpoint outside [0, n) instead of silently extending the array, so `requiredDegree()`/`prohibitedDegree()` can never return a hole-y vector for any caller. Consider having `polishConstrained`'s `checkConstraintIds(input.n, cons)` apply the same n-agreement rule for consistency.",
+      "invariant": "For every (n, k, cons), `constrainedGreedy(n, k, cons)` either throws or returns a graph g with `g.degree(v) <= k` for all v, every required pair present and no prohibited pair present — and this must hold with the dev postconditions disabled (NODE_ENV=production). Equivalently at the seam: `constrainedGreedy` throws whenever `n !== cons.n`, and `Constraints.requiredDegree()`/`prohibitedDegree()` never return an array containing a hole or a non-finite entry.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-evaluates-to-zero",
+      "theme": "a generation entry point whose only cost gate is a work estimator that can evaluate to zero, with no size cap behind it — so the guard admits every roster size",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 216,
+      "summary": "`repairDegrees` is guarded only by `greedyWork(g.n, k) > MAX_GREEDY_WORK`, and `greedyWork` returns exactly 0 for every k <= 2 at every n (edgesAdded = n*k/2 - n = 0 at k=2), so this exported entry point accepts a graph of any size up to MAX_ROSTER (1e6) and then runs unbounded O(n^2) work.",
+      "failure": "`repairDegrees(new Graph(n), 2)` (and k=1) on an empty graph: greedyWork(1e6,2) === 0, so the guard passes. Measured wall-clock, clean quadratic: n=5000 -> 1.2 s, n=10000 -> 4.5 s, n=20000 -> 19.7 s, n=40000 -> 76.3 s, all returning 0 edges. Extrapolating the confirmed n^2 curve to the largest n the guard admits (MAX_ROSTER = 1e6) is ~13 hours. Each of the |under| vertices pays one bfsDistances (Int32Array(n) alloc + fill) plus an O(|under|) candidate scan, and with minDist=3 on an empty graph no edge is ever added, so the whole n^2 is spent to accomplish nothing. `ringGreedy` has the identical k=2 hole but is saved by its separate MAX_CACHED_N size cap; `repairDegrees` is the one exported generator in the tree that has a work cap and no size cap, which is exactly the pairing budgets.ts's own module header declares mandatory (\"Each generation path needs BOTH a size cap (memory) and a work cap (time)\").",
+      "remediation": "Close it in the estimator so both callers are covered by one change: charge the unavoidable O(n^2) baseline in `greedyWork`, e.g. `3 * n * n * Math.max(edgesAdded, 1)`. This provably does not move ringGreedy's accept-set (for k>=3 edgesAdded is already >= 1, and at k=2 the new value 3n^2 = 7.5e7 at n=5000 stays far inside MAX_GREEDY_WORK), while greedyWork(1e6,2) becomes 3e12 and refuses. Name the sibling before committing: `constrainedWork` is also 0 at k=0, but that path is backed by the MAX_CONSTRAINED_N size cap in both `validate` and `checkWellFormed`, so it is safe — repairDegrees is the only unbacked one. Alternatively/additionally add the missing size cap (`g.n > MAX_CACHED_N` throws) so the doctrine holds structurally rather than relying on the estimator staying positive.",
+      "invariant": "For every integer k >= 0 and every n > MAX_CACHED_N, `repairDegrees(new Graph(n), k)` throws rather than returning; equivalently, `greedyWork(n, k) > 0` for all n >= 2 and all k >= 0, so no (n, k) can be admitted by a zero-valued work estimate."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "work-outside-the-bounded-loop",
+      "theme": "a cost budget that does not charge work performed outside the loop it bounds, so the pass costs up to twice its stated budget",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 86,
+      "summary": "`polish`'s anneal temperature calibration runs up to `min(100, max(10, m), maxIters)` full `energy()` evaluations — each an `allPairsSummary`, i.e. the same cost as one loop iteration — but `loopBudget()` only subtracts FIXED_POLISH_SWEEPS = 3 sweeps, whose comment claims to include \"the anneal calibration's amortised share\". When `maxIters <= 100` (which is precisely the large-n regime the budget exists for) the calibration costs `maxIters` sweeps, not ~1, so the default mode performs ~2x MAX_POLISH_WORK.",
+      "failure": "`polish(ring(2050))` — boundedPolishIterations returns maxIters = 99 for both modes, and both report iters=99, but measured: mode \"hill\" 11.4 s, mode \"anneal\" (the DEFAULT) 24.4 s. The 2.1x delta is entirely the 99 uncharged calibration sweeps. The overshoot is bounded at 2x (calibration <= min(100, maxIters) * perIteration <= loopBudget), so this is a budget-accuracy defect rather than an unbounded hang — but MAX_POLISH_WORK is the constant every other gate in budgets.ts is calibrated against, and on this container 8.65e8 units already measures ~23 s (buildBuddyGraph(120,4), the calibration point itself, took 22.9 s), so 2x is ~46 s on a nominally-bounded default path.",
+      "remediation": "Charge the calibration where it is spent instead of pretending it is a fixed constant: subtract the calibration's actual sweeps from the loop allowance (compute `trials` first, then run the loop for `maxIters - trials` iterations), or equivalently have `boundedPolishIterations` take the mode and halve the allowance for anneal. Then FIXED_POLISH_SWEEPS drops to the 2 sweeps that really are fixed (starting energy + final summary) and the constant stops overstating what it covers.",
+      "invariant": "For every (n, m, requested, mode), the total number of `allPairsSummary` evaluations performed by one `polish()` call is at most FIXED_POLISH_SWEEPS + boundedPolishIterations(n, m, requested, DEFAULT_POLISH_ITERS) — in particular the count must not depend on `mode`."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "incomplete-ocp-sync-list",
+      "theme": "the documented checklist for extending the constraint hard-constraint OCP seam omits a real sync point, so a future extender who follows lib/CLAUDE.md literally ships a precondition gap in the exact class of bug that sync point was added to close",
+      "file": "lib/CLAUDE.md",
+      "line": 45,
+      "summary": "lib/CLAUDE.md tells a future implementer of a genuinely-new hard-constraint category to keep four functions in sync — legalEdge, swapBreaksConstraint, assertHardConstraints, and buildReport — but constrainedGreedy.ts's checkInputSatisfiesConstraints (lines 399-416) does the same required/prohibited-pair enumeration as a fifth, undocumented sync point, and the code comment explains it was added for exactly this reason: assertHardConstraints is compiled out in production (dev-only) and previously mis-blamed polishConstrained's caller for a violation polishConstrained could not have introduced. A new hard-constraint category added by touching only the documented four leaves checkInputSatisfiesConstraints blind to it in production.",
+      "failure": "Add a hypothetical fifth constraint category (e.g. `mustBeAtLeastKApart`) and follow the CLAUDE.md instructions exactly: update legalEdge (so generation respects it), swapBreaksConstraint (so polish swaps respect it), assertHardConstraints (dev-mode postcondition), and buildReport (violation counting). Do NOT touch checkInputSatisfiesConstraints. Then call polishConstrained directly (a documented, supported low-level entry point — 'these are low-level primitives... called directly they throw on malformed input but otherwise assume feasibility') in production (NODE_ENV=production, so CONTRACTS_ENABLED is false) with a hand-built graph that already violates the new category. The precondition that exists specifically to catch this class of defect (a graph arriving already in violation) silently passes, and the swap-only pass can return a 'best' graph that never satisfies the new category, with no error and no signal — the same silent-violation failure mode the comment at line ~149-155 says this check exists to prevent for required/prohibited.",
+      "remediation": "Add checkInputSatisfiesConstraints to the documented sync list in lib/CLAUDE.md's known-limitations/OCP note, or better: derive its checks from the same iteration legalEdge/swapBreaksConstraint use so a new category can't be added to three of the four/five places and compile cleanly. At minimum, state the fifth touchpoint by name so grep for 'requiredPairs()' — which is what actually finds it — isn't the only way a future implementer discovers it.",
+      "invariant": "for every function that enumerates cons.requiredPairs()/cons.prohibitedPairs()/cons.isRequired()/cons.isProhibited() to implement a hard-constraint check (found by grep across lib/src), that function's name appears in lib/CLAUDE.md's 'kept in sync' list for a new hard-constraint category — currently 4 of 5 do."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "precondition-reads-wrong-roster-size",
+      "theme": "two sources of roster size (the `n` parameter and `cons.n`) can disagree, so the guard that enforces the degree cap silently no-ops and a hard guarantee is broken without an error",
+      "file": "/home/user/ringweave/lib/src/core/constrainedGreedy.ts",
+      "line": 458,
+      "summary": "`checkWellFormed` validates constraint endpoints against the parameter `n` but reads the required-degree vector from `cons.requiredDegree()`, which is sized by `cons.n`; when `cons.n < n` the vector has holes for the very vertices being checked, `undefined > k` is false, and the documented \"required-degree over k\" refusal never fires — so `constrainedGreedy` returns a graph exceeding k in production builds where the postcondition is compiled out.",
+      "failure": "NODE_ENV=production; `const c = new Constraints(2); c.require(3,4); c.require(3,5); constrainedGreedy(6, 1, c)` returns degrees [1,1,0,2,1,1] — vertex 3 has 2 buddies at k=1 — with no error, violating the module header's unconditional \"no vertex exceeds k buddies\". Larger: `new Constraints(3)` with require(5,6),(5,7),(5,8) and `constrainedGreedy(10, 1, cons)` yields degree(5)=3 at k=1. In dev the only signal is `constrainedGreedy: degree of 5 is 3 > k=1`, a postcondition that blames the callee for a caller precondition that should have fired first. Mechanism: `degreeOf` (constraints.ts:38) allocates `new Array(cons.n)` and does `d[a] += 1` for endpoints >= cons.n, extending the array with holes/NaN instead of refusing; `requiredDegree()` then returns e.g. [0,0,0,null,null,null,null,null,null].",
+      "remediation": "Close the size-disagreement at its source rather than the one symptom. In `checkWellFormed`, refuse `n !== cons.n` with a clear message (the same rule `Constraints.merge` and `buildConstrainedBuddyGraph` already enforce — the primitive is the only entry point that does not), and make `degreeOf` throw on an endpoint outside [0, n) instead of silently extending the array, so `requiredDegree()`/`prohibitedDegree()` can never return a hole-y vector for any caller. Consider having `polishConstrained`'s `checkConstraintIds(input.n, cons)` apply the same n-agreement rule for consistency.",
+      "invariant": "For every (n, k, cons), `constrainedGreedy(n, k, cons)` either throws or returns a graph g with `g.degree(v) <= k` for all v, every required pair present and no prohibited pair present — and this must hold with the dev postconditions disabled (NODE_ENV=production). Equivalently at the seam: `constrainedGreedy` throws whenever `n !== cons.n`, and `Constraints.requiredDegree()`/`prohibitedDegree()` never return an array containing a hole or a non-finite entry.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-evaluates-to-zero",
+      "theme": "a generation entry point whose only cost gate is a work estimator that can evaluate to zero, with no size cap behind it — so the guard admits every roster size",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 216,
+      "summary": "`repairDegrees` is guarded only by `greedyWork(g.n, k) > MAX_GREEDY_WORK`, and `greedyWork` returns exactly 0 for every k <= 2 at every n (edgesAdded = n*k/2 - n = 0 at k=2), so this exported entry point accepts a graph of any size up to MAX_ROSTER (1e6) and then runs unbounded O(n^2) work.",
+      "failure": "`repairDegrees(new Graph(n), 2)` (and k=1) on an empty graph: greedyWork(1e6,2) === 0, so the guard passes. Measured wall-clock, clean quadratic: n=5000 -> 1.2 s, n=10000 -> 4.5 s, n=20000 -> 19.7 s, n=40000 -> 76.3 s, all returning 0 edges. Extrapolating the confirmed n^2 curve to the largest n the guard admits (MAX_ROSTER = 1e6) is ~13 hours. Each of the |under| vertices pays one bfsDistances (Int32Array(n) alloc + fill) plus an O(|under|) candidate scan, and with minDist=3 on an empty graph no edge is ever added, so the whole n^2 is spent to accomplish nothing. `ringGreedy` has the identical k=2 hole but is saved by its separate MAX_CACHED_N size cap; `repairDegrees` is the one exported generator in the tree that has a work cap and no size cap, which is exactly the pairing budgets.ts's own module header declares mandatory (\"Each generation path needs BOTH a size cap (memory) and a work cap (time)\").",
+      "remediation": "Close it in the estimator so both callers are covered by one change: charge the unavoidable O(n^2) baseline in `greedyWork`, e.g. `3 * n * n * Math.max(edgesAdded, 1)`. This provably does not move ringGreedy's accept-set (for k>=3 edgesAdded is already >= 1, and at k=2 the new value 3n^2 = 7.5e7 at n=5000 stays far inside MAX_GREEDY_WORK), while greedyWork(1e6,2) becomes 3e12 and refuses. Name the sibling before committing: `constrainedWork` is also 0 at k=0, but that path is backed by the MAX_CONSTRAINED_N size cap in both `validate` and `checkWellFormed`, so it is safe — repairDegrees is the only unbacked one. Alternatively/additionally add the missing size cap (`g.n > MAX_CACHED_N` throws) so the doctrine holds structurally rather than relying on the estimator staying positive.",
+      "invariant": "For every integer k >= 0 and every n > MAX_CACHED_N, `repairDegrees(new Graph(n), k)` throws rather than returning; equivalently, `greedyWork(n, k) > 0` for all n >= 2 and all k >= 0, so no (n, k) can be admitted by a zero-valued work estimate."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "work-outside-the-bounded-loop",
+      "theme": "a cost budget that does not charge work performed outside the loop it bounds, so the pass costs up to twice its stated budget",
+      "file": "/home/user/ringweave/lib/src/core/polish.ts",
+      "line": 86,
+      "summary": "`polish`'s anneal temperature calibration runs up to `min(100, max(10, m), maxIters)` full `energy()` evaluations — each an `allPairsSummary`, i.e. the same cost as one loop iteration — but `loopBudget()` only subtracts FIXED_POLISH_SWEEPS = 3 sweeps, whose comment claims to include \"the anneal calibration's amortised share\". When `maxIters <= 100` (which is precisely the large-n regime the budget exists for) the calibration costs `maxIters` sweeps, not ~1, so the default mode performs ~2x MAX_POLISH_WORK.",
+      "failure": "`polish(ring(2050))` — boundedPolishIterations returns maxIters = 99 for both modes, and both report iters=99, but measured: mode \"hill\" 11.4 s, mode \"anneal\" (the DEFAULT) 24.4 s. The 2.1x delta is entirely the 99 uncharged calibration sweeps. The overshoot is bounded at 2x (calibration <= min(100, maxIters) * perIteration <= loopBudget), so this is a budget-accuracy defect rather than an unbounded hang — but MAX_POLISH_WORK is the constant every other gate in budgets.ts is calibrated against, and on this container 8.65e8 units already measures ~23 s (buildBuddyGraph(120,4), the calibration point itself, took 22.9 s), so 2x is ~46 s on a nominally-bounded default path.",
+      "remediation": "Charge the calibration where it is spent instead of pretending it is a fixed constant: subtract the calibration's actual sweeps from the loop allowance (compute `trials` first, then run the loop for `maxIters - trials` iterations), or equivalently have `boundedPolishIterations` take the mode and halve the allowance for anneal. Then FIXED_POLISH_SWEEPS drops to the 2 sweeps that really are fixed (starting energy + final summary) and the constant stops overstating what it covers.",
+      "invariant": "For every (n, m, requested, mode), the total number of `allPairsSummary` evaluations performed by one `polish()` call is at most FIXED_POLISH_SWEEPS + boundedPolishIterations(n, m, requested, DEFAULT_POLISH_ITERS) — in particular the count must not depend on `mode`."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-n-before-quadratic-materialization",
+      "theme": "a constructor that materializes O(n^2) state from an attacker-chosen n before any size gate can refuse it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` never validates `n` — unlike `degreeOf` in the same file, the `Graph` constructor and `validate`, all of which guard it — and then runs an unconditional `for (let i = 0; i < n; i++)` double loop, so both the loop trip count and the prohibited-pair Set are sized by untrusted input before `validate`'s MAX_CONSTRAINED_N refusal can ever run.",
+      "failure": "Reproduced: `Constraints.fromTags(3e7, [])` completes the empty outer loop in 0.19 s with no guard whatsoever — the loop is O(n) in a value that is only bounded by Number.MAX_SAFE_INTEGER, so `fromTags(1e15, [])` spins for hours. And `Constraints.fromTags(3000, Array(3000).fill('A'))` takes 4.62 s to materialize 4,498,500 prohibited pair keys; at tens of millions of pairs the Set construction itself throws before `validate` gets a chance to refuse. Filed as a DEFERRAL, not blocking, per the reporting contract's mechanical test: `grep -rn fromTags app/src lib/src scripts` returns no caller outside lib/test, so nothing untrusted reaches it in the current tree. This is already recorded in lib/CLAUDE.md's known-limitations with the same measurements; it is re-filed only because the review is full-surface and the finding is real, not to re-litigate the deferral.",
+      "remediation": "When the tag UI lands (F6): guard `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, then pre-count group sizes with a single O(n) pass over `tags` and refuse against a pair cap (sum over groups of size*(size-1)/2) BEFORE entering the double loop. Also sanitize tag values — a NaN tag never equals itself, so it silently inverts `prohibit_same`.",
+      "invariant": "For every n and every tags array, `Constraints.fromTags(n, tags)` either throws before executing any loop iteration, or performs work proportional to n + the number of pairs it actually emits, with that pair count itself refused against a cap before the first `prohibit()` call — i.e. no input can make fromTags do more work than the gate that is supposed to bound it.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "incomplete-ocp-sync-list",
+      "theme": "the documented checklist for extending the constraint hard-constraint OCP seam omits a real sync point, so a future extender who follows lib/CLAUDE.md literally ships a precondition gap in the exact class of bug that sync point was added to close",
+      "file": "lib/CLAUDE.md",
+      "line": 45,
+      "summary": "lib/CLAUDE.md tells a future implementer of a genuinely-new hard-constraint category to keep four functions in sync — legalEdge, swapBreaksConstraint, assertHardConstraints, and buildReport — but constrainedGreedy.ts's checkInputSatisfiesConstraints (lines 399-416) does the same required/prohibited-pair enumeration as a fifth, undocumented sync point, and the code comment explains it was added for exactly this reason: assertHardConstraints is compiled out in production (dev-only) and previously mis-blamed polishConstrained's caller for a violation polishConstrained could not have introduced. A new hard-constraint category added by touching only the documented four leaves checkInputSatisfiesConstraints blind to it in production.",
+      "failure": "Add a hypothetical fifth constraint category (e.g. `mustBeAtLeastKApart`) and follow the CLAUDE.md instructions exactly: update legalEdge (so generation respects it), swapBreaksConstraint (so polish swaps respect it), assertHardConstraints (dev-mode postcondition), and buildReport (violation counting). Do NOT touch checkInputSatisfiesConstraints. Then call polishConstrained directly (a documented, supported low-level entry point — 'these are low-level primitives... called directly they throw on malformed input but otherwise assume feasibility') in production (NODE_ENV=production, so CONTRACTS_ENABLED is false) with a hand-built graph that already violates the new category. The precondition that exists specifically to catch this class of defect (a graph arriving already in violation) silently passes, and the swap-only pass can return a 'best' graph that never satisfies the new category, with no error and no signal — the same silent-violation failure mode the comment at line ~149-155 says this check exists to prevent for required/prohibited.",
+      "remediation": "Add checkInputSatisfiesConstraints to the documented sync list in lib/CLAUDE.md's known-limitations/OCP note, or better: derive its checks from the same iteration legalEdge/swapBreaksConstraint use so a new category can't be added to three of the four/five places and compile cleanly. At minimum, state the fifth touchpoint by name so grep for 'requiredPairs()' — which is what actually finds it — isn't the only way a future implementer discovers it.",
+      "invariant": "for every function that enumerates cons.requiredPairs()/cons.prohibitedPairs()/cons.isRequired()/cons.isProhibited() to implement a hard-constraint check (found by grep across lib/src), that function's name appears in lib/CLAUDE.md's 'kept in sync' list for a new hard-constraint category — currently 4 of 5 do."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "unvalidated-n-before-quadratic-materialization",
+      "theme": "a constructor that materializes O(n^2) state from an attacker-chosen n before any size gate can refuse it",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "`Constraints.fromTags` never validates `n` — unlike `degreeOf` in the same file, the `Graph` constructor and `validate`, all of which guard it — and then runs an unconditional `for (let i = 0; i < n; i++)` double loop, so both the loop trip count and the prohibited-pair Set are sized by untrusted input before `validate`'s MAX_CONSTRAINED_N refusal can ever run.",
+      "failure": "Reproduced: `Constraints.fromTags(3e7, [])` completes the empty outer loop in 0.19 s with no guard whatsoever — the loop is O(n) in a value that is only bounded by Number.MAX_SAFE_INTEGER, so `fromTags(1e15, [])` spins for hours. And `Constraints.fromTags(3000, Array(3000).fill('A'))` takes 4.62 s to materialize 4,498,500 prohibited pair keys; at tens of millions of pairs the Set construction itself throws before `validate` gets a chance to refuse. Filed as a DEFERRAL, not blocking, per the reporting contract's mechanical test: `grep -rn fromTags app/src lib/src scripts` returns no caller outside lib/test, so nothing untrusted reaches it in the current tree. This is already recorded in lib/CLAUDE.md's known-limitations with the same measurements; it is re-filed only because the review is full-surface and the finding is real, not to re-litigate the deferral.",
+      "remediation": "When the tag UI lands (F6): guard `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, then pre-count group sizes with a single O(n) pass over `tags` and refuse against a pair cap (sum over groups of size*(size-1)/2) BEFORE entering the double loop. Also sanitize tag values — a NaN tag never equals itself, so it silently inverts `prohibit_same`.",
+      "invariant": "For every n and every tags array, `Constraints.fromTags(n, tags)` either throws before executing any loop iteration, or performs work proportional to n + the number of pairs it actually emits, with that pair count itself refused against a cap before the first `prohibit()` call — i.e. no input can make fromTags do more work than the gate that is supposed to bound it.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 9,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 9,
+      "skipped": true
+    }
+  },
+  "tokens": {
+    "subagentTokens": 490611,
+    "agents": 5,
+    "toolCalls": 159
+  },
+  "targetRaw": "lib/src (the ringweave core)"
+}

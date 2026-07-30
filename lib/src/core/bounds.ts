@@ -1,7 +1,7 @@
 /**
- * Moore-style lower bounds on ASPL and diameter for a k-regular graph on n
- * vertices. This is the 0%-reference every result is scored against.
- * Faithful port of Python `moore_lower_bounds`, edge cases included.
+ * Moore-style lower bounds on ASPL and diameter for a k-regular graph on n vertices — the
+ * 0%-reference every result is scored against. Port of Python `moore_lower_bounds`, edge cases
+ * included.
  */
 import { MAX_ROSTER } from "./graph.js";
 
@@ -11,10 +11,11 @@ export interface MooreBounds {
 }
 
 export function mooreLowerBounds(n: number, k: number): MooreBounds {
-  // n and k must be whole numbers: a non-integer k drives the shell recurrence
-  // (`shell *= k-1`, with k-1 < 1) into a denormal floating-point fixed point
-  // that never reaches 0 — an infinite loop. Cap n so the k=2 O(n) branch can't
-  // stall on an absurd size. Degenerate/out-of-range inputs score as no bound.
+  // No connected graph with max degree <= 1 exists above n=2, so a Moore-tree bound for k=1
+  // describes an unbuildable graph and `asplGap` returns a NEGATIVE gap.
+  if (k === 1 && n > 2) return { asplLb: 0, diameterLb: 0 };
+  // A non-integer k drives `shell *= k-1` (k-1 < 1) into a denormal fixed point that never
+  // reaches 0 — an infinite loop. The n cap stops the k=2 O(n) branch stalling on an absurd size.
   if (
     !Number.isInteger(n) ||
     !Number.isInteger(k) ||
@@ -35,9 +36,8 @@ export function mooreLowerBounds(n: number, k: number): MooreBounds {
     remaining -= take;
     diameterLb = dist;
     dist += 1;
-    // Moore-tree branching is (k-1) per shell, but that degenerates at low k:
-    // k=1 has no onward neighbors (a single edge); k=2 is a cycle whose shell
-    // size stays 2 rather than shrinking to 1.
+    // Moore-tree branching is (k-1) per shell, but degenerates at low k: k=1 has no onward
+    // neighbours, and k=2 is a cycle whose shell stays 2 rather than shrinking to 1.
     if (k === 1) {
       shell = 0;
     } else if (k === 2) {
@@ -45,7 +45,9 @@ export function mooreLowerBounds(n: number, k: number): MooreBounds {
     } else {
       shell = shell * (k - 1);
     }
-    if (shell === 0) {
+    // `remaining > 0` matters: with every vertex already placed, advancing `diameterLb` anyway
+    // claims a LOWER BOUND above what an achievable graph reaches.
+    if (shell === 0 && remaining > 0) {
       total += dist * remaining;
       diameterLb = dist;
       remaining = 0;

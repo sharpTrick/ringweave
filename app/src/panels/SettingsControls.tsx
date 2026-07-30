@@ -1,19 +1,25 @@
+import { useId } from "react";
+import { clamp } from "../io/clamp";
 import { BUDDY_MAX, BUDDY_MIN, SEED_MAX, SEPARATION_DEFAULT, SEPARATION_MAX, SEPARATION_MIN, type Settings } from "../model";
 
 interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
+  /**
+   * False once the roster carries buddy rules: the constrained builder accepts and ignores
+   * `minSeparation`, and a control that cannot affect the output must not read as a request.
+   */
+  separationApplies?: boolean;
 }
 
 const polishValue = (p: boolean | "auto"): string => (p === "auto" ? "auto" : p ? "on" : "off");
 const parsePolish = (v: string): boolean | "auto" => (v === "auto" ? "auto" : v === "on");
 
-const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
+/** Numeric inputs are clamped on change: HTML min/max do not stop a cleared or typed value, and
+    an empty field reads as 0. */
+export default function SettingsControls({ settings, onChange, separationApplies = true }: Props) {
+  const separationNoteId = `${useId()}-sep`;
 
-/** F2 settings: buddies-per-person (k) plus an Advanced disclosure for minimum
-    separation, polish mode, and the seed (determinism dial). Numeric inputs are clamped
-    on change — HTML min/max don't stop a cleared/typed value (an empty field is 0). */
-export default function SettingsControls({ settings, onChange }: Props) {
   const setK = (k: number) => onChange({ ...settings, buddies: clamp(Math.round(k), BUDDY_MIN, BUDDY_MAX) });
 
   const setMinSep = (raw: number) =>
@@ -26,10 +32,40 @@ export default function SettingsControls({ settings, onChange }: Props) {
     <>
       <div className="field">
         Buddies each
+        {/* Announced two ways. `role="status"` reports the NEW value after a press, since the
+            button keeps focus and nothing else says the press registered; each button's label
+            repeats the CURRENT value for someone who has just tabbed on.
+            AT THE BOUNDS the region cannot help — `setK` clamps, the text does not change and no
+            mutation is announced — so the bound is carried by the control instead.
+            `aria-disabled`, not `disabled`: the press that REACHES the bound would otherwise blur
+            the button under the user's finger, and no element is removed for `useFocusRescue` to
+            catch. */}
         <div className="stepper">
-          <button type="button" aria-label="fewer buddies" onClick={() => setK(settings.buddies - 1)}>−</button>
-          <span className="val tabnum">{settings.buddies}</span>
-          <button type="button" aria-label="more buddies" onClick={() => setK(settings.buddies + 1)}>+</button>
+          <button
+            type="button"
+            aria-disabled={settings.buddies <= BUDDY_MIN}
+            aria-label={
+              settings.buddies <= BUDDY_MIN
+                ? `fewer buddies, currently ${settings.buddies} — the fewest allowed`
+                : `fewer buddies, currently ${settings.buddies}`
+            }
+            onClick={() => setK(settings.buddies - 1)}
+          >
+            −
+          </button>
+          <span className="val tabnum" role="status" aria-live="polite">{settings.buddies}</span>
+          <button
+            type="button"
+            aria-disabled={settings.buddies >= BUDDY_MAX}
+            aria-label={
+              settings.buddies >= BUDDY_MAX
+                ? `more buddies, currently ${settings.buddies} — the most allowed`
+                : `more buddies, currently ${settings.buddies}`
+            }
+            onClick={() => setK(settings.buddies + 1)}
+          >
+            +
+          </button>
         </div>
       </div>
       <details>
@@ -44,8 +80,17 @@ export default function SettingsControls({ settings, onChange }: Props) {
               value={settings.minSeparation ?? SEPARATION_DEFAULT}
               onChange={(e) => setMinSep(Number(e.target.value))}
               style={{ width: 56 }}
+              // `aria-disabled`, not `disabled`, for the reason the stepper gives: a real
+              // `disabled` blurs the control out from under a keyboard user.
+              aria-disabled={!separationApplies || undefined}
+              aria-describedby={separationApplies ? undefined : separationNoteId}
             />
           </label>
+          {!separationApplies && (
+            <span className="field-note" id={separationNoteId}>
+              Doesn't apply when the group has buddy rules — those arrange it a different way.
+            </span>
+          )}
           <label className="field">
             Polish
             <select

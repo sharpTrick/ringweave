@@ -1,42 +1,64 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BuddyResult } from "ringweave";
-import type { GenerateOptions, GenerateRequest, GenerateResponse } from "../worker/protocol";
+import type { Reason } from "ringweave";
+import type {
+  GenerateOptions,
+  GenerateRequest,
+  GenerateResponse,
+  GraphResult,
+} from "../worker/protocol";
 
-export type GenStatus = "idle" | "running" | "done" | "error";
+type GenStatus = "idle" | "running" | "done" | "error" | "refused";
 
+/**
+ * `refused` is a distinct status, not an error: collapsing it into `error` routes a fixable,
+ * per-person explanation through copy that reads like a crash.
+ */
 export interface GenState {
   status: GenStatus;
-  result: BuddyResult | null;
+  result: GraphResult | null;
   error: string | null;
+  refusals: Reason[];
 }
 
 export interface GenerateArgs {
   n: number;
   k: number;
   options?: GenerateOptions;
+  constraints?: GenerateRequest["constraints"];
 }
 
 /**
- * Owns the generation worker. StrictMode-safe (worker created in an effect, terminated in
- * cleanup). Responses are correlated by an incrementing `id`; a non-latest response is a
- * stale run and is ignored. A new generate() or reset() also TERMINATES an in-flight
- * computation and swaps in a fresh worker, so a slow/superseded run can't monopolize the
- * single worker (blocking the next reroll) or leave a false "running" status.
+ * Owns the generation worker. StrictMode-safe: created in an effect, terminated in cleanup. A new
+ * generate() or reset() TERMINATES an in-flight run and swaps in a fresh worker, so a superseded
+ * run cannot monopolize the single worker or leave a false "running" status.
  */
+/** The cleared state every transition starts from, so no stale field survives a status change. */
+const IDLE: GenState = { status: "idle", result: null, error: null, refusals: [] };
+
 export function useGenerationWorker() {
   const workerRef = useRef<Worker | null>(null);
   const latestId = useRef(0);
   const runningRef = useRef(false);
-  const [state, setState] = useState<GenState>({ status: "idle", result: null, error: null });
+  const [state, setState] = useState<GenState>(IDLE);
 
   const attach = useCallback((worker: Worker) => {
     worker.onmessage = (e: MessageEvent<GenerateResponse>) => {
       const msg = e.data;
-      if (msg.id !== latestId.current) return; // stale run — superseded by a newer request
+      if (msg.id !== latestId.current) return;
       runningRef.current = false;
-      if (msg.ok) setState({ status: "done", result: msg.result, error: null });
-      else setState({ status: "error", result: null, error: msg.error });
+      if (msg.kind === "ok") setState({ ...IDLE, status: "done", result: msg.result });
+      else if (msg.kind === "refused") setState({ ...IDLE, status: "refused", refusals: msg.refusals });
+      else setState({ ...IDLE, status: "error", error: msg.error });
     };
+    // The worker's OWN failure channels: a worker that fails to load or dies mid-run posts no
+    // message at all, so without these the hook sits at "running" forever — and `#app` is `inert`
+    // while running, which locks the whole UI.
+    const fail = (what: string) => {
+      runningRef.current = false;
+      setState({ ...IDLE, status: "error", error: what });
+    };
+    worker.onerror = () => fail("Generation failed to start.");
+    worker.onmessageerror = () => fail("Generation sent back something unreadable.");
   }, []);
 
   const swapWorker = useCallback(() => {
@@ -61,17 +83,23 @@ export function useGenerationWorker() {
     if (runningRef.current) {
       latestId.current++; // drop the in-flight response
       runningRef.current = false;
-      swapWorker(); // stop the running computation, fresh worker for next time
+      swapWorker();
     }
-    setState({ status: "idle", result: null, error: null });
+    setState(IDLE);
   }, [swapWorker]);
 
   const generate = useCallback((args: GenerateArgs) => {
-    if (runningRef.current) swapWorker(); // supersede a slow in-flight run instead of queueing behind it
+    if (runningRef.current) swapWorker(); // supersede a slow run rather than queue behind it
     const id = ++latestId.current;
     runningRef.current = true;
-    setState({ status: "running", result: null, error: null });
-    const req: GenerateRequest = { id, n: args.n, k: args.k, options: args.options ?? {} };
+    setState({ ...IDLE, status: "running" });
+    const req: GenerateRequest = {
+      id,
+      n: args.n,
+      k: args.k,
+      options: args.options ?? {},
+      constraints: args.constraints ?? { required: [], prohibited: [] },
+    };
     workerRef.current?.postMessage(req);
   }, [swapWorker]);
 

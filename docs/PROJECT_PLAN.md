@@ -39,7 +39,14 @@ invisible by default and delightful when revealed.
   computes geometry; React renders SVG. At target sizes (n ≤ ~500) SVG is ample.
 - **Core:** existing `buddygraph` TS library (framework-agnostic, zero deps). UI never
   reimplements math.
-- **Constraint layer (new core work, M1):** two-tier design —
+- **Constraint layer (built in M1):** the two-tier design below was PROPOSED and then
+  **superseded by research** — see `docs/findings/CONSTRAINT_FINDINGS.md`, which showed the
+  label-assignment tier cannot carry hard required constraints. What shipped is the single
+  core-aware tier: `buildConstrainedBuddyGraph` → `constrainedGreedy` → optional
+  `polishConstrained`. There is no anonymous-graph-then-seat path anywhere in `lib/src`, and its
+  absence is a decision, not an omission. The original text is kept below because the replay
+  footnote ("names are seated last") still describes how the UNCONSTRAINED path presents itself.
+- **Constraint layer as originally proposed (superseded):** two-tier design —
   1. **Label-assignment tier (default):** generate the anonymous optimal graph, then assign
      people to vertices. Label swaps cost *nothing* structurally, so prohibited edges and most
      required edges are satisfied free. Surfaces in the construction replay as a footnote:
@@ -123,7 +130,14 @@ existing buddy pairs as possible, so relationships aren't reset.*
 ### F11. Construction replay — P2 ★signature delight
 *As anyone, I press "watch it build": ring forms, chords stitch far sides together, names seat
 last (footnote), metrics tick down live.*
-- Core already exposes deterministic edge order; replay is a UI concern only.
+- ~~Core already exposes deterministic edge order; replay is a UI concern only.~~ **FALSE, corrected
+  by review.** `Graph.edgeList()` returns edges sorted ascending by `[u, v]` — a canonical ORDER,
+  not the order the generator added them in. Replay needs construction sequence, which no core API
+  surfaces today: `ringGreedy` seeds a ring then completes greedily, and `polish` swaps edges in and
+  out, so the final sorted list is not a trace of anything. F11 is therefore core work first (emit a
+  construction log, or make the builders yield steps), not "a UI concern only". Recorded here
+  because a plan that says a feature is unlocked when it is not is how the seam gets built against a
+  contract the core never offered.
 - Doubles as the repo's marketing GIF.
 
 ### F12. What-if resilience — P2

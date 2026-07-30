@@ -1,0 +1,299 @@
+{
+  "target": "lib/src",
+  "round": 13,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 2,
+    "confirmed": 4,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 0,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 2,
+      "checked": "Full-surface read of every file in lib/src/core (graph.ts, budgets.ts, greedy.ts, swap.ts, polish.ts, constraints.ts, constrainedGreedy.ts, metrics.ts, bounds.ts, rng.ts, index.ts) plus lib/CLAUDE.md, docs/PROJECT_PLAN.md, docs/findings/churn-priors-weight.md, docs/findings/CONSTRAINT_FINDINGS.md, and the prior adversarial-review history in docs/findings/critical-review/2026-07-25-sextant/ (this lib/src review has already run 12 rounds; round 12 is the latest and did not converge).\n\nVerified round-12's still-relevant fixes are actually in place: `repairWork`'s budget is now a runtime-counted work meter (budgets.ts / greedy.ts) rather than the undercharging closed-form estimate that was 'blocking' in round 12 — confirmed by reading the current MAX_REPAIR_WORK/`repairDegrees` code, which matches the round-12 remediation. The misplaced-comment finding (constrainedGreedy.ts ~399) is also fixed — the comment now correctly sits above `checkInputSatisfiesConstraints` describing what it actually checks, with a forward pointer to `checkConstraintIds`. The `mooreLowerBounds`/fixture-coverage suggestion from round 12 is still open (fixture 'moore' array still covers only k∈{3,4}) but that is a correctness/oracle-parity concern, not a SOLID one, so left to that lens.\n\nAdopted the mandated scenario against the real next committed feature: confirmed via `app/src` (ConstraintsEditor.tsx, PersonPanel.tsx, usePathFinder.ts, panels present) and `app/CLAUDE.md`'s own status line that M3 (F7/F8/F10) is already built, so F9 ('recalculate with minimal disruption', M4, flagship) is the genuine next lib-touching feature. Traced the declared OCP seams against it:\n1. Grepped `TagPolicy`/`prohibit_same`/`fromTags` across lib/src, lib/test, reference-python and app/src — zero references outside lib/test and the Python oracle's own test/bench scripts. Confirmed the seam (constraints.ts:101-127) still has no live caller anywhere in the shipped app, exactly as lib/CLAUDE.md's own known-limitations entry states.\n2. Traced F9's actual dependency: `Constraints.addPrior`/`priorHard`, `ConstrainedBuddyOptions.priorWeight`, `ConstraintReport.priorsKeptFraction`, `DEFAULT_PRIOR_WEIGHT` (index.ts) — all already built and benchmarked (`docs/findings/churn-priors-weight.md`), but grepped `priorWeight`/`priorHard`/`addPrior`/`recalc` across app/src and confirmed (matching app/CLAUDE.md's own 'F9's worker-protocol groundwork is DEFERRED' note) there is still no live caller in app/src today — `GenerateRequest`/`GenerateOptions`/`ConstraintPair` carry no prior concept at all.\n3. Investigated a specific hypothesis — that routing F9 recalculation exclusively through `buildConstrainedBuddyGraph` (the only tier with `priorWeight`) would strand the quality panel, since `ConstrainedBuddyResult` deliberately omits `girth`/`asplGap` (documented at index.ts ~282-285). Traced this all the way through `app/src/model.ts` and `app/src/worker/generate.ts` and found it is a non-issue: the app never reads the core's `asplGap` field directly — `model.ts`'s `quality()` recomputes it itself by calling the core's exported `asplGap(aspl, n, degreeMax)` function, and `girth` is independently re-measured for the constrained path in the worker (`generate.ts:59`, explicitly commented as deliberate). So this hypothesized fan-out does not exist; the two-tier split does not leak into the metrics layer. Recording the refutation rather than a false positive.\n4. Read `app/src/constraints.ts` to confirm the app-side constraint model stays a flat plain-data mirror and does not reimplement any core semantics (only `require`/`prohibit`/`Constraints` construction), so the lib/app boundary itself shows no leaked graph math or duplicated legality logic.\n\nNo new SOLID/architecture defect was produced by any of these traces that isn't already tracked. The two live observations from this round's trace are pre-existing, already-documented deferrals (tag-policy seam, F9 dependency), re-confirmed rather than newly discovered, and filed here as `deferral` per the no-live-caller rule — not to pad the round, but because they are the direct, currently-accurate answer to 'does the declared seam pay for the next committed change,' which is exactly what this lens is asked to determine.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "\nFull-surface review of lib/src (ringweave core):\n\n**Code examined:**\n- All 11 core source files (graph.ts, greedy.ts, constrainedGreedy.ts, polish.ts, metrics.ts, constraints.ts, budgets.ts, bounds.ts, rng.ts, swap.ts, index.ts)\n- 200+ lines of docstrings, function headers, and inline comments\n- Function signatures and behavior verification against documented contracts\n\n**Lenses applied:**\n1. FALSE COMMENTS — traced claims about current behavior against actual code. All comments are accurate or correctly document past fixes.\n2. MISLEADING NAMES — vocabulary consistency (mind/minSeparation documented as aliases). All established vocabulary (Graph, adj, degree, aspl) used consistently.\n3. SILENTLY DRIFTING DUPLICATION — compared buildBuddyGraph and buildConstrainedBuddyGraph patterns, polish/polishConstrained usage. No divergence detected; differences are intentional and documented.\n4. EASY-TO-MISUSE PUBLIC SURFACES — buildConstrainedBuddyGraph refuses (returns empty) instead of throwing. This is explicitly documented at lines 278-280; callers must check `report.refusals`. Design is asymmetric but clearly stated.\n\n**Verification:**\n- All tests pass (249 tests, 9 test files)\n- All linting gates clean (oxlint, knip, hygiene oracle)\n- No drift between Python reference parity claims and actual oracle-validated behavior\n- Comments describing past bugs (23 instances found: NaN handling, oversized roster gates, polish work budget fixes) are accurate historical records, not false current claims\n\n**Example comments verified:**\n- Line 221: \"It previously documented 'Default 5', which was doubly wrong\" — accurately describes a PAST false comment that has been corrected\n- Line 4: \"incremental distance cache\" — verified in greedy.ts line 2-3 and implemented in lines 96-102\n- Lines 201-206: girth-based finalMinSeparation calculation — traced through test (optimizer.props.test.ts line 38) confirming girth-1 formula is correct\n- Lines 352-357: priorWeight finiteness check — verified code implements the synchronization described in comment\n\nNo false statements found in the codebase.\n",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "RNG seed is the only numeric core option that is silently coerced (via >>> 0) instead of validated, so invalid/out-of-range/non-integer seeds silently alias onto other seeds at the two public entry points and their internal buddy-graph callers, unlike every other numeric option (k, mind, minDist, polishIters, priorWeight) which throw or fall back explicitly.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`RNG` accepts any number as a seed and coerces it with `>>> 0`, so non-integer, negative and >= 2**32 seeds silently alias onto other seeds — the only numeric option in the core that is not validated, while k, mind, minDist, polishIters and priorWeight all throw or fall back explicitly for exactly this reason."
+      ],
+      "remediation": "Remove the silent `>>> 0` coercion path: validate seed once at the two public entry points (polish, polishConstrained) using the same throw-shaped check already used for priorWeight/polishIters, and delete the separate ad hoc normalization currently duplicated in buildBuddyGraph/buildConstrainedBuddyGraph so there is a single seed-acceptance path instead of two."
+    },
+    {
+      "theme": "repairDegrees' internal work-budget counter estimates per-sweep cost from the target degree k rather than measuring the graph's actual edge count, so a hostile/skewed graph shape (edges >> n*k/2) undercharges the counter without bound and the budget never binds — the same failure the counter was supposedly introduced to close, and repairDegrees is also the one generator missing the size cap every other path in the module carries.",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`repairDegrees`'s runtime work counter charges each `bfsDistances` sweep `sweepCost = g.n + g.n * k` — a cost model derived from the TARGET degree k, not the sweep's actual cost `g.n + 2*g.numEdges()`. For any caller-supplied graph whose real edge count exceeds `n*k/2`, the counter undercharges without bound, so the budget never binds and the call runs to completion in tens of minutes. `repairDegrees` is also the only generator with no size cap at all, against the module doctrine that every path needs both a size cap and a work cap; polish/polishConstrained were given checkPolishSize computed from the ACTUAL m for exactly this reason."
+      ],
+      "remediation": "Delete the k-derived cost estimate and charge each sweep its real, already-available cost (`g.n + 2 * g.numEdges()`, recomputed inside the while(changed) loop); this alone removes the separate size-cap gap too, since refusing up front when that same real-cost expression exceeds a fixed share of MAX_REPAIR_WORK reuses the corrected formula rather than adding a new one."
+    },
+    {
+      "theme": "The tag-policy switch in constraints.ts is a designed OCP extension seam whose sole entry point (Constraints.fromTags) currently has no caller anywhere outside tests and the Python oracle's own harness — a P2 feature not yet wired to any real flow.",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "The tag-policy switch (constraints.ts:114-126, one case, 'prohibit_same') is designed so a second policy is 'add a case, don't touch callers.' Re-verified this round by grep across lib/src, lib/test, reference-python and app/src: fromTags is referenced only by lib/test/constrained.test.ts and reference-python's own test/bench harnesses. Tags are P2 in docs/PROJECT_PLAN.md and app/CLAUDE.md explicitly notes the tag UI has no caller today."
+      ],
+      "remediation": "No action required now; if left unaddressed, remove fromTags (and the switch it wraps) until the P2 tag UI actually lands, rather than carrying dead extensibility surface in the meantime."
+    },
+    {
+      "theme": "buildBuddyGraph (the fast, k-regular tier) has no prior/priorWeight concept at all, unlike buildConstrainedBuddyGraph — a tier asymmetry that is currently harmless because the F9 recalculation feature that would need it is explicitly deferred and nothing in app/src references priors yet.",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "BuddyOptions/buildBuddyGraph has no priors/priorWeight field; only ConstrainedBuddyOptions/buildConstrainedBuddyGraph does (priorWeight, priorHard via Constraints, priorsKeptFraction on the report), and this is the mechanism M1b's churn benchmark calibrated DEFAULT_PRIOR_WEIGHT against. Re-confirmed this round: grepping app/src for priorWeight/priorHard/addPrior/recalc returns nothing, matching app/CLAUDE.md's own 'F9's worker-protocol groundwork is DEFERRED' note."
+      ],
+      "remediation": "No action required now; when F9 is built, resolve the asymmetry by consolidating churn-aware recalculation onto the single tier that already measures it (constrained) rather than adding a parallel priors mechanism to the fast tier."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "silently-coerced-option",
+      "theme": "a numeric option is silently coerced instead of validated, so distinct settings collapse onto one output and the caller cannot tell",
+      "file": "lib/src/core/rng.ts",
+      "line": 11,
+      "summary": "`RNG` accepts any number as a seed and coerces it with `>>> 0`, so non-integer, negative and >= 2**32 seeds silently alias onto other seeds — the only numeric option in the core that is not validated, while k, mind, minDist, polishIters and priorWeight all throw or fall back explicitly for exactly this reason.",
+      "failure": "`polish(ring(16), {seed: 0})`, `{seed: 2**32}`, `{seed: 12884901888}`, `{seed: NaN}`, `{seed: 0.9}` and `{seed: -0}` all return byte-identical edge lists; likewise `buildBuddyGraph(24, 4, {seed: 12345})` is byte-identical to `{seed: 12345.6}`, `{seed: 12345 + 2**32}` and `{seed: -4294954951}`. A caller asking for a different arrangement with any of those values gets the same graph back with no error and no signal. Reproduced with /home/user/ringweave/.review-scratch/p12.mjs.",
+      "remediation": "Validate the seed at the two public entry points that take it (`polish`, `polishConstrained`), in the same shape as the adjacent `priorWeight` / `polishIters` checks: throw `seed ${s} must be an integer in [0, 4294967296)` for anything else, or normalise it once in one place and document the domain on `PolishOptions.seed` / `PolishConstrainedOptions.seed`. Close the theme, not the case: the sibling is `buildBuddyGraph` / `buildConstrainedBuddyGraph`, which forward `options.seed` unchecked and whose documented contract is to refuse rather than throw — they should normalise the way they already do for a bad `priorWeight`.",
+      "invariant": "For every seed value `s` that `polish`/`polishConstrained` accept without throwing, `Number.isInteger(s) && s >= 0 && s < 2**32`; equivalently, no two distinct accepted seed values produce the same RNG stream (`new RNG(s1)` and `new RNG(s2)` with `s1 !== s2` differ within their first output).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "modelled-work-budget-undercharges-real-cost",
+      "theme": "a generation budget that models per-unit cost from the requested degree instead of measuring the graph it was handed lets a hostile graph shape run for minutes past the ceiling the budget advertises",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 248,
+      "summary": "`repairDegrees`'s runtime work counter charges each `bfsDistances` sweep `sweepCost = g.n + g.n * k` — a cost model derived from the TARGET degree k, not the sweep's actual cost `g.n + 2*g.numEdges()`. For any caller-supplied graph whose real edge count exceeds `n*k/2` (i.e. whenever k is smaller than the graph's actual degrees), the counter undercharges without bound, so the budget never binds and the call runs to completion in tens of minutes. This is the same class of defect the counter was introduced to close (a predicted model that tracked the calibration shapes and admitted a 239 s call) — the counter fixed the PASS-count model but kept a modelled unit cost, so the comment's claim that \"a counter cannot be wrong about the shape\" and `budgets.ts`'s calibration note that \"every refusal is reached in under 10 s\" are both false. `repairDegrees` is also the only generator with no size cap at all, against the module doctrine (budgets.ts header) that every path needs both a size cap and a work cap; `polish`/`polishConstrained` were given `checkPolishSize` computed from the ACTUAL m for exactly this reason.",
+      "failure": "Build g = clique on 2000 vertices plus 4000 degree-1 leaves (two per clique vertex): n=6000, m=2,003,000. Call `repairDegrees(g, 2)` (exported from the package index). Measured: returns normally after 32.8 s. Instrumented copy of the same function reports final `work` = 93,001,681 against MAX_REPAIR_WORK = 1,000,000,000 (9.3% of budget) while performing 8.03e9 real adjacency-traversal steps across 2000 sweeps — an 86x undercharge, and no refusal is ever raised. The same construction at n=12000, m=8,006,000 ran for over 10 minutes. Contrast the documented calibration, which claims every refusal lands under 10 s. Harnesses: /home/user/ringweave/.review-scratch/repair.mjs and /home/user/ringweave/.review-scratch/instrumented.mjs.",
+      "remediation": "Charge each sweep its real cost rather than a k-derived estimate: compute the edge total once per pass (`const sweepCost = g.n + 2 * g.numEdges()`, refreshed inside the `while (changed)` loop since repair adds edges) instead of `g.n + g.n * k`. Additionally give `repairDegrees` the size cap the doctrine requires — the analogue of `checkPolishSize`: refuse up front when a single sweep `g.n + 2*g.numEdges()` already exceeds a fixed share of MAX_REPAIR_WORK, so the pre-loop shape is refused rather than discovered after the first multi-second sweep. Ratchet the invariant below as a property test over generated graphs whose m is decoupled from n*k (cliques-with-leaves, dense cores with sparse fringes), asserting charged >= actual rather than asserting a wall-clock time.",
+      "invariant": "For every Graph g and every integer k >= 0, the work charged by `repairDegrees` for each `bfsDistances` sweep is >= that sweep's actual traversal cost `g.n + 2 * g.numEdges()`; equivalently, total charged work is an upper bound on total adjacency-traversal steps performed, for ALL graphs — not only those whose edge count happens to be ~n*k/2.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "silently-coerced-option",
+      "theme": "a numeric option is silently coerced instead of validated, so distinct settings collapse onto one output and the caller cannot tell",
+      "file": "lib/src/core/rng.ts",
+      "line": 11,
+      "summary": "`RNG` accepts any number as a seed and coerces it with `>>> 0`, so non-integer, negative and >= 2**32 seeds silently alias onto other seeds — the only numeric option in the core that is not validated, while k, mind, minDist, polishIters and priorWeight all throw or fall back explicitly for exactly this reason.",
+      "failure": "`polish(ring(16), {seed: 0})`, `{seed: 2**32}`, `{seed: 12884901888}`, `{seed: NaN}`, `{seed: 0.9}` and `{seed: -0}` all return byte-identical edge lists; likewise `buildBuddyGraph(24, 4, {seed: 12345})` is byte-identical to `{seed: 12345.6}`, `{seed: 12345 + 2**32}` and `{seed: -4294954951}`. A caller asking for a different arrangement with any of those values gets the same graph back with no error and no signal. Reproduced with /home/user/ringweave/.review-scratch/p12.mjs.",
+      "remediation": "Validate the seed at the two public entry points that take it (`polish`, `polishConstrained`), in the same shape as the adjacent `priorWeight` / `polishIters` checks: throw `seed ${s} must be an integer in [0, 4294967296)` for anything else, or normalise it once in one place and document the domain on `PolishOptions.seed` / `PolishConstrainedOptions.seed`. Close the theme, not the case: the sibling is `buildBuddyGraph` / `buildConstrainedBuddyGraph`, which forward `options.seed` unchecked and whose documented contract is to refuse rather than throw — they should normalise the way they already do for a bad `priorWeight`.",
+      "invariant": "For every seed value `s` that `polish`/`polishConstrained` accept without throwing, `Number.isInteger(s) && s >= 0 && s < 2**32`; equivalently, no two distinct accepted seed values produce the same RNG stream (`new RNG(s1)` and `new RNG(s2)` with `s1 !== s2` differ within their first output).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "modelled-work-budget-undercharges-real-cost",
+      "theme": "a generation budget that models per-unit cost from the requested degree instead of measuring the graph it was handed lets a hostile graph shape run for minutes past the ceiling the budget advertises",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 248,
+      "summary": "`repairDegrees`'s runtime work counter charges each `bfsDistances` sweep `sweepCost = g.n + g.n * k` — a cost model derived from the TARGET degree k, not the sweep's actual cost `g.n + 2*g.numEdges()`. For any caller-supplied graph whose real edge count exceeds `n*k/2` (i.e. whenever k is smaller than the graph's actual degrees), the counter undercharges without bound, so the budget never binds and the call runs to completion in tens of minutes. This is the same class of defect the counter was introduced to close (a predicted model that tracked the calibration shapes and admitted a 239 s call) — the counter fixed the PASS-count model but kept a modelled unit cost, so the comment's claim that \"a counter cannot be wrong about the shape\" and `budgets.ts`'s calibration note that \"every refusal is reached in under 10 s\" are both false. `repairDegrees` is also the only generator with no size cap at all, against the module doctrine (budgets.ts header) that every path needs both a size cap and a work cap; `polish`/`polishConstrained` were given `checkPolishSize` computed from the ACTUAL m for exactly this reason.",
+      "failure": "Build g = clique on 2000 vertices plus 4000 degree-1 leaves (two per clique vertex): n=6000, m=2,003,000. Call `repairDegrees(g, 2)` (exported from the package index). Measured: returns normally after 32.8 s. Instrumented copy of the same function reports final `work` = 93,001,681 against MAX_REPAIR_WORK = 1,000,000,000 (9.3% of budget) while performing 8.03e9 real adjacency-traversal steps across 2000 sweeps — an 86x undercharge, and no refusal is ever raised. The same construction at n=12000, m=8,006,000 ran for over 10 minutes. Contrast the documented calibration, which claims every refusal lands under 10 s. Harnesses: /home/user/ringweave/.review-scratch/repair.mjs and /home/user/ringweave/.review-scratch/instrumented.mjs.",
+      "remediation": "Charge each sweep its real cost rather than a k-derived estimate: compute the edge total once per pass (`const sweepCost = g.n + 2 * g.numEdges()`, refreshed inside the `while (changed)` loop since repair adds edges) instead of `g.n + g.n * k`. Additionally give `repairDegrees` the size cap the doctrine requires — the analogue of `checkPolishSize`: refuse up front when a single sweep `g.n + 2*g.numEdges()` already exceeds a fixed share of MAX_REPAIR_WORK, so the pre-loop shape is refused rather than discovered after the first multi-second sweep. Ratchet the invariant below as a property test over generated graphs whose m is decoupled from n*k (cliques-with-leaves, dense cores with sparse fringes), asserting charged >= actual rather than asserting a wall-clock time.",
+      "invariant": "For every Graph g and every integer k >= 0, the work charged by `repairDegrees` for each `bfsDistances` sweep is >= that sweep's actual traversal cost `g.n + 2 * g.numEdges()`; equivalently, total charged work is an upper bound on total adjacency-traversal steps performed, for ALL graphs — not only those whose edge count happens to be ~n*k/2.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-with-no-caller",
+      "theme": "the tag-policy switch in constraints.ts is the declared OCP seam for the constraint core, but Constraints.fromTags (its only entry point) has no caller anywhere outside lib/test and the Python oracle's own scripts",
+      "file": "lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "The tag-policy switch (constraints.ts:114-126, one case, 'prohibit_same') is designed so a second policy is 'add a case, don't touch callers' (per lib/CLAUDE.md). Re-verified this round by grep across lib/src, lib/test, reference-python and app/src: fromTags is referenced only by lib/test/constrained.test.ts and reference-python's own test/bench harnesses. Tags are P2 in docs/PROJECT_PLAN.md and app/CLAUDE.md explicitly notes the tag UI has no caller today.",
+      "failure": "Not a live defect — mechanically, `grep -rn fromTags app/src` returns nothing, so no untrusted or product code exercises the switch. The finding is that the seam is currently unexercised, matching lib/CLAUDE.md's own documented known-limitation verbatim.",
+      "remediation": "No action required now. When the tag UI (P2) actually lands, verify the switch still extends by adding a case without editing fromTags' callers, and at that point also apply the already-documented fromTags hardening (n guard, O(n²) pair-materialization cap) before any untrusted tag column reaches it.",
+      "invariant": "for every exported name in constraints.ts's tag-policy machinery (TagPolicy, Tag, Constraints.fromTags), some file outside lib/test and reference-python references it — currently false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "missing-abstraction",
+      "theme": "the next committed flagship feature (F9, minimal-disruption recalc) has churn-preservation support only on the constrained/fallback generation tier — buildBuddyGraph (the fast, k-regular, Moore-scored tier) has no prior-preservation concept at all",
+      "file": "lib/src/core/index.ts",
+      "line": 158,
+      "summary": "BuddyOptions/buildBuddyGraph has no priors/priorWeight field; only ConstrainedBuddyOptions/buildConstrainedBuddyGraph does (priorWeight, priorHard via Constraints, priorsKeptFraction on the report), and this is the mechanism M1b's churn benchmark (docs/findings/churn-priors-weight.md) calibrated DEFAULT_PRIOR_WEIGHT against. Re-confirmed this round: grepping app/src for priorWeight/priorHard/addPrior/recalc returns nothing, matching app/CLAUDE.md's own 'F9's worker-protocol groundwork is DEFERRED' note, so this is not yet a live gap anyone is blocked on.",
+      "failure": "No reproducible defect today (no caller). The traced consequence, for whoever builds F9 next: recalculating a roster that has zero required/prohibited rules but wants prior preservation must still go through the constrained builder (constrainedGreedy + polishConstrained), which per index.ts's own doc comment (line ~282) intentionally omits girth/regularity guarantees the fast tier provides for every other generation — so a churn-preserving recalc permanently trades away the k-regular/Moore-optimal structure the rest of the app assumes, purely because priors were wired into the constraint machinery rather than being an independent, tier-agnostic axis.",
+      "remediation": "No action required now (correctly deferred, matching lib/CLAUDE.md and app/CLAUDE.md). When F9 is actually built, decide explicitly whether unconstrained-but-churn-aware recalculation should stay on the constrained tier (accepting the already-measured 64%-98% preservation numbers) or needs a fast-tier-compatible mechanism, rather than defaulting silently into whichever tier priorWeight happens to already live on.",
+      "invariant": "for a Constraints object with zero required and zero prohibited pairs, both buildBuddyGraph and buildConstrainedBuddyGraph should offer equivalent quality guarantees when priors are the only input axis in use — currently false: only the constrained tier accepts priors at all.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-with-no-caller",
+      "theme": "the tag-policy switch in constraints.ts is the declared OCP seam for the constraint core, but Constraints.fromTags (its only entry point) has no caller anywhere outside lib/test and the Python oracle's own scripts",
+      "file": "lib/src/core/constraints.ts",
+      "line": 101,
+      "summary": "The tag-policy switch (constraints.ts:114-126, one case, 'prohibit_same') is designed so a second policy is 'add a case, don't touch callers' (per lib/CLAUDE.md). Re-verified this round by grep across lib/src, lib/test, reference-python and app/src: fromTags is referenced only by lib/test/constrained.test.ts and reference-python's own test/bench harnesses. Tags are P2 in docs/PROJECT_PLAN.md and app/CLAUDE.md explicitly notes the tag UI has no caller today.",
+      "failure": "Not a live defect — mechanically, `grep -rn fromTags app/src` returns nothing, so no untrusted or product code exercises the switch. The finding is that the seam is currently unexercised, matching lib/CLAUDE.md's own documented known-limitation verbatim.",
+      "remediation": "No action required now. When the tag UI (P2) actually lands, verify the switch still extends by adding a case without editing fromTags' callers, and at that point also apply the already-documented fromTags hardening (n guard, O(n²) pair-materialization cap) before any untrusted tag column reaches it.",
+      "invariant": "for every exported name in constraints.ts's tag-policy machinery (TagPolicy, Tag, Constraints.fromTags), some file outside lib/test and reference-python references it — currently false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "missing-abstraction",
+      "theme": "the next committed flagship feature (F9, minimal-disruption recalc) has churn-preservation support only on the constrained/fallback generation tier — buildBuddyGraph (the fast, k-regular, Moore-scored tier) has no prior-preservation concept at all",
+      "file": "lib/src/core/index.ts",
+      "line": 158,
+      "summary": "BuddyOptions/buildBuddyGraph has no priors/priorWeight field; only ConstrainedBuddyOptions/buildConstrainedBuddyGraph does (priorWeight, priorHard via Constraints, priorsKeptFraction on the report), and this is the mechanism M1b's churn benchmark (docs/findings/churn-priors-weight.md) calibrated DEFAULT_PRIOR_WEIGHT against. Re-confirmed this round: grepping app/src for priorWeight/priorHard/addPrior/recalc returns nothing, matching app/CLAUDE.md's own 'F9's worker-protocol groundwork is DEFERRED' note, so this is not yet a live gap anyone is blocked on.",
+      "failure": "No reproducible defect today (no caller). The traced consequence, for whoever builds F9 next: recalculating a roster that has zero required/prohibited rules but wants prior preservation must still go through the constrained builder (constrainedGreedy + polishConstrained), which per index.ts's own doc comment (line ~282) intentionally omits girth/regularity guarantees the fast tier provides for every other generation — so a churn-preserving recalc permanently trades away the k-regular/Moore-optimal structure the rest of the app assumes, purely because priors were wired into the constraint machinery rather than being an independent, tier-agnostic axis.",
+      "remediation": "No action required now (correctly deferred, matching lib/CLAUDE.md and app/CLAUDE.md). When F9 is actually built, decide explicitly whether unconstrained-but-churn-aware recalculation should stay on the constrained tier (accepting the already-measured 64%-98% preservation numbers) or needs a fast-tier-compatible mechanism, rather than defaulting silently into whichever tier priorWeight happens to already live on.",
+      "invariant": "for a Constraints object with zero required and zero prohibited pairs, both buildBuddyGraph and buildConstrainedBuddyGraph should offer equivalent quality guarantees when priors are the only input axis in use — currently false: only the constrained tier accepts priors at all.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 13,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 13,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 525969,
+    "agents": 5,
+    "toolCalls": 170
+  }
+}

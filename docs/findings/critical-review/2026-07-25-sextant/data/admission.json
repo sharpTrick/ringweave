@@ -1,0 +1,326 @@
+{
+  "head": "30e3cf6b6b9258c0a2dd5ea8c36cfd8e2bc9eb67",
+  "mode": "build",
+  "generatedFrom": "scripts/sextant/seed-defs.json",
+  "results": [
+    {
+      "id": "sd-01-roster-cap-offbyone",
+      "slot": "wt-01",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "MAX_NAMES becomes an inclusive bound, so n+1 names are kept and the truncation warning fires one name late.",
+      "worktree": ".sextant-worktrees/wt-01"
+    },
+    {
+      "id": "sd-02-dedupe-case-sensitive",
+      "slot": "wt-02",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Alice/alice become two people. Breaks the uniqueness invariant that name-keyed logic downstream relies on.",
+      "worktree": ".sextant-worktrees/wt-02"
+    },
+    {
+      "id": "sd-03-feasibility-n-vs-k",
+      "slot": "wt-03",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "n === k passes the gate, then generation fails downstream instead of being refused in plain language.",
+      "worktree": ".sextant-worktrees/wt-03"
+    },
+    {
+      "id": "sd-04-parity-inverted",
+      "slot": "wt-04",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "A displayed-truth defect: the user is told the wrong thing about degree spread.",
+      "worktree": ".sextant-worktrees/wt-04"
+    },
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "slot": "wt-05",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "n === MAX_ROSTER_N is refused although the message says that many are supported.",
+      "worktree": ".sextant-worktrees/wt-05"
+    },
+    {
+      "id": "sd-06-injection-guard-hole",
+      "slot": "wt-06",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Drops the minus sign from the formula-injection character class, so a name beginning '-' becomes a live formula. This is the exact class of E1's round-10 blocking finding.",
+      "worktree": ".sextant-worktrees/wt-06"
+    },
+    {
+      "id": "sd-07-csv-quote-escape-dropped",
+      "slot": "wt-07",
+      "stratum": "M-mutation",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "RFC 4180 quote doubling removed, so a name containing a double quote corrupts every downstream column.",
+      "worktree": ".sextant-worktrees/wt-07"
+    },
+    {
+      "id": "sd-08-dedupe-count-boundary",
+      "slot": "wt-08",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Duplicates seen exactly at the cap are counted as dropped when nothing was dropped.",
+      "worktree": ".sextant-worktrees/wt-08"
+    },
+    {
+      "id": "sd-09-control-chars-not-stripped",
+      "slot": "wt-09",
+      "stratum": "R-real",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": false,
+        "tests": false,
+        "lint": false,
+        "lintDetail": "app/src/io/parseRoster.ts:20:7: error eslint(no-unused-vars): Variable 'CONTROL_CHARS' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.",
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Removes the control-char normalization, re-opening the embedded-delimiter path: a tab inside a name splits into a second spreadsheet cell whose leading '=' the per-cell guard never sees. E1 round 10, confirmed blocking.",
+      "worktree": ".sextant-worktrees/wt-09"
+    },
+    {
+      "id": "sd-10-aria-pressed-removed",
+      "slot": "wt-10",
+      "stratum": "M-hand",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": false,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "The exact class of the ONLY user-visible bug E1's nine-round tail found, and it found that one by luck. Expected to be caught by the jsx-a11y linter, which is itself worth measuring.",
+      "worktree": ".sextant-worktrees/wt-10"
+    },
+    {
+      "id": "sd-11-orphan-export",
+      "slot": "wt-11",
+      "stratum": "M-lint",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": false,
+        "lintDetail": "Unused exports (1)",
+        "covered": true
+      },
+      "isControl": false,
+      "note": "EXPLICIT EXCEPTION to the green-lint gate. Scored against knip, not the critics: it verifies the A1 handoff catches what the critics were told to stop filing.",
+      "worktree": ".sextant-worktrees/wt-11"
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "slot": "wt-12",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Drops the !f.has(c) exclusion, so every first-degree buddy also lands in the second-degree set. Executed by the render tests but its classification is not asserted.",
+      "worktree": ".sextant-worktrees/wt-12"
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "slot": "wt-13",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Inverts the documented hover contract (1st bright, 2nd dim, rest faded) so 2nd-degree is indistinguishable from unrelated nodes.",
+      "worktree": ".sextant-worktrees/wt-13"
+    },
+    {
+      "id": "sd-14-stale-worker-response",
+      "slot": "wt-14",
+      "stratum": "R-real",
+      "admitted": false,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": false
+      },
+      "isControl": false,
+      "note": "Statement deletion of the id-correlation guard. A cancelled or superseded run's result is applied, clobbering a newer graph. E1 round 4, confirmed blocking. The suite mocks the HOOK, not the protocol, so no existing test exercises this line's logic.",
+      "worktree": ".sextant-worktrees/wt-14"
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "slot": "wt-15",
+      "stratum": "M-mutation",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": false,
+      "note": "Negates the second-degree edge test, inverting which edges glow.",
+      "worktree": ".sextant-worktrees/wt-15"
+    },
+    {
+      "id": "ctl-01",
+      "slot": "wt-16",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": true,
+      "note": "Unseeded. Every finding here is a candidate false positive.",
+      "worktree": ".sextant-worktrees/wt-16"
+    },
+    {
+      "id": "ctl-02",
+      "slot": "wt-17",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": true,
+      "note": "Unseeded.",
+      "worktree": ".sextant-worktrees/wt-17"
+    },
+    {
+      "id": "ctl-03",
+      "slot": "wt-18",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": true,
+      "note": "Unseeded.",
+      "worktree": ".sextant-worktrees/wt-18"
+    },
+    {
+      "id": "ctl-04",
+      "slot": "wt-19",
+      "admitted": true,
+      "gates": {
+        "applied": true,
+        "typecheck": true,
+        "tests": true,
+        "lint": true,
+        "lintDetail": null,
+        "covered": true
+      },
+      "isControl": true,
+      "note": "Unseeded.",
+      "worktree": ".sextant-worktrees/wt-19"
+    }
+  ]
+}

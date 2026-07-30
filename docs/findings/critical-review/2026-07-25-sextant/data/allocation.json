@@ -1,0 +1,149 @@
+{
+  "rule": "PRE-REGISTRATION.md §Allocation rule — applied mechanically, no selection-time judgement",
+  "head": "30e3cf6b6b9258c0a2dd5ea8c36cfd8e2bc9eb67",
+  "totals": {
+    "candidates": 15,
+    "admittedCriticSeeds": 5,
+    "oracleProbes": 2,
+    "controls": 4
+  },
+  "proseSubset": [
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "worktree": ".sextant-worktrees/wt-05",
+      "reviewTarget": ".sextant-worktrees/wt-05/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "off-by-one-boundary",
+      "theme": "the maximum roster size is rejected at exactly the limit it advertises",
+      "file": "app/src/io/feasibility.ts",
+      "line": 33
+    },
+    {
+      "id": "sd-08-dedupe-count-boundary",
+      "worktree": ".sextant-worktrees/wt-08",
+      "reviewTarget": ".sextant-worktrees/wt-08/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "off-by-one-boundary",
+      "theme": "the duplicate tally counts one entry past the cap",
+      "file": "app/src/io/parseRoster.ts",
+      "line": 64
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "worktree": ".sextant-worktrees/wt-12",
+      "reviewTarget": ".sextant-worktrees/wt-12/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "dropped-guard-clause",
+      "theme": "the neighbourhood glow misclassifies first-degree buddies as second-degree",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 184
+    },
+    {
+      "id": "sd-13-second-degree-renders-faded",
+      "worktree": ".sextant-worktrees/wt-13",
+      "reviewTarget": ".sextant-worktrees/wt-13/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "wrong-displayed-state",
+      "theme": "second-degree neighbours are dimmed instead of highlighted",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 196
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "worktree": ".sextant-worktrees/wt-15",
+      "reviewTarget": ".sextant-worktrees/wt-15/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "inverted-comparison",
+      "theme": "edges to unrelated nodes are lit while second-degree edges are dimmed",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 203
+    }
+  ],
+  "homogeneousArm": [
+    {
+      "id": "sd-05-roster-max-offbyone",
+      "worktree": ".sextant-worktrees/wt-05",
+      "reviewTarget": ".sextant-worktrees/wt-05/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "off-by-one-boundary",
+      "theme": "the maximum roster size is rejected at exactly the limit it advertises",
+      "file": "app/src/io/feasibility.ts",
+      "line": 33
+    },
+    {
+      "id": "sd-12-second-degree-overlap",
+      "worktree": ".sextant-worktrees/wt-12",
+      "reviewTarget": ".sextant-worktrees/wt-12/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "dropped-guard-clause",
+      "theme": "the neighbourhood glow misclassifies first-degree buddies as second-degree",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 184
+    },
+    {
+      "id": "sd-15-edge-lit2-inverted",
+      "worktree": ".sextant-worktrees/wt-15",
+      "reviewTarget": ".sextant-worktrees/wt-15/app/src (the BuddyGraph app)",
+      "stratum": "M-mutation",
+      "class": "inverted-comparison",
+      "theme": "edges to unrelated nodes are lit while second-degree edges are dimmed",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 203
+    }
+  ],
+  "oracleProbes": [
+    {
+      "id": "sd-10-aria-pressed-removed",
+      "worktree": ".sextant-worktrees/wt-10",
+      "reviewTarget": ".sextant-worktrees/wt-10/app/src (the BuddyGraph app)",
+      "stratum": "M-hand",
+      "class": "missing-accessible-state",
+      "theme": "a toggle's visual state has no accessible counterpart",
+      "file": "app/src/panels/LayoutToggle.tsx",
+      "line": 0
+    },
+    {
+      "id": "sd-11-orphan-export",
+      "worktree": ".sextant-worktrees/wt-11",
+      "reviewTarget": ".sextant-worktrees/wt-11/app/src (the BuddyGraph app)",
+      "stratum": "M-lint",
+      "class": "dead-export",
+      "theme": "an exported symbol has no consumer",
+      "file": "app/src/model.ts",
+      "line": 0
+    }
+  ],
+  "controls": [
+    {
+      "id": "ctl-01",
+      "worktree": ".sextant-worktrees/wt-16",
+      "reviewTarget": ".sextant-worktrees/wt-16/app/src (the BuddyGraph app)"
+    },
+    {
+      "id": "ctl-02",
+      "worktree": ".sextant-worktrees/wt-17",
+      "reviewTarget": ".sextant-worktrees/wt-17/app/src (the BuddyGraph app)"
+    },
+    {
+      "id": "ctl-03",
+      "worktree": ".sextant-worktrees/wt-18",
+      "reviewTarget": ".sextant-worktrees/wt-18/app/src (the BuddyGraph app)"
+    },
+    {
+      "id": "ctl-04",
+      "worktree": ".sextant-worktrees/wt-19",
+      "reviewTarget": ".sextant-worktrees/wt-19/app/src (the BuddyGraph app)"
+    }
+  ],
+  "powerNote": "SHORTFALL: only 5 critic-corpus seeds admitted, against a planned 12. Reported as a power limitation per the pre-registration, not absorbed. A paired exact McNemar test needs >=6 discordant seeds in one direction for p<0.05, which 5 seeds cannot supply; existence claims and per-seed blind-spot reporting remain valid.",
+  "rejectionReasons": [
+    [
+      "existing-suite-already-catches-it",
+      7
+    ],
+    [
+      "line-not-covered-by-any-test",
+      1
+    ]
+  ]
+}

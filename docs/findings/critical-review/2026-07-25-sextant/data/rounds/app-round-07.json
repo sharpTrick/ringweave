@@ -1,0 +1,374 @@
+{
+  "target": "app/src",
+  "round": 7,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 5,
+    "confirmed": 6,
+    "blocking": 2,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of app/src, traced and partly reproduced. Files read: model.ts, constraints.ts, search.ts, neighborhood.ts, sample.ts; io/ (importGraph, exportGraph, parseRoster, feasibility, constraintMessages, download, readFileText, schema); worker/ (generate.ts, protocol.ts, generate.worker.ts); state/ (useBuddyGraph, useGenerationWorker, useGraph, usePathFinder, useExplorerHistory, useNotice, useEscape, useFocusRescue); graph/ (GraphCanvas, layout, highlight); all 11 panels; App.tsx; main.tsx; plus all 29 files in app/test. Reproduction harnesses under /home/user/ringweave/.review-scratch/r2/ (gitignored, outside the pinned vitest include glob): (1) parity.probe.ts — 272 generated graphs, displayed Metrics vs an independent re-measure (allPairsSummary/girth/largestComponentFraction) of the rendered edge list, plus exportGraph->importGraph round-trip of edges/buddies/metrics/settings: NO mismatch. (2) cons.probe.ts — 379 constrained builds through the real runGeneration, recounting report.reqViolations/prohViolations from the rendered edges, checking no prohibited edge reaches the view, buddies==edges, degreeMin/Max==actual, disconnected => qualityPercent 0: ALL CLEAN. (3) imp.probe.ts — 12 adversarial/boundary import files (two disjoint triangles, n=1, K2, edgeless n=2, path n=10, K5+isolate, duplicate edges, negative/float/1e30 settings, __proto__ payload): no non-ImportError escape, no false-optimal on a split graph, quality 0 whenever disconnected. (4) deg.probe.ts + app.probe.tsx + seed.probe.tsx — the two findings filed. Determinism sweep: no Math.random/Date.now/crypto anywhere in app/src (only performance.now for the tween); every Set/Map in the app is consumed via .has/.get or sorted before display (neighborhood sets are sorted in PersonPanel, highlight sets are membership-only, dedupePairs/readConstraints use keys only); the one path reconstruction goes through the core's shortestPath, which is min-based over adj and provably order-free, and the app canonicalises on min(from,to). Boundary checks traced: parseRoster MAX_NAMES/MAX_PARSE_CHARS/MAX_NAME_CHARS off-by-ones vs importGraph's mirrors (consistent, inclusive limits agree), MAX_CONSTRAINT_PAIRS vs the editor's atCap (consistent), feasibility n<k+1 / k<2, asplGap for k<=1 and n<=1 (mooreLowerBounds returns 0 so quality cannot go NaN or negative-gap-optimal; every reachable path is gated by connected && isFinite(aspl)), computeFit at n=1/n=2 (degenerate span cancels correctly), forceIters/FORCE_MAX_EDGES vs the import density cap, nextRerollSeed at SEED_MAX, MAX_HISTORY and SECOND_LIMIT slicing, rankMatches limit and astral-codepoint indexOf advance (benign). npm test: 265/265 green before and after (src untouched).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface pass over every file in /home/user/ringweave/app/src, with hostile inputs actually constructed and run under vitest (probes in /home/user/ringweave/.review-scratch/adv2/, gitignored).\n\nGATE ORDERING (cost before commitment) — traced /home/user/ringweave/app/src/io/importGraph.ts line by line. Every size/shape gate precedes the work it bounds: file.size before FileReader (readFileText.ts), people.length<=1000 and `2m <= BUDDY_MAX*n` and declaredPairs<=200 all before `f.people.map`, before the edge loop, before readConstraints, and before `allPairsSummary`/`girth`. Per-name length (<=120) is checked before any message interpolates the name; the total-length check precedes the round-trip check. Measured the worst LEGAL import: 12-regular n=1000/m=6000 = 100 ms; 1000-node path graph = 62-75 ms; 6000 duplicate declared edges = 9 ms. Import's ceiling is exactly generation's ceiling (n<=1000, degreeMax<=12, 2m<=12n), so no file can make the app render more than it can generate. I could not construct a legal file costing more than ~100 ms on the main thread.\n\nATTACKER-CHOSEN NUMBERS — ran hostile `settings`: `{buddies:1e9, seed:1e300, minSeparation:1e9, polish:true}` -> `{buddies:12, minSeparation:12, seed:2147483647, polish:true}`; `{buddies:-0, seed:-0, minSeparation:2.5}` -> `{buddies:2, minSeparation:5, seed:0}`; `seed:MAX_SAFE_INTEGER` -> SEED_MAX. `-0` in edges/constraints is neutral (String(-0)===\"0\" so pairKey dedupes it, `-0===0` catches the self-pair, JSON.stringify emits 0). Non-integer/NaN/Infinity all fall back. No numeric edge escapes sanitizeSettings/sanitizeInt.\n\nMAIN-THREAD HANGS — benchmarked the RosterModal per-keystroke chain (parseRoster + resolveNamedPairs + toConstraints + validateDetailed + describeReasons) at 1000 names x 200 rules: 2.7 ms. validateDetailed's O(n^2) prohibited connectivity walk is 1.3-2.7 ms at n=1000 (51 ms only at n=5000, which the roster cap makes unreachable). parseRoster at the 500k char cap across five degenerate shapes: worst 24 ms (all-duplicates). forceLayout on edgeless/star/12-regular/n=1/n=2: 200 ms worst at n=1000, zero non-finite coordinates, maxCoord ~4e2 — matches its documented tick-scaled budget, and ANIM_MAX_N=400 gates the interpolation that consumes it. Blocking rule notes are bounded at ~66 / 15 KB by the 200-pair cap.\n\nUNTRUSTED TEXT AT SPREADSHEET SINKS — this is genuinely closed, and I tried to break it. Imported the names `=HYPERLINK(...)`, `+1+1`, `-2+3`, `@SUM(A1)`, `=cmd|' /C calc'!A1` and dumped the real CSV and clipboard payloads. CSV: every field is RFC-4180 quoted, so no embedded `;` or `,` can open a new cell in either comma- or semicolon-locale dialects, and the field's first char goes through neutralizeCell before the quote-doubling (correct order). Clipboard: buddyLabel's default separator is `\", \"`, so every comma-split segment begins with a SPACE and cannot be read as a formula; the leading segment is the neutralized name. A tab/CR/LF/U+2028 cannot reach either sink because importGraph refuses \\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp} and parseRoster normalizes the same shared class. No dangerouslySetInnerHTML/innerHTML/eval anywhere; download filenames are constants.\n\nOTHER — JSON.parse RangeError on deep nesting escapes as an Error and is caught by handleImportFile; `quote()` bounds its INPUT so no huge stringify runs; no render loop (traced App's status effect, useFocusRescue's array-less effect, GraphCanvas's rAF and its render-time ref mutation); explorer history capped at 50; PersonSearch capped by maxLength=200 and ECHO_MAX=60; notices clamped at 300.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Traced the next real committed changes against app/src as it stands (not a diff): (1) F9's minimal-disruption recalc — followed the fan-out through App.tsx (constraintRows/settings state), state/useBuddyGraph.ts, worker/protocol.ts and generate.ts, and constraints.ts's toConstraints/resolveNamedPairs; independently confirmed the documented reasons it is correctly deferred (no priorWeight/priorHard/addPrior caller anywhere in app/src via grep; the toggle's home is genuinely undecided; the promote-then-validate hazard in lib/src/core/index.ts:332-337 is already guarded in worker/generate.ts:105-114, which I verified reads report.refusals after building rather than trusting the pre-check). (2) 'Buddy rules are not re-checked on import' (model.ts:352-359, GraphView.report) — traced what implementing it would actually touch: lib/src/core/index.ts's buildReport (currently module-private, lib/src/core/index.ts:506) would need to become an exported entry point, and app/src/io/importGraph.ts would call it via the already-exported Constraints class (requiredPairs/prohibitedPairs/priorPairs are public, lib/src/core/constraints.ts:142-150) through the existing app/src/constraints.ts:toConstraints. This is a clean two-file, lib-first fan-out consistent with the declared architecture rule ('if a number is missing, add it to the core, not here') — not a violation. constraintSummary in model.ts already treats report as a uniform null-vs-populated shape regardless of origin, so no other consumer (QualityPanel, useBuddyGraph.ts) would need to change. (3) CSV constraint import (F7 P1) — confirmed via grep that no column contract exists anywhere in app/src or io/schema.ts, matching the documented no-caller deferral. (4) GraphCanvas's declared seam (LAYOUT_MODES/FIT_MODES/positionsFor) against the focus/ego layout follow-on — re-derived the same four hazards CLAUDE.md already lists (focus = hovered ?? selected keys layout and would re-lay-out on hover; animation only fires on layoutChanged so it would snap; mock radii exceed computeFit's frame; positionsFor would need a new parameter touching graphCanvasFit.test.ts) by reading GraphCanvas.tsx directly — no new hazard found beyond what's recorded. Also read neighborhood.ts, highlight.ts, useGraph.ts, parseRoster.ts, readFileText.ts, importGraph.ts end to end for responsibility leaks (graph math in the UI) and gate ordering (size caps before parse) — both hold: neighborhood.ts's O(k^2) walk is bounded by BUDDY_MAX and documented as deliberately not BFS; gate order in importGraph.ts runs density/per-vertex-degree caps before the O(n^2) allPairsSummary. Checked App.tsx as the composition root (388 lines) for god-component drift — logic is delegated to seven single-purpose hooks (useBuddyGraph, useExplorerHistory, useGraph, useEscape, useFocusRescue, usePathFinder, useNotice); what remains is orchestration proper to a composition root.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "\nExamined all of app/src: core model (model.ts), state management (state/*.ts), UI components (panels/*.tsx), graph rendering (graph/*.tsx), worker protocol and generation (worker/*.ts), IO/import/export/parsing (io/*.ts), search, constraints, and neighborhood logic. Reviewed all 29 test files to understand intended behavior. Ran npm run lint to verify lint gate is clean. Traced constraints handling through editor (RosterModal.tsx, ConstraintsEditor.tsx) → resolution (constraints.ts) → worker (generate.ts). Verified settings defaults stay in-range. Checked state machines (useBuddyGraph, useGenerationWorker, usePathFinder). Traced focus rescue mechanism. Verified quality scoring path. Reviewed export/import round-trip logic.\n",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Traced the full keyboard/screen-reader path across app/src: cold load -> RosterModal (inert/#app trap), roster paste, Generate, worker busy overlay, focus rescue (useFocusRescue.ts), search/select (PersonSearch.tsx), PersonPanel navigation and back-stack (useExplorerHistory.ts), path-finding (usePathFinder.ts, PathPanel.tsx), BuddyList/QualityPanel export/import, error and refusal paths (App.tsx bg.status effect), Escape handling (useEscape.ts), reduced-motion gating in GraphCanvas.tsx and app.css. Cross-checked every conditionally-rendered live region against its mount point (RosterModal.tsx, Notice.tsx, PersonSearch.tsx, App.tsx busy-live/sr-live) for the \"region must pre-exist\" pattern, and checked LayoutToggle/BuddyList aria-pressed/aria-current correctness against actual state. Compared DOM/JSX order in App.tsx against the absolute-position CSS coordinates in app.css for every top-level panel to check tab order vs. visual order.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "QualityPanel's shortfall line reads degreeMax directly instead of the shared degreeLabel seam, so it asserts a per-person buddy count the graph doesn't actually have for irregular graphs, contradicting the rail and connection caption on screen",
+      "severity": "blocking",
+      "findingSummaries": [
+        "The shortfall line renders \"Each person has {degreeMax} buddies\" instead of using the shared degreeLabel seam, so for any non-regular graph it asserts a count that at least one person does not have — and it disagrees with the rail and the connection caption, which both render degreeLabel. This is the same defect model.ts:206-209 records as already fixed for connectionSummary; the second consumer of the number was not converted. The line also has no singular form (\"1 buddies\")."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the local `{degreeMax}` interpolation in QualityPanel and have the line consume `degreeLabel(view.metrics)` — the same value connectionSummary and the rail already render — removing the second, divergent code path for expressing the same number rather than adding a new formatting helper."
+    },
+    {
+      "theme": "settings state advances at generation dispatch time in App.tsx, not at success, so a cancelled or failed reroll leaves the roster modal and Advanced panel describing a graph that was never built",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "handleReroll calls setSettings(s) with the incremented seed before the worker answers, while view.settings only advances when a generation succeeds. Cancelling or failing the reroll leaves App's settings — the values the roster modal's Advanced panel is seeded with — one seed ahead of the graph on screen and of what exportGraph writes. handleReroll fixes the reroll INPUTS by reading from view but left the DISPLAY reading the dispatch-time copy."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Remove the pre-emptive `setSettings(s)` call from handleReroll entirely and seed the modal directly from `view.settings` (falling back to `settings` only when view is null) — deleting the duplicate, premature copy of state rather than adding a synchronization mechanism between the two."
+    },
+    {
+      "theme": "the route readout (pathStatusText / PathPanel) is the one untrusted-name-derived sink in the app with no size clamp, even though every other such sink already enforces one",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "pathStatusText joins EVERY name on the route into one string, written unclamped into the permanently-mounted aria-live region, and PathPanel renders one focusable button per route node — both scale with graph diameter, which an imported file controls. This is the fourth untrusted-text sink in the app and the only one without a bound: useNotice clamps at 300 chars, PersonSearch at 60, importGraph names at 120, PersonPanel's chip list at 24. The route readout inherited none of that."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Cap pathStatusText and PathPanel's rendered chain at a shared constant (first-few/last-few plus \"… and N more\"), removing the unbounded full-name-list branch rather than special-casing route text as an exception to the clamp convention the other three sinks already follow."
+    },
+    {
+      "theme": "comments describing the deferred selection-dependent layout mode in GraphCanvas.tsx use inconsistent, duplicated terminology, obscuring the feature's intent for future maintainers",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "Comments about deferred selection-dependent layout mode use inconsistent terminology and duplicate phrases, obscuring the feature's intent"
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Cut the duplicated explanation down to a single comment (on FIT_MODES, with positionsFor referring back to it) using one settled term, removing the second restatement rather than reconciling two parallel descriptions."
+    },
+    {
+      "theme": "the dashboard's DOM/tab order in App.tsx does not follow the CSS-absolute visual layout, so keyboard focus zigzags across the screen instead of sweeping once",
+      "severity": "blocking",
+      "findingSummaries": [
+        "Panels are laid out with CSS position:absolute at four screen corners/edges, but mounted in JSX order rail -> toggle -> hint -> PersonSearch(bottom-left) -> PersonPanel(top-right) -> PathPanel(bottom-left) -> BuddyList(top-right) -> QualityPanel(bottom). Tabbing visits top-left -> top-center -> bottom-left -> top-right -> bottom-left(again) -> top-right(again) -> bottom, reversing direction twice in a single pass."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Reorder the JSX in App.tsx's <main> to match visual order (rail, toggle, PersonPanel, BuddyList as top row, then PersonSearch, PathPanel as bottom-left, then QualityPanel), removing the mismatch between DOM order and CSS position rather than patching it with tabindex."
+    },
+    {
+      "theme": "ConstraintsEditor's atCap note sits outside any live region, unlike every other status note in the same RosterModal dialog which the modal already wraps in one shared live region",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "RosterModal.tsx wraps its whole notes stack in one permanently-mounted role=\"status\" aria-live=\"polite\" region specifically because a region that appears together with its first text is never announced. ConstraintsEditor.tsx's own cap note lives inside the <details> rules-block, entirely outside that live region."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Move the atCap note's markup inside RosterModal's existing permanently-mounted live region (or render it through that shared region) rather than giving ConstraintsEditor its own second live-region instance."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "wrong-displayed-number",
+      "theme": "a panel states a per-person buddy count that the graph does not have, contradicting the count another panel shows for the same graph",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 55,
+      "summary": "The shortfall line renders \"Each person has {degreeMax} buddies\" instead of using the shared degreeLabel seam, so for any non-regular graph it asserts a count that at least one person does not have — and it disagrees with the rail and the connection caption, which both render degreeLabel. This is the same defect model.ts:206-209 records as already fixed for connectionSummary (switched from degreeMax alone to degreeLabel for exactly this reason); the second consumer of the number was not converted. The same line also has no singular form (\"1 buddies\") while the caption one line above correctly says \"1 buddy each\".",
+      "failure": "Reproduced through the real App + real worker body (.review-scratch/r2/app.probe.tsx) on the DEFAULT path: roster \"A..G\" (n=7) with DEFAULT_SETTINGS (k=4, polish auto, seed 12345) produces degrees [3,3,3,3,3,3,2]. The rail renders \"people · 2–3 buddies each\" and the caption \"everyone's well-linked for 2–3 buddies each\", while QualityPanel renders \"Each person has 3 buddies, not the 4 in Settings.\" — false for the 7th person, who has 2. A grid sweep (.review-scratch/r2/deg.probe.ts) hits this for 72 of the n<=40,k<=8 configurations (n=7 k=4/5/6; n=9 k=5..8; n=10, n=11, n=13, n=14, n=15..20 ...). Secondary: importing {version:1,people:[A,B],edges:[[0,1]]} yields shortfall {asked:2,got:1} and renders \"Each person has 1 buddies, not the 2 in Settings.\" beside a caption reading \"everyone's well-linked for 1 buddy each\"; a 1-person import renders \"Each person has 0 buddies, not the 2 in Settings.\" for a buddies:2 that sanitizeSettings synthesised rather than the user choosing. No existing test catches any of this: every targetShortfall fixture in test/quality.test.ts:98-110 is built with regular:true and degreeMin===degreeMax, and no test renders the line at all (grep \"Each person has\" test/ is empty).",
+      "invariant": "Any rendered copy that states a per-person buddy count for a view must state exactly degreeLabel(view.metrics) (and pluralise \"buddy/buddies\" on that same value): for every GraphView, the buddy-count substring of the shortfall line equals the buddy-count substring the rail and connectionSummary render. Equivalently: no UI string may name metrics.degreeMax as a per-person count while metrics.regular is false.",
+      "remediation": "Word the line off the shared seam rather than off degreeMax: e.g. `Each person has {degreeLabel(view.metrics)} {pluralise} — not the {shortfall.asked} in Settings.` (or \"at most {got}\"), reusing the same singular/plural rule connectionSummary already applies. Then extend targetShortfall's tests with an irregular fixture (degreeMin<degreeMax) and add a QualityPanel render assertion that the buddy-count substring equals degreeLabel(m), so the two panels are pinned to one another rather than to a case list. While there, consider suppressing the line (or wording it about the file) when settings.buddies was synthesised by sanitizeSettings rather than declared, so an import is not told it fell short of a target nothing set."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "state-committed-before-success",
+      "theme": "settings state advances at generation dispatch time, so after a cancelled or failed run the panel describes a graph that was never built",
+      "file": "app/src/App.tsx",
+      "line": 203,
+      "summary": "handleReroll calls setSettings(s) with the incremented seed before the worker answers, while view.settings only advances when a generation succeeds (useBuddyGraph.ts:79-88 adopts next.settings on both the identical-edges and the new-graph branch). Cancelling or failing the reroll therefore leaves App's settings — the values the roster modal's Advanced panel is seeded with — one seed ahead of the graph on screen and of what exportGraph writes. handleReroll's own comment identifies this dispatch-vs-success split and fixes the reroll INPUTS by reading everything from view; the DISPLAY was left reading the dispatch-time copy.",
+      "failure": "Reproduced in .review-scratch/r2/seed.probe.tsx: generate 7 names (dispatch seed 12345) -> result applied -> click \"↻ Different arrangement\" (dispatch seed 12346) -> click the busy overlay's Cancel (status returns to idle, view unchanged) -> click \"Edit people\" -> Advanced. The modal's number inputs read [5, 12346], i.e. Seed 12346, while the graph on screen and exportGraph(view).settings.seed are 12345. For a tool whose stated contract is \"same roster + settings => same graph\", the seed the UI offers as the reproduction recipe regenerates a different graph than the file it just exported. Not covered by test/reroll.test.ts (which tests rerollBlockReason/nextRerollSeed in isolation) or test/appErrorRecovery.test.tsx (which asserts the reroll's arguments, not the displayed settings).",
+      "invariant": "Whenever view !== null, the settings the roster modal is seeded with must have the same seed as view.settings — i.e. after any reroll that does not produce a new view (cancelled, errored, refused, or pre-gated by feasibility/rerollBlockReason), the seed rendered by SettingsControls equals view.settings.seed.",
+      "remediation": "Drop the pre-emptive setSettings(s) from handleReroll and seed the modal from the view that exists (`settings={view?.settings ?? settings}`), or move the settings commit into the success path so App's settings advance with view rather than with the dispatch. Pin it with an App-level test that rerolls, cancels, reopens the modal, and asserts the Seed field equals exportGraph(view).settings.seed."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-untrusted-text-sink",
+      "theme": "an untrusted-name sink with no size bound — the route readout is the one place roster names reach the DOM in quantity proportional to n without a clamp",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 307,
+      "summary": "pathStatusText joins EVERY name on the route into one string and App.tsx writes it, unclamped, into the permanently-mounted `.sr-live` aria-live region; PathPanel renders one focusable <button> per route node. Both scale with the graph's diameter, which an imported file controls. This is the fourth untrusted-text sink in the app and the only one without a bound: useNotice clamps at MAX_NOTICE_CHARS=300 (\"an unbounded message is an unbounded DOM text node\"), PersonSearch clamps its echo at ECHO_MAX=60, importGraph clamps names at MAX_NAME_CHARS=120 under a test literally named \"bounds the text every buddy-label sink has to materialize\", and PersonPanel collapses its chip list at SECOND_LIMIT=24. The route readout inherited none of that.",
+      "failure": "Reproduced (.review-scratch/adv2/route.probe.ts): a hand-made file of 1000 people with 120-char names and edges [[0,1],[1,2],...,[998,999]] passes every import gate (degreeMax=2, 2m=1998 <= 12000, no control chars, round-trips through parseRoster) and imports in 75 ms with diameter 999. Selecting person 0, \"Find a path from here\", then person 999 yields route.length === 1000, and pathStatusText(...).length === 123009 — a 123 KB text change inside role=\"status\" aria-live=\"polite\", which a screen reader will attempt to read in full, plus 1000 new tab-reachable buttons in PathPanel. Not import-only: a plain n=1000 / buddies=2 generation is a ring (verified: diameter 500, longest route 501 nodes), so ordinary use reaches ~61 KB and 501 buttons by the same path.",
+      "remediation": "Clamp at the producer, the way the other three sinks already do. Give model.ts a ROUTE_STATUS_MAX exported constant and have pathStatusText name the first few and last few people plus \"… and N more — N steps\" once the route exceeds it (the string it builds must be O(1) in n, not O(n)); and cap PathPanel's chain at a constant with the \"+N more\" affordance PersonPanel already uses for SECOND_LIMIT, so the number of focus stops a route adds is bounded too. The step count is the load-bearing information at that length; the full chain is still on the graph and in the buddy list.",
+      "invariant": "For all GraphViews and all routes the path finder can produce, the text placed in an aria-live region is bounded by a constant independent of n and of name length: pathStatusText(view, from, route, unreachable).length <= ROUTE_STATUS_MAX_CHARS, and the number of interactive elements PathPanel renders is <= a fixed constant, for every route length.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-order-mismatch",
+      "theme": "keyboard/tab order across the main dashboard does not follow the on-screen (visual) layout, so a sighted keyboard user tracking focus visually, or a screen-reader user building a mental map from a sighted description, is bounced back and forth across the screen instead of moving in one sweep",
+      "file": "app/src/App.tsx",
+      "line": 270,
+      "summary": "The panels in <main> are laid out with CSS `position: absolute` at four screen corners/edges (app.css: #rail top-left, #toggle top-center, #person top-right, #route/#search bottom-left, #buddies top-right, #metrics bottom band), but they are mounted in JSX/DOM order rail -> toggle -> hint -> PersonSearch(#search, bottom-left) -> PersonPanel(#person, top-right) -> PathPanel(#route, bottom-left) -> BuddyList(#buddies, top-right) -> QualityPanel(#metrics, bottom). Tabbing therefore visits top-left -> top-center -> bottom-left -> top-right -> bottom-left(again) -> top-right(again) -> bottom, reversing direction twice in a single pass.",
+      "failure": "Starting from a cold load: paste a roster, Generate, select a person via search (focus lands in the bottom-left #search box, per design), Tab once more and focus jumps up to the top-right PersonPanel's 'Back'/'Close' buttons; click 'Find a path from here' (still top-right) and Tab again drops focus back down to the bottom-left PathPanel's 'Clear' button; Tab again jumps back up to the top-right BuddyList rows before finally reaching the bottom QualityPanel/Export bar. A keyboard user who has learned the visual layout (or a low-vision user tracking the visible focus ring) experiences focus repeatedly reversing direction across the viewport rather than sweeping the screen once.",
+      "remediation": "Reorder the JSX in App.tsx's <main> to match the visual reading order actually produced by app.css's absolute positions (e.g. rail, toggle, PersonPanel/BuddyList as the top row left-to-right, then PersonSearch/PathPanel as the bottom-left row, then QualityPanel last) — or, since the positions are already independent of DOM order via CSS, use `tabindex`-free reordering (moving the JSX) rather than CSS `order`, which does not affect DOM/AT traversal order.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-region",
+      "theme": "a conditionally-rendered status note is not inside any live region, so its appearance is silent to screen readers even though the same file (RosterModal.tsx) explicitly solved this exact pattern for every other note in the same dialog",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 111,
+      "summary": "RosterModal.tsx wraps its whole notes stack (file errors, char-cap notice, parse warnings, feasibility messages, rule-resolution notes, blocking rule problems) in one permanently-mounted `role=\"status\" aria-live=\"polite\"` region (RosterModal.tsx:178) specifically because a region that appears together with its first text is never announced. `ConstraintsEditor.tsx`'s own cap note (`{atCap && <span className=\"rule-note\">That's the limit of {MAX_CONSTRAINT_PAIRS} rules.</span>}`) lives inside the `<details className=\"rules-block\">` block, entirely outside that live region, and is not itself inside any live-region ancestor.",
+      "failure": "Add buddy rules up to MAX_CONSTRAINT_PAIRS (200, constraints.ts:34) via keyboard. On the click that adds the 200th rule, the 'Add a buddy rule' button becomes `disabled` in the same commit — which browsers respond to by blurring the now-disabled focused button to `<body>` — and the 'That's the limit of 200 rules.' note appears with no live region announcing it. A screen-reader user hears nothing about why the button stopped working; useFocusRescue's generic rescue then silently relocates focus to the roster textarea (the next reachable anchor), which is disorienting since it is unrelated to the rule they were editing.",
+      "remediation": "Move the `atCap` note (and any future ConstraintsEditor status text) inside a permanently-mounted `role=\"status\" aria-live=\"polite\"` region, following the same pattern RosterModal.tsx already established for its own notes stack.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "wrong-displayed-number",
+      "theme": "a panel states a per-person buddy count that the graph does not have, contradicting the count another panel shows for the same graph",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 55,
+      "summary": "The shortfall line renders \"Each person has {degreeMax} buddies\" instead of using the shared degreeLabel seam, so for any non-regular graph it asserts a count that at least one person does not have — and it disagrees with the rail and the connection caption, which both render degreeLabel. This is the same defect model.ts:206-209 records as already fixed for connectionSummary (switched from degreeMax alone to degreeLabel for exactly this reason); the second consumer of the number was not converted. The same line also has no singular form (\"1 buddies\") while the caption one line above correctly says \"1 buddy each\".",
+      "failure": "Reproduced through the real App + real worker body (.review-scratch/r2/app.probe.tsx) on the DEFAULT path: roster \"A..G\" (n=7) with DEFAULT_SETTINGS (k=4, polish auto, seed 12345) produces degrees [3,3,3,3,3,3,2]. The rail renders \"people · 2–3 buddies each\" and the caption \"everyone's well-linked for 2–3 buddies each\", while QualityPanel renders \"Each person has 3 buddies, not the 4 in Settings.\" — false for the 7th person, who has 2. A grid sweep (.review-scratch/r2/deg.probe.ts) hits this for 72 of the n<=40,k<=8 configurations (n=7 k=4/5/6; n=9 k=5..8; n=10, n=11, n=13, n=14, n=15..20 ...). Secondary: importing {version:1,people:[A,B],edges:[[0,1]]} yields shortfall {asked:2,got:1} and renders \"Each person has 1 buddies, not the 2 in Settings.\" beside a caption reading \"everyone's well-linked for 1 buddy each\"; a 1-person import renders \"Each person has 0 buddies, not the 2 in Settings.\" for a buddies:2 that sanitizeSettings synthesised rather than the user choosing. No existing test catches any of this: every targetShortfall fixture in test/quality.test.ts:98-110 is built with regular:true and degreeMin===degreeMax, and no test renders the line at all (grep \"Each person has\" test/ is empty).",
+      "invariant": "Any rendered copy that states a per-person buddy count for a view must state exactly degreeLabel(view.metrics) (and pluralise \"buddy/buddies\" on that same value): for every GraphView, the buddy-count substring of the shortfall line equals the buddy-count substring the rail and connectionSummary render. Equivalently: no UI string may name metrics.degreeMax as a per-person count while metrics.regular is false.",
+      "remediation": "Word the line off the shared seam rather than off degreeMax: e.g. `Each person has {degreeLabel(view.metrics)} {pluralise} — not the {shortfall.asked} in Settings.` (or \"at most {got}\"), reusing the same singular/plural rule connectionSummary already applies. Then extend targetShortfall's tests with an irregular fixture (degreeMin<degreeMax) and add a QualityPanel render assertion that the buddy-count substring equals degreeLabel(m), so the two panels are pinned to one another rather than to a case list. While there, consider suppressing the line (or wording it about the file) when settings.buddies was synthesised by sanitizeSettings rather than declared, so an import is not told it fell short of a target nothing set."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "state-committed-before-success",
+      "theme": "settings state advances at generation dispatch time, so after a cancelled or failed run the panel describes a graph that was never built",
+      "file": "app/src/App.tsx",
+      "line": 203,
+      "summary": "handleReroll calls setSettings(s) with the incremented seed before the worker answers, while view.settings only advances when a generation succeeds (useBuddyGraph.ts:79-88 adopts next.settings on both the identical-edges and the new-graph branch). Cancelling or failing the reroll therefore leaves App's settings — the values the roster modal's Advanced panel is seeded with — one seed ahead of the graph on screen and of what exportGraph writes. handleReroll's own comment identifies this dispatch-vs-success split and fixes the reroll INPUTS by reading everything from view; the DISPLAY was left reading the dispatch-time copy.",
+      "failure": "Reproduced in .review-scratch/r2/seed.probe.tsx: generate 7 names (dispatch seed 12345) -> result applied -> click \"↻ Different arrangement\" (dispatch seed 12346) -> click the busy overlay's Cancel (status returns to idle, view unchanged) -> click \"Edit people\" -> Advanced. The modal's number inputs read [5, 12346], i.e. Seed 12346, while the graph on screen and exportGraph(view).settings.seed are 12345. For a tool whose stated contract is \"same roster + settings => same graph\", the seed the UI offers as the reproduction recipe regenerates a different graph than the file it just exported. Not covered by test/reroll.test.ts (which tests rerollBlockReason/nextRerollSeed in isolation) or test/appErrorRecovery.test.tsx (which asserts the reroll's arguments, not the displayed settings).",
+      "invariant": "Whenever view !== null, the settings the roster modal is seeded with must have the same seed as view.settings — i.e. after any reroll that does not produce a new view (cancelled, errored, refused, or pre-gated by feasibility/rerollBlockReason), the seed rendered by SettingsControls equals view.settings.seed.",
+      "remediation": "Drop the pre-emptive setSettings(s) from handleReroll and seed the modal from the view that exists (`settings={view?.settings ?? settings}`), or move the settings commit into the success path so App's settings advance with view rather than with the dispatch. Pin it with an App-level test that rerolls, cancels, reopens the modal, and asserts the Seed field equals exportGraph(view).settings.seed."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-untrusted-text-sink",
+      "theme": "an untrusted-name sink with no size bound — the route readout is the one place roster names reach the DOM in quantity proportional to n without a clamp",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 307,
+      "summary": "pathStatusText joins EVERY name on the route into one string and App.tsx writes it, unclamped, into the permanently-mounted `.sr-live` aria-live region; PathPanel renders one focusable <button> per route node. Both scale with the graph's diameter, which an imported file controls. This is the fourth untrusted-text sink in the app and the only one without a bound: useNotice clamps at MAX_NOTICE_CHARS=300 (\"an unbounded message is an unbounded DOM text node\"), PersonSearch clamps its echo at ECHO_MAX=60, importGraph clamps names at MAX_NAME_CHARS=120 under a test literally named \"bounds the text every buddy-label sink has to materialize\", and PersonPanel collapses its chip list at SECOND_LIMIT=24. The route readout inherited none of that.",
+      "failure": "Reproduced (.review-scratch/adv2/route.probe.ts): a hand-made file of 1000 people with 120-char names and edges [[0,1],[1,2],...,[998,999]] passes every import gate (degreeMax=2, 2m=1998 <= 12000, no control chars, round-trips through parseRoster) and imports in 75 ms with diameter 999. Selecting person 0, \"Find a path from here\", then person 999 yields route.length === 1000, and pathStatusText(...).length === 123009 — a 123 KB text change inside role=\"status\" aria-live=\"polite\", which a screen reader will attempt to read in full, plus 1000 new tab-reachable buttons in PathPanel. Not import-only: a plain n=1000 / buddies=2 generation is a ring (verified: diameter 500, longest route 501 nodes), so ordinary use reaches ~61 KB and 501 buttons by the same path.",
+      "remediation": "Clamp at the producer, the way the other three sinks already do. Give model.ts a ROUTE_STATUS_MAX exported constant and have pathStatusText name the first few and last few people plus \"… and N more — N steps\" once the route exceeds it (the string it builds must be O(1) in n, not O(n)); and cap PathPanel's chain at a constant with the \"+N more\" affordance PersonPanel already uses for SECOND_LIMIT, so the number of focus stops a route adds is bounded too. The step count is the load-bearing information at that length; the full chain is still on the graph and in the buddy list.",
+      "invariant": "For all GraphViews and all routes the path finder can produce, the text placed in an aria-live region is bounded by a constant independent of n and of name length: pathStatusText(view, from, route, unreachable).length <= ROUTE_STATUS_MAX_CHARS, and the number of interactive elements PathPanel renders is <= a fixed constant, for every route length.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "drifting-terminology",
+      "theme": "Future feature uses inconsistent naming across duplicate explanations, creating confusion for maintainers extending the code",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 26,
+      "summary": "Comments about deferred selection-dependent layout mode use inconsistent terminology and duplicate phrases, obscuring the feature's intent",
+      "failure": "Developer reading lines 26-27 and lines 40-41 encounters: (1) 'SELECTION-DEPENDENT mode (a future selection-dependent mode' at line 26, and (2) 'selection-keyed mode (a future selection-dependent mode' at line 40. The terms 'selection-keyed' and 'selection-dependent' are used interchangeably to refer to what appears to be the same future feature, but the duplication and case-shift muddy the vocabulary. When implementing this deferred feature (F8 is deferred past M3), a contributor must infer whether these are synonyms, different aspects, or copy-paste errors.",
+      "remediation": "Standardize on one term (recommend 'selection-dependent mode' since that's used more frequently and matches CLAUDE.md terminology) and remove duplication. Rewrite both comments cleanly: FIT_MODES comment: 'The POSITION-STABLE layouts... A future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3)... is added to `LAYOUT_MODES` and `positionsFor` but deliberately NOT here...'. positionsFor comment: 'EXHAUSTIVE over LayoutMode via assertNever: a future selection-dependent mode (NOT F8 — the focus/ego layout is deferred past M3) added to LAYOUT_MODES will fail to COMPILE...'",
+      "invariant": "The term used to name a deferred future layout mode must be consistent across all explanations and comments (no aliases without explicit 'also known as'), and explanatory text must not contain duplicate or overlapping phrases that can be read two ways",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "tab-order-visual-order-mismatch",
+      "theme": "keyboard/tab order across the main dashboard does not follow the on-screen (visual) layout, so a sighted keyboard user tracking focus visually, or a screen-reader user building a mental map from a sighted description, is bounced back and forth across the screen instead of moving in one sweep",
+      "file": "app/src/App.tsx",
+      "line": 270,
+      "summary": "The panels in <main> are laid out with CSS `position: absolute` at four screen corners/edges (app.css: #rail top-left, #toggle top-center, #person top-right, #route/#search bottom-left, #buddies top-right, #metrics bottom band), but they are mounted in JSX/DOM order rail -> toggle -> hint -> PersonSearch(#search, bottom-left) -> PersonPanel(#person, top-right) -> PathPanel(#route, bottom-left) -> BuddyList(#buddies, top-right) -> QualityPanel(#metrics, bottom). Tabbing therefore visits top-left -> top-center -> bottom-left -> top-right -> bottom-left(again) -> top-right(again) -> bottom, reversing direction twice in a single pass.",
+      "failure": "Starting from a cold load: paste a roster, Generate, select a person via search (focus lands in the bottom-left #search box, per design), Tab once more and focus jumps up to the top-right PersonPanel's 'Back'/'Close' buttons; click 'Find a path from here' (still top-right) and Tab again drops focus back down to the bottom-left PathPanel's 'Clear' button; Tab again jumps back up to the top-right BuddyList rows before finally reaching the bottom QualityPanel/Export bar. A keyboard user who has learned the visual layout (or a low-vision user tracking the visible focus ring) experiences focus repeatedly reversing direction across the viewport rather than sweeping the screen once.",
+      "remediation": "Reorder the JSX in App.tsx's <main> to match the visual reading order actually produced by app.css's absolute positions (e.g. rail, toggle, PersonPanel/BuddyList as the top row left-to-right, then PersonSearch/PathPanel as the bottom-left row, then QualityPanel last) — or, since the positions are already independent of DOM order via CSS, use `tabindex`-free reordering (moving the JSX) rather than CSS `order`, which does not affect DOM/AT traversal order.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-live-region",
+      "theme": "a conditionally-rendered status note is not inside any live region, so its appearance is silent to screen readers even though the same file (RosterModal.tsx) explicitly solved this exact pattern for every other note in the same dialog",
+      "file": "app/src/panels/ConstraintsEditor.tsx",
+      "line": 111,
+      "summary": "RosterModal.tsx wraps its whole notes stack (file errors, char-cap notice, parse warnings, feasibility messages, rule-resolution notes, blocking rule problems) in one permanently-mounted `role=\"status\" aria-live=\"polite\"` region (RosterModal.tsx:178) specifically because a region that appears together with its first text is never announced. `ConstraintsEditor.tsx`'s own cap note (`{atCap && <span className=\"rule-note\">That's the limit of {MAX_CONSTRAINT_PAIRS} rules.</span>}`) lives inside the `<details className=\"rules-block\">` block, entirely outside that live region, and is not itself inside any live-region ancestor.",
+      "failure": "Add buddy rules up to MAX_CONSTRAINT_PAIRS (200, constraints.ts:34) via keyboard. On the click that adds the 200th rule, the 'Add a buddy rule' button becomes `disabled` in the same commit — which browsers respond to by blurring the now-disabled focused button to `<body>` — and the 'That's the limit of 200 rules.' note appears with no live region announcing it. A screen-reader user hears nothing about why the button stopped working; useFocusRescue's generic rescue then silently relocates focus to the roster textarea (the next reachable anchor), which is disorienting since it is unrelated to the rule they were editing.",
+      "remediation": "Move the `atCap` note (and any future ConstraintsEditor status text) inside a permanently-mounted `role=\"status\" aria-live=\"polite\"` region, following the same pattern RosterModal.tsx already established for its own notes stack.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 7,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 7,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 2,
+      "lastRound": 7,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 7,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 7,
+      "skipped": false
+    }
+  },
+  "tokens": {
+    "subagentTokens": 31288,
+    "agents": 6,
+    "toolCalls": 1,
+    "resumedFromCache": 5,
+    "note": "Resumed after a session-limit halt: 5 of 6 lenses replayed from the journal, 1 re-ran. 31k tokens against ~600k for a full round."
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "observations": [
+    {
+      "kind": "themes-reopened",
+      "note": "5 of 6 findings continue themes closed in earlier rounds: the shortfall line I ADDED last round reintroduced the degreeMax-vs-degreeLabel defect that was fixed in the caption beside it in the same commit; this is the FOURTH unclamped text sink; the live-region class is back in ConstraintsEditor; and setSettings-before-success is the same state-committed-at-dispatch class as the round-2 reroll desync. Fixing the reported case and not the class is now the dominant failure mode of this loop, ahead of any code defect."
+    },
+    {
+      "kind": "closed-as-class",
+      "note": "Four ad-hoc truncation helpers replaced by io/clamp.ts (clampText + clampList), used by all four sinks plus parseRoster warning enumeration. The instruction \"clamp untrusted text\" had failed four times; the helper makes the next sink cheap to do right rather than easy to forget."
+    },
+    {
+      "kind": "unfiled-defect-observed",
+      "note": ".hint and #search are BOTH at left:18px bottom:104px in app.css, so the hint text sits underneath the search box at a lower z-index and is invisible. Verified, not filed by any critic, and deliberately NOT fixed in this round: it is outside the findings under repair, and fixing it unreviewed is the behaviour this protocol exists to prevent. Recorded for the next round."
+    }
+  ]
+}

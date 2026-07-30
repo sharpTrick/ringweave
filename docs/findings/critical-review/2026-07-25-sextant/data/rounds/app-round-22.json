@@ -1,0 +1,384 @@
+{
+  "target": "app/src",
+  "round": 22,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 4,
+    "confirmed": 6,
+    "blocking": 1,
+    "deferrals": 2,
+    "plausible": 1,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full re-read of every file under /home/user/ringweave/app/src (model, search, neighborhood, constraints, sample, io/*, worker/*, state/*, panels/*, graph/*, App, main) plus all 31 files in app/test, and the lib entry points they depend on (metrics.ts shortestPath/allPairsSummary/girth/largestComponentFraction, bounds.ts mooreLowerBounds/asplGap, index.ts buildBuddyGraph/buildConstrainedBuddyGraph/buildReport, graph.ts edgeList, rng.ts checkSeed, constrainedGreedy.ts choosePartner). Ran `npx vitest run` in app/ (31 files, 329 tests, all pass). Wrote four probes under /home/user/ringweave/.review-scratch/r-app-x/: (1) layout.probe.ts \u2014 instrumented Math.random and ran forceLayout twice over 60 (n, shape) combos, n=2..200 x empty/cycle/star/skip-2: zero Math.random calls, byte-identical output; (2) fuzz.probe.ts \u2014 66 (n,k) generations and 200 random constrained generations through the real runGeneration -> viewFromResult, asserting aspl/diameter nullity agreement, quality===0 when aspl===null, isOptimal=>connected, connected<=>lcf===1, degreeMax<=k, buddies/edges degree coherence, connectionSummary never contradicting the qualityPercent threshold or the connected flag, report violation counts equal to a recount against the produced edges, constraintSummary broken<=total, separationShortfall suppressed on the constrained path, and export->JSON->import reproducing edges+all metrics exactly \u2014 all clean; (3) perf.probe.ts \u2014 measured the modal per-keystroke pre-flight at the 1000-name/200-rule ceiling (2.4+6.5+19.3 ms; janky, not a hang, out of scope); (4) optimal.probe.ts \u2014 swept k=2..6, n=k+1..40 for configurations that are isOptimal with no targetShortfall but a live separationShortfall and an identical reroll. Also hand-traced: Set/Map iteration-order dependence across the whole app (none: relatedChips sorts, highlight uses membership only, edgeList and summarize().buddies are sorted, shortestPath tie-breaks on lowest index); the degenerate mooreLowerBounds branches (all unreachable for a connected graph, so quality can never read optimal for a split graph); boundary limits MAX_IMPORT_N/MAX_NAMES/MAX_NAME_CHARS/MAX_CONSTRAINT_PAIRS/SEED_MAX for off-by-ones and cross-module agreement; n=1 and 2-person imports; CSV/clipboard formula neutralisation against names that survive parseRoster; useGenerationWorker/useBuddyGraph supersession, cancel and StrictMode double-invoke ordering; and the edgeClass 'node membership is enough' proof.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read app/CLAUDE.md, docs/PROJECT_PLAN.md and lib/CLAUDE.md in full to identify the next actually-committed, not-yet-analyzed feature. Confirmed F9 (recalc) and F11 (replay) already have extensive, specific hazard write-ups in app/CLAUDE.md's follow-ons (worker-protocol groundwork, discriminator hazard, priorHard promotion trap, replay's best/g divergence) \u2014 refiling those would be redundant. F12 (\"What-if resilience\" \u2014 PROJECT_PLAN.md:143, milestone M4) has zero prior mentions anywhere in app/CLAUDE.md, docs/PROJECT_PLAN.md's risk section, or app/src. Traced its real implementation path: read app/src/io/importGraph.ts (the one place the app already builds a `Graph` and calls core connectivity functions directly, outside the worker) as the template a contributor would copy for \"simulate X leaving,\" since it is the only precedent for app-side connectivity computation. Read lib/src/core/graph.ts (Graph has no vertex-removal primitive \u2014 fixed n, 0..n-1) and lib/src/core/metrics.ts (`largestComponentFraction` divides by `g.n`). Wrote a throwaway probe (.review-scratch, deleted after use) against the built lib/dist to reproduce the \"isolate vertex in place\" implementation path a contributor would naturally take (mirroring importGraph's `new Graph(n)` + `addEdge` pattern) versus a correctly-remapped `n-1` graph. Also reviewed GraphCanvas.tsx / layout.ts (the declared LAYOUT_MODES/FIT_MODES/positionsFor seam \u2014 exhaustive switch via assertNever, only 2 variants, matches what CLAUDE.md already documents as a seam that paid, 8 suggestion-level findings across 6 rounds, nothing new to add), neighborhood.ts and highlight.ts (clean, no boundary leaks), App.tsx (composition root \u2014 dense but each concern is delegated to a named hook; not a god component by the codebase's own scale).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full-surface trace of app/src for the assigned scenario (cold load -> roster entry -> generate -> read quality -> find a person -> discover buddies -> export -> recover from an error), plus the least-astonishment mouse pass. Read every panel (RosterModal, ConstraintsEditor, SettingsControls, PathPanel, PersonPanel, BuddyList, PersonSearch, QualityPanel, LayoutToggle, Notice, Slips) and every state hook (useBuddyGraph, useExplorerHistory, usePathFinder, useEscape, useFocusRescue, useNotice, useGenerationWorker) and GraphCanvas/highlight/layout. Verified against app/CLAUDE.md's own known-follow-ons list to avoid re-filing already-recorded items (path panel placement, mode toggle, back-stack-into-a-stranger \u2014 all now fixed and covered by tests). Checked CSS for prefers-reduced-motion coverage (app.css:261, global `* { transition:none; animation:none }`) and confirmed GraphCanvas's own JS tween also checks `reducedMotion()`. Traced the toggle/mode contracts (usePathFinder, PersonPanel's aria-pressed, LayoutToggle's aria-pressed+visible `.on` state) \u2014 all exitable and visibly stateful. Built three throwaway harnesses under app/test (copied into the vitest include glob, then deleted \u2014 nothing left behind, confirmed via `git status --porcelain` clean) that render the real App with a mocked worker to observe document.activeElement after (1) removing a focused buddy-rule row, (2) clearing the path finder, and (3) a reroll cycle with the browser's own inert-triggered blur simulated by hand (jsdom itself does not implement inert's focus effects, which appErrorRecovery.test.tsx's own comment acknowledges \u2014 so I reproduced the documented UA sequence \u2014 synchronous blur-to-body before any MutationObserver microtask \u2014 and exercised the app's actual useFocusRescue/onFocusIn code against it). Grepped exhaustively for every aria-live region in app/src to confirm which state transitions are and are not announced.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-security",
+      "reason": "saturated (2 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (2 quiet rounds), surface untouched"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Reroll's 'already optimal' toast is guarded only by targetShortfall, so it can contradict the separation-shortfall line QualityPanel renders in the same view \u2014 two checks over the same underlying 'did the delivered graph meet every disclosed Settings ask' question have diverged",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "The identical-reroll toast in App.tsx (isOptimal(kept.metrics) && targetShortfall(kept) === null) is not also guarded against separationShortfall, so it can say 'already optimal' while QualityPanel is telling the user their Min separation target wasn't met; the same rationale that motivated guarding targetShortfall was never carried over to the sibling knob."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the App.tsx guard's separate, narrower condition and make it call the exact same shortfall check QualityPanel already uses to decide what to render \u2014 one call site instead of two independently-maintained conditions over the same Settings-shortfall question."
+    },
+    {
+      "theme": "resolveNamedPairs' `dropped` count is documented as one thing, computed as another, and contradicted by RosterModal's own user-facing copy about duplicates \u2014 and has no live consumer to force the mismatch to surface",
+      "severity": "deferral",
+      "findingSummaries": [
+        "`dropped: named.length - pairs.length` is documented as 'rows that produced no pair for any reason' but actually equals unmatched+selfPair+incomplete+duplicate, because a duplicate row DID produce a pair (the same one) \u2014 RosterModal.tsx's own copy says duplicates are 'applied once', not dropped. Grep finds no live consumer of the field, so nothing currently renders the wrong number, but the first caller to trust the doc comment will over-report."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Delete the `dropped` field entirely until a real caller needs it \u2014 it has no consumer today, and removing it removes the contract that is currently false rather than papering over it with a reworded comment."
+    },
+    {
+      "theme": "The only existing app-side precedent for computing connectivity metrics (Graph sized to g.n, no vertex-removal primitive) is exactly the pattern that will silently answer the wrong question once F12 copies it to simulate someone leaving",
+      "severity": "deferral",
+      "findingSummaries": [
+        "F12 ('simulate X leaving') isn't implemented yet, but the only existing app-side pattern for connectivity outside the worker (importGraph.ts's fixed-size Graph + allPairsSummary/largestComponentFraction) would, if copied as-is, isolate the leaver in place rather than resize the graph \u2014 making `connected` unconditionally false and dividing largestComponentFraction by a population that still includes the person who left."
+      ],
+      "critics": [
+        "critic-solid"
+      ],
+      "remediation": "Strip the isolate-in-place approach out of consideration before F12's first draft: do not let importGraph.ts's g.n-sized Graph/allPairsSummary call path be copied as precedent for leave-simulation; any leave-simulation must run these functions only on a graph already reduced to n-1, never on the original n with edges merely removed."
+    },
+    {
+      "theme": "Two hand-rolled ConstraintReport mock literals in quality.test.ts have drifted from the interface they're meant to represent, breaking the typecheck",
+      "severity": "blocking",
+      "findingSummaries": [
+        "Mock ConstraintReport objects in quality.test.ts are missing the required `satisfied` property, causing typecheck failures."
+      ],
+      "critics": [
+        "critic-maintainability"
+      ],
+      "remediation": "Remove the second hand-written literal entirely and derive it from the first by spreading and overriding only the fields that differ (`{...clean, satisfied: false, ...}`), eliminating the duplicate literal that let the two mocks diverge from the interface instead of writing two independently-maintained objects."
+    },
+    {
+      "theme": "useFocusRescue's single global mechanism fails focused-control removal in two distinct ways in App.tsx \u2014 it can be defeated entirely by inert's own synchronous blur-to-body before the observer ever runs, and even when it does fire its context-free fallback chain (mainRef ?? roster field ?? Cancel button) lands focus somewhere unrelated to where the removal happened",
+      "severity": "blocking",
+      "findingSummaries": [
+        "When #app becomes inert on generation/reroll, the browser synchronously forces focus to <body> before useFocusRescue's MutationObserver callback runs; onFocusIn nulls lastFocused on any transition to document.body, so by the time rescue() would run there is nothing to rescue \u2014 no anchor is ever attempted, on either the busy-overlay mount or its later unmount.",
+        "ConstraintsEditor's 'Remove rule N' button removal unmounts a focused control; because #app is inert while the roster modal is open, the rescue's first candidate (mainRef) is unreachable, so it falls through to the roster textarea \u2014 a control unrelated to the buddy-rule list the user was editing."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Collapse the two divergent focus-capture paths into one: capture document.activeElement synchronously in the same click handler that sets inert (before it commits), instead of relying on the MutationObserver/onFocusIn bookkeeping that inert's own blur races and erases; then drop the generic multi-step fallback chain (mainRef ?? roster field ?? Cancel button) in favor of restoring that captured element directly, removing the context-free guesswork for both the inert-cascade case and in-dialog list edits."
+    },
+    {
+      "theme": "The one live region that speaks to generation progress announces the start but goes silent on completion, so a screen-reader user has no signal the regenerated graph/updated numbers appeared",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "App.tsx's busy-live region only ever contains text while running ('Generating\u2026'); on completion it reverts to '', and a live region going empty is not reliably announced. No other aria-live region in app/src announces completion either, and after the first generation there isn't even a secondary focus-move signal since the reroll button never unmounts."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Remove the code path that resets the busy-live text to '' on completion; replace it directly with the completion message so the region always transitions to meaningful content instead of emptiness."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unguarded-optimality-claim",
+      "theme": "a Settings ask the delivered graph missed is disclosed in one panel and contradicted by the reroll message beside it",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 40,
+      "summary": "The identical-reroll toast is guarded against `targetShortfall` but not against `separationShortfall`, so it can claim \"already an optimal arrangement\" at the same moment QualityPanel is telling the user the Min separation they set was not met. `App.tsx:40-46` reads `isOptimal(kept.metrics) && targetShortfall(kept) === null`; `QualityPanel.tsx:58-63` renders the separation line from `separationShortfall(view)`. The two disagree about whether the user got what they asked for. The comment beside the guard states its own rationale \u2014 \"`isOptimal` alone said 'already optimal' to someone who asked for 4 buddies and got 3 \u2014 true of the graph, not an answer to the question they asked\" \u2014 which applies verbatim to the sibling knob and was not carried over. Reported as a suggestion, not blocking, and I want to be straight about the weak side of the argument: in all 8 configurations I found, the separation target is mathematically unattainable at that (n, k) (girth 5 on a 4-regular graph needs n >= 17), so the sentence is substantively true. The defect is that it answers a different question from the one the panel is raising. A reviewer could reasonably reject this on the grounds that separation is not what a re-roll optimises; the counter-argument is that the same is true of buddy count, and that case was guarded.",
+      "failure": "12 people, stock defaults (buddies 4, polish \"auto\", seed 12345, minSeparation unset). Generation returns a 4-regular graph with aspl exactly at the Moore bound (quality 1, gauge 100) and girth 4. QualityPanel renders \"Buddies are 3 steps apart, not the 5 in Settings\". Pressing \"Different arrangement\" dispatches (rerollBlockReason returns null: autoPolishEnabled(12,4) is true and polish is \"auto\"), the result is edge-identical, and onIdenticalReroll flashes \"That's already an optimal arrangement \u2014 a re-roll can't improve it.\" Both strings are on screen together. Reproduced in /home/user/ringweave/.review-scratch/r-app-x/optimal.probe.ts, which also finds n=3 k=2, n=4 k=2, n=5 k=2, n=4 k=3, n=6 k=3, n=8 k=3 and n=5 k=4 (the last is K5 \u2014 a 5-person team on the default buddy count).",
+      "remediation": "Extend the guard in App.tsx to every disclosed Settings shortfall, e.g. `isOptimal(kept.metrics) && targetShortfall(kept) === null && separationShortfall(kept) === null`, falling through to the existing \"Couldn't find a different arrangement \u2014 this is what the current settings produce.\" Better still, derive the guard from one predicate (a `settingsShortfall(view)` that ORs the disclosures) so the next Settings knob cannot be added to QualityPanel and forgotten here \u2014 that is the failure mode this finding is an instance of.",
+      "invariant": "For every GraphView v, the \"already an optimal arrangement\" message is emitted only when v has no disclosed Settings shortfall: message === OPTIMAL_TEXT implies targetShortfall(v) === null && separationShortfall(v) === null. Equivalently, no rendered state may simultaneously contain the optimal-reroll text and any QualityPanel \"not the N in Settings\" line.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "type-mismatch-test-mock",
+      "theme": "Test mocks do not match evolved type definitions",
+      "file": "/home/user/ringweave/app/test/quality.test.ts",
+      "line": 209,
+      "summary": "Mock ConstraintReport objects are missing the required `satisfied` property, causing typecheck failures",
+      "failure": "Lines 209 and 212 create mock ConstraintReport objects without the `satisfied: boolean` property that is now required by the ConstraintReport type definition from ringweave. This causes two TypeScript compilation errors: 'Property satisfied is missing in type...but required in type ConstraintReport'. The typecheck gate (npm run typecheck) fails because of these errors.",
+      "invariant": "Every ConstraintReport mock or object created in tests must include the `satisfied` property as a boolean. The property should be true when reqViolations === 0 && prohViolations === 0, and false otherwise. Mock creation must match the current type signature of ConstraintReport from ringweave.",
+      "remediation": "Add `satisfied: true` to the clean mock on line 209. Update line 212 to set `satisfied: false` for the broken variants. Alternatively, derive the mock from a helper that computes satisfied correctly. The fix on line 209 would be: `const clean = { satisfied: true, reqViolations: 0, prohViolations: 0, connected: true, largestComponentFraction: 1, refusals: [], priorsKeptFraction: null };` and line 212 would need to ensure `satisfied: false` when violations are non-zero."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-completion-announcement",
+      "theme": "a live region announces that an operation STARTED but never that it FINISHED, so a screen-reader user gets no signal a visually-obvious change (the regenerated graph, the updated quality numbers) has happened",
+      "file": "app/src/App.tsx",
+      "line": 355,
+      "summary": "The one region that speaks to generation progress (`<div className=\"busy-live\" role=\"status\" aria-live=\"polite\">{bg.status === \"running\" ? \"Generating\u2026\" : \"\"}</div>`) only ever contains text while running; when generation finishes the text reverts to `\"\"`. A live region going empty is not reliably announced by screen readers (there is nothing to read), and I grepped every `aria-live` region in app/src (PersonSearch, ConstraintsEditor, RosterModal, BuddyList, SettingsControls, App's three regions) \u2014 none of them announce that a regeneration completed. For the FIRST generation there is at least a secondary, weak signal: RosterModal unmounts and `useFocusRescue` moves focus to `<main>` (which has no accessible name). For every REROLL after that, the triggering button (`\u21bb Different arrangement`) never unmounts, so there is no focus move either \u2014 the only accessible signal for the entire operation is \"Generating\u2026\" followed by silence.",
+      "failure": "With a graph already on screen, press \"\u21bb Different arrangement\" (App.tsx:286). A screen reader announces \"Generating\u2026\" and then nothing further \u2014 not \"done\", not the new quality numbers, not even an empty-string non-event. The user has no way to know the regeneration is complete except manually tabbing to and re-reading `#metrics`/`#rail`, which contradicts the app's own stated pattern elsewhere (every other transient state \u2014 copy success, copy failure, search results, path status, selection \u2014 gets an explicit completion message in a pre-mounted live region).",
+      "remediation": "Give the `busy-live` region (or a sibling) a genuine completion message on the `running -> done` transition, e.g. \"Arrangement updated \u2014 {peopleNoun/quality summary}\", mirroring the pattern `selectionStatusText`/`pathStatusText` already use elsewhere in this file.",
+      "invariant": "every accessible live region used to announce an operation's start also announces that operation's completion with non-empty text, for every path that can trigger the operation (not only the first)."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "focus-lands-out-of-context",
+      "theme": "the app's single global focus-rescue anchor is context-free, so removing a focused control deep in a form can warp keyboard focus to an unrelated control at the top of the same dialog rather than to anything near where the action happened",
+      "file": "app/src/App.tsx",
+      "line": 93,
+      "summary": "`useFocusRescue`'s anchor callback (App.tsx:93-102) is one function for the whole app: `mainRef ?? roster-field-by-label ?? busy-Cancel-button`. Removing a buddy-rule row's own \"Remove rule N\" button (ConstraintsEditor.tsx:90) while it holds focus unmounts that button. Since `#app` is inert while the roster modal is open, the first candidate (`mainRef`) is unreachable, so the rescue falls through to the roster textarea \u2014 a control that has nothing to do with the rule list the user was just editing.",
+      "failure": "Reproduced directly: open the roster editor, add a buddy rule, focus \"Remove rule 1\", and click/activate it. I rendered the real `App` (worker mocked) in a throwaway harness and inspected `document.activeElement` afterward \u2014 it is the `<textarea aria-label=\"Roster names\">` at the very top of the dialog, not the next/previous rule row, not the \"+ Add a buddy rule\" link, and not the settings below the (now-shorter) rule list. For a sighted keyboard user with several rules, deleting one warps focus away from the list entirely, and every remaining row (and the settings/generate button below it) now requires re-navigating from the top of the form.",
+      "remediation": "Give `ConstraintsEditor` its own local rescue (e.g. focus the next row's first field, or the row that shifted into the removed row's position, or the \"+ Add a buddy rule\" control) instead of relying solely on the app-global anchor, which is documented as a last-resort net for cross-component unmounts (RosterModal reopening, first-generation busy overlay) rather than for in-dialog list edits.",
+      "invariant": "when a focusable control inside an open dialog is removed by a user action taken from within that dialog, focus lands on a control that is contextually adjacent to the one removed (same section/list), not on an unrelated control elsewhere in the same dialog."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unguarded-optimality-claim",
+      "theme": "a Settings ask the delivered graph missed is disclosed in one panel and contradicted by the reroll message beside it",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 40,
+      "summary": "The identical-reroll toast is guarded against `targetShortfall` but not against `separationShortfall`, so it can claim \"already an optimal arrangement\" at the same moment QualityPanel is telling the user the Min separation they set was not met. `App.tsx:40-46` reads `isOptimal(kept.metrics) && targetShortfall(kept) === null`; `QualityPanel.tsx:58-63` renders the separation line from `separationShortfall(view)`. The two disagree about whether the user got what they asked for. The comment beside the guard states its own rationale \u2014 \"`isOptimal` alone said 'already optimal' to someone who asked for 4 buddies and got 3 \u2014 true of the graph, not an answer to the question they asked\" \u2014 which applies verbatim to the sibling knob and was not carried over. Reported as a suggestion, not blocking, and I want to be straight about the weak side of the argument: in all 8 configurations I found, the separation target is mathematically unattainable at that (n, k) (girth 5 on a 4-regular graph needs n >= 17), so the sentence is substantively true. The defect is that it answers a different question from the one the panel is raising. A reviewer could reasonably reject this on the grounds that separation is not what a re-roll optimises; the counter-argument is that the same is true of buddy count, and that case was guarded.",
+      "failure": "12 people, stock defaults (buddies 4, polish \"auto\", seed 12345, minSeparation unset). Generation returns a 4-regular graph with aspl exactly at the Moore bound (quality 1, gauge 100) and girth 4. QualityPanel renders \"Buddies are 3 steps apart, not the 5 in Settings\". Pressing \"Different arrangement\" dispatches (rerollBlockReason returns null: autoPolishEnabled(12,4) is true and polish is \"auto\"), the result is edge-identical, and onIdenticalReroll flashes \"That's already an optimal arrangement \u2014 a re-roll can't improve it.\" Both strings are on screen together. Reproduced in /home/user/ringweave/.review-scratch/r-app-x/optimal.probe.ts, which also finds n=3 k=2, n=4 k=2, n=5 k=2, n=4 k=3, n=6 k=3, n=8 k=3 and n=5 k=4 (the last is K5 \u2014 a 5-person team on the default buddy count).",
+      "remediation": "Extend the guard in App.tsx to every disclosed Settings shortfall, e.g. `isOptimal(kept.metrics) && targetShortfall(kept) === null && separationShortfall(kept) === null`, falling through to the existing \"Couldn't find a different arrangement \u2014 this is what the current settings produce.\" Better still, derive the guard from one predicate (a `settingsShortfall(view)` that ORs the disclosures) so the next Settings knob cannot be added to QualityPanel and forgotten here \u2014 that is the failure mode this finding is an instance of.",
+      "invariant": "For every GraphView v, the \"already an optimal arrangement\" message is emitted only when v has no disclosed Settings shortfall: message === OPTIMAL_TEXT implies targetShortfall(v) === null && separationShortfall(v) === null. Equivalently, no rendered state may simultaneously contain the optimal-reroll text and any QualityPanel \"not the N in Settings\" line.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "field-contradicts-its-own-doc",
+      "theme": "a Settings/rules-resolution count whose documented meaning does not match its arithmetic or the copy the user is shown",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 198,
+      "summary": "`resolveNamedPairs` returns `dropped: named.length - pairs.length`, documented as \"Rows that produced no pair for ANY reason, including ones still being filled in \u2014 so a caller reporting a single number does not have to know the taxonomy.\" The arithmetic actually yields `unmatched + selfPair + incomplete + duplicate`, because dedupe happens between `resolved` and `pairs`. A duplicate row DID produce a pair \u2014 the identical one \u2014 and RosterModal's own copy says so: \"repeats another one and will only be applied once\" (RosterModal.tsx:225-231), i.e. it is applied, not dropped. So the field's documented meaning contradicts both its value and the app's user-facing wording. Filed as a deferral rather than a suggestion because `grep -rn \"dropped\" app/src` finds no live consumer: only the interface declaration and the assignment. No linter can see this (the identifiers all resolve and the field is a property of a returned object literal, which knip does not reach), and nothing currently renders the wrong number \u2014 but the first caller to trust the comment will over-report.",
+      "failure": "resolveNamedPairs([{a:\"Ana\",b:\"Ben\",kind:\"required\"},{a:\"Ben\",b:\"Ana\",kind:\"required\"}], [\"Ana\",\"Ben\"]) returns pairs.length === 1, duplicate === 1, unmatched === 0, selfPair === 0, incomplete === 0 \u2014 and dropped === 1. Under the documented definition (\"rows that produced no pair\") it must be 0: both rows resolved, and the modal tells the user the rule \"will only be applied once\", not that a row was discarded.",
+      "remediation": "Either compute `dropped: unmatched + selfPair + incomplete` so the value matches the doc and the modal's copy, or delete the field until a caller needs it and let that caller sum the causes it actually wants. Do not just reword the comment to describe the current arithmetic \u2014 \"rows that did not contribute a NEW pair\" is not a number any caller has a use for, and the taxonomy fields already cover it.",
+      "invariant": "resolveNamedPairs(named, names).dropped === unmatched + selfPair + incomplete for all inputs; equivalently dropped === named.length - resolved-row count, and dropped is unaffected by adding a duplicate of a row that already resolves.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "metric-population-mismatch",
+      "theme": "reusing a core connectivity metric whose contract is 'fraction/boolean over g.n vertices' on a graph edited to represent a smaller population, without remapping n, silently answers a different question than the one asked",
+      "file": "app/src/io/importGraph.ts (the only existing precedent for app-side use of Graph/allPairsSummary/largestComponentFraction, which F12 would copy) and lib/src/core/graph.ts + lib/src/core/metrics.ts (Graph has no vertex-removal primitive; largestComponentFraction divides by g.n)",
+      "line": 196,
+      "summary": "F12 ('simulate X leaving', PROJECT_PLAN.md:143-146, committed for M4) has no implementation yet, but the only existing app-side pattern for computing connectivity outside the worker (importGraph.ts's `new Graph(n)` + `addEdge` + `allPairsSummary`/`largestComponentFraction`) is exactly the pattern that produces the wrong number for this feature, because ringweave's Graph is fixed-size 0..n-1 with no delete-vertex operation. The path of least resistance is to keep n unchanged and just stop adding edges touching the removed person (isolating them in place), since that keeps the 'names[i] labels vertex i' positional invariant the whole app relies on intact. But every core connectivity function is defined over g.n vertices, so an isolated leaver is counted as their own permanent one-vertex component: `connected` becomes unconditionally false (the very thing 'does the group stay connected' is supposed to answer) and `largestComponentFraction` divides by a population that still includes the person who left.",
+      "failure": "Verified by direct probe against lib/dist: n=5 ring buddy graph (edges 0-1,1-2,2-3,3-4,4-0), simulate person 2 leaving by isolating vertex 2 (drop their two edges, keep n=5) \u2192 allPairsSummary reports connected=false, largestComponentFraction=0.8. The correct answer \u2014 do the 4 remaining people stay connected to each other \u2014 is connected=true, largestComponentFraction=1 (reproduced by remapping to a fresh Graph(4) with indices [0,1,3,4]\u2192[0,1,2,3]). The isolate-in-place path silently reports 'the group falls apart' on every single simulated departure, for any roster size, because the leaver's own now-empty vertex is unconditionally its own disconnected component.",
+      "remediation": "When F12 is built, the leave-simulation must construct a new Graph of size n-1 with the surviving vertices remapped to 0..n-2 (dropping every edge touching the removed person), then run allPairsSummary/girth/largestComponentFraction on THAT graph \u2014 never isolate-in-place on the original n. Since remapping vertex indices while preserving the positional 'names[i] \u2194 vertex i' contract touches how the resulting sub-metrics are matched back to names for display, this is a real design decision (a small remap helper, app-side or core-side) to make explicitly before F12's first draft, not an incidental detail to catch in review after the fact.",
+      "invariant": "for the leave-simulation's connectivity read, the Graph passed to allPairsSummary/largestComponentFraction must have exactly (n - departures) vertices \u2014 the denominator population must equal the population being evaluated, never n with isolated vertices standing in for departures."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "type-mismatch-test-mock",
+      "theme": "Test mocks do not match evolved type definitions",
+      "file": "/home/user/ringweave/app/test/quality.test.ts",
+      "line": 209,
+      "summary": "Mock ConstraintReport objects are missing the required `satisfied` property, causing typecheck failures",
+      "failure": "Lines 209 and 212 create mock ConstraintReport objects without the `satisfied: boolean` property that is now required by the ConstraintReport type definition from ringweave. This causes two TypeScript compilation errors: 'Property satisfied is missing in type...but required in type ConstraintReport'. The typecheck gate (npm run typecheck) fails because of these errors.",
+      "invariant": "Every ConstraintReport mock or object created in tests must include the `satisfied` property as a boolean. The property should be true when reqViolations === 0 && prohViolations === 0, and false otherwise. Mock creation must match the current type signature of ConstraintReport from ringweave.",
+      "remediation": "Add `satisfied: true` to the clean mock on line 209. Update line 212 to set `satisfied: false` for the broken variants. Alternatively, derive the mock from a helper that computes satisfied correctly. The fix on line 209 would be: `const clean = { satisfied: true, reqViolations: 0, prohViolations: 0, connected: true, largestComponentFraction: 1, refusals: [], priorsKeptFraction: null };` and line 212 would need to ensure `satisfied: false` when violations are non-zero."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "missing-completion-announcement",
+      "theme": "a live region announces that an operation STARTED but never that it FINISHED, so a screen-reader user gets no signal a visually-obvious change (the regenerated graph, the updated quality numbers) has happened",
+      "file": "app/src/App.tsx",
+      "line": 355,
+      "summary": "The one region that speaks to generation progress (`<div className=\"busy-live\" role=\"status\" aria-live=\"polite\">{bg.status === \"running\" ? \"Generating\u2026\" : \"\"}</div>`) only ever contains text while running; when generation finishes the text reverts to `\"\"`. A live region going empty is not reliably announced by screen readers (there is nothing to read), and I grepped every `aria-live` region in app/src (PersonSearch, ConstraintsEditor, RosterModal, BuddyList, SettingsControls, App's three regions) \u2014 none of them announce that a regeneration completed. For the FIRST generation there is at least a secondary, weak signal: RosterModal unmounts and `useFocusRescue` moves focus to `<main>` (which has no accessible name). For every REROLL after that, the triggering button (`\u21bb Different arrangement`) never unmounts, so there is no focus move either \u2014 the only accessible signal for the entire operation is \"Generating\u2026\" followed by silence.",
+      "failure": "With a graph already on screen, press \"\u21bb Different arrangement\" (App.tsx:286). A screen reader announces \"Generating\u2026\" and then nothing further \u2014 not \"done\", not the new quality numbers, not even an empty-string non-event. The user has no way to know the regeneration is complete except manually tabbing to and re-reading `#metrics`/`#rail`, which contradicts the app's own stated pattern elsewhere (every other transient state \u2014 copy success, copy failure, search results, path status, selection \u2014 gets an explicit completion message in a pre-mounted live region).",
+      "remediation": "Give the `busy-live` region (or a sibling) a genuine completion message on the `running -> done` transition, e.g. \"Arrangement updated \u2014 {peopleNoun/quality summary}\", mirroring the pattern `selectionStatusText`/`pathStatusText` already use elsewhere in this file.",
+      "invariant": "every accessible live region used to announce an operation's start also announces that operation's completion with non-empty text, for every path that can trigger the operation (not only the first)."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "focus-lands-out-of-context",
+      "theme": "the app's single global focus-rescue anchor is context-free, so removing a focused control deep in a form can warp keyboard focus to an unrelated control at the top of the same dialog rather than to anything near where the action happened",
+      "file": "app/src/App.tsx",
+      "line": 93,
+      "summary": "`useFocusRescue`'s anchor callback (App.tsx:93-102) is one function for the whole app: `mainRef ?? roster-field-by-label ?? busy-Cancel-button`. Removing a buddy-rule row's own \"Remove rule N\" button (ConstraintsEditor.tsx:90) while it holds focus unmounts that button. Since `#app` is inert while the roster modal is open, the first candidate (`mainRef`) is unreachable, so the rescue falls through to the roster textarea \u2014 a control that has nothing to do with the rule list the user was just editing.",
+      "failure": "Reproduced directly: open the roster editor, add a buddy rule, focus \"Remove rule 1\", and click/activate it. I rendered the real `App` (worker mocked) in a throwaway harness and inspected `document.activeElement` afterward \u2014 it is the `<textarea aria-label=\"Roster names\">` at the very top of the dialog, not the next/previous rule row, not the \"+ Add a buddy rule\" link, and not the settings below the (now-shorter) rule list. For a sighted keyboard user with several rules, deleting one warps focus away from the list entirely, and every remaining row (and the settings/generate button below it) now requires re-navigating from the top of the form.",
+      "remediation": "Give `ConstraintsEditor` its own local rescue (e.g. focus the next row's first field, or the row that shifted into the removed row's position, or the \"+ Add a buddy rule\" control) instead of relying solely on the app-global anchor, which is documented as a last-resort net for cross-component unmounts (RosterModal reopening, first-generation busy overlay) rather than for in-dialog list edits.",
+      "invariant": "when a focusable control inside an open dialog is removed by a user action taken from within that dialog, focus lands on a control that is contextually adjacent to the one removed (same section/list), not on an unrelated control elsewhere in the same dialog."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-correctness",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "field-contradicts-its-own-doc",
+      "theme": "a Settings/rules-resolution count whose documented meaning does not match its arithmetic or the copy the user is shown",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 198,
+      "summary": "`resolveNamedPairs` returns `dropped: named.length - pairs.length`, documented as \"Rows that produced no pair for ANY reason, including ones still being filled in \u2014 so a caller reporting a single number does not have to know the taxonomy.\" The arithmetic actually yields `unmatched + selfPair + incomplete + duplicate`, because dedupe happens between `resolved` and `pairs`. A duplicate row DID produce a pair \u2014 the identical one \u2014 and RosterModal's own copy says so: \"repeats another one and will only be applied once\" (RosterModal.tsx:225-231), i.e. it is applied, not dropped. So the field's documented meaning contradicts both its value and the app's user-facing wording. Filed as a deferral rather than a suggestion because `grep -rn \"dropped\" app/src` finds no live consumer: only the interface declaration and the assignment. No linter can see this (the identifiers all resolve and the field is a property of a returned object literal, which knip does not reach), and nothing currently renders the wrong number \u2014 but the first caller to trust the comment will over-report.",
+      "failure": "resolveNamedPairs([{a:\"Ana\",b:\"Ben\",kind:\"required\"},{a:\"Ben\",b:\"Ana\",kind:\"required\"}], [\"Ana\",\"Ben\"]) returns pairs.length === 1, duplicate === 1, unmatched === 0, selfPair === 0, incomplete === 0 \u2014 and dropped === 1. Under the documented definition (\"rows that produced no pair\") it must be 0: both rows resolved, and the modal tells the user the rule \"will only be applied once\", not that a row was discarded.",
+      "remediation": "Either compute `dropped: unmatched + selfPair + incomplete` so the value matches the doc and the modal's copy, or delete the field until a caller needs it and let that caller sum the causes it actually wants. Do not just reword the comment to describe the current arithmetic \u2014 \"rows that did not contribute a NEW pair\" is not a number any caller has a use for, and the taxonomy fields already cover it.",
+      "invariant": "resolveNamedPairs(named, names).dropped === unmatched + selfPair + incomplete for all inputs; equivalently dropped === named.length - resolved-row count, and dropped is unaffected by adding a duplicate of a row that already resolves.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "metric-population-mismatch",
+      "theme": "reusing a core connectivity metric whose contract is 'fraction/boolean over g.n vertices' on a graph edited to represent a smaller population, without remapping n, silently answers a different question than the one asked",
+      "file": "app/src/io/importGraph.ts (the only existing precedent for app-side use of Graph/allPairsSummary/largestComponentFraction, which F12 would copy) and lib/src/core/graph.ts + lib/src/core/metrics.ts (Graph has no vertex-removal primitive; largestComponentFraction divides by g.n)",
+      "line": 196,
+      "summary": "F12 ('simulate X leaving', PROJECT_PLAN.md:143-146, committed for M4) has no implementation yet, but the only existing app-side pattern for computing connectivity outside the worker (importGraph.ts's `new Graph(n)` + `addEdge` + `allPairsSummary`/`largestComponentFraction`) is exactly the pattern that produces the wrong number for this feature, because ringweave's Graph is fixed-size 0..n-1 with no delete-vertex operation. The path of least resistance is to keep n unchanged and just stop adding edges touching the removed person (isolating them in place), since that keeps the 'names[i] labels vertex i' positional invariant the whole app relies on intact. But every core connectivity function is defined over g.n vertices, so an isolated leaver is counted as their own permanent one-vertex component: `connected` becomes unconditionally false (the very thing 'does the group stay connected' is supposed to answer) and `largestComponentFraction` divides by a population that still includes the person who left.",
+      "failure": "Verified by direct probe against lib/dist: n=5 ring buddy graph (edges 0-1,1-2,2-3,3-4,4-0), simulate person 2 leaving by isolating vertex 2 (drop their two edges, keep n=5) \u2192 allPairsSummary reports connected=false, largestComponentFraction=0.8. The correct answer \u2014 do the 4 remaining people stay connected to each other \u2014 is connected=true, largestComponentFraction=1 (reproduced by remapping to a fresh Graph(4) with indices [0,1,3,4]\u2192[0,1,2,3]). The isolate-in-place path silently reports 'the group falls apart' on every single simulated departure, for any roster size, because the leaver's own now-empty vertex is unconditionally its own disconnected component.",
+      "remediation": "When F12 is built, the leave-simulation must construct a new Graph of size n-1 with the surviving vertices remapped to 0..n-2 (dropping every edge touching the removed person), then run allPairsSummary/girth/largestComponentFraction on THAT graph \u2014 never isolate-in-place on the original n. Since remapping vertex indices while preserving the positional 'names[i] \u2194 vertex i' contract touches how the resulting sub-metrics are matched back to names for display, this is a real design decision (a small remap helper, app-side or core-side) to make explicitly before F12's first draft, not an incidental detail to catch in review after the fact.",
+      "invariant": "for the leave-simulation's connectivity read, the Graph passed to allPairsSummary/largestComponentFraction must have exactly (n - departures) vertices \u2014 the denominator population must equal the population being evaluated, never n with isolated vertices standing in for departures."
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "PLAUSIBLE",
+      "class": "focus-stranded-on-inert-cascade",
+      "theme": "a control that keeps its own focus through a state change can still lose focus involuntarily when an ancestor becomes inert, and the app's mutation-based rescue does not watch for that",
+      "file": "app/src/App.tsx",
+      "line": 255,
+      "summary": "`#app` is made `inert` on every generation/reroll (`inert={modalOpen || bg.status === \"running\"}`), and the reroll button that has focus at that moment lives inside `#app`. Per the HTML spec, when an ancestor of the focused element becomes inert, the UA synchronously forces focus off it (to `<body>`) before any microtask runs. `useFocusRescue`'s only trigger is a `MutationObserver({childList:true, subtree:true})`, and its `onFocusIn` listener explicitly nulls `lastFocused` whenever the new focus target is `document.body` (state/useFocusRescue.ts:21: `el !== document.body ? el : null`). So by the time the observer's callback runs (triggered by the busy overlay mounting in the same commit), `lastFocused.current` is already `null` and `rescue()` bails at `if (!previous) return;` \u2014 no anchor is ever attempted. When the busy overlay later unmounts (generation done), the same thing happens: nothing to rescue, because `lastFocused` was already cleared.",
+      "failure": "Load a roster, generate, tab to and press \"\u21bb Different arrangement\" (App.tsx:286) while focused on it. In a real browser, `#app` going inert should blur that button to `<body>`. I reproduced that exact sequence by hand against the app's real `useFocusRescue`/`onFocusIn` code (not jsdom's absent inert support) in a throwaway harness and confirmed: `document.activeElement` is `<body>` during the run AND remains `<body>` after generation completes \u2014 the rescue never fires because its own precondition (`lastFocused.current` non-null) was already falsified by the browser's own inert-driven blur. A keyboard user who presses reroll loses their place in the document entirely and must Tab from the very top to resume, with no cue that this happened.",
+      "remediation": "Either (a) capture `document.activeElement` synchronously before the `inert` attribute is applied (e.g. in the same click handler / a layout effect that runs before the state that flips `inert` commits) rather than relying on `focusin` bookkeeping that inert's own blur can race and erase, or (b) have `useFocusRescue`'s `onFocusIn` ignore a transition to `document.body` when the previously-focused element is merely inert-but-still-connected (distinguish \"removed\" from \"blurred by inert\"), or (c) explicitly re-focus a stable anchor at the same moment `inert` is set (e.g. focus `mainRef` in the click handlers that dispatch generation, before the busy state commits), so the rescue's own invariant (\"a rescue is attempted whenever the previously-focused element is gone from the accessible tree\") is not defeated by the very attribute the app relies on for containment.",
+      "invariant": "for every element that becomes non-focusable (removed OR made inert via an ancestor) while it holds focus, document.activeElement after the transition settles is a real, on-screen, tabbable element \u2014 never left on <body> with no further prompt."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 22,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 22,
+      "skipped": true
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 22,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 22,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 22,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 498508,
+    "agents": 5,
+    "toolCalls": 201
+  }
+}

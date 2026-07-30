@@ -1,0 +1,260 @@
+{
+  "target": "lib/src",
+  "round": 21,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 2,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 3
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface pass over lib/src (graph, metrics, bounds, rng, swap, greedy, polish, budgets, constraints, constrainedGreedy, index) plus lib/test and reference-python. Ran: npm test (265 pass); TS-vs-Python byte-identity for ringGreedy over 5700 (n,k,mind,demote,repair) cells and for repairDegrees over 800 arbitrary graphs and for constrainedGreedy over 587 random feasible constraint scenarios (all identical); re-derived the committed constrained fixtures from gen_fixtures.make_fixture (no drift); insertion-order invariance of girth/shortestPath/eccentricity/allPairsSummary/largestComponentFraction/isConnected/polish(anneal+hill)/polishConstrained/repairDegrees over 4 permutations of each of 600 random graphs, and of constrainedGreedy over 4311 shuffled-constraint builds; bridges() vs a remove-and-recount oracle and girth() vs an exact per-edge oracle over 7000 random graphs at two densities; hard-constraint stress (prohibited absent, required present, degree<=k, priorHard promotion, report-vs-graph agreement) over ~5700 buildConstrainedBuddyGraph runs including k=0..6, n=2..15, priors and polish on/off; every BuddyResult field recomputed from the returned edges for n=0..24 x k in {2,3,5,7} including a non-negative asplGap check. Traced without reproducing: the stuck-memoization equivalence with Python's rescan, completionCap non-binding, forceConnect provable inertness (which makes joinAnyComponents' unsorted component iteration unreachable), swapJoin/stealSlot degree neutrality and bridge argument, the in-place incremental distance-cache update, that checkPolishSize can never throw inside either builder within the validated accept-set, and that validate covers every checkWellFormed throw so the constrained builder cannot throw instead of refusing. Scratch harnesses left in /home/user/ringweave/.review-scratch/rd/.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "TARGET: lib/src/core (graph.ts, bounds.ts, budgets.ts, constraints.ts, constrainedGreedy.ts, greedy.ts, index.ts, metrics.ts, polish.ts, rng.ts, swap.ts), read in full, plus lib/test and reference-python/constraints.py for the mirrored constants. Baseline `npx vitest run` in lib/: 10 files, 265 tests, all pass. All probes under /home/user/ringweave/.review-scratch/ (gitignored, outside every test glob); no source file was modified.\n\nMACHINE CALIBRATION FIRST, so the numbers below are comparable to the repo's documented ones: n=500,k=4 constrained generation measures 365 ms here against the 120 ms recorded in docs/findings, i.e. this box is ~3x slower than the one the budgets were calibrated on. Every wall-clock figure below is raw (this box); divide by 3 for the calibrated machine.\n\n1. COST-BEFORE-COMMITMENT, ordering traced by hand in every gate:\n - `validateDetailed`: structuralReasons -> MAX_CONSTRAINED_N -> k domain -> constrainedWork -> the O(n^2) `connectivityReasons` walk. The O(n^2) walk is behind both size and work gates. structuralReasons does run before the n cap and materializes requiredPairs/prohibitedPairs/priorPairs, but that is O(#constraints the caller already built) \u2014 linear in existing data, not a superlinear step behind a gate. Considered and rejected as a finding.\n - `constrainedGreedy.checkWellFormed`: n domain -> required-and-prohibited scan -> cons.n match -> MAX_CONSTRAINED_N -> k domain -> constrainedWork -> checkConstraintIds -> requiredDegree. Same shape, same conclusion.\n - `polish` / `polishConstrained`: `checkPolishSize` runs BEFORE `input.copy()` and before the first `energy()`/`measure()`; `boundedPolishIterations` is inside both primitives, not in a wrapper, so a direct public-API caller is bounded too.\n - `buildConstrainedBuddyGraph`: n-domain check precedes the `n !== cons.n` NaN-masking check and precedes any n-sized allocation; `refusedResult` caps its allocation at MAX_CONSTRAINED_N so a refusal never costs more than a success.\n\n2. ATTACKER-CHOSEN NUMBERS -> UNBOUNDED WORK. Measured the accept boundary of every budget rather than reading it:\n - constrainedWork/MAX_CONSTRAINED_WORK: n=5000,k=4,p=0 (exactly at the 1e8 cap) = 34.5 s raw (~11 s calibrated, matching the documented 13-15 s). Deepest allowed corner n=464,k=463 (work 99.68e6) = 91.6 s raw (~30 s calibrated, better than the documented ~46 s). 320-trial randomized fuzz over n in [100,600], k in [2,9] with five prohibition shapes (random density, household blocks, required chains, dominant hub, none) found a worst rate of 1.57M work-units/s against a 2.9M/s sparse baseline \u2014 a <2x undercharge, and the near-complete corner the constant was calibrated against is worse still, so the estimator is a genuine floor. `PROHIBITED_PROBE_COST=80` is conservative in the other direction: n=1000,k=4 with 404,550 prohibitions modelled at 36.4e6 actually ran in 2.5 s.\n - Worst-case `validate`: n=5000, k=1, p=937,500 (constrainedWork exactly 1e8, the maximum p the budget admits at any k that still runs the connectivity walk) = 1.31 s raw for the full 25M-probe O(n^2) walk. Not a hang, and it is behind the n and work caps.\n - MAX_POLISH_WORK: verified it bounds WALL TIME uniformly, not just a unit count \u2014 `polish: true` (which bypasses the auto gate by design) costs 22.9 s / 21.9 s / 21.8 s / 19.1 s at (n,k) = (189,4), (500,4), (1000,4), (2000,4). Flat across a 10x span of n, which is what a correct cost model looks like. The prior term is charged correctly too: n=100,k=4 goes 7.2 s -> 11.3 s when all 4,950 pairs are priors at priorWeight 2, against a modelled 2.98x iteration-cost ratio absorbed by the iteration clamp.\n - MAX_REPAIR_WORK: `repairDegrees(ring(5000), 4999)` throws after 11.3 s; (2000,1999) after 9.9 s; (3000,2999) after 11.8 s. The runtime counter bounds wall time.\n - `completionCap = n*k*6` in constrainedGreedy: proved it cannot bind (each non-breaking step adds exactly one edge, and the degree cap holds total edges to n*k/2), including for k=1e9 at n=100, which validate accepts because min(k,n-1) clamps it.\n - `minSeparation` from an untrusted settings object: `curMind = min(mind, floor(n/2))` clamps it, so the demotion cascade costs at most (n/2) extra O(n^2) `findPair` calls \u2014 bounded at 1/(6*(k/2-1)) of `greedyWork`'s own estimate, i.e. inside the budget. Verified n=2000,k=3 (greedyWork 1.2e10 of a 1.5e10 cap) at 28.1 s.\n\n3. THE MANY-COMPONENT / repairConnectivity ANGLE, which is the one place the cost model has no term. `repairConnectivity`'s per-pass `connectedComponents` + `bridges` + two `edgesByComponent` (each an O(m log m) `edgeList`) plus `swapJoin`'s O(C^2) component-pair scan are NOT charged by `constrainedWork`, and the shared `budget` cell does not bound the C^2 scan when components are edgeless. I built the worst shape I could reach \u2014 required (k+1)-cliques saturating a hub set at degree k, plus a mutually-prohibited orphan pool whose only legal partners are those saturated hubs \u2014 and got 2,065 components at n=4000 within budget: 10.7 s for a modelled 80.4e6, a rate of 7.5M/s, i.e. BETTER than baseline. The C^3 blow-up needs `stealSlot` to succeed once per pass alongside many singletons, and that appears structurally unreachable: a vertex is stranded only when every partner it is allowed is at degree k, and if such a partner were saturated by a non-required edge, completion (which examines the deficient vertex from the front of `under` on every step until it is stuck, and marks stuck monotonically) would have connected it first. Every stealable endpoint therefore carries only required edges, which `stealSlot` skips. Not filed: I could not reproduce it, and a speculative O(C^3) claim I failed to trigger is exactly the manufactured finding the brief warns against. A 120-trial randomized search over this shape (n in [400,1600], k in [2,4], mixed clique/orphan/random prohibitions) produced a worst rate of 9.2M/s.\n\n4. CONTRACT FUZZING (invariants, not case tables):\n - \"buildConstrainedBuddyGraph never throws\": 9,408 combinations of n,k drawn from {NaN, +/-Infinity, -1, -0, 0, 0.5, 1, 2, 3, 1e21, 2^53, 5001, 1e6+1} crossed with priorHard and 12 hostile option objects (NaN seed, Infinity polishIters, negative/Infinite/1e300 priorWeight, minSeparation 1e9). Zero throws, `aspl` always a number.\n - Hard guarantees + determinism: 4,000 random small rosters with weird constraint endpoints (NaN, -1, 1e21, 2^53, \"3\", null, undefined) mixed into prohibit/require/addPrior, priorHard toggled. Zero prohibited edges present, zero required edges missing, zero hard-prior violations, zero degree-cap violations, `buddies.length === n` always, byte-identical output on repeat. Zero throws.\n - Insertion-order independence: 150 rosters built three ways (forward, reversed, shuffled constraint-insertion order) produce byte-identical results, so nothing reads a `Set`'s insertion order \u2014 including `bridges`, `connectedComponents` ordering, `choosePartner`'s total order and `stealSlot`'s explicit sort. (`joinAnyComponents` DOES iterate component members in adjacency order, but I re-derived the proof that `forceConnect` is inert: completion terminates only when no legal edge exists anywhere, and each of `legalEdge`'s disjuncts is monotone under edge addition.)\n\n5. UNTRUSTED TEXT -> SINK: lib has no text sink. No name, label or caller string reaches a CSV, clipboard, filename or DOM path from `lib/src`; the only caller-supplied string that reaches an Error message is `fromTags`'s `String(policy)`, and `fromTags` has no live caller. The spreadsheet-injection theme lives entirely in `app/src/io/download.ts` and is out of this target's scope.\n\n6. NUMERIC EDGES: `-0` behaves as `0` through `Number.isInteger`/`pairKey`/array indexing consistently. `aspl`/`girth` are `Infinity` at n<=1 / on a forest and `JSON.stringify` turns that into `null` \u2014 already recorded in lib/CLAUDE.md and neutralized app-side by `finiteOrNull`. `mooreLowerBounds` guards the non-integer-k denormal fixed point and the k=2 O(n) branch behind MAX_ROSTER. `penalizedAspl` guards `Infinity * 0`. `boundedPolishIterations` rejects `Infinity`/non-integer requests without coercion. `RNG` validates rather than `>>> 0`-coerces a seed.\n\nNOT FILED, DELIBERATELY: `Constraints.fromTags` (no `n` validation, O(n^2) pair materialization before any gate, NaN tags never grouping) is real and I re-verified it, but a repo-wide grep confirms its only callers are `lib/test/constrained.test.ts`. It is already recorded verbatim as a deferral in lib/CLAUDE.md's Known limitations and again in app/CLAUDE.md; re-filing an adjudicated no-caller deferral would spend a round on a decision already made. Likewise `autoPolishEnabled`'s hard-coded `priorCount: 0` (correct today \u2014 no app caller has a prior concept) and the uncapped diagnostic metrics (`girth`, `allPairsSummary`) on a caller-built `Graph` up to MAX_ROSTER, both documented deferrals whose reachable callers are all inside a worker and inside the app's own n<=1000 clamp.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 1,
+      "checked": "Full-surface read of lib/src/core (graph.ts, greedy.ts, constraints.ts, constrainedGreedy.ts, polish.ts, metrics.ts, budgets.ts, index.ts) plus lib/CLAUDE.md and docs/PROJECT_PLAN.md. Grounded the extension scenario in the actual next committed lib-facing work: the app's own CLAUDE.md confirms F7/F8/F10 (M3) are already built and wired, so the next real committed change touching lib/src is M4's F9 (minimal-disruption recalc with priors), which lib/CLAUDE.md itself names a concrete gap for: `autoPolishEnabled` hard-codes `priorCount` to 0. I traced every live caller of `autoPolishEnabled` (`app/src/model.ts`, `app/src/state/useBuddyGraph.ts`) and confirmed via grep that no caller in app/src currently threads a prior concept anywhere (`priorWeight`/`priorHard`/`addPrior` all absent from app/src), matching the documented no-caller deferral. I then did not just read but *performed* the extension: patched `autoPolishEnabled` in lib/src/core/index.ts to accept and thread an optional `priorCount` (removing the hardcoded 0), ran `npm run typecheck` (clean) and the full `npm test` suite (265/265 passed, no fixture regeneration needed, no other file touched) \u2014 then reverted the patch to leave the tree clean. Also read greedy.ts, metrics.ts, polish.ts, constrainedGreedy.ts in full for SRP/OCP issues and re-verified constraints.ts's `fromTags`/tag-policy switch has no caller outside lib/test (matching the CLAUDE.md deferral), so its known O(n\u00b2)/NaN hazards are correctly filed as deferrals already and not re-filed here.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 6,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (6) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "Structural-refusal cap message counts endpoint faults instead of distinct invalid constraint pairs, so it asserts messages were truncated even when every distinct reason was listed and the cap never actually bit",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The structural-refusal summary counts endpoint FAULTS rather than invalid constraints, and is emitted whenever duplicate messages deduped \u2014 so it asserts \"only some are listed\" even when every distinct reason is listed and the 16-message cap never bit."
+      ],
+      "remediation": "Count distinct constraint PAIRS that carry at least one fault (a per-pair flag inside `scan`, not a per-note increment), and emit `too-many-invalid-constraints` only when `listed.length === MAX_STRUCTURAL_REASONS` actually suppressed a distinct message \u2014 removing the fault-increment path and the now-redundant 50,000-pair test expectation that currently pins the wrong semantics, and mirroring the trimmed logic in reference-python `_structural_errors` so only one counting rule exists instead of two."
+    },
+    {
+      "theme": "autoPolishEnabled hardcodes priorCount to 0, a documented gap that will under-charge the auto-polish gate once F9 priors land, but has no live caller today",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "lib/CLAUDE.md's known-limitations section predicts autoPolishEnabled's hardcoded `priorCount: 0` will under-charge the auto-polish gate once F9 (priors) lands; the fix (threading opts.priorCount ?? 0 into resolveWantPolish) was applied and verified clean/backward-compatible against the live tree, but no app/src caller passes a real priorCount yet, so it is confirmed-but-not-yet-triggered."
+      ],
+      "remediation": "Delete the hardcoded `priorCount: 0` literal at the autoPolishEnabled call site in lib/src/core/index.ts and replace it with `opts.priorCount ?? 0`, in the same commit that introduces the app-side prior toggle \u2014 closing the special-cased default rather than adding a new parameter path."
+    },
+    {
+      "theme": "greedy.ts docstring states the chord-selection tiebreak order in reverse of what the code actually prioritizes",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Docstring lists algorithm selection criteria in reverse order: says 'farthest apart and least connected' but code prioritizes degree (least connected) before distance (farthest apart)."
+      ],
+      "remediation": "Delete the reversed phrase in the lines 37-39 docstring and replace it with the code's actual lexicographic order (least connected, then farthest apart), removing the mismatched wording rather than adding a second explanation alongside it."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misreported-refusal-count",
+      "theme": "a refusal message states a number and a claim that do not describe what actually happened",
+      "file": "lib/src/core/constraints.ts",
+      "line": 362,
+      "summary": "The structural-refusal summary counts endpoint FAULTS rather than invalid constraints, and is emitted whenever duplicate messages deduped \u2014 so it asserts \"only some are listed\" even when every distinct reason is listed and the 16-message cap never bit.",
+      "failure": "new Constraints(10).prohibit(12,13).prohibit(12,14); validate(c,4) returns ['4 constraints are invalid \u2014 only some are listed', 'constraint references unknown person 12 (roster has 10)', '...13...', '...14...']. There are 2 constraints, not 4, and all 3 distinct reasons ARE listed (cap is 16). Also new Constraints(3).prohibit(5,5) reports '3 constraints are invalid' for one constraint. These strings reach the organizer through report.refusals -> app/src/App.tsx. The existing suite pins the wrong behaviour: lib/test/reasons.test.ts:218 asserts '100000 constraints are invalid' for 50,000 malformed pairs, so the defect passes npm test by construction.",
+      "remediation": "Count distinct constraint PAIRS that carry at least one fault (a per-pair flag inside `scan`, not a per-note increment), and emit `too-many-invalid-constraints` only when the cap actually suppressed a distinct message, i.e. only when `listed.length === MAX_STRUCTURAL_REASONS`. Mirror in reference-python `_structural_errors` first (the message strings are a pinned parity contract), then update the count assertion in reasons.test.ts. Sibling in the same theme to close in the same commit: the 50,000-pair test's expectation, which is the only thing currently holding the fault-count semantics in place.",
+      "invariant": "For every Constraints/k, if validateDetailed(cons,k) contains a `too-many-invalid-constraints` reason then (a) the number of other reasons returned equals MAX_STRUCTURAL_REASONS, and (b) its `count` equals the number of distinct constraint pairs (across required, prohibited and priors) having at least one structural fault \u2014 never more.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "algorithm description contradicts actual priority order",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 37,
+      "summary": "Docstring lists algorithm selection criteria in reverse order: says 'farthest apart and least connected' but code prioritizes degree (least connected) before distance (farthest apart)",
+      "failure": "A contributor reading 'farthest apart and least connected' would expect the algorithm to prioritize distance-based selection first, then break ties by degree. But tracing lexLess(key=[neMax, neMin, -ecc, ...]) shows the code sorts by neMax (degree) first, then by -ecc (distance) third. The Python reference (generators.py line 56-61) confirms: 'lexicographic rule: 1. lowest max-endpoint-degree 2. lowest min-endpoint-degree 3. largest BFS distance'. The TypeScript comment reverses this priority.",
+      "remediation": "Change lines 37-39 to: 'Build a ~k-regular graph on `n` people: a ring seed, then greedily add chords by lexicographic priority: (1) least connected (lowest max-endpoint degree) (2) then farthest apart (largest BFS distance). See reference-python/generators.py for the full tiebreaker sequence.' Or match the Python docstring exactly to preserve intent.",
+      "invariant": "For any two pairs (va,vb) and (va',vb') both satisfying eccentricity >= curMind and both under degree k, if (va,vb) is selected over (va',vb') then: (min(max(deg(va),deg(vb)), max(deg(va'),deg(vb')))) is strictly smaller for (va,vb); if tied, then max(dist(va,vb), dist(va',vb')) is strictly larger for (va,vb); if tied, lexicographic tiebreak on perimeter/indices applies. The comment must state degree takes priority 1-2, distance priority 3.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misreported-refusal-count",
+      "theme": "a refusal message states a number and a claim that do not describe what actually happened",
+      "file": "lib/src/core/constraints.ts",
+      "line": 362,
+      "summary": "The structural-refusal summary counts endpoint FAULTS rather than invalid constraints, and is emitted whenever duplicate messages deduped \u2014 so it asserts \"only some are listed\" even when every distinct reason is listed and the 16-message cap never bit.",
+      "failure": "new Constraints(10).prohibit(12,13).prohibit(12,14); validate(c,4) returns ['4 constraints are invalid \u2014 only some are listed', 'constraint references unknown person 12 (roster has 10)', '...13...', '...14...']. There are 2 constraints, not 4, and all 3 distinct reasons ARE listed (cap is 16). Also new Constraints(3).prohibit(5,5) reports '3 constraints are invalid' for one constraint. These strings reach the organizer through report.refusals -> app/src/App.tsx. The existing suite pins the wrong behaviour: lib/test/reasons.test.ts:218 asserts '100000 constraints are invalid' for 50,000 malformed pairs, so the defect passes npm test by construction.",
+      "remediation": "Count distinct constraint PAIRS that carry at least one fault (a per-pair flag inside `scan`, not a per-note increment), and emit `too-many-invalid-constraints` only when the cap actually suppressed a distinct message, i.e. only when `listed.length === MAX_STRUCTURAL_REASONS`. Mirror in reference-python `_structural_errors` first (the message strings are a pinned parity contract), then update the count assertion in reasons.test.ts. Sibling in the same theme to close in the same commit: the 50,000-pair test's expectation, which is the only thing currently holding the fault-count semantics in place.",
+      "invariant": "For every Constraints/k, if validateDetailed(cons,k) contains a `too-many-invalid-constraints` reason then (a) the number of other reasons returned equals MAX_STRUCTURAL_REASONS, and (b) its `count` equals the number of distinct constraint pairs (across required, prohibited and priors) having at least one structural fault \u2014 never more.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-verified-not-yet-exercised",
+      "theme": "the core's declared F9 extension point (autoPolishEnabled's priorCount) is real, cheap to close, and currently has zero live callers",
+      "file": "lib/src/core/index.ts",
+      "line": 434,
+      "summary": "This is a positive/negative-result finding, not a defect: lib/CLAUDE.md's own known-limitations section predicts that autoPolishEnabled's hardcoded `priorCount: 0` will under-charge the auto-polish gate the moment F9 (priors) lands, and names the exact fix. I did not invent this need \u2014 it is already committed in the docs \u2014 but I went further than reading and actually applied the described fix (opts.priorCount ?? 0 threaded into resolveWantPolish, replacing the hardcoded 0) against the live tree, ran typecheck and the full 265-test suite, and confirmed it is a genuinely clean, backward-compatible, one-function change: no caller needed updating, no fixture regenerated, nothing else moved. This confirms the seam CLAUDE.md claims (resolveWantPolish/polishWork already require priorCount as a parameter rather than defaulting it, which is exactly why closing the gap at the one call site that special-cased it to 0 was sufficient) genuinely pays for the committed next feature. Filed as deferral, not suggestion, per the reporting contract: no caller in app/src passes a real priorCount today (confirmed by grep \u2014 priorWeight/priorHard/addPrior are absent from app/src), so applying the fix now would be speculative hardening for a feature not yet built, and lib/CLAUDE.md already tracks it as a known follow-on with an explicit trigger (F9 landing). Recording the confirmation here rather than re-filing it as new, since it is already an acknowledged, correctly-scoped deferral and re-flagging it would not be a new finding.",
+      "failure": "N/A \u2014 not a bug today. When F9 ships and a UI passes a nonzero prior count into the generation gate but continues to call the unmodified autoPolishEnabled(n,k,{constrained}) for pre-flight UI messaging (e.g. \"this will auto-polish\"), the pre-flight answer would diverge from what buildConstrainedBuddyGraph actually does (which already correctly threads active.priorCount internally), producing a UI/reality mismatch \u2014 but this requires an F9 caller that does not yet exist.",
+      "remediation": "When F9 lands and app/src gains a real prior concept, land the one-line change verified here (opts.priorCount on autoPolishEnabled, threaded through to resolveWantPolish) in the same commit that adds the app-side prior toggle, per lib/CLAUDE.md's own instruction.",
+      "invariant": "autoPolishEnabled(n, k, {priorCount}) must agree with the internal gate buildConstrainedBuddyGraph uses to decide whether to run polish, for every (n, k, priorCount) triple \u2014 i.e. resolveWantPolish(..., priorCount, ...) called from the exported pre-flight helper and called from the generator itself must never diverge for the same inputs.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "false-comment",
+      "theme": "algorithm description contradicts actual priority order",
+      "file": "/home/user/ringweave/lib/src/core/greedy.ts",
+      "line": 37,
+      "summary": "Docstring lists algorithm selection criteria in reverse order: says 'farthest apart and least connected' but code prioritizes degree (least connected) before distance (farthest apart)",
+      "failure": "A contributor reading 'farthest apart and least connected' would expect the algorithm to prioritize distance-based selection first, then break ties by degree. But tracing lexLess(key=[neMax, neMin, -ecc, ...]) shows the code sorts by neMax (degree) first, then by -ecc (distance) third. The Python reference (generators.py line 56-61) confirms: 'lexicographic rule: 1. lowest max-endpoint-degree 2. lowest min-endpoint-degree 3. largest BFS distance'. The TypeScript comment reverses this priority.",
+      "remediation": "Change lines 37-39 to: 'Build a ~k-regular graph on `n` people: a ring seed, then greedily add chords by lexicographic priority: (1) least connected (lowest max-endpoint degree) (2) then farthest apart (largest BFS distance). See reference-python/generators.py for the full tiebreaker sequence.' Or match the Python docstring exactly to preserve intent.",
+      "invariant": "For any two pairs (va,vb) and (va',vb') both satisfying eccentricity >= curMind and both under degree k, if (va,vb) is selected over (va',vb') then: (min(max(deg(va),deg(vb)), max(deg(va'),deg(vb')))) is strictly smaller for (va,vb); if tied, then max(dist(va,vb), dist(va',vb')) is strictly larger for (va,vb); if tied, lexicographic tiebreak on perimeter/indices applies. The comment must state degree takes priority 1-2, distance priority 3.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-verified-not-yet-exercised",
+      "theme": "the core's declared F9 extension point (autoPolishEnabled's priorCount) is real, cheap to close, and currently has zero live callers",
+      "file": "lib/src/core/index.ts",
+      "line": 434,
+      "summary": "This is a positive/negative-result finding, not a defect: lib/CLAUDE.md's own known-limitations section predicts that autoPolishEnabled's hardcoded `priorCount: 0` will under-charge the auto-polish gate the moment F9 (priors) lands, and names the exact fix. I did not invent this need \u2014 it is already committed in the docs \u2014 but I went further than reading and actually applied the described fix (opts.priorCount ?? 0 threaded into resolveWantPolish, replacing the hardcoded 0) against the live tree, ran typecheck and the full 265-test suite, and confirmed it is a genuinely clean, backward-compatible, one-function change: no caller needed updating, no fixture regenerated, nothing else moved. This confirms the seam CLAUDE.md claims (resolveWantPolish/polishWork already require priorCount as a parameter rather than defaulting it, which is exactly why closing the gap at the one call site that special-cased it to 0 was sufficient) genuinely pays for the committed next feature. Filed as deferral, not suggestion, per the reporting contract: no caller in app/src passes a real priorCount today (confirmed by grep \u2014 priorWeight/priorHard/addPrior are absent from app/src), so applying the fix now would be speculative hardening for a feature not yet built, and lib/CLAUDE.md already tracks it as a known follow-on with an explicit trigger (F9 landing). Recording the confirmation here rather than re-filing it as new, since it is already an acknowledged, correctly-scoped deferral and re-flagging it would not be a new finding.",
+      "failure": "N/A \u2014 not a bug today. When F9 ships and a UI passes a nonzero prior count into the generation gate but continues to call the unmodified autoPolishEnabled(n,k,{constrained}) for pre-flight UI messaging (e.g. \"this will auto-polish\"), the pre-flight answer would diverge from what buildConstrainedBuddyGraph actually does (which already correctly threads active.priorCount internally), producing a UI/reality mismatch \u2014 but this requires an F9 caller that does not yet exist.",
+      "remediation": "When F9 lands and app/src gains a real prior concept, land the one-line change verified here (opts.priorCount on autoPolishEnabled, threaded through to resolveWantPolish) in the same commit that adds the app-side prior toggle, per lib/CLAUDE.md's own instruction.",
+      "invariant": "autoPolishEnabled(n, k, {priorCount}) must agree with the internal gate buildConstrainedBuddyGraph uses to decide whether to run polish, for every (n, k, priorCount) triple \u2014 i.e. resolveWantPolish(..., priorCount, ...) called from the exported pre-flight helper and called from the generator itself must never diverge for the same inputs.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 1,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 7,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 21,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 525920,
+    "agents": 5,
+    "toolCalls": 178
+  }
+}

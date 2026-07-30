@@ -1,0 +1,181 @@
+{
+  "target": "lib/src",
+  "round": 18,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 1,
+    "confirmed": 1,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 1
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface pass over all 11 modules in /home/user/ringweave/lib/src/core (graph, metrics, bounds, budgets, rng, swap, greedy, polish, constraints, constrainedGreedy, index) plus all 9 files in /home/user/ringweave/lib/test. Baseline `npm test` green (256 tests). All probes under /home/user/ringweave/.review-scratch/ (gitignored, outside every test glob); working tree restored afterwards.\n\nDETERMINISM / SET-ITERATION ORDER: (1) girth + shortestPath over 2376 rebuilds of the same edge set in shuffled insertion order — 0 divergences. (2) girth vs a brute-force oracle (min over edges of 1 + dist_{G-uv}(u,v)) on 20000 random 7-vertex graphs — 0 mismatches. (3) buildConstrainedBuddyGraph over 772 feasible scenarios x 4 shuffled constraint-insertion orders (required/prohibited/prior sets permuted and endpoints swapped) — byte-identical results; traced that connectedComponents member order only reaches joinAnyComponents (provably inert, see below) and that swapJoin reads the sorted edgeList() and uses comps solely for owner/length. (4) polish and polishConstrained on 290 graphs x 3 shuffled insertion orders — identical outputs, so both public primitives that accept a caller-built Graph are functions of the edge set, not of insertion history. (5) grep of lib/src for Math.random / Date. / performance. / globalThis — only hit is the NODE_ENV contract guard at constrainedGreedy.ts:690.\n\nHARD-CONSTRAINT GUARANTEES: 3128 feasible random constraint sets through constrainedGreedy (no prohibited edge present, no required edge missing, no degree over k, reruns identical). 519 accepted + 81 refused runs through buildConstrainedBuddyGraph with adversarial option bags (priorWeight in {0,1,5,-1,NaN,Infinity}, polishIters in {0,1,50,-5,NaN}, priorHard, varied seeds), recomputing every returned field from result.edges: aspl, diameter, connected, largestComponentFraction, degreeMin/Max, regular, buddies, satisfied, the priorsKeptFraction null-contract, and `polished => edges differ from a polish:false build`. 0 failures, 0 throws. Mutation check of guard coverage: deleting the `cons.isProhibited(a,x) || cons.isProhibited(b,y)` line in swapJoin (constrainedGreedy.ts:491) makes npm test fail (2 tests) — the suite does police that path; source restored.\n\nORACLE PARITY: python3 test_core.py passes; python3 gen_fixtures.py regenerates lib/test/fixtures/reference.json byte-identically. Two fresh differential sweeps beyond the 9 committed fixtures: 405 random constrained cases vs constrained_gen.constrained_greedy — edge lists BYTE-IDENTICAL, connectivity identical (metric diffs only where Python inf was JSON-sanitized); 2360 ringGreedy configurations (n 2-60, k 2-6, mind in {2,3,5,7}, repair on/off) vs generators.ring_greedy — byte-identical edge sets and identical finalMind. End-to-end quality vs Python constrained_greedy + polish_constrained on 14 fresh scenarios: ASPL within +/-2%, connectivity identical.\n\nBOUNDARIES / BUDGETS: n in {0,1,2}, k in {0,1,>=n}, empty constraints, everyone-under-degree, one component vs many, mind clamping and the demotion floor at 3, k>=n capping, refusal-path placeholder sizing. Exhaustively enumerated the ENTIRE admitted (n,k) grid of both builders and confirmed checkPolishSize can never throw out of buildBuddyGraph/buildConstrainedBuddyGraph even with explicit polish:true (worst admitted n*(n+m) = 7.5e7 at (5000,4) against a 8.65e8 budget), so the documented \"refuses, never throws\" contract holds. Traced that validate is strictly stricter than checkWellFormed, so no input validate accepts can make the primitive throw.\n\nDISPLAYED VS ACTUAL: every field of BuddyResult and ConstrainedBuddyResult is derived from the same post-polish graph that produces `edges`; verified by rebuilding a Graph from result.edges and recomputing (see fuzz above). asplGap scored against degreeMax was checked to be non-negative across the grid n 2-14, k 2-7.\n\nHAND-TRACED, NO DEFECT: greedy.ts updateAfterEdge reads partially-updated rows in place, but every substituted value is a valid path length in the new graph, so it can neither under- nor over-shoot the true distance; the bridges-based merge test in swapJoin is exact in all four bridge/non-bridge combinations; penalizedAspl is Infinity only for n<=1, where both polish loops break before any Infinity-minus-Infinity comparison; the `stuck` memo in completion is monotone (completion only ever removes candidates), which is why the TS output matches Python's re-scanning loop exactly, and it is what makes forceConnect provably inert.\n\nThe gaps I went looking for are already closed by the suite: constrained.props.test.ts carries the insertion-order regression guard (buildReversed), the legal-edge-maximality property, and both fragmentation guards (component count AND largest-component size).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of every file in lib/src/core (graph.ts, greedy.ts, constraints.ts, constrainedGreedy.ts, metrics.ts, polish.ts, swap.ts, bounds.ts, budgets.ts, rng.ts, index.ts) plus lib/CLAUDE.md's known-limitations ledger and docs/PROJECT_PLAN.md's milestone list, against the task of implementing the project's actual next committed work (M3: F7 constraints UI, F8 fuzzy search/node explorer, F10 path finder; and F9 recalc, whose core primitives already exist per M1).\n\nConcretely attempted to extend the one seam lib/CLAUDE.md names as genuine open/closed: the TagPolicy switch in Constraints.fromTags (constraints.ts). Traced what a second policy (e.g. 'require_same', a cohort-must-pair variant) would touch: only the TagPolicy union and the switch's case list in constraints.ts. Verified by reading constrainedGreedy.ts's own precondition/postcondition comments (lines 683-687) that a new tag policy is explicitly exempted from the legalEdge/swapBreaksConstraint/assertHardConstraints/buildReport sync obligation that only a genuinely new hard-constraint *category* would trigger, and by grep that TagPolicy is re-exported as an opaque type with no exhaustive switch anywhere else in lib or app that would need updating. Ran a throwaway probe (lib/.review-scratch/tagpolicy-probe.ts, since deleted) exercising fromTags to confirm current behavior before reasoning about the diff. Conclusion: the seam pays as documented — a new policy is genuinely a one-file, one-switch-case change with no fan-out.\n\nAlso traced F10 (path finder) and confirmed it is already implemented in app/src/state/usePathFinder.ts directly against the exported shortestPath/Graph with zero additional core surface needed — the core's shortestPath/eccentricity (metrics.ts) already anticipated this consumer exactly as lib/CLAUDE.md's known-limitations entry describes. Traced F9 (recalc/minimal disruption): buildConstrainedBuddyGraph's priorWeight/priorHard/priorsKeptFraction and Constraints.addPrior already fully support 'preserve current buddies on roster change' with no new core API required; roster-index remapping on person add/remove is correctly left to the app layer, which is the right owner since Constraints operates on caller-supplied indices with no concept of a stable person identity. F7's core-aware tier (constrainedGreedy, validate/validateDetailed) is already built and already consumed by app/src/panels/ConstraintsEditor.tsx.\n\nRead swap.ts, rng.ts, bounds.ts, budgets.ts in full for over-engineering (unused indirection, single-variant patterns) and under-abstraction (duplicated logic that should share a seam) — found none: PolishMode has exactly two live variants used by one caller each, EdgePredicate is shared by exactly the two call sites that need it, and the cost-budget functions are intentionally NOT unified across the two generation paths for a stated, previously-measured reason (different cost shapes) rather than by omission.\n\nDeliberately did not file legalEdge/constrainedMeasure non-injectability (explained and intentional per lib/CLAUDE.md and this lens's own instructions), nor the already-self-documented dead ConstrainedGreedyOptions.minSeparation field (acknowledged, tracked, breaking-change-gated in the source's own comments — filing it would be re-stating the project's own existing finding, not a new one), nor fromTags' O(n²)/no-n-guard cost hazard (already an open, correctly-deferred item in lib/CLAUDE.md's known-limitations list with no live caller). Ran `npm run typecheck` and `npm test` (256/256 passing) to confirm the tree is currently green.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "All 11 core source files in lib/src: graph.ts, metrics.ts, constraints.ts, budgets.ts, bounds.ts, greedy.ts, polish.ts, swap.ts, rng.ts, constrainedGreedy.ts, and index.ts. Verified consistency of cost model estimators (constrainedWork, greedyWork, polishWork, boundedPolishIterations), traced public API contracts through entry points (buildBuddyGraph, buildConstrainedBuddyGraph, ringGreedy, constrainedGreedy, polish, polishConstrained), validated documented invariants against test suite, checked for duplication and drift risk in edge-counting and iteration-bounding logic, verified all comments describe current code behavior (not obsolete decisions), examined public surface for misuse-prone patterns (e.g., result type narrowing, silently-ignored parameters). Also reviewed test files (identity.test.ts, constrained.props.test.ts, optimizer.props.test.ts) to verify claimed test coverage. Lint gate (npm run lint) passes clean.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-interaction",
+      "reason": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 3,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (3) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 5,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (5 quiet rounds), surface untouched"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "the constrained generation gate prices only (n, k) and ignores the constraint set, so validate admits inputs whose real cost is several times the budget's documented ceiling",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`constrainedWork(n, k) = n*n*min(k, n-1)` is the only quantity `validate` / `checkWellFormed` compare against `MAX_CONSTRAINED_WORK`, and it has no term for the constraint set even though `validateDetailed` holds `cons` when it calls it. Every legality decision in the generator (`legalEdge`, `swapJoin`, `forceConnect`) is a `cons.isProhibited` probe — a template-string build plus a lookup in the prohibited `Set` — whose unit cost rises sharply with the size of that Set. The result is that a SPARSE roster sitting exactly at the work budget can cost several times the calibrated worst case, and `validate` returns `[]` for it. The gate itself is on the same curve: `validateDetailed` materialises every pair array (`pairsOf`) several times and then runs the O(n^2) `connectivityReasons` walk, all with the same per-probe penalty."
+      ],
+      "remediation": "Give the estimator the constraint set it is already handed: change `constrainedWork(n, k)` to `constrainedWork(n, k, cons)` (or add a separate `constraintWork` term) so the compared quantity includes `cons.prohibitedCount` — the generator performs O(n) prohibited probes per edge added plus O(n^2) in `connectivityReasons`, so a term such as `n*n*min(k,n-1) + PROBE_COST * cons.prohibitedCount` is the right shape. Recalibrate `MAX_CONSTRAINED_WORK` against the dense-prohibition shape rather than only the near-complete-k corner, mirror the new term in `reference-python`, and keep `validateDetailed` and `constrainedGreedy`'s `checkWellFormed` calling the same function so the refusal and the throw stay in step. Update the ceiling figures in the `MAX_CONSTRAINED_WORK` docblock and in `lib/CLAUDE.md`'s \"Generation cost scales as n^2*min(k,n-1)\" note, which states the same (n, k)-only model."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "cost-model-omits-input-dimension",
+      "theme": "the constrained generation gate prices only (n, k) and ignores the constraint set, so validate admits inputs whose real cost is several times the budget's documented ceiling",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 45,
+      "summary": "`constrainedWork(n, k) = n*n*min(k, n-1)` is the only quantity `validate` / `checkWellFormed` compare against `MAX_CONSTRAINED_WORK`, and it has no term for the constraint set even though `validateDetailed` holds `cons` when it calls it. Every legality decision in the generator (`legalEdge`, `swapJoin`, `forceConnect`) is a `cons.isProhibited` probe — a template-string build plus a lookup in the prohibited `Set` — whose unit cost rises sharply with the size of that Set. The result is that a SPARSE roster sitting exactly at the work budget can cost several times the calibrated worst case, and `validate` returns `[]` for it. The gate itself is on the same curve: `validateDetailed` materialises every pair array (`pairsOf`) several times and then runs the O(n^2) `connectivityReasons` walk, all with the same per-probe penalty.",
+      "failure": "Measured on this machine, all at n=5000, k=4, i.e. `constrainedWork` = 1e8 = exactly `MAX_CONSTRAINED_WORK`, all with `validate(cons, 4)` returning `[]` (repro: /home/user/ringweave/.review-scratch/dos-probe/p8.mjs and p9.mjs):\n  prohibitedCount = 0        -> validate ~0 ms,     constrainedGreedy 16.5 s\n  prohibitedCount = 1e6      -> validate 0.77 s,    constrainedGreedy 52.9 s\n  prohibitedCount = 5e6      -> validate 4.5 s,     constrainedGreedy 60.5 s\n  prohibitedCount = 9e6      -> validate 15.2 s,    constrainedGreedy 91.5 s\nEnd-to-end through the safe entry point: `buildConstrainedBuddyGraph(5000, 4, cons)` with 5e6 prohibited pairs returns after 81.4 s with `report.refusals.length === 0`. `MAX_CONSTRAINED_WORK`'s own docblock states the budget \"hold[s] worst-case generation to ~13 s for sparse rosters and ~46 s at the deepest allowed corner (n~464, k=n-1)\" — this is a sparse roster (k=4) exceeding both, by 2x at 9e6 pairs, and 15 s of that is spent inside the gate that is supposed to refuse it. A dense-prohibition block layout reproduces the same effect at lower n (p7.mjs: n=3000, k=4, 4.46e6 pairs -> 19.1 s at a modelled work of 3.6e7, a rate of 1.9e6 units/s, below the 2.2e6/s figure the constant is calibrated on). Present-day reachability: this is via the library's public API only — `app/src/constraints.ts` caps stored pairs at `MAX_CONSTRAINT_PAIRS = 200` and the app's n at 1000, so the shipping UI cannot reach it today; the amplification is also a bounded constant factor (prohibitedCount <= n(n-1)/2), not an unbounded hang. It is a calibration hole in the library's stated authoritative gate, not a live app DoS.",
+      "remediation": "Give the estimator the constraint set it is already handed: change `constrainedWork(n, k)` to `constrainedWork(n, k, cons)` (or add a separate `constraintWork` term) so the compared quantity includes `cons.prohibitedCount` — the generator performs O(n) prohibited probes per edge added plus O(n^2) in `connectivityReasons`, so a term such as `n*n*min(k,n-1) + PROBE_COST * cons.prohibitedCount` is the right shape. Recalibrate `MAX_CONSTRAINED_WORK` against the dense-prohibition shape rather than only the near-complete-k corner, mirror the new term in `reference-python`, and keep `validateDetailed` and `constrainedGreedy`'s `checkWellFormed` calling the same function so the refusal and the throw stay in step. Update the ceiling figures in the `MAX_CONSTRAINED_WORK` docblock and in `lib/CLAUDE.md`'s \"Generation cost scales as n^2*min(k,n-1)\" note, which states the same (n, k)-only model.",
+      "invariant": "For every `(n, k, cons)` for which `validate(cons, k)` returns `[]`, the cost estimate compared against `MAX_CONSTRAINED_WORK` must be non-decreasing in the constraint set: for any `cons1` whose required/prohibited/prior sets are subsets of `cons2`'s at the same `n`, `estimate(n, k, cons1) <= estimate(n, k, cons2)`, and `validate` must refuse whenever `estimate > MAX_CONSTRAINED_WORK`. Equivalently: adding prohibited pairs to an admitted input can only ever move it toward refusal, never leave it admitted at an unchanged estimate — so no input dimension the generator's inner loop probes is invisible to the gate.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "cost-model-omits-input-dimension",
+      "theme": "the constrained generation gate prices only (n, k) and ignores the constraint set, so validate admits inputs whose real cost is several times the budget's documented ceiling",
+      "file": "/home/user/ringweave/lib/src/core/budgets.ts",
+      "line": 45,
+      "summary": "`constrainedWork(n, k) = n*n*min(k, n-1)` is the only quantity `validate` / `checkWellFormed` compare against `MAX_CONSTRAINED_WORK`, and it has no term for the constraint set even though `validateDetailed` holds `cons` when it calls it. Every legality decision in the generator (`legalEdge`, `swapJoin`, `forceConnect`) is a `cons.isProhibited` probe — a template-string build plus a lookup in the prohibited `Set` — whose unit cost rises sharply with the size of that Set. The result is that a SPARSE roster sitting exactly at the work budget can cost several times the calibrated worst case, and `validate` returns `[]` for it. The gate itself is on the same curve: `validateDetailed` materialises every pair array (`pairsOf`) several times and then runs the O(n^2) `connectivityReasons` walk, all with the same per-probe penalty.",
+      "failure": "Measured on this machine, all at n=5000, k=4, i.e. `constrainedWork` = 1e8 = exactly `MAX_CONSTRAINED_WORK`, all with `validate(cons, 4)` returning `[]` (repro: /home/user/ringweave/.review-scratch/dos-probe/p8.mjs and p9.mjs):\n  prohibitedCount = 0        -> validate ~0 ms,     constrainedGreedy 16.5 s\n  prohibitedCount = 1e6      -> validate 0.77 s,    constrainedGreedy 52.9 s\n  prohibitedCount = 5e6      -> validate 4.5 s,     constrainedGreedy 60.5 s\n  prohibitedCount = 9e6      -> validate 15.2 s,    constrainedGreedy 91.5 s\nEnd-to-end through the safe entry point: `buildConstrainedBuddyGraph(5000, 4, cons)` with 5e6 prohibited pairs returns after 81.4 s with `report.refusals.length === 0`. `MAX_CONSTRAINED_WORK`'s own docblock states the budget \"hold[s] worst-case generation to ~13 s for sparse rosters and ~46 s at the deepest allowed corner (n~464, k=n-1)\" — this is a sparse roster (k=4) exceeding both, by 2x at 9e6 pairs, and 15 s of that is spent inside the gate that is supposed to refuse it. A dense-prohibition block layout reproduces the same effect at lower n (p7.mjs: n=3000, k=4, 4.46e6 pairs -> 19.1 s at a modelled work of 3.6e7, a rate of 1.9e6 units/s, below the 2.2e6/s figure the constant is calibrated on). Present-day reachability: this is via the library's public API only — `app/src/constraints.ts` caps stored pairs at `MAX_CONSTRAINT_PAIRS = 200` and the app's n at 1000, so the shipping UI cannot reach it today; the amplification is also a bounded constant factor (prohibitedCount <= n(n-1)/2), not an unbounded hang. It is a calibration hole in the library's stated authoritative gate, not a live app DoS.",
+      "remediation": "Give the estimator the constraint set it is already handed: change `constrainedWork(n, k)` to `constrainedWork(n, k, cons)` (or add a separate `constraintWork` term) so the compared quantity includes `cons.prohibitedCount` — the generator performs O(n) prohibited probes per edge added plus O(n^2) in `connectivityReasons`, so a term such as `n*n*min(k,n-1) + PROBE_COST * cons.prohibitedCount` is the right shape. Recalibrate `MAX_CONSTRAINED_WORK` against the dense-prohibition shape rather than only the near-complete-k corner, mirror the new term in `reference-python`, and keep `validateDetailed` and `constrainedGreedy`'s `checkWellFormed` calling the same function so the refusal and the throw stay in step. Update the ceiling figures in the `MAX_CONSTRAINED_WORK` docblock and in `lib/CLAUDE.md`'s \"Generation cost scales as n^2*min(k,n-1)\" note, which states the same (n, k)-only model.",
+      "invariant": "For every `(n, k, cons)` for which `validate(cons, k)` returns `[]`, the cost estimate compared against `MAX_CONSTRAINED_WORK` must be non-decreasing in the constraint set: for any `cons1` whose required/prohibited/prior sets are subsets of `cons2`'s at the same `n`, `estimate(n, k, cons1) <= estimate(n, k, cons2)`, and `validate` must refuse whenever `estimate > MAX_CONSTRAINED_WORK`. Equivalently: adding prohibited pairs to an admitted input can only ever move it toward refusal, never leave it admitted at an unchanged estimate — so no input dimension the generator's inner loop probes is invisible to the gate.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 1,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 4,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 18,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 5,
+      "lastRound": 18,
+      "skipped": true
+    }
+  },
+  "targetRaw": "lib/src (the ringweave core)",
+  "tokens": {
+    "subagentTokens": 530690,
+    "agents": 4,
+    "toolCalls": 155
+  }
+}

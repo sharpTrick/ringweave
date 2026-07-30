@@ -130,9 +130,9 @@ describe("largestComponentFraction", () => {
   });
 });
 
-// Ratchet: malformed n/k fed directly to the bounds exports must return a finite
-// result quickly — a non-integer k in ~(1.6,1.98) used to spin forever (denormal
-// fixed point). Per-test timeout so a regression fails as a timeout, not a hang.
+// A non-integer k in ~(1.6, 1.98) is the band that spins forever (denormal fixed point), which is
+// what the 1.9 / 1.95 entries are for; the per-test timeout makes a regression fail as a timeout
+// rather than hanging the suite.
 describe("mooreLowerBounds / asplGap reject malformed n,k (no infinite loop)", () => {
   const BAD = [-1, 0, 1.5, 1.9, 1.95, 2.5, Number.NaN, Infinity];
   it.each(BAD)("mooreLowerBounds(50, %p) is finite and terminates", (k) => {

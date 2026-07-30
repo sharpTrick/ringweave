@@ -1,0 +1,38 @@
+{
+  "note": "Ledger of scoring runs, written at launch rather than reconstructed from memory. A usage-limit halt can end a session, and a fresh context has no way to discover an in-flight run id otherwise. Recover partial state with: node scripts/sextant/recover-run.mjs <runId>",
+  "runs": [
+    {
+      "runId": "wf_09929847-e79",
+      "config": "proposed-model-diverse",
+      "script": ".claude/workflows/mutation-recall.js",
+      "seeds": 5,
+      "controls": 4,
+      "expectedAgents": "9 rounds x 5 lenses (+ triage per round)",
+      "status": "SUPERSEDED \u2014 died after a worker restart (journal last touched 16:18, discovered 19:43). Also ran at an UNSPECIFIED inherited reasoning effort, because the runner did not pass `effort` at all.",
+      "firstResultVoided": "The initial completion is VOID \u2014 see VOID-recall-diverse-contaminated.json. 33 of 49 agents died on a session limit and the runner scored the survivors as a whole ensemble.",
+      "argsRegeneration": "node -e 'const a=require(\"./docs/findings/critical-review/2026-07-25-sextant/data/allocation.json\"); console.log(JSON.stringify({config:\"proposed-model-diverse\",seeds:a.proseSubset.map(s=>({id:s.id,worktree:s.reviewTarget,file:s.file,line:s.line,stratum:s.stratum,class:s.class,theme:s.theme})),controls:a.controls.map(c=>({id:c.id,worktree:c.reviewTarget}))}))'",
+      "salvaged": "recovered-wf_09929847-e79.json \u2014 5/5 seeds FOUND (strict and loose). Durable as an existence result and it refutes the earlier 'sd-15 blind spot', since a positive detection cannot be undone by rerunning. NOT the pre-registered figure: effort was unspecified."
+    },
+    {
+      "runId": "wf_28dabccc-9c7",
+      "config": "proposed-model-diverse-medium-effort",
+      "script": ".claude/workflows/mutation-recall.js",
+      "seeds": 5,
+      "controls": 4,
+      "effort": "medium, now passed explicitly per lens (previously inherited from the session, silently contradicting the frontmatter and REVIEW_PROTOCOL.md)",
+      "status": "in-flight",
+      "whyFresh": "Adding `effort` to the agent options changes the cache key, so the prior run's 87 results cannot replay. That is correct rather than wasteful: they were produced at an unknown effort, and a configuration that was never specified is not one you can report.",
+      "supersedes": "wf_09929847-e79"
+    },
+    {
+      "runId": "wf_88887b29-0f5",
+      "config": "m3-review-loop",
+      "script": ".claude/workflows/adversarial-review.js",
+      "target": "lib/src",
+      "round": 1,
+      "purpose": "Part 4: run the M3 changes through the reformed loop to convergence. This is the loop under test, not a scoring run \u2014 its per-round output is the E2/E4 dataset.",
+      "status": "in-flight",
+      "note": "Runs concurrently with the recall run; they share one agent-concurrency pool, so both are slower in wall-clock than either alone. The seeded worktrees are pinned at the pre-M3 commit and live in their own working directories, so M3 commits on this branch cannot contaminate them."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "STATUS": "VOID — DO NOT QUOTE ANY NUMBER FROM THIS FILE",
+  "why": "A session-limit exhaustion killed 33 of 49 agents mid-run. The runner then mapped each dead agent's null return to a clean zero-finding lens with `errored` unset, so the harness scored rounds in which most lenses never ran. Kept as evidence of the defect, not as a result.",
+  "tells": [
+    "Every control reports findings:0 AND nothingFound:false AND errored:false — impossible for a healthy agent, and the signature of a swallowed null.",
+    "sd-15 reports converged:true with zero findings, i.e. the runner called a round clean in which nothing ran.",
+    "erroredSeeds was empty despite 33 agent failures, because the failures were inside rounds that still returned."
+  ],
+  "reportedButInvalid": { "recall": { "strict": 0.8, "loose": 0.8 }, "blindSpots": ["sd-15-edge-lit2-inverted"] },
+  "whyTheBlindSpotIsSuspect": "sd-15's lenses appear to have died rather than looked and missed, so calling it a blind spot would have been a fabricated negative result — the most misleading output this harness could produce.",
+  "fix": "adversarial-review.js now treats a null or malformed agent result as errored (agent() RETURNS null on a terminal API error; it does not throw, so .catch never fired). mutation-recall.js now excludes any round with a dead lens from the denominator and emits denominatorWarning.",
+  "runId": "wf_09929847-e79",
+  "agents": { "total": 49, "completed": 16, "failed": 33 }
+}

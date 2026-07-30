@@ -1,0 +1,451 @@
+{
+  "target": "app/src",
+  "round": 24,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 8,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 8
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 5,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full surface of app/src plus the named harness files. Constructed and RAN hostile inputs against the real sources (probes in /home/user/ringweave/.review-scratch/dos/, run through a scratch vitest config outside every test glob).\n\nImport path (/home/user/ringweave/app/src/io/importGraph.ts, readFileText.ts, schema.ts, exportGraph.ts): traced gate ordering end to end and confirmed every size/shape gate precedes the work it bounds. Measured worst legal file (n=1000, m=6000 12-regular circulant, 200 prohibited pairs) at 99 ms for the whole re-measure including allPairsSummary and girth. Measured checkJsonShape at 87 ms on 8 MB inside a single string literal, 78 ms on 8 MB of escape sequences, and JSON.parse at 15 ms on the largest input the 400k-node budget admits. Attempted to defeat the depth cap with unmatched `]` driving depth negative \u2014 reachable only with JSON that JSON.parse then rejects immediately, so no expensive work follows. Attempted to defeat the declared-pair cap with `constraints` as a string/number/array and with `required` as a non-array carrying a `length` \u2014 all refused. Checked -0, 1e21, 2**53, non-integer and NaN through sanitizeInt/sanitizeSettings/edge validation, and confirmed nothing non-finite survives assembleMetrics/finiteOrNull to reach JSON.stringify at the export boundary.\n\nSpreadsheet/clipboard sinks (download.ts, BuddyList.tsx, Slips.tsx, model.ts buddyLabel): traced that NAME_HOSTILE_CHARS plus parseRoster's comma/newline tokenisation plus importGraph's round-trip refusal make it impossible for a name to carry \\t, \\r, \\n, comma, U+2028/9 or a lone surrogate, and that trim() removes every leading Zs/BOM \u2014 so neutralizeCell's leading-char test has no embedded delimiter to be split around. Verified toCsv quotes every field (so a `=` inside the \"; \"-joined buddies cell stays in one cell even under a semicolon-locale reader) and that a name beginning with a double quote round-trips to a quote-prefixed literal rather than a formula. Clipboard text is newline-separated only, so each pasted row is a single cell whose leading name is neutralized.\n\nUntrusted text to the DOM: confirmed the one string reaching flash() without passing through quote() is JSON.parse's own SyntaxError message, and measured V8 truncating it to <=90 chars on five different 8 MB shapes. No innerHTML/dangerouslySetInnerHTML/eval anywhere; the only attacker-influenced attribute is a constant download filename.\n\nMain-thread cost: measured validateDetailed at the app ceiling (n=1000, 200 prohibited) at 3.7 ms, so RosterModal's per-keystroke constraint pre-flight is not the O(n^2) hazard it looks like; forceLayout at n=1000/m=6000 at 348 ms, capped by forceIters/FORCE_MAX_EDGES and equally reachable from ordinary generation. Checked neighborhood's degree-bounded claim against importGraph's per-vertex degree gate, search.ts's needle loop for unbounded scan (bounded by haystack length), useFocusTrap and useExplorerHistory for unbounded loops/stacks, and scripts/e2e/{run,drive}.mjs for unbounded waits (both have deadlines and kill the server on every exit path).\n\nThe one thing that broke is filed below.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Read the full app/src surface named in scope (App.tsx end-to-end, styles/app.css, styles/print.css, state/useFocusTrap.ts, test/responsiveCss.test.ts, scripts/e2e/drive.mjs, scripts/e2e/run.mjs) plus app/CLAUDE.md's already-recorded follow-ons (F9/F11/F12/F13, the deferred focus/ego layout) and lib/CLAUDE.md/PROJECT_PLAN.md to ground the extension scenario. Attempted the scenario concretely: traced what adding a new floating/nested panel (the shape F9's preserve-toggle disclosure, F12's what-if result, or F13's share-link panel would take) would touch across app.css's tier system, responsiveCss.test.ts's CSS-derived selector list, and drive.mjs's hand-maintained PANELS array. Also traced GraphCanvas's declared LAYOUT_MODES/FIT_MODES/positionsFor seam via LayoutToggle.tsx to see whether it holds up for the app's stated 2-variant case (it does: LayoutToggle maps generically over LAYOUT_MODES with zero per-mode code, and positionsFor's assertNever makes a third mode fail to compile until handled \u2014 a seam that pays, not a finding). Checked useFocusTrap.ts's single caller (RosterModal) \u2014 a plain ref-taking function, not a premature abstraction. Cross-referenced app/CLAUDE.md's own recorded traps (F12's Graph-removal pitfall, the focus/ego layout's four unresolved issues) to avoid re-filing what the project has already documented as a deferral.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full keyboard/SR path across App.tsx, PersonPanel.tsx, PathPanel.tsx, BuddyList.tsx, PersonSearch.tsx, LayoutToggle.tsx, RosterModal.tsx, ConstraintsEditor.tsx, SettingsControls.tsx, QualityPanel.tsx, Notice.tsx, Slips.tsx, GraphCanvas.tsx, and hooks useFocusTrap, useFocusRescue, useEscape, useExplorerHistory, usePathFinder, useNotice, useBuddyGraph, useGenerationWorker. Ran the scenario end to end (roster -> generate -> read quality numbers -> find a person -> read buddies -> export -> recover from a refusal/error) and specifically re-checked the three previously-reported least-astonishment bugs described in the prompt (path panel placement, path-as-mode toggle, Back-to-a-stranger) against the current code: all three are now correctly implemented (PathPanel sits above PersonPanel in DOM/CSS per app.css comment and is verified by scripts/e2e/drive.mjs; usePathFinder.toggle turns the mode off on a second press of the same source and PersonPanel exposes aria-pressed; useExplorerHistory resets the stack on an unrelated jump so Back is never offered to a stranger \u2014 also asserted in drive.mjs). Checked reduced-motion (JS tween in GraphCanvas.tsx gates on matchMedia, CSS has a blanket `* { transition:none; animation:none }` fallback), live-region pre-mounting (busy-live, sr-live x2, RosterModal's status region, ConstraintsEditor's rule-note, PersonSearch's search-empty, BuddyList's sr-live are all unconditionally mounted with conditional text), aria-pressed/aria-current tracking on LayoutToggle, PersonPanel's path button and BuddyList rows, the modal's focus trap and inert containment, and the app-global focus rescue's several documented races. Built and ran a throwaway Vitest probe (temporarily under app/test/, deleted before finishing) mounting the real App with a mocked worker to observe document.activeElement after (a) clicking a buddy chip inside an already-open PersonPanel and (b) clicking its Back button.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "The e2e harness spawns a server through an npx wrapper it never truly owns: SIGTERM does not reach the real vite preview child, so the process leaks and the next run's reachability check silently attaches to a stale server instead of the one it just built.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "stop() sends SIGTERM to the npx wrapper, which does not forward it to the vite preview child, so the preview server outlives every run; the next run's reachable() then succeeds against that leftover server and drive.mjs reports PASS/FAIL about a build nobody just made."
+      ],
+      "remediation": "Bypass the npx wrapper and spawn the real vite binary directly so the process this script controls is the process actually serving; stop() then kills the thing it started, removing the indirection layer that swallows the signal instead of adding new signal-forwarding or process-group logic."
+    },
+    {
+      "theme": "The responsive-layout stylesheet model the CSS guard builds from is narrower than what it claims to check \u2014 it drops out-of-order base fragments and filters positioning too tightly \u2014 so ordinary stylesheet mistakes can strand a panel while the guard stays green.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "placementAt concatenates the non-media tier first and the media tiers after it, and positionedSelectors only enumerates selectors that are absolute somewhere \u2014 so two ordinary stylesheet mistakes strand a panel at phone width while both assertions stay green."
+      ],
+      "remediation": "Remove the base-then-media reordering in placementAt so blocks are simply joined in source order, and remove the '=== absolute' restriction in positionedSelectors so it uses the single existing viewport-relative-positioning test already applicable to fixed elements \u2014 both are deletions of an overly narrow filter, not new machinery."
+    },
+    {
+      "theme": "A refusal-reporting branch re-derives its answer from a validator call whose result is provably empty at that point, because an earlier branch already consumed the non-empty case \u2014 so the loud failure path the codebase relies on for priors traps is silently empty instead.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The built.report.refusals.length > 0 branch answers with validateDetailed(cons, k), but line 80 already returned early when that call was non-empty \u2014 so this branch provably posts refusals: [], and the defensive path recorded in app/CLAUDE.md as the priors trap's loud failure is silent instead."
+      ],
+      "remediation": "Delete the re-derivation call in this branch and pass through built.report.refusals, the value the builder already computed \u2014 stop computing the same fact twice from two different code paths that can disagree."
+    },
+    {
+      "theme": "The 'already optimal' toast is decided by a predicate that checks two of the quality panel's three disclosures, so a graph can fail the disclosure the toast forgot to check and still claim optimality.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "meetsEverySetting checks isOptimal + targetShortfall + separationShortfall, but the quality panel renders a THIRD disclosure \u2014 constraintSummary \u2014 and it is not consulted, so a graph whose buddy rules were not met (or were never checked) can still produce \"That's already an optimal arrangement \u2014 a re-roll can't improve it.\""
+      ],
+      "remediation": "Extend the single existing predicate meetsEverySetting to also require zero constraint violations, and delete any separate ad hoc check at the call site \u2014 keep one predicate the toast and panel both read, rather than letting the toast maintain its own partial copy."
+    },
+    {
+      "theme": "A source comment states a geometric derivation the stylesheet no longer produces, so the next reader recalibrates a breakpoint from a stale number.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The comment justifying the 1360px breakpoint says \"the person column starts at viewport - 594px\", but #sidecol is right: calc(18px + 280px + 16px) with width: 250px, so it starts at viewport - 564px."
+      ],
+      "remediation": "Delete the restated arithmetic from the comment and keep only the non-obvious fact (which columns/toggle cross below this width) \u2014 the derivation duplicates values the stylesheet already holds and will go stale again the next time a width changes."
+    },
+    {
+      "theme": "The roster-parser size cap bounds code points but not per-character cost, and the per-keystroke synchronous parse it is meant to make affordable has a ~40x cost spread depending on which characters fill the budget, so an attacker-chosen roster can still make every keystroke lag.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "MAX_PARSE_CHARS is documented as the bound that makes the on-every-keystroke re-parse affordable, but the cost per code point is not constant: it is dominated by a per-token replace under a /u regex and by clampToPoints re-walking the string whenever UTF-16 length exceeds the cap \u2014 an astral roster does this at exactly half the cap, and one keystroke measured at 5.4ms for a benign 50k-name roster versus 223ms for an astral roster of the same code-point length."
+      ],
+      "remediation": "Remove the per-token control-character replace (fold the hostile class into the TOKEN regex so those characters never enter a token in the first place) and remove the redundant re-walk in clampToPoints for strings already known to sit at the cap \u2014 collapse two costly passes into the single pass the cap was supposed to already bound."
+    },
+    {
+      "theme": "The e2e layout harness and the CSS-completeness test each maintain their own separate, unlinked list of which panels must be checked, so #stage is present in one list and silently absent from the other with no recorded reason \u2014 and any future panel addition has to be remembered twice.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "responsiveCss.test.ts derives its panel list mechanically from app.css and pins it with a toEqual assertion, so a new position:absolute panel forces that test to fail until updated \u2014 but drive.mjs's PANELS array is a separate hand-typed literal with no relationship to the CSS-derived list and no completeness assertion; #stage is in the CSS-derived list but absent from PANELS, and the comment above PANELS ('every panel main renders, by the selector the stylesheet places it with') is false as written since it omits this exclusion.",
+        "#stage is checked in responsiveCss.test.ts as an absolutely-positioned element that must rejoin the flow at narrow width, but is not in the PANELS list for runtime layout verification, and the discrepancy is unexplained."
+      ],
+      "remediation": "Delete drive.mjs's hand-typed PANELS literal and have it import/derive the same CSS-derived selector list responsiveCss.test.ts already computes, so there is exactly one registry of checkable panels instead of two that can silently diverge."
+    },
+    {
+      "theme": "Selecting a new person from within an already-open PersonPanel (via a buddy chip or Back) unmounts the focused element without redirecting focus into the new content, so the app-global focus rescue lands the user back at <main> instead of where they were reading, breaking the app's core browse-buddies keyboard workflow.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "PersonPanel keeps the same <section id=\"person\"> mounted across a within-panel selection change, but its buddy/related chips and Back button are keyed by the OLD person's buddy indices, so the specific DOM node that had focus is unmounted on every hop; no code redirects focus to the new content, so App's global useFocusRescue catches it and lands focus on <main tabIndex={-1}> instead."
+      ],
+      "remediation": "Remove reliance on the generic global focus rescue for this in-panel case: after a within-panel selection change, move focus to the panel's own heading (already rendered, just add tabIndex={-1}) so the existing rescue mechanism is no longer the thing deciding where focus lands here."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "e2e-server-lifetime-not-owned",
+      "theme": "the end-to-end harness does not own the lifetime of the server it claims to build, serve and drive, so it can leak a server and then silently verify a stale build",
+      "file": "scripts/e2e/run.mjs",
+      "line": 28,
+      "summary": "`stop()` sends SIGTERM to the `npx` wrapper, which does not forward it to the `vite preview` child, so the preview server outlives every run; the next run's `reachable()` then succeeds against that leftover server and `drive.mjs` reports PASS/FAIL about a build nobody just made.",
+      "failure": "Reproduced twice under /home/user/ringweave/.review-scratch. (1) Spawn `npx vite preview --port 4199 --strictPort` exactly as run.mjs does, wait until it answers, send `server.kill(\"SIGTERM\")`, wait 2.5 s: `STILL SERVING AFTER SIGTERM TO npx: true`, and the server was still answering (HTTP 302 -> /ringweave/) after the parent node process had exited; `ps` showed 3 live vite processes. (2) With an unrelated HTTP server already bound to the port, run.mjs's verbatim `reachable()` loop returns true on its first iteration (it fetches BASE before the strictPort-failed vite has set `exitCode`), and the content `drive.mjs` would then drive is `<h1>STALE BUILD</h1>`. Concretely: run `npm run e2e`, change app source, run `npm run e2e` again -> the second run drives the first run's leaked server, so every check reports on the OLD bundle while claiming to test \"the PRODUCTION BUILD ... so what is checked is what ships\".",
+      "remediation": "Own the process group rather than the wrapper: spawn with `detached: true` and `process.kill(-server.pid, \"SIGTERM\")` in `stop()`, or bypass `npx` entirely and spawn `process.execPath` on `app/node_modules/vite/bin/vite.js`. Close the sibling in the same change: `reachable()` must not accept a server this script did not start \u2014 check `server.exitCode !== null` *after* a failed-to-bind grace period, or have the spawned server print its ready line to stdout and gate on that, so a port already in use is a hard failure instead of a silent redirect to somebody else's build.",
+      "invariant": "After `scripts/e2e/run.mjs` terminates by ANY path (success, check failure, throw, SIGINT/SIGTERM), nothing is listening on `E2E_PORT`; and `drive.mjs` is only ever spawned against a server whose process this run started and still owns."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "guard-model-false-negative",
+      "theme": "the responsive-layout guard states a completeness property about panels rejoining the flow that its stylesheet model does not actually deliver",
+      "file": "app/test/responsiveCss.test.ts",
+      "line": 61,
+      "summary": "`placementAt` concatenates the non-media tier first and the media tiers after it, and `positionedSelectors` only enumerates selectors that are `absolute` somewhere \u2014 so two ordinary stylesheet mistakes strand a panel at phone width while both assertions stay green.",
+      "failure": "Both reproduced with the guard's helpers copied verbatim (/home/user/ringweave/.review-scratch/guard.mjs, probe1.mjs, probe4.mjs) against the real app.css. (a) Cascade order: append `#rail { position: absolute; left: 500px; }` to the END of app.css (after the `@media (max-width: 820px)` block). Browser: `@media` adds no specificity and this rule is later in source order, so `#rail` computes `absolute; left:500px` at 390px and paints at x=500..710 of a 390px viewport. Guard: `strandedPanels` returns `[]` because it evaluates `[base, 1360, 820]` in that fixed order and sees the narrow tier's `position: static` last. (b) Never-absolute panels: insert `#newpanel { position: fixed; top:14px; left:700px; width:250px }` with no entry in any media tier. Browser: off a 390px viewport at every width. Guard: `positionedSelectors` filters on `position === \"absolute\"`, so `#newpanel` is never enumerated \u2014 `strandedPanels` returns `[]` AND the pinned list assertion `[\"#buddies\",\"#rail\",\"#rightcol\",\"#sidecol\",\"#stage\",\"#toggle\"]` still passes unchanged. The docblock's claim (\"a panel missing from it is the whole defect\"; \"enumerates them so a new one cannot be forgotten\") is therefore false for both.",
+      "remediation": "Make `tiers()` emit blocks in source order including the base fragments that follow a media block, and have `placementAt` join them in that order rather than base-then-media. Widen `positionedSelectors` from `=== \"absolute\"` to \"any viewport-relative positioning\" (`absolute` or `fixed`), which is the property the check is actually about \u2014 a `fixed` panel carrying a viewport-edge offset is stranded for exactly the same reason. Both are subtractions from the current filters, not new machinery.",
+      "invariant": "For every selector S and every width W, the guard's computed placement of S equals the browser's computed `position`/inset for S at W \u2014 i.e. declarations are evaluated in stylesheet source order, and every selector the cascade ever positions out of normal flow (`absolute` OR `fixed`) is enumerated for the narrow-tier check."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "provably-empty-refusal-channel",
+      "theme": "a refusal reaching the user must carry the reason it was refused for, not a re-derivation that is guaranteed to be empty",
+      "file": "app/src/worker/generate.ts",
+      "line": 87,
+      "summary": "The `built.report.refusals.length > 0` branch answers with `validateDetailed(cons, k)`, but line 80 already returned early when that call was non-empty \u2014 so this branch provably posts `refusals: []`, and the defensive path recorded in app/CLAUDE.md as the priors trap's loud failure is silent instead.",
+      "failure": "Trace: `runGeneration` computes `refusals = validateDetailed(cons, k)` at line 80 and returns `{kind:\"refused\"}` if non-empty. Reaching line 87 therefore implies `validateDetailed(cons, k).length === 0`. The call at line 93 is the same pure function on the same arguments, so `refusals` is always `[]`. Downstream in App.tsx:150 that yields `describeReasons([], names)[0] ?? \"Those buddy rules can't all be met.\"` and `anyAboutARule([]) === false`, so the dialog reopens with the generic sentence and the buddy-rules disclosure stays CLOSED. The reachable trigger is the one app/CLAUDE.md names: `buildConstrainedBuddyGraph` validates `withHardPriors(cons)` (lib/src/core/index.ts:289) while the app validates the un-promoted `cons`, so the moment priors exist a refusal that only exists after promotion arrives with zero reasons \u2014 exactly the case this branch was written to make loud. It is also hit today by lib/src/core/index.ts:275 and :281 (roster size invalid / `n !== cons.n`), which the app's own MAX_ROSTER_N gate keeps unreachable.",
+      "remediation": "Do not re-derive: surface what the builder actually reported. Either re-run the validator over the same set the builder validated, or carry `built.report.refusals` through the response (widening the `refused` payload to accept prose reasons alongside structured ones) so the channel can never be empty. Guard it with the invariant below rather than with a comment.",
+      "invariant": "For every `GenerateRequest`, if `runGeneration(req).kind === \"refused\"` then `refusals.length > 0`."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "per-keystroke-reparse-cost-budget",
+      "theme": "the roster size cap counts characters, but the per-character cost varies ~40x with what those characters are, so a cap calibrated on plain names does not bound the synchronous per-keystroke re-parse an attacker-chosen roster forces",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 12,
+      "summary": "MAX_PARSE_CHARS is documented as the bound that makes the on-every-keystroke re-parse affordable (\"this parse re-runs on every keystroke, so both totals are bounded here\"), and RosterModal calls parseRoster synchronously inside a render-path useMemo keyed on `text`. The cap bounds CODE POINTS, but the cost per code point is not constant: it is dominated by `match[0].replace(CONTROL_CHARS, \" \")` over a whole token under a /u regex, and by clampToPoints re-walking the string whenever `text.length` (UTF-16 units) exceeds the cap, which an astral roster does at exactly half the cap. Measured against the real source, one keystroke costs 5.4 ms for a benign 50k-name roster and 223 ms for a roster of the same code-point length made of astral characters \u2014 a ~40x spread entirely inside the documented budget. Nothing debounces, defers or memoizes across the keystroke, and RosterModal is the whole accessible document when it is open.",
+      "failure": "Drop a .txt file of 500,000 U+200B (zero-width space, BMP, exactly at MAX_PARSE_CHARS, so no truncation warning fires) onto the roster dialog, or paste 500,000 U+1F600. readFileText accepts it (well under 8 MB) and setRoster stores it. Every subsequent keystroke in the textarea then runs capText + parseRoster synchronously in render: measured 165.5 ms/keystroke for the ZWSP file and 223.5 ms/keystroke for the astral one, against 5.4 ms for an equally long roster of ordinary names (node 24, /home/user/ringweave/.review-scratch/dos/probeRoster.test.ts). The ZWSP roster yields ZERO names, so the entire cost buys nothing. On a phone-class device this multiplies out to roughly a second per character, which is a frozen dialog rather than jank. The guard that should have stopped it is MAX_PARSE_CHARS itself: it is enforced, it is not bypassed, and it still admits the input \u2014 because it bounds how many characters are scanned and not what scanning one costs.",
+      "remediation": "Bound the per-keystroke work rather than only the character count. Cheapest correct fix: hoist the control-character normalization out of the per-token `replace` and do it once over the capped text (or fold the hostile class into the TOKEN regex so those characters are non-token characters and never enter a token), and give clampToPoints a path that avoids re-walking a string already known to sit at the cap \u2014 currently the UTF-16 fast path can never fire for an astral roster, so it pays the full walk on every keystroke forever. Then add a shape-independent cost-budget test alongside the existing layout one (FORCE_MIN_TICKS has the same shape), asserting the ratio in the invariant.",
+      "invariant": "For every string s of at most MAX_PARSE_CHARS code points, the synchronous cost of one roster keystroke \u2014 clampToPoints(s, MAX_PARSE_CHARS) followed by parseRoster on the result \u2014 is within a fixed small constant factor (e.g. 4x) of the cost for an ASCII roster of the same code-point length. Equivalently: the number of character-level operations parseRoster and capText perform together is O(MAX_PARSE_CHARS) with a constant independent of the Unicode class and token structure of s. This is a ratio bound quantified over all admissible inputs and is property-testable over arbitrary generated Unicode strings; it is not satisfied by special-casing any particular character.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-manual-registry",
+      "theme": "the e2e layout-geometry harness and the CSS-completeness test maintain two independent, unlinked lists of 'the panels that must be checked', so extending the panel set (which F9/F12/F13 will all do) does not automatically extend geometry coverage the way it automatically extends the CSS check",
+      "file": "scripts/e2e/drive.mjs",
+      "line": 50,
+      "summary": "responsiveCss.test.ts derives its panel list mechanically from app.css (positionedSelectors(tiers(APP_CSS))) and pins it with a non-vacuity toEqual([...]) assertion, so a new position:absolute panel forces that test to fail until the array is updated \u2014 a seam that pays. drive.mjs's PANELS array (used by checkLayout for off-screen/overlap detection in a real browser, the check that exists specifically because #sidecol shipped off-screen at phone width) is a separate, hand-typed literal with no relationship to the CSS-derived list and no assertion that it is complete relative to it. Concretely: responsiveCss.test.ts's own positioned-selector list currently contains #stage, but drive.mjs's PANELS does not (a defensible exclusion \u2014 #stage is deliberately layered under every floating panel by design, so including it would manufacture false 'overlap' failures against #rail/#toggle/#sidecol/#buddies \u2014 but that reasoning lives nowhere: drive.mjs's comment above PANELS claims 'Every panel <main> renders, by the selector the stylesheet places it with', which is false as written since #stage is one such panel and is not in the list).",
+      "failure": "Add a new floating/nested panel for a real committed feature (e.g. F12's what-if result card, or F9's disruption-report disclosure, following the existing #route/#person pattern of a card inside #sidecol, or a new position:absolute panel like #route/#person's siblings) and forget to add its selector to drive.mjs's PANELS: `npm test` (responsiveCss.test.ts) only fails if the new panel is itself position:absolute in some tier and thus CSS-auto-discovered \u2014 a card nested inside #sidecol (like #route/#person today) triggers no such failure at all, since positionedSelectors only walks explicit position:absolute rules. `npm run e2e` then silently stops checking that panel's off-screen/overlap behavior at all five viewports \u2014 exactly the class of defect (`#sidecol` at x=-174 on a 390px phone) the harness was built to catch \u2014 with zero red signal anywhere in CI.",
+      "remediation": "Either derive PANELS in drive.mjs from the same source responsiveCss.test.ts uses (export the CSS-derived selector list, or read app.css in drive.mjs the same way and union it with the known nested-card selectors), or add a completeness assertion \u2014 e.g. a short Node script/test that fails when a DOM id present in App.tsx's rendered markup is absent from both PANELS and a documented allow-list of intentional exclusions (#stage). At minimum, correct the comment above PANELS so it states the #stage exclusion and the reason (it is deliberately layered under the floating panels), so a future contributor extending the list does not have to re-derive that reasoning from scratch or copy the gap forward.",
+      "invariant": "every selector id that App.tsx (or a panel it renders) exposes as a distinct floating or nested-card region reachable by a real user must appear either in scripts/e2e/drive.mjs's PANELS array or in a documented, reasoned exclusion list \u2014 no selector should be addable to the rendered UI without a mechanical prompt (test failure) to decide which bucket it goes in"
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "test-coverage-inconsistency",
+      "theme": "inconsistent test coverage between static CSS tests and runtime browser tests for positioned elements",
+      "file": "/home/user/ringweave/scripts/e2e/drive.mjs",
+      "line": 50,
+      "summary": "#stage is checked in responsiveCss.test.ts as an absolutely-positioned element that must rejoin the flow at narrow width, but is not in the PANELS list for runtime layout verification",
+      "failure": "PANELS list at line 50-51 is [\"#rail\", \"#toggle\", \"#rightcol\", \"#sidecol\", \"#route\", \"#person\", \"#buddies\", \"#search\", \".hint\", \"#metrics\"], missing #stage. Yet responsiveCss.test.ts line 114 expects positionedSelectors to include [\"#buddies\", \"#rail\", \"#rightcol\", \"#sidecol\", \"#stage\", \"#toggle\"]. If #stage's CSS positioning breaks at narrow viewport (e.g., remains absolute at 820px when it should be relative), drive.mjs will not detect it even though responsiveCss.test.ts checks it statically.",
+      "remediation": "Either (1) add \"#stage\" to the PANELS list in drive.mjs line 50 to include it in runtime layout checks, or (2) add a comment explaining why #stage is deliberately excluded despite being absolutely-positioned and therefore in the responsiveCss.test.ts list. Currently the discrepancy is unexplained and could confuse future maintainers.",
+      "invariant": "For every selector that responsiveCss.test.ts includes in positionedSelectors (selectors positioned absolutely at any viewport tier), either (a) that selector is in the PANELS list for runtime verification, or (b) there is an explicit comment in drive.mjs explaining why it is excluded.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "focus-context-loss-on-in-panel-navigation",
+      "theme": "Selecting a new person from *within* the already-open PersonPanel (a buddy/related-person chip, or Back) does not keep focus inside that panel; it resets to the page's <main> landmark, so a keyboard/screen-reader user doing the app's core 'find someone, then browse who their buddies are' workflow loses their place after every hop and has to Tab from the very top of the document (through the reroll/edit-people buttons, the layout toggle, etc.) to get back into the panel they were just reading.",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 33,
+      "summary": "PersonPanel keeps the same <section id=\"person\"> mounted across a within-panel selection change (App.tsx only unmounts it when `selected === null`), but its buddy/related chips and its Back button are keyed by the OLD person's buddy indices, so the specific DOM node that had focus is unmounted on every hop. No code redirects focus to the new content (e.g. the new <h2> or a control inside the panel), so App's global useFocusRescue (App.tsx:91-105) catches it by its generic contract and lands focus on <main tabIndex={-1}> instead \u2014 a valid but contextless target.",
+      "failure": "Reproduced with an 8-person roster: select Alice (BuddyList row), focus her first buddy chip (\"Bob\"), press Enter/click it. document.activeElement becomes the <main> element (its full textContent spans the whole app UI) rather than anything inside #person. Same result clicking \"\u2190 Back\" after a hop. scripts/e2e/drive.mjs exercises this exact sequence (lines 270-277, \"every name in the panel is clickable\") but only asserts the new h2 text, never where focus lands, so the gap is untested end to end as well as in the unit suite.",
+      "remediation": "After a within-panel selection change (the chip/Back paths, as distinct from a panel opening/closing), move focus explicitly to a stable element that survives the re-render \u2014 e.g. the panel's <h2> (with tabIndex={-1}) or the Close button \u2014 rather than leaving it to the app-global rescue, whose contract is 'land somewhere reachable,' not 'stay where the user was working.'",
+      "invariant": "For any control inside #person whose activation replaces that panel's own content while the panel itself remains mounted (a related-person chip, or Back), document.activeElement immediately after the resulting update must be contained within #person \u2014 not merely 'reachable' or 'not <body>'.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "e2e-server-lifetime-not-owned",
+      "theme": "the end-to-end harness does not own the lifetime of the server it claims to build, serve and drive, so it can leak a server and then silently verify a stale build",
+      "file": "scripts/e2e/run.mjs",
+      "line": 28,
+      "summary": "`stop()` sends SIGTERM to the `npx` wrapper, which does not forward it to the `vite preview` child, so the preview server outlives every run; the next run's `reachable()` then succeeds against that leftover server and `drive.mjs` reports PASS/FAIL about a build nobody just made.",
+      "failure": "Reproduced twice under /home/user/ringweave/.review-scratch. (1) Spawn `npx vite preview --port 4199 --strictPort` exactly as run.mjs does, wait until it answers, send `server.kill(\"SIGTERM\")`, wait 2.5 s: `STILL SERVING AFTER SIGTERM TO npx: true`, and the server was still answering (HTTP 302 -> /ringweave/) after the parent node process had exited; `ps` showed 3 live vite processes. (2) With an unrelated HTTP server already bound to the port, run.mjs's verbatim `reachable()` loop returns true on its first iteration (it fetches BASE before the strictPort-failed vite has set `exitCode`), and the content `drive.mjs` would then drive is `<h1>STALE BUILD</h1>`. Concretely: run `npm run e2e`, change app source, run `npm run e2e` again -> the second run drives the first run's leaked server, so every check reports on the OLD bundle while claiming to test \"the PRODUCTION BUILD ... so what is checked is what ships\".",
+      "remediation": "Own the process group rather than the wrapper: spawn with `detached: true` and `process.kill(-server.pid, \"SIGTERM\")` in `stop()`, or bypass `npx` entirely and spawn `process.execPath` on `app/node_modules/vite/bin/vite.js`. Close the sibling in the same change: `reachable()` must not accept a server this script did not start \u2014 check `server.exitCode !== null` *after* a failed-to-bind grace period, or have the spawned server print its ready line to stdout and gate on that, so a port already in use is a hard failure instead of a silent redirect to somebody else's build.",
+      "invariant": "After `scripts/e2e/run.mjs` terminates by ANY path (success, check failure, throw, SIGINT/SIGTERM), nothing is listening on `E2E_PORT`; and `drive.mjs` is only ever spawned against a server whose process this run started and still owns."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "guard-model-false-negative",
+      "theme": "the responsive-layout guard states a completeness property about panels rejoining the flow that its stylesheet model does not actually deliver",
+      "file": "app/test/responsiveCss.test.ts",
+      "line": 61,
+      "summary": "`placementAt` concatenates the non-media tier first and the media tiers after it, and `positionedSelectors` only enumerates selectors that are `absolute` somewhere \u2014 so two ordinary stylesheet mistakes strand a panel at phone width while both assertions stay green.",
+      "failure": "Both reproduced with the guard's helpers copied verbatim (/home/user/ringweave/.review-scratch/guard.mjs, probe1.mjs, probe4.mjs) against the real app.css. (a) Cascade order: append `#rail { position: absolute; left: 500px; }` to the END of app.css (after the `@media (max-width: 820px)` block). Browser: `@media` adds no specificity and this rule is later in source order, so `#rail` computes `absolute; left:500px` at 390px and paints at x=500..710 of a 390px viewport. Guard: `strandedPanels` returns `[]` because it evaluates `[base, 1360, 820]` in that fixed order and sees the narrow tier's `position: static` last. (b) Never-absolute panels: insert `#newpanel { position: fixed; top:14px; left:700px; width:250px }` with no entry in any media tier. Browser: off a 390px viewport at every width. Guard: `positionedSelectors` filters on `position === \"absolute\"`, so `#newpanel` is never enumerated \u2014 `strandedPanels` returns `[]` AND the pinned list assertion `[\"#buddies\",\"#rail\",\"#rightcol\",\"#sidecol\",\"#stage\",\"#toggle\"]` still passes unchanged. The docblock's claim (\"a panel missing from it is the whole defect\"; \"enumerates them so a new one cannot be forgotten\") is therefore false for both.",
+      "remediation": "Make `tiers()` emit blocks in source order including the base fragments that follow a media block, and have `placementAt` join them in that order rather than base-then-media. Widen `positionedSelectors` from `=== \"absolute\"` to \"any viewport-relative positioning\" (`absolute` or `fixed`), which is the property the check is actually about \u2014 a `fixed` panel carrying a viewport-edge offset is stranded for exactly the same reason. Both are subtractions from the current filters, not new machinery.",
+      "invariant": "For every selector S and every width W, the guard's computed placement of S equals the browser's computed `position`/inset for S at W \u2014 i.e. declarations are evaluated in stylesheet source order, and every selector the cascade ever positions out of normal flow (`absolute` OR `fixed`) is enumerated for the narrow-tier check."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "provably-empty-refusal-channel",
+      "theme": "a refusal reaching the user must carry the reason it was refused for, not a re-derivation that is guaranteed to be empty",
+      "file": "app/src/worker/generate.ts",
+      "line": 87,
+      "summary": "The `built.report.refusals.length > 0` branch answers with `validateDetailed(cons, k)`, but line 80 already returned early when that call was non-empty \u2014 so this branch provably posts `refusals: []`, and the defensive path recorded in app/CLAUDE.md as the priors trap's loud failure is silent instead.",
+      "failure": "Trace: `runGeneration` computes `refusals = validateDetailed(cons, k)` at line 80 and returns `{kind:\"refused\"}` if non-empty. Reaching line 87 therefore implies `validateDetailed(cons, k).length === 0`. The call at line 93 is the same pure function on the same arguments, so `refusals` is always `[]`. Downstream in App.tsx:150 that yields `describeReasons([], names)[0] ?? \"Those buddy rules can't all be met.\"` and `anyAboutARule([]) === false`, so the dialog reopens with the generic sentence and the buddy-rules disclosure stays CLOSED. The reachable trigger is the one app/CLAUDE.md names: `buildConstrainedBuddyGraph` validates `withHardPriors(cons)` (lib/src/core/index.ts:289) while the app validates the un-promoted `cons`, so the moment priors exist a refusal that only exists after promotion arrives with zero reasons \u2014 exactly the case this branch was written to make loud. It is also hit today by lib/src/core/index.ts:275 and :281 (roster size invalid / `n !== cons.n`), which the app's own MAX_ROSTER_N gate keeps unreachable.",
+      "remediation": "Do not re-derive: surface what the builder actually reported. Either re-run the validator over the same set the builder validated, or carry `built.report.refusals` through the response (widening the `refused` payload to accept prose reasons alongside structured ones) so the channel can never be empty. Guard it with the invariant below rather than with a comment.",
+      "invariant": "For every `GenerateRequest`, if `runGeneration(req).kind === \"refused\"` then `refusals.length > 0`."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "comment-arithmetic-now-false",
+      "theme": "a source comment states a geometric number the stylesheet no longer computes, so the next reader recalibrates a breakpoint from a wrong premise",
+      "file": "app/src/styles/app.css",
+      "line": 290,
+      "summary": "The comment justifying the 1360px breakpoint says \"the person column starts at `viewport - 594px`\", but `#sidecol` is `right: calc(18px + 280px + 16px)` with `width: 250px`, so it starts at `viewport - 564px`.",
+      "failure": "Read the rule it describes: `#sidecol { right: calc(var(--gutter) + var(--col-w) + var(--col-gap)); width: 250px }` with `--gutter: 18px`, `--col-w: 280px`, `--col-gap: 16px` (app.css:27-29, 158). Left edge = viewport \u2212 314 \u2212 250 = viewport \u2212 564, not \u2212 594. 594 is what the arithmetic gives for `width: 280px`, i.e. the value before the column was narrowed to 250. Working the comment's own crossing equation with the true number gives 1280px, not the ~1360 it derives; the shipped breakpoint is still safe, but a reader tightening it would trust a 30px cushion that is not there.",
+      "remediation": "Either correct the figure to 564 (and the derived crossing width), or delete the arithmetic and keep only the non-obvious fact \u2014 that two card columns and a centre-anchored toggle cross below this width \u2014 since the derivation restates values the stylesheet already holds and will go stale again on the next width change.",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "per-keystroke-reparse-cost-budget",
+      "theme": "the roster size cap counts characters, but the per-character cost varies ~40x with what those characters are, so a cap calibrated on plain names does not bound the synchronous per-keystroke re-parse an attacker-chosen roster forces",
+      "file": "/home/user/ringweave/app/src/io/parseRoster.ts",
+      "line": 12,
+      "summary": "MAX_PARSE_CHARS is documented as the bound that makes the on-every-keystroke re-parse affordable (\"this parse re-runs on every keystroke, so both totals are bounded here\"), and RosterModal calls parseRoster synchronously inside a render-path useMemo keyed on `text`. The cap bounds CODE POINTS, but the cost per code point is not constant: it is dominated by `match[0].replace(CONTROL_CHARS, \" \")` over a whole token under a /u regex, and by clampToPoints re-walking the string whenever `text.length` (UTF-16 units) exceeds the cap, which an astral roster does at exactly half the cap. Measured against the real source, one keystroke costs 5.4 ms for a benign 50k-name roster and 223 ms for a roster of the same code-point length made of astral characters \u2014 a ~40x spread entirely inside the documented budget. Nothing debounces, defers or memoizes across the keystroke, and RosterModal is the whole accessible document when it is open.",
+      "failure": "Drop a .txt file of 500,000 U+200B (zero-width space, BMP, exactly at MAX_PARSE_CHARS, so no truncation warning fires) onto the roster dialog, or paste 500,000 U+1F600. readFileText accepts it (well under 8 MB) and setRoster stores it. Every subsequent keystroke in the textarea then runs capText + parseRoster synchronously in render: measured 165.5 ms/keystroke for the ZWSP file and 223.5 ms/keystroke for the astral one, against 5.4 ms for an equally long roster of ordinary names (node 24, /home/user/ringweave/.review-scratch/dos/probeRoster.test.ts). The ZWSP roster yields ZERO names, so the entire cost buys nothing. On a phone-class device this multiplies out to roughly a second per character, which is a frozen dialog rather than jank. The guard that should have stopped it is MAX_PARSE_CHARS itself: it is enforced, it is not bypassed, and it still admits the input \u2014 because it bounds how many characters are scanned and not what scanning one costs.",
+      "remediation": "Bound the per-keystroke work rather than only the character count. Cheapest correct fix: hoist the control-character normalization out of the per-token `replace` and do it once over the capped text (or fold the hostile class into the TOKEN regex so those characters are non-token characters and never enter a token), and give clampToPoints a path that avoids re-walking a string already known to sit at the cap \u2014 currently the UTF-16 fast path can never fire for an astral roster, so it pays the full walk on every keystroke forever. Then add a shape-independent cost-budget test alongside the existing layout one (FORCE_MIN_TICKS has the same shape), asserting the ratio in the invariant.",
+      "invariant": "For every string s of at most MAX_PARSE_CHARS code points, the synchronous cost of one roster keystroke \u2014 clampToPoints(s, MAX_PARSE_CHARS) followed by parseRoster on the result \u2014 is within a fixed small constant factor (e.g. 4x) of the cost for an ASCII roster of the same code-point length. Equivalently: the number of character-level operations parseRoster and capText perform together is O(MAX_PARSE_CHARS) with a constant independent of the Unicode class and token structure of s. This is a ratio bound quantified over all admissible inputs and is property-testable over arbitrary generated Unicode strings; it is not satisfied by special-casing any particular character.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-manual-registry",
+      "theme": "the e2e layout-geometry harness and the CSS-completeness test maintain two independent, unlinked lists of 'the panels that must be checked', so extending the panel set (which F9/F12/F13 will all do) does not automatically extend geometry coverage the way it automatically extends the CSS check",
+      "file": "scripts/e2e/drive.mjs",
+      "line": 50,
+      "summary": "responsiveCss.test.ts derives its panel list mechanically from app.css (positionedSelectors(tiers(APP_CSS))) and pins it with a non-vacuity toEqual([...]) assertion, so a new position:absolute panel forces that test to fail until the array is updated \u2014 a seam that pays. drive.mjs's PANELS array (used by checkLayout for off-screen/overlap detection in a real browser, the check that exists specifically because #sidecol shipped off-screen at phone width) is a separate, hand-typed literal with no relationship to the CSS-derived list and no assertion that it is complete relative to it. Concretely: responsiveCss.test.ts's own positioned-selector list currently contains #stage, but drive.mjs's PANELS does not (a defensible exclusion \u2014 #stage is deliberately layered under every floating panel by design, so including it would manufacture false 'overlap' failures against #rail/#toggle/#sidecol/#buddies \u2014 but that reasoning lives nowhere: drive.mjs's comment above PANELS claims 'Every panel <main> renders, by the selector the stylesheet places it with', which is false as written since #stage is one such panel and is not in the list).",
+      "failure": "Add a new floating/nested panel for a real committed feature (e.g. F12's what-if result card, or F9's disruption-report disclosure, following the existing #route/#person pattern of a card inside #sidecol, or a new position:absolute panel like #route/#person's siblings) and forget to add its selector to drive.mjs's PANELS: `npm test` (responsiveCss.test.ts) only fails if the new panel is itself position:absolute in some tier and thus CSS-auto-discovered \u2014 a card nested inside #sidecol (like #route/#person today) triggers no such failure at all, since positionedSelectors only walks explicit position:absolute rules. `npm run e2e` then silently stops checking that panel's off-screen/overlap behavior at all five viewports \u2014 exactly the class of defect (`#sidecol` at x=-174 on a 390px phone) the harness was built to catch \u2014 with zero red signal anywhere in CI.",
+      "remediation": "Either derive PANELS in drive.mjs from the same source responsiveCss.test.ts uses (export the CSS-derived selector list, or read app.css in drive.mjs the same way and union it with the known nested-card selectors), or add a completeness assertion \u2014 e.g. a short Node script/test that fails when a DOM id present in App.tsx's rendered markup is absent from both PANELS and a documented allow-list of intentional exclusions (#stage). At minimum, correct the comment above PANELS so it states the #stage exclusion and the reason (it is deliberately layered under the floating panels), so a future contributor extending the list does not have to re-derive that reasoning from scratch or copy the gap forward.",
+      "invariant": "every selector id that App.tsx (or a panel it renders) exposes as a distinct floating or nested-card region reachable by a real user must appear either in scripts/e2e/drive.mjs's PANELS array or in a documented, reasoned exclusion list \u2014 no selector should be addable to the rendered UI without a mechanical prompt (test failure) to decide which bucket it goes in"
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "test-coverage-inconsistency",
+      "theme": "inconsistent test coverage between static CSS tests and runtime browser tests for positioned elements",
+      "file": "/home/user/ringweave/scripts/e2e/drive.mjs",
+      "line": 50,
+      "summary": "#stage is checked in responsiveCss.test.ts as an absolutely-positioned element that must rejoin the flow at narrow width, but is not in the PANELS list for runtime layout verification",
+      "failure": "PANELS list at line 50-51 is [\"#rail\", \"#toggle\", \"#rightcol\", \"#sidecol\", \"#route\", \"#person\", \"#buddies\", \"#search\", \".hint\", \"#metrics\"], missing #stage. Yet responsiveCss.test.ts line 114 expects positionedSelectors to include [\"#buddies\", \"#rail\", \"#rightcol\", \"#sidecol\", \"#stage\", \"#toggle\"]. If #stage's CSS positioning breaks at narrow viewport (e.g., remains absolute at 820px when it should be relative), drive.mjs will not detect it even though responsiveCss.test.ts checks it statically.",
+      "remediation": "Either (1) add \"#stage\" to the PANELS list in drive.mjs line 50 to include it in runtime layout checks, or (2) add a comment explaining why #stage is deliberately excluded despite being absolutely-positioned and therefore in the responsiveCss.test.ts list. Currently the discrepancy is unexplained and could confuse future maintainers.",
+      "invariant": "For every selector that responsiveCss.test.ts includes in positionedSelectors (selectors positioned absolutely at any viewport tier), either (a) that selector is in the PANELS list for runtime verification, or (b) there is an explicit comment in drive.mjs explaining why it is excluded.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "focus-context-loss-on-in-panel-navigation",
+      "theme": "Selecting a new person from *within* the already-open PersonPanel (a buddy/related-person chip, or Back) does not keep focus inside that panel; it resets to the page's <main> landmark, so a keyboard/screen-reader user doing the app's core 'find someone, then browse who their buddies are' workflow loses their place after every hop and has to Tab from the very top of the document (through the reroll/edit-people buttons, the layout toggle, etc.) to get back into the panel they were just reading.",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 33,
+      "summary": "PersonPanel keeps the same <section id=\"person\"> mounted across a within-panel selection change (App.tsx only unmounts it when `selected === null`), but its buddy/related chips and its Back button are keyed by the OLD person's buddy indices, so the specific DOM node that had focus is unmounted on every hop. No code redirects focus to the new content (e.g. the new <h2> or a control inside the panel), so App's global useFocusRescue (App.tsx:91-105) catches it by its generic contract and lands focus on <main tabIndex={-1}> instead \u2014 a valid but contextless target.",
+      "failure": "Reproduced with an 8-person roster: select Alice (BuddyList row), focus her first buddy chip (\"Bob\"), press Enter/click it. document.activeElement becomes the <main> element (its full textContent spans the whole app UI) rather than anything inside #person. Same result clicking \"\u2190 Back\" after a hop. scripts/e2e/drive.mjs exercises this exact sequence (lines 270-277, \"every name in the panel is clickable\") but only asserts the new h2 text, never where focus lands, so the gap is untested end to end as well as in the unit suite.",
+      "remediation": "After a within-panel selection change (the chip/Back paths, as distinct from a panel opening/closing), move focus explicitly to a stable element that survives the re-render \u2014 e.g. the panel's <h2> (with tabIndex={-1}) or the Close button \u2014 rather than leaving it to the app-global rescue, whose contract is 'land somewhere reachable,' not 'stay where the user was working.'",
+      "invariant": "For any control inside #person whose activation replaces that panel's own content while the panel itself remains mounted (a related-person chip, or Back), document.activeElement immediately after the resulting update must be contained within #person \u2014 not merely 'reachable' or 'not <body>'.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "optimality-claim-outruns-disclosures",
+      "theme": "the 'already optimal' toast must be false whenever the quality panel is still disclosing something the graph did not deliver",
+      "file": "app/src/model.ts",
+      "line": 127,
+      "summary": "`meetsEverySetting` checks `isOptimal` + `targetShortfall` + `separationShortfall`, but the quality panel renders a THIRD disclosure \u2014 `constraintSummary` \u2014 and it is not consulted, so a graph whose buddy rules were not met (or were never checked) can still produce \"That's already an optimal arrangement \u2014 a re-roll can't improve it.\"",
+      "failure": "`QualityPanel.tsx:64` renders `constraintSummary(view)` as a `.rules-line` alongside the two shortfall lines. `constraintSummary` returns `\"N of M buddy rules couldn't be met\"` when `report.reqViolations + report.prohViolations > 0`, and `\"N buddy rules saved with this graph \u2014 not re-checked on import.\"` when `report === null` with rules present (every imported constrained graph). `meetsEverySetting` reads neither. Note `separationShortfall` returns null whenever `constraints.length > 0`, so for a constrained view the predicate collapses to `isOptimal && targetShortfall === null` \u2014 nothing in it is about the rules at all. I could not reach the violation case from the app: 15,600 randomized constrained builds (n 5..14, k 2..5, /home/user/ringweave/.review-scratch/probe3.mjs) produced zero reports with `refusals.length === 0 && reqViolations + prohViolations > 0`, so today this rests on the core continuing to place every required edge and no prohibited one \u2014 hence PLAUSIBLE, not CONFIRMED. This is the literal sibling of the defect the comment at App.tsx:37-41 records as already fixed once (\"'Optimal' has to mean every disclosure the quality panel is making is clear, not just the buddy count\").",
+      "remediation": "Fold the rules disclosure into the same predicate: `meetsEverySetting` should additionally require `view.report !== null ? view.report.reqViolations + view.report.prohViolations === 0 : view.constraints.length === 0`. Keeping the panel and the toast on one predicate is what the function already exists for; extend it rather than adding a second test at the App.tsx call site.",
+      "invariant": "`meetsEverySetting(v) === true` implies the quality panel renders no unmet-expectation line for `v` \u2014 i.e. `targetShortfall(v) === null && separationShortfall(v) === null && (v.constraints.length === 0 || (v.report !== null && v.report.reqViolations + v.report.prohViolations === 0))`."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 24,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 24,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 24,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 24,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 24,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app), plus its layout/e2e harness \u2014 app/src/styles/*.css, app/src/App.tsx, app/src/state/useFocusTrap.ts, app/test/responsiveCss.test.ts, scripts/e2e/drive.mjs and scripts/e2e/run.mjs",
+  "tokens": {
+    "subagentTokens": 651679,
+    "agents": 6,
+    "toolCalls": 256
+  }
+}

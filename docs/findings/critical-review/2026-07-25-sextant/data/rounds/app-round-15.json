@@ -1,0 +1,483 @@
+{
+  "target": "app/src",
+  "round": 15,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 10,
+    "blocking": 2,
+    "deferrals": 3,
+    "plausible": 1,
+    "themes": 5
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/app/src (App.tsx, model.ts, constraints.ts, neighborhood.ts, search.ts, sample.ts, io/*, graph/*, panels/*, state/*, worker/*) plus the relevant core seams in /home/user/ringweave/lib/src/core (graph.ts, metrics.ts, bounds.ts, index.ts) and the whole app/test suite (286 tests, green before and after).\n\nReproduced with throwaway probes under /home/user/ringweave/.review-scratch/r-app (probe1-5, run via a scratch vitest config; nothing left in app/test):\n- Determinism: grepped app/src for Math.random/Date.now/Set-or-Map iteration order. Only ordered consumers found (parseRoster's `extras` Map is insertion-ordered; PersonPanel sorts neighbourhood Sets before render; highlight.ts only does `.has`). Verified `forceLayout` is byte-identical with Math.random stubbed to 0.999999 and 0.000001 (probe4). `shortestPath` traced: it BFSes from `t` and takes `min` neighbour, so it is Set-order-free, and `usePathFinder` canonicalises on min(from,to) before orienting.\n- Hard-constraint guarantees through the app: 60-trial fuzz of `runGeneration` with random required/prohibited sets, asserting `report.reqViolations`/`prohViolations` equal the violations actually present in `result.edges` (probe1) — no disagreement.\n- Displayed vs actual: probe3 asserts, over degenerate shapes (n=1, n=2 edgeless, two disjoint triangles, path, cycle), that quality===0 whenever aspl===null, that a disconnected graph has aspl/diameter null and gauge 0 and never reads \"well-linked\", and that isOptimal implies connected. All hold.\n- Round-trip: generation -> viewFromResult -> exportGraph -> importGraph reproduces metrics, buddies and edges exactly for (6,2),(13,3),(20,4),(3,2) (probe1); export(import(f)) is idempotent (probe3).\n- parseRoster idempotence, which importGraph's round-trip gate depends on: 10 hostile inputs including NBSP, 200 emoji, a 119-char name plus an astral char, all-blank/comma tokens — idempotent, and every emitted name passes importGraph's own gates (probe3).\n- Boundaries traced by hand: n<=2, k>=n, feasibility k<2 / n<k+1 / n>MAX_ROSTER_N, MAX_NAMES=1000 cap, MAX_NAME_CHARS=120 in code points, MAX_CONSTRAINT_PAIRS=200 on both the editor and the import paths, the import density gate vs the per-vertex degree gate (a degree-13 hub is refused), computeFit at n=1 (verified the huge-scale cancellation is exact in float64), clampText/clampToPoints/clampList/codePointsIfOver off-by-ones, nextRerollSeed at SEED_MAX, useExplorerHistory MAX_HISTORY slice, PersonSearch activeIndex clamping.\n- React/StrictMode: useGenerationWorker id-correlation and worker swap, useBuddyGraph's `consumed`/`pending` guards against a stale result clobbering an import, GraphCanvas's forceFitRef render-time write, the settings re-sync effect, the refusal/error effect's dependency set.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial pass over app/src, constructing and RUNNING hostile inputs (harnesses in /home/user/ringweave/.review-scratch/, gitignored).\n\nGATE ORDERING (io/importGraph.ts): traced the whole sequence — people.length<=MAX_IMPORT_N(1000) -> edges is array -> density 2m<=BUDDY_MAX*n -> declaredPairs<=MAX_CONSTRAINT_PAIRS(200) -> per-name 120-code-point cap -> control-char refusal -> total-length + parseRoster round-trip -> O(m) per-edge validation -> per-vertex degreeMax<=BUDDY_MAX -> readConstraints -> ONLY THEN allPairsSummary/girth/largestComponentFraction. Every bound precedes the work it bounds. Measured worst admissible file (n=1000, m=6000 6-regular circulant) = 91 ms synchronous re-measure; n=1000 edgeless 9 ms; n=1000 path (diameter 999) 78 ms.\n\nATTACKER-CHOSEN NUMBERS: {buddies:1e9,minSeparation:1e9,seed:-0,polish:true} -> {12,12,0}; {buddies:MAX_SAFE_INTEGER,minSeparation:2.5,seed:1e308} -> {12,5,2147483647}; constraints:{required:{length:1e9}} refused by the pair-count gate before any per-pair work (0.0 ms); constraints:[] (array) refused, not silently dropped; required+prohibited on the same pair refused; duplicate rule refused; people:{length:1e9} refused. Reroll from a ceiling import never dispatches unbounded work (rerollBlockReason blocks at n=1000 for every clamped k; constrained path refused by the core's MAX_CONSTRAINED_WORK = 1e8 vs constrainedWork(1000,12)=1.2e10).\n\nSPREADSHEET/CLIPBOARD SINK: enumerated every sink (toCsv, copyText in BuddyList.tsx, downloadBlob). Both name authorities agree on the class \\\\p{Cc}\\\\p{Cf}\\\\p{Zl}\\\\p{Zp}\\\\p{Cs} (parseRoster normalizes to space, importGraph refuses) — verified refusal for U+2028, lone surrogate \\\\ud800, U+202E; acceptance for NBSP and semicolon names. Therefore no name in view.names can carry \\\\t, \\\\r, \\\\n, U+2028/9 or a comma, so no embedded-delimiter split exists at either sink; toCsv also RFC-4180-quotes every cell and neutralizeCell runs per cell (not leading-cell-only). '=HYPERLINK(...)', '+1', '@SUM(1)', '\"=1+1' all come out inert. The un-neutralized buddy half of the clipboard line is never cell-leading.\n\nMAIN-THREAD HANGS: force settle 214 ms at n=1000/m=5979/40 ticks, 167 ms at the n=120 knee, 180 ms at n=400 — tick scaling holds; animation gated at ANIM_MAX_N=400. parseRoster per keystroke on 500 K chars: all-duplicates 'a\\\\n'x250k = 33 ms, 1000 distinct + 200k dups = 42 ms, 250k commas = 33 ms, one 500k-char token = 1.5 ms, mixed-case dups = 31 ms; clampToPoints on 8 MB = 37 ms. validateDetailed's O(n^2) prohibited-connectivity walk (re-run by RosterModal's ruleProblems memo on every keystroke) = 1.9 ms at n=1000 with 1 prohibited pair, 2.1 ms with 200. rankMatches with a 200-char emoji query over 1000 x 120-char names = 2.5 ms.\n\nNUMERIC EDGES / EXPORT BOUNDARY: fuzzed 4200 admissible import shapes (n=1..14, random edge sets), asserting no non-finite value in Metrics, quality===0 whenever disconnected, no 'NaN'/'Infinity' substring in exportGraphJson, and export->import fixpoint. Zero failures. asplGap's asplLb<=0 guard plus assembleMetrics's connected&&isFinite gate close the NaN path; -0 seed normalizes to 0; version 1.0 === 1 accepted as intended.\n\nALSO READ AND TRACED WITHOUT FINDING A BREAK: readFileText 8 MB pre-parse gate; App.handleImportFile try/catch (JSON.parse RangeError on deep nesting is an Error and is caught); clamp.ts (codePointsIfOver bounded at max+1, surrogate-safe); useNotice sink clamp (300 chars); PersonSearch maxLength=200 + ECHO_MAX; RosterModal capText pre-cap; ConstraintsEditor single datalist + 200-pair cap; useGenerationWorker worker swap/terminate + onerror/onmessageerror; GraphCanvas lazy force memo and DOM node counts at n=1000 (~12k nodes); neighborhood O(k^2) with degree bounded by the import degree gate; useExplorerHistory MAX_HISTORY; pathStatusText/selectionStatusText clampList bounds.\n\nINCIDENTAL (not filed — test-timing artifact, not product behavior): app/test/parseRoster.test.ts:93 asserts wall-clock < 500 ms and failed once under full-suite parallel load, then passed in isolation at 242 ms.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 2,
+      "checked": "Full-surface read of app/src for the F9 (\"recalculate with minimal disruption\") extension the project has actually committed to next (docs/PROJECT_PLAN.md M4, app/CLAUDE.md \"Known follow-ons\"): traced worker/protocol.ts, worker/generate.ts, constraints.ts, state/useBuddyGraph.ts, state/useGenerationWorker.ts (implied), model.ts, panels/RosterModal.tsx, panels/SettingsControls.tsx to see what a priors toggle would actually touch. Also attempted the app's declared seam (GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor triple, layout.ts) against the focus/ego-layout extension named in app/CLAUDE.md. Read the composition root (App.tsx) for god-component risk, and the newer M3 surfaces (ConstraintsEditor.tsx, PersonPanel.tsx, usePathFinder.ts, useExplorerHistory.ts, useGraph.ts, neighborhood.ts, search.ts, feasibility.ts, importGraph.ts) for responsibility leaks, over-abstraction, and OCP breaks. Verified via grep that priorWeight/priorHard/addPrior (the core's existing priors API) have zero references under app/src.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 5,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Walked the full cold-load → roster → generate → quality → find person → buddies → path → export → error-recovery flow across app/src: App.tsx (inert containment, focus rescue, live regions, dispatch/reroll/cancel/import paths), RosterModal.tsx (mount-time focus, reopen-reason description, note-stack live region), GraphCanvas.tsx + LayoutToggle.tsx (reduced-motion gating of the JS tween, aria-pressed), BuddyList.tsx, PersonPanel.tsx, PersonSearch.tsx (combobox pattern, Escape propagation, empty-result live region), PathPanel.tsx + usePathFinder.ts, QualityPanel.tsx, ConstraintsEditor.tsx, SettingsControls.tsx, Notice.tsx, Slips.tsx, and the mechanism hooks useFocusRescue.ts, useEscape.ts, useExplorerHistory.ts, useNotice.ts, useGenerationWorker.ts, useBuddyGraph.ts. Cross-checked app.css for prefers-reduced-motion coverage and for :focus/:focus-visible replacement (border-color substitutes where outline is suppressed — no bare removal found). Traced the useFocusRescue MutationObserver mechanism against the specific transition where #app newly becomes inert (reroll dispatch) and confirmed empirically (jsdom MutationObserver probe + a scratch App-level test) that every such transition is coincident with a childList mutation elsewhere (the busy overlay mounting, or RosterModal mounting/unmounting), so the observer does fire — this hypothesis did not hold up and is not filed. Built throwaway harnesses under .review-scratch/ (gitignored, outside test globs) to reproduce two findings directly against the real components before filing.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "State committed after generate/reroll is assembled ad hoc, per-field, from a mix of the pre-dispatch request and the post-dispatch resolved view — with no single reconciliation point. This drops rule rows that didn't resolve (rebuilt from view.constraints), lets the Advanced/export polish setting describe a pass that never ran (view.settings keeps the un-downgraded value), and forces three rounds of hand-tuned dispatch ordering just to keep seed/settings honest.",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness",
+        "critic-correctness",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "handleReroll re-derives rule-editor rows from view.constraints/view.names via toNamedPairs, silently deleting any row that didn't resolve to an index pair (unmatched names, half-typed rows, duplicates) — the exact index-reconstruction the code's own comments forbid.",
+        "generate() downgrades an explicit polish:true to \"auto\" before dispatch, but pending.current.settings keeps the original un-downgraded value, so view.settings.polish (shown in the Advanced panel and written into the export file) describes a pass that never actually ran — the same class of bug as the seed-drift issue the surrounding comments were written to fix.",
+        "Reroll dispatch deliberately commits view.settings (not the locally-built request) with seed synthesized only for dispatch and synced back afterward; the three-round debate documented in the surrounding comment shows this ordering is fragile and easy to regress."
+      ],
+      "remediation": "Stop reconstructing committed state field-by-field from two different sources (the request vs. the resolved view). Delete the two divergent writes — the setConstraintRows(toNamedPairs(view.constraints, view.names)) call in handleReroll, and the separate un-downgraded polish value kept in pending.current.settings — so the only thing ever written back to App/hook state after a generate is the single settings object that was actually dispatched, and rows are left untouched unless the source is a full file import (the one place index-only data legitimately exists)."
+    },
+    {
+      "theme": "Documented extension seams for features the plan has committed to but not yet scheduled (F9 minimal-disruption recalc priors, a third GraphCanvas layout mode) have no caller today, so their real shape is still speculative.",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid",
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "F9 (priors-based recalc) would require coordinated changes across GenerateRequest/GenerateOptions/ConstraintPair, useBuddyGraph's dispatch, and an undecided UI home in RosterModal — none of which currently know about 'the previous view's edges'.",
+        "GraphCanvas's LAYOUT_MODES/FIT_MODES/positionsFor seam is exhaustive and sound for its two existing cases (ring/force), but has only ever served one variant pair; the only candidate third case (focus/ego layout) is explicitly deferred with four unresolved hazards cataloged in app/CLAUDE.md."
+      ],
+      "remediation": "No code change now — the correct subtraction is to not build either seam ahead of a real caller (no speculative GenerateOptions fields, no generalized positionsFor signature) until F9 or focus/ego layout is actually scheduled."
+    },
+    {
+      "theme": "A function or prop signature is looser or vaguer than what the implementation actually requires, leaving room for a future caller to violate a constraint the code never states in its type or name.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "neighborhood() performs a degree-capped walk (max 144 ops) but its name gives no hint of the bounded-degree assumption, only the JSDoc does.",
+        "GraphCanvas's route prop is typed optional (number[] | null | undefined) but buildHighlight needs null specifically; App.tsx coerces with route ?? null at its one call site today, but nothing stops a future caller from passing undefined straight through."
+      ],
+      "remediation": "Tighten the signature instead of documenting around it: make GraphCanvas's route prop required as `route: number[] | null` (drop the optional/undefined case) so the ?? null coercion collapses into the type itself and no caller can skip it; leave neighborhood's cap as the existing JSDoc rather than adding a second explanation."
+    },
+    {
+      "theme": "An invariant that spans two code locations (a boundary-crossing assumption) is upheld by convention rather than being enforced at a single point, so the two sites can silently drift apart.",
+      "severity": "suggestion",
+      "critics": [
+        "critic-maintainability",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "toConstraints() normalizes pair order to required-then-prohibited regardless of input order; RosterModal's pre-flight check and the worker's check rely on this normalization matching, but the equivalence is implicit and undocumented at either call site.",
+        "PersonPanel documents its index parameter as requiring [0, view.names.length) but only App.tsx's caller enforces the range — PersonPanel itself has no guard, so reuse elsewhere would inherit an unenforced precondition."
+      ],
+      "remediation": "Remove the duplicate/split enforcement instead of documenting it: drop RosterModal's separate pre-flight ordering-dependent constraint check and rely solely on the worker's post-build validation (already the source of truth via report.refusals) as the one place order-equivalence matters; likewise drop the caller-side range guard in App.tsx and let PersonPanel's own eccentricity call be the sole enforcement point for its index precondition."
+    },
+    {
+      "theme": "A confirmable keyboard/screen-reader action produces no perceivable feedback whenever the live-region text happens not to change — at a clamped boundary, or on an identical repeat within the auto-clear window — so the user cannot tell their press registered.",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction",
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "The 'Buddies each' stepper clamps silently at BUDDY_MIN/MAX: the live-region text doesn't change and the +/- buttons carry no disabled state, unlike ConstraintsEditor's atCap pattern, so a keyboard/screen-reader user gets no signal they've hit the limit.",
+        "BuddyList's Copy button feedback lives entirely in the live-region text; pressing Copy again while the label still reads 'Copied' (within the 4s auto-clear window) sets identical text, so the region doesn't re-announce and a same-window re-press is silent."
+      ],
+      "remediation": "Eliminate the code path that lets a triggering action leave the live-region text unchanged: disable the +/- buttons at BUDDY_MIN/BUDDY_MAX (mirroring ConstraintsEditor's disabled={atCap}) so a no-op press can't happen at all, and clear the live region before rewriting it on every Copy press so identical successive messages can never survive untouched."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-row-deletion-on-reroll",
+      "theme": "the rules the user TYPED and the rules that RESOLVED are two different things, and one code path quietly replaces the first with the second",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 253,
+      "summary": "`handleReroll` re-derives the rule-editor rows from the view's resolved index pairs (`toNamedPairs(view.constraints, view.names)`), so pressing \"Different arrangement\" silently deletes every row that did not resolve — a row naming somebody not in the roster, a half-typed row, or a duplicate — which is exactly the index-reconstruction the code documents as forbidden (RosterModal's `rules` prop comment and the editor's \"kept and flagged, never deleted\" contract).",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/r-app/probe2.test.tsx against the real `App`: roster A..F; rule 1 = A/B (required), rule 2 = A/\"Zoe\" (Zoe not in the roster, flagged), rule 3 = C/\"\" (half typed). Generate -> reopen \"Edit people\": all three rows present (assertion passes). Then click \"↻ Different arrangement\", let the worker resolve, reopen \"Edit people\": expected {row2:\"Zoe\", row3:true}, got {row2:null, row3:false} — rows 2 and 3 are gone with no notice. Only the resolvable A/B row survives. No existing test covers this: constraintsFlow.test.tsx exercises RosterModal in isolation and nothing in app/test asserts on `constraintRows` across a reroll.",
+      "remediation": "Do not re-commit rows on the reroll path at all — `constraintRows` already holds the rows the user last submitted and the reroll changes neither the roster nor the rules, so drop the `setConstraintRows(toNamedPairs(...))` call (and, for the same reason, `setNames(view.names)` is only safe because `view.names` IS the parsed roster). Close the theme rather than the case: make `toNamedPairs` reachable from exactly one call site — `applyImported`, where the file carries only index pairs and there are no typed rows to lose — so no future dispatch path can rebuild rows from indices.",
+      "invariant": "For every code path other than import, the `NamedPair[]` committed to App's `constraintRows` is content-identical to the rows the user last submitted; equivalently, `toNamedPairs(view.constraints, view.names)` may only be assigned to `constraintRows` on the import path, and for all other paths `constraintRows` after the transition equals `constraintRows` before it."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stored-setting-does-not-describe-the-graph",
+      "theme": "a setting shown in the Advanced panel and written into the exported file must be the setting the displayed graph was actually built with",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 214,
+      "summary": "`generate` downgrades an explicit `polish: true` to `\"auto\"` before dispatch (so the core declines it), but `pending.current.settings` keeps the un-downgraded `polish: true`, so `view.settings.polish` — the value the Advanced panel renders and `exportGraph` writes into `settings.polish` — describes a pass that never ran. This is the same class as the seed drift the surrounding comments were written to fix (\"the Advanced → Seed field showing a seed that does not produce the displayed graph\"), one field over.",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/r-app/probe5.test.ts: n=80, k=12 (autoPolishEnabled(80,12,{constrained:false}) === false). The app dispatches options.polish=\"auto\" and the core declines, so the graph is unpolished; the view/file keep settings.polish === true. Feeding the exported `settings` straight back into `buildBuddyGraph(80, 12, {polish:true, seed:12345})` yields a DIFFERENT edge list from `file.edges` (assertion `same: true` -> `same: false`). The organizer's file therefore records a configuration that does not reproduce the graph beside it.",
+      "remediation": "Store the DISPATCHED options on the view rather than the requested ones: have `generate` write the downgraded `polish` into `pending.current.settings` so `view.settings` (and hence the Advanced panel, the export file, and the next reroll) is the configuration that actually produced the edges. If the user's raw choice must still be shown, keep it as a separate editor-side field rather than letting the view carry a value the graph does not satisfy.",
+      "invariant": "For every GraphView produced by generation, re-running the same builder with `view.settings` at `view.names.length` reproduces `view.edges` exactly — i.e. `view.settings` is always the option set that was dispatched, never a superseded request."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-name",
+      "theme": "Function name does not convey its performance-critical bounded-degree assumption",
+      "file": "/home/user/ringweave/app/src/neighborhood.ts",
+      "line": 24,
+      "summary": "neighborhood() performs a degree-capped walk (max 144 operations), not a general neighborhood computation, but the name does not indicate this constraint",
+      "failure": "A maintainer reading the function name and JSDoc might assume it computes unrestricted neighbors and be surprised by the degree cap or consider refactoring it to use Graph BFS (defeating the performance optimization). CLAUDE.md documents the exception but the code itself does not make the constraint obvious.",
+      "remediation": "Rename to `degreeCappedbNeighborhood()` or `boundedNeighborhood()`, or add a comment at line 24 clarifying: 'Limited to BUDDY_MAX degree per node for performance (O(k²) vs O(n+m))'. The JSDoc mentions the cap but the function signature does not hint at it."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fragile-logic-pattern",
+      "theme": "Multiple review rounds tuning state-dispatch ordering in reroll path creates maintenance hazard",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 237,
+      "summary": "Reroll dispatch deliberately commits view.settings (not s) to state, with seed synthesized only for dispatch, then synced back from the resulting view. The comment (lines 237-250) documents three rounds of prior debate about this.",
+      "failure": "The logic is correct: (1) compute s with new seed, (2) commit view.settings to state, (3) dispatch with s, (4) sync view back. But someone reading only part of this logic or trying to 'simplify' by committing s directly would reintroduce the desync bug that motivated the current structure. New maintainers may not realize the three-part contract between handleReroll, setSettings, and the useEffect at line 124.",
+      "remediation": "Extract the dispatch-and-sync contract into a named helper function: `function rerollWithNewSeed(view: GraphView, settings: Settings): void { const s = {...}; setSettings(view.settings); bg.generate(view.names, s, ...). }` This would make the atomic operation and its invariants explicit. Or add an invariant test: after a successful reroll, verify that App.settings.seed equals view.settings.seed."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "implicit-ordering",
+      "theme": "Constraint order is implicitly normalized across abstraction boundaries, creating a hidden invariant",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 93,
+      "summary": "toConstraints() normalizes ConstraintPair order to 'required-then-prohibited' regardless of input order. This normalization is implicit and lives in the middle of the constraint flow, so the equivalence between RosterModal's pre-check (using resolveNamedPairs order) and the worker's check (using joinPairs order) is not obvious.",
+      "failure": "If someone refactors toConstraints() to not split and re-order (e.g., to preserve input order for debugging), the pre-check and worker validation could diverge and produce different Constraints. The tests pass, but the implicit contract is not documented in the calling code.",
+      "remediation": "Add a comment at the toConstraints call site (constraints.ts line 93) and in RosterModal (around line 144): '// toConstraints normalizes to required-then-prohibited regardless of input order, so pre-flight and worker validation are equivalent'. Or move the normalization into splitPairs() and make it explicit in the return type."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-bounded-control",
+      "theme": "a custom stepper's clamp-at-bound state has no accessible representation, so a keyboard/screen-reader user who presses past the limit gets no perceivable feedback that anything happened",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 36,
+      "summary": "The 'Buddies each' stepper (+/- buttons around a role=\"status\" live-region span) is reachable and operable by keyboard, and the component's own comment (lines 28-34) explicitly reasons about announcing the new value after a press because a focus-retaining button gives no other feedback. But when settings.buddies is already at BUDDY_MAX (12) or BUDDY_MIN (2), setK() clamps the result back to the same value, so the live-region text does not change, the buttons carry no `disabled`/`aria-disabled`, and there is no boundary message anywhere (contrast ConstraintsEditor's 'Add a buddy rule', which both disables at MAX_CONSTRAINT_PAIRS and has a `role=\"status\"` note explaining why). A screen-reader user (or any keyboard user relying on the announced value) pressing '+' repeatedly at the ceiling hears nothing and has no way to distinguish 'my press didn't register' from 'I'm already at the limit'.",
+      "failure": "Render SettingsControls with settings.buddies = BUDDY_MAX (12). Press the '+' button (aria-label 'more buddies, currently 12') three times. The role=\"status\" span's textContent stays \"12\" → \"12\" → \"12\" (no DOM mutation, so nothing is announced), and the button has no disabled/aria-disabled attribute at any point — verified with a scratch RTL test (.review-scratch/stepperBound.test.tsx) asserting the live region's textContent is byte-identical before and after three presses at the bound, and that the button carries neither `disabled` nor `aria-disabled`. Symmetric at BUDDY_MIN with the '-' button.",
+      "remediation": "Disable the '+' button (with `disabled` or `aria-disabled=\"true\"`) once settings.buddies === BUDDY_MAX, and the '-' button at BUDDY_MIN — mirroring ConstraintsEditor's `disabled={atCap}` pattern — or, if the buttons must stay enabled, add a permanently-mounted boundary note (e.g. \"That's the most buddies each person can have.\") whose text changes precisely when the press was a no-op, so the live region's silence is never the only signal.",
+      "invariant": "For a bounded custom stepper, pressing the button in the direction of a bound that is already reached must either (a) mark that control disabled/aria-disabled, or (b) produce a DOM-text change in an accessible live region announcing the boundary — it must never be the case that the control remains fully enabled with no accessible-tree change on press."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "no-repeat-announcement",
+      "theme": "identical successive live-region text is not re-announced, so a repeated confirmable action (Copy) gives no feedback on the second press within the auto-clear window",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 49,
+      "summary": "The 'Copy' button's only feedback is the `.sr-live` region's text (\"Buddy list copied to the clipboard.\") plus the button's own label flipping to \"Copied\". If the user presses Copy again while the label still reads \"Copied\" (within the 4s AUTO_CLEAR_MS window — realistic for a user unsure the first press registered, especially since clipboard writes are awaited and there is no other synchronous feedback), `setCopied(true)` is called again but the string is identical, so the live region's textContent does not change and nothing is (re-)announced. A screen-reader user gets confirmation on the first press only; a same-second re-press is silent.",
+      "failure": "Render BuddyList with a stubbed clipboard, click 'Copy', wait for the label to read 'Copied', then click it again immediately. Confirmed with a scratch test (.review-scratch/copyReannounce.test.tsx): the `.sr-live` region's textContent is identical before and after the second click, i.e. no DOM mutation occurs on the repeat press even though the action (a fresh clipboard write) did happen.",
+      "remediation": "Make the announcement distinguishable on a repeat within the window — e.g. append a monotonic counter or timestamp to an off-screen portion of the live-region text, or briefly clear the region to \"\" and re-set the message on every successful copy (matching the pattern already used elsewhere in this app for guaranteeing a live-region text change registers).",
+      "invariant": "Every user-triggered confirmation written into a live region must produce a DOM text change on each successful invocation of the action it confirms, even when consecutive invocations would otherwise render identical text."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-row-deletion-on-reroll",
+      "theme": "the rules the user TYPED and the rules that RESOLVED are two different things, and one code path quietly replaces the first with the second",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 253,
+      "summary": "`handleReroll` re-derives the rule-editor rows from the view's resolved index pairs (`toNamedPairs(view.constraints, view.names)`), so pressing \"Different arrangement\" silently deletes every row that did not resolve — a row naming somebody not in the roster, a half-typed row, or a duplicate — which is exactly the index-reconstruction the code documents as forbidden (RosterModal's `rules` prop comment and the editor's \"kept and flagged, never deleted\" contract).",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/r-app/probe2.test.tsx against the real `App`: roster A..F; rule 1 = A/B (required), rule 2 = A/\"Zoe\" (Zoe not in the roster, flagged), rule 3 = C/\"\" (half typed). Generate -> reopen \"Edit people\": all three rows present (assertion passes). Then click \"↻ Different arrangement\", let the worker resolve, reopen \"Edit people\": expected {row2:\"Zoe\", row3:true}, got {row2:null, row3:false} — rows 2 and 3 are gone with no notice. Only the resolvable A/B row survives. No existing test covers this: constraintsFlow.test.tsx exercises RosterModal in isolation and nothing in app/test asserts on `constraintRows` across a reroll.",
+      "remediation": "Do not re-commit rows on the reroll path at all — `constraintRows` already holds the rows the user last submitted and the reroll changes neither the roster nor the rules, so drop the `setConstraintRows(toNamedPairs(...))` call (and, for the same reason, `setNames(view.names)` is only safe because `view.names` IS the parsed roster). Close the theme rather than the case: make `toNamedPairs` reachable from exactly one call site — `applyImported`, where the file carries only index pairs and there are no typed rows to lose — so no future dispatch path can rebuild rows from indices.",
+      "invariant": "For every code path other than import, the `NamedPair[]` committed to App's `constraintRows` is content-identical to the rows the user last submitted; equivalently, `toNamedPairs(view.constraints, view.names)` may only be assigned to `constraintRows` on the import path, and for all other paths `constraintRows` after the transition equals `constraintRows` before it."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stored-setting-does-not-describe-the-graph",
+      "theme": "a setting shown in the Advanced panel and written into the exported file must be the setting the displayed graph was actually built with",
+      "file": "/home/user/ringweave/app/src/state/useBuddyGraph.ts",
+      "line": 214,
+      "summary": "`generate` downgrades an explicit `polish: true` to `\"auto\"` before dispatch (so the core declines it), but `pending.current.settings` keeps the un-downgraded `polish: true`, so `view.settings.polish` — the value the Advanced panel renders and `exportGraph` writes into `settings.polish` — describes a pass that never ran. This is the same class as the seed drift the surrounding comments were written to fix (\"the Advanced → Seed field showing a seed that does not produce the displayed graph\"), one field over.",
+      "failure": "Reproduced in /home/user/ringweave/.review-scratch/r-app/probe5.test.ts: n=80, k=12 (autoPolishEnabled(80,12,{constrained:false}) === false). The app dispatches options.polish=\"auto\" and the core declines, so the graph is unpolished; the view/file keep settings.polish === true. Feeding the exported `settings` straight back into `buildBuddyGraph(80, 12, {polish:true, seed:12345})` yields a DIFFERENT edge list from `file.edges` (assertion `same: true` -> `same: false`). The organizer's file therefore records a configuration that does not reproduce the graph beside it.",
+      "remediation": "Store the DISPATCHED options on the view rather than the requested ones: have `generate` write the downgraded `polish` into `pending.current.settings` so `view.settings` (and hence the Advanced panel, the export file, and the next reroll) is the configuration that actually produced the edges. If the user's raw choice must still be shown, keep it as a separate editor-side field rather than letting the view carry a value the graph does not satisfy.",
+      "invariant": "For every GraphView produced by generation, re-running the same builder with `view.settings` at `view.names.length` reproduces `view.edges` exactly — i.e. `view.settings` is always the option set that was dispatched, never a superseded request."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "extension-seam-no-caller",
+      "theme": "F9 (minimal-disruption recalc) is the next M4 feature the plan commits to, and building its priors toggle would fan out across the worker protocol, the constraint model, the generation orchestrator hook, and an undecided UI home — none of which currently know about each other in that way",
+      "file": "app/src/worker/protocol.ts",
+      "line": 17,
+      "summary": "Tracing F9 against the real files: GenerateRequest.constraints carries only {required, prohibited} (protocol.ts:22-26), GenerateOptions has no priorWeight/priorHard (protocol.ts:4-8), ConstraintPair has no `prior` kind (constraints.ts:14), useBuddyGraph.generate builds the wire payload with no source of 'the previous view's edges' (useBuddyGraph.ts:93-128), and RosterModal — the only surface that currently edits settings/rules before a (re)generate — receives roster text, Settings and NamedPair[] but never the live GraphView's edges (RosterModal.tsx:17-47), so it cannot itself derive priors from 'what's on screen now'. Implementing F9 therefore touches at minimum: worker/protocol.ts, worker/generate.ts, constraints.ts, state/useBuddyGraph.ts, and either RosterModal.tsx gains a new prop or the toggle's home moves.",
+      "failure": "Not a runtime failure — this is a design-time trace. The concrete risk the project's own code comments already flag (worker/generate.ts:100-105) is real: buildConstrainedBuddyGraph promotes hard priors to required BEFORE validating, so a naive app-side pre-check run against the un-promoted rule set (as RosterModal's ruleProblems check at RosterModal.tsx:140-146 does today for required/prohibited) would call a priors-bearing rule set feasible that the builder then refuses — rendering an edgeless graph as satisfied unless the post-build report.refusals check (already added defensively in generate.ts:106-115) is kept in the priors path too.",
+      "remediation": "No action needed now — this is correctly recorded. When F9 is scheduled: extend GenerateRequest.constraints/GenerateOptions and ConstraintPair together (protocol.ts + constraints.ts) in one commit so they can't drift the way isConstrainedRequest's doc comment already warns about; derive priors from the PREVIOUS view's edges (not the roster text) at the point of dispatch, resolved by current names the same way resolveNamedPairs does for authored rules; and keep validating against report.refusals post-build rather than trusting a pre-check equivalence, per the documented hazard.",
+      "invariant": "grep for priorWeight|priorHard|addPrior across app/src returns zero matches (mechanically confirmed); the day F9 lands, that grep must return matches in worker/protocol.ts, worker/generate.ts, and constraints.ts together, in the same commit, not just one of them.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "extension-seam-no-caller",
+      "theme": "The GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor seam is genuinely exhaustive and would force a compile error on a new mode, but it has never been exercised by a second selection-dependent variant — the only candidate (focus/ego layout) is explicitly deferred with no caller",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 22,
+      "summary": "Positive result worth recording, not a defect: positionsFor (GraphCanvas.tsx:49-58) is exhaustive via assertNever, so LAYOUT_MODES and FIT_MODES are the app's real OCP seam for its two current cases (ring/force) and the deliberate split (FIT_MODES excludes a selection-dependent mode) is sound reasoning against a rescale-on-hover bug, not speculative hardening. But the seam has exactly one variant pair it has ever served; the only unbuilt third case is the focus/ego layout, which app/CLAUDE.md itself catalogs as carrying four unresolved problems (layout keyed on hover causing re-layout-on-mouseover, clipping past computeFit's frame, undefined focus-with-nothing-selected behavior, and a positionsFor signature change touching every call site plus graphCanvasFit.test.ts).",
+      "failure": "N/A — no caller exists (grep for a third LayoutMode/FIT mode confirms LAYOUT_MODES = FIT_MODES = [\"ring\",\"force\"] as const, with no other reference in app/src).",
+      "remediation": "None required. Do not build a third mode or generalize positionsFor's signature ahead of an actual focus/ego feature commitment — the four hazards app/CLAUDE.md lists are the right pre-work if/when that feature is scheduled, not now.",
+      "invariant": "grep for a third string literal in LAYOUT_MODES (app/src/graph/GraphCanvas.tsx) returns none; the day a selection-dependent mode is added, positionsFor must fail to compile until a branch is added (mechanically true today, verified by reading the exhaustive switch + assertNever).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "misleading-name",
+      "theme": "Function name does not convey its performance-critical bounded-degree assumption",
+      "file": "/home/user/ringweave/app/src/neighborhood.ts",
+      "line": 24,
+      "summary": "neighborhood() performs a degree-capped walk (max 144 operations), not a general neighborhood computation, but the name does not indicate this constraint",
+      "failure": "A maintainer reading the function name and JSDoc might assume it computes unrestricted neighbors and be surprised by the degree cap or consider refactoring it to use Graph BFS (defeating the performance optimization). CLAUDE.md documents the exception but the code itself does not make the constraint obvious.",
+      "remediation": "Rename to `degreeCappedbNeighborhood()` or `boundedNeighborhood()`, or add a comment at line 24 clarifying: 'Limited to BUDDY_MAX degree per node for performance (O(k²) vs O(n+m))'. The JSDoc mentions the cap but the function signature does not hint at it."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "fragile-logic-pattern",
+      "theme": "Multiple review rounds tuning state-dispatch ordering in reroll path creates maintenance hazard",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 237,
+      "summary": "Reroll dispatch deliberately commits view.settings (not s) to state, with seed synthesized only for dispatch, then synced back from the resulting view. The comment (lines 237-250) documents three rounds of prior debate about this.",
+      "failure": "The logic is correct: (1) compute s with new seed, (2) commit view.settings to state, (3) dispatch with s, (4) sync view back. But someone reading only part of this logic or trying to 'simplify' by committing s directly would reintroduce the desync bug that motivated the current structure. New maintainers may not realize the three-part contract between handleReroll, setSettings, and the useEffect at line 124.",
+      "remediation": "Extract the dispatch-and-sync contract into a named helper function: `function rerollWithNewSeed(view: GraphView, settings: Settings): void { const s = {...}; setSettings(view.settings); bg.generate(view.names, s, ...). }` This would make the atomic operation and its invariants explicit. Or add an invariant test: after a successful reroll, verify that App.settings.seed equals view.settings.seed."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "implicit-ordering",
+      "theme": "Constraint order is implicitly normalized across abstraction boundaries, creating a hidden invariant",
+      "file": "/home/user/ringweave/app/src/constraints.ts",
+      "line": 93,
+      "summary": "toConstraints() normalizes ConstraintPair order to 'required-then-prohibited' regardless of input order. This normalization is implicit and lives in the middle of the constraint flow, so the equivalence between RosterModal's pre-check (using resolveNamedPairs order) and the worker's check (using joinPairs order) is not obvious.",
+      "failure": "If someone refactors toConstraints() to not split and re-order (e.g., to preserve input order for debugging), the pre-check and worker validation could diverge and produce different Constraints. The tests pass, but the implicit contract is not documented in the calling code.",
+      "remediation": "Add a comment at the toConstraints call site (constraints.ts line 93) and in RosterModal (around line 144): '// toConstraints normalizes to required-then-prohibited regardless of input order, so pre-flight and worker validation are equivalent'. Or move the normalization into splitPairs() and make it explicit in the return type."
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-for-unbuilt",
+      "theme": "PersonPanel has precondition guard on the caller side only, increasing risk if component is reused",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 9,
+      "summary": "The index parameter is documented as a PRECONDITION (must be in range [0, view.names.length)) but the guard is enforced by the caller (App.tsx line 79-80), not by PersonPanel itself. The error is loud (eccentricity throws on out-of-range), so this is not a correctness bug in isolation.",
+      "failure": "If PersonPanel is ever used from another call site or if the caller's guard logic changes, the precondition could be violated silently for the range of indices where eccentricity doesn't throw (this is low probability but not zero). For maintainability, preconditions on component props should be validated at the component boundary.",
+      "remediation": "Add a guard inside PersonPanel before calling eccentricity: `if (index < 0 || index >= view.names.length) throw new Error('index out of range');`. This moves the contract from caller to component and makes it obvious in code that the precondition is non-negotiable."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "silent-bounded-control",
+      "theme": "a custom stepper's clamp-at-bound state has no accessible representation, so a keyboard/screen-reader user who presses past the limit gets no perceivable feedback that anything happened",
+      "file": "app/src/panels/SettingsControls.tsx",
+      "line": 36,
+      "summary": "The 'Buddies each' stepper (+/- buttons around a role=\"status\" live-region span) is reachable and operable by keyboard, and the component's own comment (lines 28-34) explicitly reasons about announcing the new value after a press because a focus-retaining button gives no other feedback. But when settings.buddies is already at BUDDY_MAX (12) or BUDDY_MIN (2), setK() clamps the result back to the same value, so the live-region text does not change, the buttons carry no `disabled`/`aria-disabled`, and there is no boundary message anywhere (contrast ConstraintsEditor's 'Add a buddy rule', which both disables at MAX_CONSTRAINT_PAIRS and has a `role=\"status\"` note explaining why). A screen-reader user (or any keyboard user relying on the announced value) pressing '+' repeatedly at the ceiling hears nothing and has no way to distinguish 'my press didn't register' from 'I'm already at the limit'.",
+      "failure": "Render SettingsControls with settings.buddies = BUDDY_MAX (12). Press the '+' button (aria-label 'more buddies, currently 12') three times. The role=\"status\" span's textContent stays \"12\" → \"12\" → \"12\" (no DOM mutation, so nothing is announced), and the button has no disabled/aria-disabled attribute at any point — verified with a scratch RTL test (.review-scratch/stepperBound.test.tsx) asserting the live region's textContent is byte-identical before and after three presses at the bound, and that the button carries neither `disabled` nor `aria-disabled`. Symmetric at BUDDY_MIN with the '-' button.",
+      "remediation": "Disable the '+' button (with `disabled` or `aria-disabled=\"true\"`) once settings.buddies === BUDDY_MAX, and the '-' button at BUDDY_MIN — mirroring ConstraintsEditor's `disabled={atCap}` pattern — or, if the buttons must stay enabled, add a permanently-mounted boundary note (e.g. \"That's the most buddies each person can have.\") whose text changes precisely when the press was a no-op, so the live region's silence is never the only signal.",
+      "invariant": "For a bounded custom stepper, pressing the button in the direction of a bound that is already reached must either (a) mark that control disabled/aria-disabled, or (b) produce a DOM-text change in an accessible live region announcing the boundary — it must never be the case that the control remains fully enabled with no accessible-tree change on press."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "no-repeat-announcement",
+      "theme": "identical successive live-region text is not re-announced, so a repeated confirmable action (Copy) gives no feedback on the second press within the auto-clear window",
+      "file": "app/src/panels/BuddyList.tsx",
+      "line": 49,
+      "summary": "The 'Copy' button's only feedback is the `.sr-live` region's text (\"Buddy list copied to the clipboard.\") plus the button's own label flipping to \"Copied\". If the user presses Copy again while the label still reads \"Copied\" (within the 4s AUTO_CLEAR_MS window — realistic for a user unsure the first press registered, especially since clipboard writes are awaited and there is no other synchronous feedback), `setCopied(true)` is called again but the string is identical, so the live region's textContent does not change and nothing is (re-)announced. A screen-reader user gets confirmation on the first press only; a same-second re-press is silent.",
+      "failure": "Render BuddyList with a stubbed clipboard, click 'Copy', wait for the label to read 'Copied', then click it again immediately. Confirmed with a scratch test (.review-scratch/copyReannounce.test.tsx): the `.sr-live` region's textContent is identical before and after the second click, i.e. no DOM mutation occurs on the repeat press even though the action (a fresh clipboard write) did happen.",
+      "remediation": "Make the announcement distinguishable on a repeat within the window — e.g. append a monotonic counter or timestamp to an off-screen portion of the live-region text, or briefly clear the region to \"\" and re-set the message on every successful copy (matching the pattern already used elsewhere in this app for guaranteeing a live-region text change registers).",
+      "invariant": "Every user-triggered confirmation written into a live region must produce a DOM text change on each successful invocation of the action it confirms, even when consecutive invocations would otherwise render identical text."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "extension-seam-no-caller",
+      "theme": "F9 (minimal-disruption recalc) is the next M4 feature the plan commits to, and building its priors toggle would fan out across the worker protocol, the constraint model, the generation orchestrator hook, and an undecided UI home — none of which currently know about each other in that way",
+      "file": "app/src/worker/protocol.ts",
+      "line": 17,
+      "summary": "Tracing F9 against the real files: GenerateRequest.constraints carries only {required, prohibited} (protocol.ts:22-26), GenerateOptions has no priorWeight/priorHard (protocol.ts:4-8), ConstraintPair has no `prior` kind (constraints.ts:14), useBuddyGraph.generate builds the wire payload with no source of 'the previous view's edges' (useBuddyGraph.ts:93-128), and RosterModal — the only surface that currently edits settings/rules before a (re)generate — receives roster text, Settings and NamedPair[] but never the live GraphView's edges (RosterModal.tsx:17-47), so it cannot itself derive priors from 'what's on screen now'. Implementing F9 therefore touches at minimum: worker/protocol.ts, worker/generate.ts, constraints.ts, state/useBuddyGraph.ts, and either RosterModal.tsx gains a new prop or the toggle's home moves.",
+      "failure": "Not a runtime failure — this is a design-time trace. The concrete risk the project's own code comments already flag (worker/generate.ts:100-105) is real: buildConstrainedBuddyGraph promotes hard priors to required BEFORE validating, so a naive app-side pre-check run against the un-promoted rule set (as RosterModal's ruleProblems check at RosterModal.tsx:140-146 does today for required/prohibited) would call a priors-bearing rule set feasible that the builder then refuses — rendering an edgeless graph as satisfied unless the post-build report.refusals check (already added defensively in generate.ts:106-115) is kept in the priors path too.",
+      "remediation": "No action needed now — this is correctly recorded. When F9 is scheduled: extend GenerateRequest.constraints/GenerateOptions and ConstraintPair together (protocol.ts + constraints.ts) in one commit so they can't drift the way isConstrainedRequest's doc comment already warns about; derive priors from the PREVIOUS view's edges (not the roster text) at the point of dispatch, resolved by current names the same way resolveNamedPairs does for authored rules; and keep validating against report.refusals post-build rather than trusting a pre-check equivalence, per the documented hazard.",
+      "invariant": "grep for priorWeight|priorHard|addPrior across app/src returns zero matches (mechanically confirmed); the day F9 lands, that grep must return matches in worker/protocol.ts, worker/generate.ts, and constraints.ts together, in the same commit, not just one of them.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "extension-seam-no-caller",
+      "theme": "The GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor seam is genuinely exhaustive and would force a compile error on a new mode, but it has never been exercised by a second selection-dependent variant — the only candidate (focus/ego layout) is explicitly deferred with no caller",
+      "file": "app/src/graph/GraphCanvas.tsx",
+      "line": 22,
+      "summary": "Positive result worth recording, not a defect: positionsFor (GraphCanvas.tsx:49-58) is exhaustive via assertNever, so LAYOUT_MODES and FIT_MODES are the app's real OCP seam for its two current cases (ring/force) and the deliberate split (FIT_MODES excludes a selection-dependent mode) is sound reasoning against a rescale-on-hover bug, not speculative hardening. But the seam has exactly one variant pair it has ever served; the only unbuilt third case is the focus/ego layout, which app/CLAUDE.md itself catalogs as carrying four unresolved problems (layout keyed on hover causing re-layout-on-mouseover, clipping past computeFit's frame, undefined focus-with-nothing-selected behavior, and a positionsFor signature change touching every call site plus graphCanvasFit.test.ts).",
+      "failure": "N/A — no caller exists (grep for a third LayoutMode/FIT mode confirms LAYOUT_MODES = FIT_MODES = [\"ring\",\"force\"] as const, with no other reference in app/src).",
+      "remediation": "None required. Do not build a third mode or generalize positionsFor's signature ahead of an actual focus/ego feature commitment — the four hazards app/CLAUDE.md lists are the right pre-work if/when that feature is scheduled, not now.",
+      "invariant": "grep for a third string literal in LAYOUT_MODES (app/src/graph/GraphCanvas.tsx) returns none; the day a selection-dependent mode is added, positionsFor must fail to compile until a branch is added (mechanically true today, verified by reading the exhaustive switch + assertNever).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "seam-for-unbuilt",
+      "theme": "PersonPanel has precondition guard on the caller side only, increasing risk if component is reused",
+      "file": "/home/user/ringweave/app/src/panels/PersonPanel.tsx",
+      "line": 9,
+      "summary": "The index parameter is documented as a PRECONDITION (must be in range [0, view.names.length)) but the guard is enforced by the caller (App.tsx line 79-80), not by PersonPanel itself. The error is loud (eccentricity throws on out-of-range), so this is not a correctness bug in isolation.",
+      "failure": "If PersonPanel is ever used from another call site or if the caller's guard logic changes, the precondition could be violated silently for the range of indices where eccentricity doesn't throw (this is low probability but not zero). For maintainability, preconditions on component props should be validated at the component boundary.",
+      "remediation": "Add a guard inside PersonPanel before calling eccentricity: `if (index < 0 || index >= view.names.length) throw new Error('index out of range');`. This moves the contract from caller to component and makes it obvious in code that the precondition is non-negotiable."
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "easy-to-misuse-surface",
+      "theme": "GraphCanvas route prop is optional but buildHighlight requires null, not undefined",
+      "file": "/home/user/ringweave/app/src/graph/GraphCanvas.tsx",
+      "line": 71,
+      "summary": "route prop is declared as `route?: number[] | null;` (optional, can be undefined). At line 208 it is converted to null with `route ?? null` before passing to buildHighlight. If a caller forgets this coercion and passes undefined, buildHighlight receives undefined and may not highlight the route correctly.",
+      "failure": "buildHighlight checks `route !== null` at line 37 (highlight.ts). If route is undefined, this check is truthy, and the function treats it as an active route when it should not. The route would be used as `route.length` or array indexing elsewhere, potentially causing silent logic errors.",
+      "remediation": "Change the route prop type to `route?: (number[] | null);` with explicit default at call site, OR change buildHighlight to accept `route?: number[] | null` and handle undefined. Most simply: in GraphCanvas, declare route prop as `route: number[] | null;` (required, never optional) and let the caller (App.tsx line 334) handle the coercion."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 1,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 15,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 15,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 672171,
+    "agents": 6,
+    "toolCalls": 193
+  }
+}

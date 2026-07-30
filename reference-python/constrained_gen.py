@@ -13,7 +13,7 @@ Plus:
 """
 import math
 import random
-from core import Graph, ring, bfs_distances, all_pairs_summary, is_connected
+from core import penalized_aspl, Graph, ring, bfs_distances, all_pairs_summary, is_connected
 from constraints import pair
 
 
@@ -86,32 +86,221 @@ def constrained_greedy(n, k, cons, mind=5, rng=None):
                 continue
             _, far, dist = _ecc_and_far(g, u, proh, k)
             # allowed partners, farthest first (prefer joining components), then
-            # lower degree, then index; respect mind softly (prefer dist>=cur_mind).
+            # lower degree, then index. Completion MAXIMISES separation; it does
+            # not aim at `mind`.
+            #
+            # The `good = [...] or cands` filter that used to sit here was provably
+            # a no-op and is removed rather than kept as decoration: cands[0] is the
+            # farthest (unreachable sorts to 10**9), so if it passes the filter it
+            # is good[0], and if it fails then nothing passes — it is the maximum —
+            # and the fallback returns cands[0] anyway. `mind` therefore cannot
+            # change the output of this function. Mirrored in
+            # constrainedGreedy.ts's `choosePartner`.
             cands.sort(key=lambda v: (-(dist[v] if dist[v] >= 0 else 10**9),
                                       g.degree(v), v))
-            good = [v for v in cands if (dist[v] == -1 or dist[v] >= cur_mind)]
-            g.add_edge(u, (good or cands)[0])
+            g.add_edge(u, cands[0])
             progressed = True
             break
         if not progressed:
             break
 
-    # 3) force-connect components under the degree cap. Connectivity beats
-    #    girth/regularity, but never exceed k: repeatedly add any legal
-    #    (non-prohibited, both-under-k) cross-component edge until one component
-    #    remains or no such edge exists. Residual disconnection is honest — it
-    #    means the roster cannot be connected within k buddies each.
+    # 3) force-connect components under the degree cap: repeatedly ADD any legal
+    #    (non-prohibited, both-under-k) cross-component edge.
     for _ in range(n):
         comps = _components(g)
         if len(comps) <= 1:
             break
         if not _join_any(g, comps, proh, k):
             break
+
+    # 4) REWIRE, because adding is not enough. _join_any needs BOTH endpoints under
+    #    k, so a component whose whole boundary is saturated cannot be joined however
+    #    many legal pairs exist elsewhere -- and the old comment here claimed residual
+    #    disconnection "means the roster cannot be connected within k buddies each",
+    #    which is false. Witness: n=7, k=2, prohibit (3,5) and (3,4). validate accepts
+    #    it, completion leaves {0,1,2,3,6} and {4,5} with every vertex at degree 2, and
+    #    the 7-cycle 0-1-2-3-6-4-5-0 is a connected graph at the same k under the same
+    #    prohibitions -- one double edge swap away. A degree-preserving swap can reach
+    #    it where an addition cannot, because it frees the degree it spends.
+    _repair_connectivity(g, cons, k)
     return g
 
 
+def _bridges(g):
+    """Edges whose removal disconnects their component, as a set of pair() keys.
+
+    Needed because a swap between two components merges them IFF at least one of the
+    two dropped edges is NOT a bridge. If both are bridges, dropping them splits both
+    components and the two new edges reconnect the halves crosswise into two pieces
+    again -- the count does not fall. That makes this an exact test, so the repair
+    never has to apply a swap speculatively and measure.
+
+    Iterative Tarjan. The result is a property of the graph, not of the traversal, so
+    the arbitrary set-iteration order here cannot make it differ from the TS mirror.
+    """
+    disc = [-1] * g.n
+    low = [0] * g.n
+    out = set()
+    timer = 0
+    for root in range(g.n):
+        if disc[root] != -1:
+            continue
+        stack = [(root, -1, iter(sorted(g.adj[root])))]
+        disc[root] = low[root] = timer
+        timer += 1
+        while stack:
+            u, parent, it = stack[-1]
+            advanced = False
+            for w in it:
+                if w == parent:
+                    continue
+                if disc[w] == -1:
+                    disc[w] = low[w] = timer
+                    timer += 1
+                    stack.append((w, u, iter(sorted(g.adj[w]))))
+                    advanced = True
+                    break
+                low[u] = min(low[u], disc[w])
+                stack[-1] = (u, parent, it)
+            if not advanced:
+                stack.pop()
+                if stack:
+                    pu = stack[-1][0]
+                    low[pu] = min(low[pu], low[u])
+                    if low[u] > disc[pu]:
+                        out.add(pair(pu, u))
+            else:
+                stack[-2] = (u, parent, it)
+    return out
+
+
+def _repair_connectivity(g, cons, k):
+    """Merge components with degree-preserving, constraint-preserving double edge swaps.
+
+    Deterministic and RNG-free like the rest of this generator: components are visited
+    in ascending-minimum-vertex order and edges in sorted order, so the first legal
+    rewiring found is a function of the graph alone.
+
+    BOUNDED, and the bound is part of the contract. Each pass costs O(n + m) for the
+    component/bridge scan plus at most `budget` candidate pairs; the budget is charged
+    across the WHOLE repair so a pathological input cannot make this quadratic in m.
+    If it runs out, the graph is returned as it stands -- residual disconnection now
+    means "no legal rewiring was found within the budget", which is what the docblock
+    says, rather than a claim about the roster.
+    """
+    proh = cons.prohibited
+    req = cons.required
+    budget = [8 * (g.n + 2 * g.num_edges()) + 64]
+    for _ in range(g.n):
+        comps = _components(g)
+        if len(comps) <= 1:
+            return
+        bridges = _bridges(g)
+        if _swap_join(g, comps, proh, req, bridges, budget):
+            continue
+        # A swap needs one droppable edge from EACH component, so a component with no
+        # edges at all -- a single stranded person -- is beyond it however much slack
+        # the rest of the graph has. _steal_slot is tried second because it MOVES a
+        # degree rather than preserving every one, which is the strictly larger
+        # concession; it is only reached when the cheaper repair found nothing.
+        if not _steal_slot(g, comps, proh, req, bridges, k, budget):
+            return
+
+
+def _edges_by_component(g, comps):
+    """Edges bucketed by the component their lower endpoint belongs to."""
+    owner = {}
+    for ci, comp in enumerate(comps):
+        for v in comp:
+            owner[v] = ci
+    per = [[] for _ in comps]
+    for (a, b) in sorted(g.edge_list()):
+        per[owner[a]].append((a, b))
+    return per
+
+
+def _swap_join(g, comps, proh, req, bridges, budget):
+    per = _edges_by_component(g, comps)
+    for i in range(len(comps)):
+        for j in range(i + 1, len(comps)):
+            for (a, b) in per[i]:
+                if pair(a, b) in req:
+                    continue
+                for (c, d) in per[j]:
+                    if pair(c, d) in req:
+                        continue
+                    if budget[0] <= 0:
+                        return False
+                    budget[0] -= 1
+                    # Both bridges cannot merge -- see _bridges.
+                    if pair(a, b) in bridges and pair(c, d) in bridges:
+                        continue
+                    for (x, y) in ((c, d), (d, c)):
+                        if a == x or b == y:
+                            continue
+                        if g.has_edge(a, x) or g.has_edge(b, y):
+                            continue
+                        if pair(a, x) in proh or pair(b, y) in proh:
+                            continue
+                        g.remove_edge(a, b)
+                        g.remove_edge(c, d)
+                        g.add_edge(a, x)
+                        g.add_edge(b, y)
+                        return True
+    return False
+
+
+def _steal_slot(g, comps, proh, req, bridges, k, budget):
+    """Join two components by MOVING a degree: drop a non-bridge edge (a,b) inside one
+    component and spend the freed slot on an under-k vertex u in another.
+
+    Why this exists on top of _swap_join. A double edge swap needs a droppable edge in
+    each of the two components, so it cannot touch a component that has no edges --
+    exactly the shape a saturated boundary produces at small k. Witness: n=4, k=2,
+    prohibiting (1,3) and (2,3). Completion builds the triangle 0-1-2 and leaves person
+    3 alone with no legal partner (0 is full, 1 and 2 are prohibited); _join_any cannot
+    add, _swap_join has nothing to swap, and the result reported connected=False with
+    largest-component 0.75 -- while 0-1, 0-3, 1-2 is a connected graph at the same k
+    under the same prohibitions.
+
+    Dropping non-bridge (a,b) keeps a and b connected to each other, so the only
+    component change is the merge. Edge COUNT is preserved (one removed, one added);
+    what moves is a single degree, from b to u. That is a real concession -- the result
+    is less regular than the input -- and it is why this runs only after _swap_join,
+    which concedes nothing, has failed.
+
+    Deterministic and RNG-free: components ascending, vertices ascending, edges in
+    sorted order, so the first legal move is a function of the graph alone.
+    """
+    per = _edges_by_component(g, comps)
+    for i in range(len(comps)):
+        for u in sorted(comps[i]):
+            if g.degree(u) >= k:
+                continue
+            for j in range(len(comps)):
+                if j == i:
+                    continue
+                for (a, b) in per[j]:
+                    if pair(a, b) in req or pair(a, b) in bridges:
+                        continue
+                    if budget[0] <= 0:
+                        return False
+                    budget[0] -= 1
+                    for keep in (a, b):
+                        if pair(u, keep) in proh or g.has_edge(u, keep):
+                            continue
+                        g.remove_edge(a, b)
+                        g.add_edge(u, keep)
+                        return True
+    return False
+
+
 def _join_any(g, comps, proh, k):
-    """Add one legal edge bridging two distinct components; True if one was added."""
+    """Add one legal edge bridging two distinct components; True if one was added.
+
+    Adding needs BOTH endpoints under k. _repair_connectivity runs after this and can rewire;
+    what survives both is disconnection no single constraint-preserving swap can remove.
+    """
     for i in range(len(comps)):
         for j in range(i + 1, len(comps)):
             for u in comps[i]:
@@ -270,8 +459,8 @@ def polish_constrained(g, cons, rng=None, iters=8000, prior_weight=0.0):
     priors = cons.priors
 
     def measure():
-        aspl, _, conn = all_pairs_summary(g)
-        e = aspl if conn else aspl + 10 * g.n
+        _, _, conn = all_pairs_summary(g)
+        e = penalized_aspl(g)
         if prior_weight and priors:
             kept = sum(1 for p in priors if g.has_edge(*p))
             e += prior_weight * (len(priors) - kept)

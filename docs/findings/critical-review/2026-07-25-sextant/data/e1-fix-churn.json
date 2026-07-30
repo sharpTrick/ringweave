@@ -1,0 +1,157 @@
+{
+  "ref": "claude/m2-xapjhu",
+  "head": "462360d",
+  "fixCommits": 21,
+  "productLinesAdded": 1195,
+  "productLinesSurviving": 920,
+  "rewrittenOrRemovedFraction": 0.2301,
+  "perRound": [
+    {
+      "round": "pass",
+      "sha": "c57da2d",
+      "subject": "M2 review pass: harden import, fix name overload, ratchet tests",
+      "added": 100,
+      "surviving": 54
+    },
+    {
+      "round": "2",
+      "sha": "ef4f855",
+      "subject": "M2 review round 2: bound import all-pairs cost by the n·m product",
+      "added": 10,
+      "surviving": 1
+    },
+    {
+      "round": "3",
+      "sha": "796018b",
+      "subject": "M2 review round 3 (full-surface, all four critics): fix 3 blocking + suggestions",
+      "added": 181,
+      "surviving": 118
+    },
+    {
+      "round": "4",
+      "sha": "c872a6e",
+      "subject": "M2 review round 4 (full-surface via the runner): connectivity + 3 more",
+      "added": 92,
+      "surviving": 63
+    },
+    {
+      "round": "5",
+      "sha": "5f98c2b",
+      "subject": "M2 review round 5 (full-surface via runner): density cap + consistency cluster",
+      "added": 172,
+      "surviving": 148
+    },
+    {
+      "round": "6",
+      "sha": "1da0d6b",
+      "subject": "M2 review round 6 (full-surface via runner): consistency polish, 0 blocking",
+      "added": 93,
+      "surviving": 74
+    },
+    {
+      "round": "7",
+      "sha": "e28d5f4",
+      "subject": "M2 review round 7 (full-surface via runner): reroll, polish-cost, name integrity",
+      "added": 76,
+      "surviving": 55
+    },
+    {
+      "round": "8",
+      "sha": "2f7c2b5",
+      "subject": "M2 review round 8: robust reroll no-op detection, import/CSV hardening",
+      "added": 75,
+      "surviving": 57
+    },
+    {
+      "round": "9",
+      "sha": "a98a2ff",
+      "subject": "M2 review round 9: reroll notice honesty, seed clamp, copy-path CSV guard",
+      "added": 51,
+      "surviving": 44
+    },
+    {
+      "round": "10",
+      "sha": "50f9428",
+      "subject": "M2 review round 10: close embedded-delimiter injection, kill default drift",
+      "added": 44,
+      "surviving": 35
+    },
+    {
+      "round": "11",
+      "sha": "88fd0a2",
+      "subject": "M2 review round 11: bound the force settle, fix truncation warning + copy drift",
+      "added": 50,
+      "surviving": 46
+    },
+    {
+      "round": "12",
+      "sha": "7346787",
+      "subject": "M2 review round 12: de-flake test timeouts, unify layout resolver, close notice gaps",
+      "added": 37,
+      "surviving": 24
+    },
+    {
+      "round": "13",
+      "sha": "e0e757c",
+      "subject": "M2 review round 13: honest import-cap comment, clamp default, stable fit frame",
+      "added": 27,
+      "surviving": 25
+    },
+    {
+      "round": "14",
+      "sha": "1fea5c6",
+      "subject": "M2 review round 14: truthful settings on idempotent generate, force cap covers all graphs",
+      "added": 45,
+      "surviving": 41
+    },
+    {
+      "round": "15",
+      "sha": "ad8e6f3",
+      "subject": "M2 review round 15: make LAYOUT_MODES load-bearing (data-driven layout toggle)",
+      "added": 21,
+      "surviving": 20
+    },
+    {
+      "round": "16",
+      "sha": "e5b292f",
+      "subject": "M2 review round 16: finish the data-driven toggle (active style, exhaustive resolver, a11y)",
+      "added": 26,
+      "surviving": 26
+    },
+    {
+      "round": "17",
+      "sha": "27bc4cb",
+      "subject": "M2 review round 17: gauge/caption consistency, prune orphan exports + dead CSS",
+      "added": 24,
+      "surviving": 22
+    },
+    {
+      "round": "18",
+      "sha": "df44170",
+      "subject": "M2 review round 18: dedupe-warning casing, girth doc, size-gate test, isOptimal seam",
+      "added": 27,
+      "surviving": 27
+    },
+    {
+      "round": "19",
+      "sha": "eb06243",
+      "subject": "M2 review round 19: reset stale modal notices, unify truncation copy, fix MB unit",
+      "added": 29,
+      "surviving": 29
+    },
+    {
+      "round": "20",
+      "sha": "a66272c",
+      "subject": "M2 review round 20: complete worker-error recovery (converged round)",
+      "added": 10,
+      "surviving": 6
+    },
+    {
+      "round": "21",
+      "sha": "462360d",
+      "subject": "M2 review round 21: decouple error recovery from message content",
+      "added": 5,
+      "surviving": 5
+    }
+  ]
+}

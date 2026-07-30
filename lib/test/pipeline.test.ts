@@ -26,9 +26,6 @@ describe("malformed inputs throw a clear error (unconstrained path)", () => {
     expect(() => buildBuddyGraph(MAX_CACHED_N + 1, 4)).toThrow(/ringGreedy supports up to/);
   });
 
-  // The ring seed floors degree at 2, so k<2 can't be honored — reject rather
-  // than silently return a 2-regular graph. (Constrained path handles k<2; see
-  // constrained.test.ts.)
   it.each([0, 1])("buildBuddyGraph/ringGreedy reject k=%i (ring floors degree at 2)", (k) => {
     expect(() => buildBuddyGraph(20, k)).toThrow(/needs k >= 2/);
     expect(() => ringGreedy(20, k)).toThrow(/needs k >= 2/);
@@ -50,15 +47,12 @@ describe("buildBuddyGraph", () => {
   it("produces a valid symmetric buddy assignment", () => {
     const r = buildBuddyGraph(30, 4);
     expect(r.buddies.length).toBe(30);
-    // symmetry: i lists j iff j lists i
     for (let i = 0; i < 30; i++) {
       for (const j of r.buddies[i]) {
         expect(r.buddies[j]).toContain(i);
       }
     }
-    // degree cap respected
     expect(r.degreeMax).toBeLessThanOrEqual(4);
-    // well connected
     expect(r.diameter).toBeGreaterThan(0);
     expect(r.asplGap).toBeLessThan(0.2);
   });
@@ -104,5 +98,27 @@ describe("polish", () => {
     const a = polish(graph, { mode: "anneal", seed: 99, maxIters: 4000 });
     const b = polish(graph, { mode: "anneal", seed: 99, maxIters: 4000 });
     expect(a.graph.edgeList()).toEqual(b.graph.edgeList());
+  });
+
+  it("refuses a seed it cannot honour instead of aliasing it onto another one", () => {
+    const { graph } = ringGreedy(40, 4, { mind: 5, repair: true });
+    for (const bad of [0.9, -1, NaN, Infinity, 2 ** 32, 12345 + 2 ** 32]) {
+      expect(() => polish(graph, { seed: bad, maxIters: 10 })).toThrow(/seed .* must be an integer/);
+    }
+    expect(() => polish(graph, { seed: 0, maxIters: 10 })).not.toThrow();
+    expect(() => polish(graph, { seed: 2 ** 32 - 1, maxIters: 10 })).not.toThrow();
+    // -0 is accepted because it IS 0 — `-0 === 0` and the stream is identical. Aliasing is only a
+    // defect when two DISTINCT values collide.
+    expect(() => polish(graph, { seed: -0, maxIters: 10 })).not.toThrow();
+
+    // The check is at the option, not at the RNG, so it fires whether or not polish runs.
+    expect(() => buildBuddyGraph(24, 4, { seed: 12345.6 })).toThrow(/seed .* must be an integer/);
+    expect(() => buildBuddyGraph(24, 4, { seed: 12345.6, polish: false })).toThrow(
+      /seed .* must be an integer/,
+    );
+    // Non-vacuity: distinct accepted seeds are distinct arrangements, which is the knob's job.
+    const s1 = buildBuddyGraph(60, 4, { seed: 1, polish: true });
+    const s2 = buildBuddyGraph(60, 4, { seed: 2, polish: true });
+    expect(s1.edges).not.toEqual(s2.edges);
   });
 });

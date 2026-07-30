@@ -1,0 +1,181 @@
+{
+  "target": "app/src",
+  "round": 17,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 1,
+    "confirmed": 1,
+    "blocking": 1,
+    "deferrals": 0,
+    "plausible": 0,
+    "themes": 1
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full read of all 30 files under app/src plus styles/. Empirical probes under .review-scratch/: (1) export->import round-trip for 7 (n,k) configs asserting metrics/buddies/settings deep-equality; (2) 3000-case fuzz over random imported graphs asserting qualityPercent in [0,100], isOptimal=>connected, quality>0 => connected && aspl!=null, disconnected never says \"well-linked\", <50% says \"loosely\", targetShortfall null => degreeMax>=buddies, and singular/plural agreement across degreeLabel/buddiesLabel/buddiesEachLabel; (3) 4000-case hostile-unicode fuzz (lone surrogates, U+2028, NBSP, combining marks, astral pairs, tabs, commas) asserting parseRoster idempotence and that importGraph never refuses parser output; (4) 300 random constrained generations asserting no prohibited edge appears, reqViolations+prohViolations <= constraints.length, constraintSummary wording matches the report, and no false optimality on a disconnected graph; (5) buildBuddyGraph degree sweep k in [2,12], n<=200, confirming degreeMax never exceeds k (so neighborhood.ts's degree bound and importGraph's per-vertex gate can never be tripped by a self-exported file). Determinism: grepped app/src for Math.random/Date.now/new Date/crypto/Object.keys (only performance.now in the animation tween) and verified d3-force 3's random source is a per-forceSimulation lcg(). Traced by hand: useGenerationWorker id/supersede/reset/onerror paths, useBuddyGraph consumed/pending pairing and the identical-reroll adoption branch, App's bg.status effect under every dependency change, reopenReason lifecycle across refusal/error/cancel/import, useNotice timer supersession vs show/clear, importGraph gate ordering, usePathFinder canonicalisation and stale-graph guard, GraphCanvas display/target/fit resolution, clamp/clampList/codePointsIfOver unit-vs-code-point handling, neutralizeCell across both spreadsheet sinks. npm test green (29 files, 292 tests) before and after.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of app/src (App.tsx composition root, GraphCanvas.tsx/layout.ts/highlight.ts, neighborhood.ts, model.ts, constraints.ts, io/importGraph.ts + exportGraph/schema, panels/ConstraintsEditor.tsx + RosterModal.tsx, state/useBuddyGraph.ts + useGraph.ts + usePathFinder.ts). Adopted the scenario task by tracing a real, already-committed follow-on named verbatim in app/CLAUDE.md's \"Known follow-ons\": 'Buddy rules are not re-checked on import' (report is hardcoded null in importGraph.ts, GraphView.report/model.ts:409, and importExport.roundtrip.test.ts:430 pins it). Traced the concrete fix path: export lib's module-private `buildReport` (lib/src/core/index.ts:541) as public API alongside the already-exported `ConstraintReport` type; call it from app/src/io/importGraph.ts using the app's EXISTING `toConstraints(n, pairs)` helper (app/src/constraints.ts:93, already used by worker/generate.ts and RosterModal.tsx) to convert the already-parsed `ConstraintPair[]` into a core `Constraints` object, then `buildReport(g, cons, summary.connected, false)`. Cross-checked model.ts's `constraintSummary` (model.ts:169-178, null-branch would become unreachable for imports-with-rules, which is the expected/intended outcome the follow-on note anticipates) and the generation path (model.ts:421+ `viewFromResult`) to confirm `report` already flows end-to-end from this same core function on the generate path, so import would just become symmetric with generate rather than inventing a new pattern. Also spot-checked the GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor seam (already extensively reviewed per app/CLAUDE.md's recorded 8-findings/6-rounds/zero-blocking history for the deferred focus/ego mode) and confirmed no new live caller exists (grep for a third LayoutMode or selection-dependent mode returns nothing), so no new deferral to add there. Read ConstraintsEditor.tsx, neighborhood.ts, layout.ts for responsibility leaks (core math in UI) — none found; neighborhood.ts's local adjacency walk and layout.ts's geometry are both explicitly justified exceptions with measured bounds, not undeclared leaks.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface review of app/src: state management (App.tsx, useBuddyGraph.ts, useGenerationWorker.ts), business logic (constraints.ts, model.ts, search.ts, neighborhood.ts, feasibility.ts), IO (importGraph.ts, exportGraph.ts, parseRoster.ts), workers (worker/protocol.ts, worker/generate.ts), visualization (GraphCanvas.tsx, layout.ts, highlight.ts), UI components (RosterModal.tsx, ConstraintsEditor.tsx, PersonSearch.tsx), utilities (clamp.ts). Verified: all 292 tests pass; lint gate clean; all comments accurately describe code behavior and history; no false/misleading documentation; no silently-drifting duplication (duplication is single-sourced via exported functions or well-documented); no easy-to-misuse public surfaces; no edge-case bugs (validated constraint pair handling, settings downgrading, density/degree checking, name truncation, state sync); proper use of shared predicates (isConstrainedRequest) prevents drift.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Traced the full cold-load-to-export-to-recovery flow across app/src: App.tsx (inert containment, focus rescue via MutationObserver, escape handling, live-region mounting for busy/path/selection status), RosterModal.tsx (mount-time focus, aria-describedby reopen reason, permanently-mounted note-stack live region, file drop/choose-file/sample paths), ConstraintsEditor.tsx (datalist-based rule rows, aria-disabled at cap, remove-row reconciliation), SettingsControls.tsx (stepper aria-disabled/live announcement at bounds), GraphCanvas.tsx (role=img delegation to keyboard-navigable buddy list, JS-driven layout-toggle animation gated on matchMedia(prefers-reduced-motion) at animation time not just mount, CSS `* { transition:none }` reduced-motion override), LayoutToggle.tsx (aria-pressed), BuddyList.tsx (aria-current, copy confirmation via emptied-then-refilled live region, AUTO_CLEAR_MS floor), PersonSearch.tsx (combobox pattern, aria-activedescendant, empty-result live region, Escape scoping, focus-follows-choice), PersonPanel.tsx (real buttons for every buddy/two-steps-away chip, eccentricity-based reach text for disconnected groups), PathPanel.tsx + usePathFinder.ts (canonicalized/oriented route, spoken twin in model.ts's pathStatusText), QualityPanel.tsx (plain-language quality/shortfall/disconnected wording), Notice.tsx + useNotice.ts (dismissable toast, inert-while-modal containment), useFocusRescue.ts (DOM-level rescue independent of which component's state caused a removal), useEscape.ts, useExplorerHistory.ts, useGenerationWorker.ts/useBuddyGraph.ts (status transitions, error/refused recovery reopening the dialog), importGraph.ts (every untrusted-file error path is a caught, announced, non-blocking toast with no dead end), download.ts/exportGraph.ts (export/CSV triggering), Slips.tsx (aria-hidden print-only subtree), app.css/print.css tab-order-vs-visual-order comments and reduced-motion media query. Also checked React key-based reconciliation behavior for ConstraintsEditor's row deletion (index-keyed) to see whether a non-last-row delete silently mutates a focused control without announcement.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [
+    {
+      "critic": "critic-security",
+      "reason": "saturated (2 quiet rounds), surface untouched"
+    }
+  ],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": false,
+      "ran": false,
+      "why": "saturated (2 quiet rounds), surface untouched"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "a live region must already be in the accessibility tree before its text changes — otherwise the region and its first message arrive together and nothing is announced",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`.toast-region:empty { display: none; }` removes the app's only transient-notice live region from the accessibility tree exactly while it is empty, so the region and its first text enter the tree in one commit and no toast is ever announced — contradicting the guarantee stated eleven lines above in the same file and in Notice.tsx."
+      ],
+      "remediation": "Delete the `.toast-region:empty { display: none; }` rule. Pure subtraction: the region carries no layout of its own — its own comment says so, because `.toast` is `position: fixed` — so an empty, displayed region is already invisible and zero-cost. Close the theme rather than the case by adding the CSS-source assertion below to `cssTokens.test.ts` (which already parses app.css this way), covering every live-region class in the tree, not just this one: `toast-region`, `sr-live`, `busy-live`, `search-empty`, `rule-note`."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-removed-from-a11y-tree-by-css",
+      "theme": "a live region must already be in the accessibility tree before its text changes — otherwise the region and its first message arrive together and nothing is announced",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 238,
+      "summary": "`.toast-region:empty { display: none; }` removes the app's only transient-notice live region from the accessibility tree exactly while it is empty, so the region and its first text enter the tree in one commit and no toast is ever announced — contradicting the guarantee stated eleven lines above in the same file and in Notice.tsx.",
+      "failure": "Trigger any toast (e.g. pick a malformed JSON file via Import, or press \"↻ Different arrangement\" on a small graph that regenerates identically). Notice.tsx renders `<div role=\"status\" className=\"toast-region\">{message ? <button/> : null}</div>`, so with `message === null` the div has zero child nodes, `:empty` matches, and computed `display` is `none` — a display:none subtree is not in the accessibility tree at all. When `message` becomes non-null the element is inserted into the a11y tree already carrying its text, which assistive tech treats as a new region rather than a content change: the import error / worker error / reroll no-op notice is silent. The toast is the sole channel for all three, and app.css:226-228 asserts the opposite policy for `.sr-live`/`.busy-live` (\"Not `display:none` ... both remove the element from the accessibility tree too, which would defeat the entire point of keeping it mounted\").",
+      "remediation": "Delete the `.toast-region:empty { display: none; }` rule. Pure subtraction: the region carries no layout of its own — its own comment says so, because `.toast` is `position: fixed` — so an empty, displayed region is already invisible and zero-cost. Close the theme rather than the case by adding the CSS-source assertion below to `cssTokens.test.ts` (which already parses app.css this way), covering every live-region class in the tree, not just this one: `toast-region`, `sr-live`, `busy-live`, `search-empty`, `rule-note`.",
+      "invariant": "For every class name that appears on an element rendered with `role=\"status\"` or `aria-live` anywhere in app/src (currently toast-region, sr-live, busy-live, search-empty, rule-note), no rule in app/src/styles/*.css whose selector contains that class — in any state, including :empty — may declare `display: none` or `visibility: hidden`.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "live-region-removed-from-a11y-tree-by-css",
+      "theme": "a live region must already be in the accessibility tree before its text changes — otherwise the region and its first message arrive together and nothing is announced",
+      "file": "/home/user/ringweave/app/src/styles/app.css",
+      "line": 238,
+      "summary": "`.toast-region:empty { display: none; }` removes the app's only transient-notice live region from the accessibility tree exactly while it is empty, so the region and its first text enter the tree in one commit and no toast is ever announced — contradicting the guarantee stated eleven lines above in the same file and in Notice.tsx.",
+      "failure": "Trigger any toast (e.g. pick a malformed JSON file via Import, or press \"↻ Different arrangement\" on a small graph that regenerates identically). Notice.tsx renders `<div role=\"status\" className=\"toast-region\">{message ? <button/> : null}</div>`, so with `message === null` the div has zero child nodes, `:empty` matches, and computed `display` is `none` — a display:none subtree is not in the accessibility tree at all. When `message` becomes non-null the element is inserted into the a11y tree already carrying its text, which assistive tech treats as a new region rather than a content change: the import error / worker error / reroll no-op notice is silent. The toast is the sole channel for all three, and app.css:226-228 asserts the opposite policy for `.sr-live`/`.busy-live` (\"Not `display:none` ... both remove the element from the accessibility tree too, which would defeat the entire point of keeping it mounted\").",
+      "remediation": "Delete the `.toast-region:empty { display: none; }` rule. Pure subtraction: the region carries no layout of its own — its own comment says so, because `.toast` is `position: fixed` — so an empty, displayed region is already invisible and zero-cost. Close the theme rather than the case by adding the CSS-source assertion below to `cssTokens.test.ts` (which already parses app.css this way), covering every live-region class in the tree, not just this one: `toast-region`, `sr-live`, `busy-live`, `search-empty`, `rule-note`.",
+      "invariant": "For every class name that appears on an element rendered with `role=\"status\"` or `aria-live` anywhere in app/src (currently toast-region, sr-live, busy-live, search-empty, rule-note), no rule in app/src/styles/*.css whose selector contains that class — in any state, including :empty — may declare `display: none` or `visibility: hidden`.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 17,
+      "skipped": true
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 1,
+      "lastRound": 17,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 1,
+      "lastRound": 17,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 481121,
+    "agents": 4,
+    "toolCalls": 171
+  }
+}

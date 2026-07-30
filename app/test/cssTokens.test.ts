@@ -23,14 +23,36 @@ describe("CSS tokens", () => {
     expect(offenders).toEqual([]);
   });
 
-  // Class: the data-driven layout toggle renders a button per LAYOUT_MODES entry, so the ACTIVE
-  // style must be mode-agnostic — a new mode's selected state can't depend on a hardcoded
-  // `.on.<mode>` rule or it renders invisible. The generic `#toggle button.on` rule must set a
-  // non-transparent background so any mode reads as selected.
+  // The toggle renders one button per LAYOUT_MODES entry, so an `.on.<mode>` rule would leave a
+  // new mode's selected state invisible.
   it("the active toggle button has a mode-agnostic background", () => {
     const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
     const generic = css.match(/#toggle button\.on\s*\{([^}]*)\}/); // the .on rule, not .on.<mode>
     expect(generic).not.toBeNull();
     expect(generic![1]).toMatch(/background:\s*var\(--/); // a defined-token background, not transparent
+  });
+});
+
+// `display:none` and `visibility:hidden` remove a subtree from the accessibility tree, so a rule
+// hiding an empty live region makes its first message arrive WITH it and never be announced.
+describe("CSS cannot un-mount a live region", () => {
+  it("no rule hides any live-region class, in any state", () => {
+    const css = readFileSync(new URL("../src/styles/app.css", import.meta.url), "utf8");
+    const liveClasses = ["toast-region", "sr-live", "busy-live", "search-empty", "rule-note"];
+    const offenders: string[] = [];
+    // Rule-by-rule: selector up to `{`, declarations up to `}`. Comments are stripped first so
+    // the prose ABOVE a rule (which names these classes on purpose) is never mistaken for one.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const rule of withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector, body] = rule;
+      const hidden = /(^|[;\s])(display\s*:\s*none|visibility\s*:\s*hidden)\s*(;|$)/.test(body);
+      if (!hidden) continue;
+      for (const cls of liveClasses) {
+        if (new RegExp(`\\.${cls}\\b`).test(selector)) {
+          offenders.push(`${selector.trim()} { ${body.trim()} }`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

@@ -9,11 +9,10 @@ export function downloadBlob(filename: string, mime: string, data: string): void
   URL.revokeObjectURL(url);
 }
 
-/** Neutralize spreadsheet formula injection: a value starting with =,+,-,@ (or tab/CR) is
-    prefixed with an apostrophe so a spreadsheet treats it as text, not a formula, when a hostile
-    imported name (e.g. `=HYPERLINK(...)`) reaches a paste sink and is re-opened. Shared by BOTH
-    spreadsheet-bound exports — the CSV serializer (per cell) and the clipboard copy (per line's
-    leading name) — so the two sinks can't drift out of sync. */
+/** Neutralize spreadsheet formula injection: a leading =,+,-,@ (or tab/CR) is prefixed with an
+    apostrophe so a hostile name (`=HYPERLINK(...)`) is text, not a live formula, when the export
+    is opened in a spreadsheet. Shared by BOTH spreadsheet-bound sinks — the CSV serializer and
+    the clipboard copy — so the two can't drift apart. */
 export function neutralizeCell(cell: string): string {
   return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
 }

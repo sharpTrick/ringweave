@@ -1,0 +1,158 @@
+{
+  "purpose": "Commit manifest for the E2 self-induction (SZZ-style) blame oracle. main is squash-merged (one commit per PR), so blame there resolves at PR granularity and cannot distinguish a review-round fix from the M2 baseline. These SHAs are the durable record; they live on refs/heads/claude/m2-xapjhu and local tag e1-ouroboros-reviewed.",
+  "ref": "claude/m2-xapjhu",
+  "head": "462360d2b17f6280e314a5631c75cdf95e032a59",
+  "totalCommits": 29,
+  "fixCommits": [
+    {
+      "round": "pass",
+      "sha": "c57da2dd36765784cdadc7ba58dedb2b2030b723",
+      "committedAt": "2026-07-24T05:09:02.000Z",
+      "subject": "M2 review pass: harden import, fix name overload, ratchet tests"
+    },
+    {
+      "round": "2",
+      "sha": "ef4f85574954fa6beea1f1a44b35732baaadf4e2",
+      "committedAt": "2026-07-24T05:14:37.000Z",
+      "subject": "M2 review round 2: bound import all-pairs cost by the n·m product"
+    },
+    {
+      "round": "3",
+      "sha": "796018bf46e2f8c91e755c8e9305b42d923b466b",
+      "committedAt": "2026-07-24T06:07:08.000Z",
+      "subject": "M2 review round 3 (full-surface, all four critics): fix 3 blocking + suggestions"
+    },
+    {
+      "round": "4",
+      "sha": "c872a6e19c22fa501b268dffa190d2471e8e521a",
+      "committedAt": "2026-07-24T06:36:21.000Z",
+      "subject": "M2 review round 4 (full-surface via the runner): connectivity + 3 more"
+    },
+    {
+      "round": "5",
+      "sha": "5f98c2bb1b68b5d4934e80af8dfec5b5e5340ac0",
+      "committedAt": "2026-07-24T07:05:29.000Z",
+      "subject": "M2 review round 5 (full-surface via runner): density cap + consistency cluster"
+    },
+    {
+      "round": "6",
+      "sha": "1da0d6bf2c0f14a1b76457affcf9141637efeecf",
+      "committedAt": "2026-07-24T07:33:11.000Z",
+      "subject": "M2 review round 6 (full-surface via runner): consistency polish, 0 blocking"
+    },
+    {
+      "round": "7",
+      "sha": "e28d5f4d0e0a47b104a41c087954e185971fa6d9",
+      "committedAt": "2026-07-24T07:58:17.000Z",
+      "subject": "M2 review round 7 (full-surface via runner): reroll, polish-cost, name integrity"
+    },
+    {
+      "round": "8",
+      "sha": "2f7c2b5bc963ea8c792fbc45a9d92ee41a1cda1b",
+      "committedAt": "2026-07-24T08:24:57.000Z",
+      "subject": "M2 review round 8: robust reroll no-op detection, import/CSV hardening"
+    },
+    {
+      "round": "9",
+      "sha": "a98a2ffc361f9383b8615ffdd22da6cc816ee605",
+      "committedAt": "2026-07-24T08:42:57.000Z",
+      "subject": "M2 review round 9: reroll notice honesty, seed clamp, copy-path CSV guard"
+    },
+    {
+      "round": "10",
+      "sha": "50f942885953ae301c8f7e81323b362f3270a499",
+      "committedAt": "2026-07-24T09:05:11.000Z",
+      "subject": "M2 review round 10: close embedded-delimiter injection, kill default drift"
+    },
+    {
+      "round": "11",
+      "sha": "88fd0a2874e19bd09702ee925496c0ad324a320b",
+      "committedAt": "2026-07-24T09:23:34.000Z",
+      "subject": "M2 review round 11: bound the force settle, fix truncation warning + copy drift"
+    },
+    {
+      "round": "12",
+      "sha": "73467879984b69bfeec3faa91e3c057da5aac805",
+      "committedAt": "2026-07-24T09:43:37.000Z",
+      "subject": "M2 review round 12: de-flake test timeouts, unify layout resolver, close notice gaps"
+    },
+    {
+      "round": "13",
+      "sha": "e0e757cd82206fbaef112ee3c8c75e39a649d47a",
+      "committedAt": "2026-07-24T14:10:47.000Z",
+      "subject": "M2 review round 13: honest import-cap comment, clamp default, stable fit frame"
+    },
+    {
+      "round": "14",
+      "sha": "1fea5c64e781606c3ecb8805488605ccc8597b03",
+      "committedAt": "2026-07-24T14:34:42.000Z",
+      "subject": "M2 review round 14: truthful settings on idempotent generate, force cap covers all graphs"
+    },
+    {
+      "round": "15",
+      "sha": "ad8e6f315befb15fe7e1125e439c3716b698d0d6",
+      "committedAt": "2026-07-24T14:48:46.000Z",
+      "subject": "M2 review round 15: make LAYOUT_MODES load-bearing (data-driven layout toggle)"
+    },
+    {
+      "round": "16",
+      "sha": "e5b292fc3965bf83e9bd453ebba1064b8fc3aae9",
+      "committedAt": "2026-07-24T14:58:30.000Z",
+      "subject": "M2 review round 16: finish the data-driven toggle (active style, exhaustive resolver, a11y)"
+    },
+    {
+      "round": "17",
+      "sha": "27bc4cbb286b874869ef858b3cd7de3396ce6563",
+      "committedAt": "2026-07-24T15:13:45.000Z",
+      "subject": "M2 review round 17: gauge/caption consistency, prune orphan exports + dead CSS"
+    },
+    {
+      "round": "18",
+      "sha": "df44170940ef33216fd125834fcaa9bce9e70a2c",
+      "committedAt": "2026-07-24T15:29:18.000Z",
+      "subject": "M2 review round 18: dedupe-warning casing, girth doc, size-gate test, isOptimal seam"
+    },
+    {
+      "round": "19",
+      "sha": "eb0624381229a062be82f59b29301a049a0dcb00",
+      "committedAt": "2026-07-24T15:45:21.000Z",
+      "subject": "M2 review round 19: reset stale modal notices, unify truncation copy, fix MB unit"
+    },
+    {
+      "round": "20",
+      "sha": "a66272c1332a3e46c958937cafc404c0282d0069",
+      "committedAt": "2026-07-24T16:04:14.000Z",
+      "subject": "M2 review round 20: complete worker-error recovery (converged round)"
+    },
+    {
+      "round": "21",
+      "sha": "462360d2b17f6280e314a5631c75cdf95e032a59",
+      "committedAt": "2026-07-24T16:13:34.000Z",
+      "subject": "M2 review round 21: decouple error recovery from message content"
+    }
+  ],
+  "excludedFromFixSet": [
+    {
+      "sha": "24b5dd6cacc27d30a6fa008c3dd66ebed5735949",
+      "committedAt": "2026-07-24T04:57:31.000Z",
+      "subject": "M2: BuddyGraph MVP app (F1–F6) wired to the ringweave core",
+      "reason": "M2 baseline implementation, not a review fix"
+    },
+    {
+      "sha": "ded306a182631721518b8890890292fca752db52",
+      "committedAt": "2026-07-24T05:10:37.000Z",
+      "subject": "docs: mark M2 (MVP app, F1–F6) implemented in status banners",
+      "reason": "docs-only status banners"
+    },
+    {
+      "sha": "767cb875ffa43c6ac9e69cb24bfd20a8fd1fd324",
+      "committedAt": "2026-07-24T06:13:50.000Z",
+      "subject": "Strengthen the adversarial review mechanism (executable, structured, scoped)",
+      "reason": "review-harness tooling, not a code fix"
+    }
+  ],
+  "outlier": {
+    "sha": "c872a6e19c22fa501b268dffa190d2471e8e521a",
+    "reason": "1,249 insertions; report separately per Kim et al. outlier-fix filtering"
+  }
+}

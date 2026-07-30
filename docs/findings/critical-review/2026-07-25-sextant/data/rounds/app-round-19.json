@@ -1,0 +1,288 @@
+{
+  "target": "app/src",
+  "round": 19,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 3,
+    "confirmed": 3,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 4
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Full-surface pass over every file in app/src plus app/test, with executable probes under .review-scratch/probe/ (run via a scratch vitest config; nothing added to app/test).\n\nDeterminism: grepped app/src for Math.random / Date.now / performance.now / new Date (only performance.now in the GraphCanvas tween). Audited every Set/Map for order leakage — neighborhood()'s sets are consumed only via .has (highlight.ts) and sorted in PersonPanel; indexByName is get/has only; parseRoster's `extras` iterates in input order; importGraph sorts g.adj; exportGraph sorts edges; core edgeList() is sorted. The only path-RECONSTRUCTING call is usePathFinder -> core shortestPath, which is order-free by construction (BFS from t, then lowest-indexed-closer walk) and is canonicalised on min(from,to) before orienting. Verified d3-force's default randomSource is a fresh per-simulation LCG (node_modules/d3-force/src/lcg.js), so forceLayout is run-to-run reproducible.\n\nDisplayed vs actual: parity.probe.ts re-measures every GraphResult field against a Graph rebuilt from that result's own edge list, across 60 unconstrained AND constrained configurations (connected, aspl, diameter, girth, degreeMin/Max, largestComponentFraction, buddies) — all agree. fuzz.probe.ts pushes 3000 random legal files through importGraph and asserts quality===0 whenever aspl===null, never optimal-while-disconnected, no \"100%\" in the disconnected caption, caption/rail buddy-count agreement, shortfall sanity, and export->import fixed-point on metrics/edges/settings. rules.probe.ts recomputes reqViolations/prohViolations from the returned edge set over 400 random rule sets and checks constraintSummary never overstates. app.probe.tsx drives App under RTL with the real runGeneration behind a mocked worker hook: rail count, every .brow buddy cell, the dispatched seed increment, and the Advanced Seed field all match the worker payload.\n\nBoundaries/off-by-one: traced MAX_NAMES, MAX_IMPORT_N, MAX_CONSTRAINT_PAIRS, the 2m<=BUDDY_MAX*n density gate, the per-vertex degreeMax gate, MAX_NAME_CHARS/MAX_PARSE_CHARS (code points vs UTF-16), FORCE_MAX_N/FORCE_MAX_EDGES, ANIM_MAX_N, forceIters, SEED_MAX wrap, clampList/clampText/codePointsIfOver, SECOND_LIMIT, MAX_HISTORY, RESULT_LIMIT/activeIndex. Confirmed empirically that no generated graph (constrained or not, k in [2,12]) exceeds degreeMax=12 or the density gate, so the app cannot write a file its own import refuses. n=1 import yields aspl=Infinity -> quality 0 (not a false optimum); n=2/1-edge scores 1 correctly.\n\nReact/state: traced useBuddyGraph's consumed/pending guards and the identical-reroll adoption, useGenerationWorker's stale-id drop + worker swap on supersede/reset, loadView superseding an in-flight run, App's bg.status effect dependency set, reopenReason clearing on both dialog exits, the selected-index clamp, and StrictMode double-invoke of the forceFitRef render write and all mount effects.\n\napp/ npm test: 29 files / 297 tests green before and after.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Full surface of /home/user/ringweave/app/src, adversarially, with measurements rather than inspection alone. Probes under /home/user/ringweave/app/.review-scratch/ (gitignored, outside the pinned `test/**` glob). App suite re-run 3x after: 297/297 green.\n\nWHAT I TRIED AND COULD NOT BREAK:\n\n1. importGraph gate ordering. Traced every gate against the work it bounds: version -> people.length<=1000 -> edges is-array -> density (2m <= 12n, so m<=6000) -> declaredPairs<=200 -> per-name length (bounded via codePointsIfOver) -> control-char class -> joined length -> parseRoster round-trip -> Graph build -> per-vertex degree<=12 -> readConstraints -> allPairsSummary/girth. Every gate precedes its expensive step. Fuzzed ~450 hostile substitutions (undefined/null/NaN/Infinity/-0/1.5/2^53/\"\"/true/[]/{}/nested) across version, people, edges, constraints.required/prohibited, settings.{buddies,minSeparation,seed,polish} and per-element people/edge shapes: zero non-ImportError escapes, and every returned Settings satisfied buddies integer in [2,12], minSeparation undefined-or-integer-in-[2,12], seed integer in [0,2^31-1], polish in {true,false,\"auto\"}.\n\n2. Import re-measure cost. Maximum legal file (n=1000, m=6000, deg<=12) imports in 90 ms; ring n=1000 109 ms; path n=1000 70 ms; isolated 14 ms. Matches the documented budget.\n\n3. Spreadsheet/clipboard sink. Ran a 23-entry hostile corpus (=cmd|' /C calc'!A0, +/-/@ leads, tab, CR, NBSP, ZWSP, U+2028, RLO, lone surrogate, NEL, BOM, ideographic space, embedded comma/newline/tab, 200-char formula) through importGraph -> toCsv and -> the clipboard join, asserting \"no cell, after splitting on every CSV delimiter, begins with =,+,-,@,TAB,CR\". It held for every case: names carrying an embedded delimiter are structurally excluded (parseRoster splits on , and \\n and normalizes Cc/Cf/Zl/Zp/Cs; importGraph refuses that class and refuses anything parseRoster would not round-trip), so leading-only neutralization is sufficient here rather than accidental. Filenames are constants; no innerHTML/eval/network sinks exist anywhere in app/src.\n\n4. Numeric edges. -0 as person id, edge endpoint, constraint endpoint and seed all behave (=== treats -0===0, so the id and self-pair checks are correct); Infinity/NaN metrics are null-normalized before JSON.stringify; girth null for a forest; a disconnected import scores quality 0 with aspl/diameter null.\n\n5. parseRoster degenerate inputs at the 500k pre-cap: 250k duplicate tokens 60 ms, 500k commas 0.8 ms, 250k whitespace tokens 27 ms, 200k distinct names 63 ms (scan stops at MAX_NAMES), one 500k token 1.3 ms, 500k astral code points 6 ms, clampToPoints on 8 MB astral 126 ms. TOKEN's global-regex lastIndex is reset per call and the pattern cannot match empty, so no reentrancy or spin.\n\n6. Main-thread superlinear work: validateDetailed's O(n^2) prohibited-pair walk at n=1000 with 200 pairs measures 2.7 ms, so RosterModal's per-keystroke pre-flight is safe; a full-ceiling RosterModal keystroke (1000 names, 200 rules, 1403 datalist options, 400 rule inputs) is ~90 ms in jsdom; forceLayout at n=1000/m=6000 is 294 ms with 40 scaled ticks.\n\n7. Worker path: reroll of an imported view is bounded by the sanitized (n<=1000, k in [2,12]) and runs off-thread; explicit polish=true is downgraded via the core's own predicate rather than a mirrored cap; useGenerationWorker terminates and swaps on supersede so only one worker is ever live; onerror/onmessageerror both unstick the inert overlay.\n\n8. Unbounded growth: explorer history capped at 50, BuddyList timers replaced not accumulated, constraint pairs capped at 200 on both the import and editor paths, notice clamped at the sink, every untrusted-text DOM sink routed through io/clamp.\n\nTwo things I could measure fell outside the budgets the code documents for itself; both are filed as suggestions. The lib-side fromTags O(n^2) hazard named in the task has no caller in app/src (grepped) and is already a recorded lib deferral, so I did not file it.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Attempted the actual next-committed extension for app/src per docs/PROJECT_PLAN.md M4: F9's \"Preserve current buddies\" (priors) toggle. Traced every file the change would touch: worker/protocol.ts (GenerateRequest.constraints, isConstrainedRequest), worker/generate.ts (routing + buildConstrainedBuddyGraph call), constraints.ts (ConstraintKind/NamedPair/resolveNamedPairs), RosterModal.tsx (would need a new prop carrying the live view's edges+names, which it does not currently receive), App.tsx (dispatch site), useBuddyGraph.ts (wire construction). Confirmed lib/src/core/index.ts already has full prior support (Constraints#addPrior/priorHard, buildConstrainedBuddyGraph's priorWeight/priorsKeptFraction) from M1, so this is genuinely app-side-only work, matching app/CLAUDE.md's own analysis. Verified the fan-out this change would require is exactly what's already recorded in app/CLAUDE.md's \"F9's worker-protocol groundwork is DEFERRED\" note (isConstrainedRequest doesn't see priors yet — grep confirms the wire-shape has a single construction site in useBuddyGraph.ts and a single consumption site in generate.ts, so the seam for extending it is actually well-contained, not scattered). Traced buildReport in lib/src/core/index.ts (line 583) and confirmed it is module-private and not exported, matching the \"Buddy rules are not re-checked on import\" follow-on note; importGraph.ts:293 still returns report: null. Both of these match app/CLAUDE.md's existing analysis exactly — nothing new found there.\n\nSeparately attempted the declared app-side extension seam (GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor triple in graph/layout.ts and graph/GraphCanvas.tsx): traced positionsFor's exhaustive switch (assertNever), the FIT_MODES vs LAYOUT_MODES split for selection-dependent layouts, computeFit's frame-stability logic, and the animation gating (ANIM_MAX_N, sizeKey/layoutChanged). For the two built modes (ring, force) the seam holds together correctly — single source of truth for the mapping, animation and fit both consume positionsFor so they can't disagree. The one gap (a selection-dependent \"focus\" mode) has no caller in the tree (grep for a third LayoutMode/consumer of a focus param returns nothing) and is already filed as a deferral with its four unresolved problems named in app/CLAUDE.md.\n\nRead every remaining app/src file end to end for SRP leaks (math/graph logic in the UI), OCP violations, and DIP issues: model.ts, App.tsx, constraints.ts, neighborhood.ts, search.ts, highlight.ts, useGraph.ts, usePathFinder.ts, useExplorerHistory.ts, useFocusRescue.ts, useGenerationWorker.ts, useBuddyGraph.ts, RosterModal.tsx, ConstraintsEditor.tsx, PersonPanel.tsx, QualityPanel.tsx, BuddyList.tsx, Slips.tsx, importGraph.ts, worker/protocol.ts, worker/generate.ts, worker/generate.worker.ts. No new math-in-UI leak (neighborhood.ts's local walk is the one documented, reasoned exception); no god-component beyond App.tsx's expected composition-root role scoped in lib/CLAUDE.md's \"light DIP\" allowance; no gratuitous indirection with a single variant found beyond what's already flagged as a no-caller deferral.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "All 42 source files in app/src: component tree (App, panels, graph canvas), state management (useBuddyGraph, usePathFinder, useGenerationWorker), I/O layer (import/export, constraints, parsing, clamping), worker protocol, and utilities. Traced: comment accuracy (app.tsx reroll flow, model.ts quality/separation/target functions, constraints.ts resolution ordering, importGraph.ts round-trip contract, neighborhood.ts derivation scope); data flow consistency (generation/import/reroll creating/updating GraphView, constraint resolution in RosterModal vs worker, selection bounds-checking during async generation); public API contracts (GraphResult normalization from both builders, ConstraintPair dispatch to worker, targetShortfall/separationShortfall return shape); edge case handling (null girth for acyclic graphs, empty constraint rows kept and flagged, out-of-range person indices in error messages, duplicates within single roster vs. cross-document); single-source functions (quality scorer, degree label, constraint summary predicate, validation); duplication scope (neighborhood() shared between highlight and PersonPanel, buddiesLabel() seam across panels, quality calculation in one place only).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full interaction surface of app/src end-to-end against the 'mouse broken, screen off' scenario: App.tsx's inert/focus-rescue machinery, useFocusRescue.ts, useEscape.ts, useExplorerHistory.ts, usePathFinder.ts, useNotice.ts, useBuddyGraph.ts, useGenerationWorker.ts; every panel (RosterModal, ConstraintsEditor, SettingsControls, LayoutToggle, PersonSearch, PersonPanel, BuddyList, PathPanel, QualityPanel, Notice, Slips) and GraphCanvas.tsx (including its reduced-motion gating of the JS-driven layout tween). Verified aria-pressed/aria-current tracking, live-region mount-before-text ordering, the DOM-order-follows-visual-order claim against app.css positioning, and the reduced-motion CSS blanket rule. Where the code's own comments asserted a browser behavior (in particular, that setting `inert` on `#app` reliably moves focus off a descendant so `useFocusRescue`'s `document.activeElement === document.body` precondition fires), I did not take the comment's word for it: built app+lib, served the production build, and drove it with a real Chromium (v141, via Playwright) rather than jsdom (confirmed jsdom does not model inert's focus effects at all, so this path is untested by the existing suite). Repeated the 'tab to *Different arrangement*, press it' sequence multiple times against the live app.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 2,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (2) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "QualityPanel's separation-shortfall message is displayed regardless of whether the active graph-building path actually consumes the minSeparation setting, so it blames a control that has no way to change the outcome on the constrained path",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "separationShortfall fires on the constrained path, where the core documents minSeparation as \"ACCEPTED AND IGNORED\", so QualityPanel blames an inert control for a shortfall no value of that control can close."
+      ],
+      "critics": [
+        "critic-correctness"
+      ],
+      "remediation": "Gate the disclosure on whether the setting was actually consumed by the builder that produced the current view (e.g. `if (view.constraints.length > 0) return null;` at the top of separationShortfall, mirroring the same predicate App already uses at App.tsx:223), and mark Min separation as not applicable in SettingsControls once RosterModal has resolved rules — remove the display path for a control that cannot affect the output rather than adding a new one."
+    },
+    {
+      "theme": "The pre-parse size gate on imported files is calibrated in bytes while the actual cost of JSON.parse is driven by file shape, so an attacker-chosen shape blows past the gate's stated budget entirely on the main thread before any downstream check runs",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "MAX_FILE_BYTES is documented as bounding the cost of the read, string, and parse, but only bounds bytes; a maximum-size file crafted for depth/structure parses 5-18x slower and allocates hundreds of MB synchronously on the main thread, all before importGraph's own (correctly cheap) gate ever sees the value."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Reject on structural shape before calling JSON.parse — a single linear scan of the in-memory text bounding nesting depth and/or structural-character count, applying the same gate-before-the-expensive-step discipline importGraph already uses internally — and correct readFileText's docblock, which currently claims a bound (parse cost) it does not deliver."
+    },
+    {
+      "theme": "A single hover-state change at App level fans out into full re-renders of sibling panels that don't read that state, because nothing below App is memoized and the callbacks passed down are recreated every render — so the render cost of one hover scales with the size of the whole imported roster, not with the graph the hover belongs to",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "`hovered` is App-level state with no memoization below it and no stable callback identities, so every hover transition re-renders BuddyList, Slips, PathPanel and QualityPanel — panels that read neither `hovered` nor `selected` — reconciling ~17,000 elements per hover for large imports; app/CLAUDE.md misidentifies the small neighborhood-recompute term as the cost, missing the larger unmemoized-subtree term."
+      ],
+      "critics": [
+        "critic-security"
+      ],
+      "remediation": "Stop the hover state change from reaching subtrees that don't read it: memoize Slips and BuddyList and give their callback props stable identities (or keep `hovered` local to GraphCanvas and lift only what other panels actually consume) — and correct the app/CLAUDE.md note so it stops pointing fixers at the smallest of the three costs."
+    },
+    {
+      "theme": "The busy-overlay focus rescue is built on an assumption that the browser synchronously blurs focus off an element the instant its ancestor becomes `inert`, but that ordering is not guaranteed, so the rescue can miss the very race condition it exists to catch",
+      "severity": "suggestion",
+      "findingSummaries": [
+        "useFocusRescue only fires when document.activeElement === document.body, relying on `inert` to force that transition, but driving the real app in Chromium shows activeElement can still be the now-inert button (inside #app, appInert: true) right after the click that triggers it — the rescue's precondition is not reliably met."
+      ],
+      "critics": [
+        "critic-interaction"
+      ],
+      "remediation": "Don't depend on the browser to blur focus as a side effect of going inert: at the same call site that sets the state driving `inert` (reroll / edit-people / generate), explicitly move focus off the soon-to-be-inert element — one rescue triggered by the `inert` transition itself rather than assumed as a browser guarantee, keeping the existing single-rescue-at-commit-boundary design instead of adding a second mechanism."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "inert-setting-reported-as-unmet-request",
+      "theme": "a Settings value the active code path never consumes is displayed as a request the graph failed to meet",
+      "file": "app/src/model.ts",
+      "line": 342,
+      "summary": "separationShortfall fires on the constrained path, where the core documents minSeparation as \"ACCEPTED AND IGNORED\", so QualityPanel blames an inert control for a shortfall no value of that control can close.",
+      "failure": "Generate n=20, k=4 with one required rule and minSeparation=12. Measured (.review-scratch/probe/sep.probe.ts -> /tmp/sep.txt): girth is 3 for minSeparation in {2, 5, 12} — byte-identical graphs — yet separationShortfall returns {asked:12, got:2} and QualityPanel renders \"Buddies are 2 steps apart, not the 12 in Settings.\" The Advanced > Min separation field is fully editable throughout, so the organizer can lower it to 2, watch the message disappear, and conclude the graph changed when nothing did. lib/src/core/index.ts:241 states the option \"ACCEPTED AND IGNORED on this path... no value here can change the output\". The unconstrained path is correct and is the only one quality.test.ts's `viewAt` helper exercises, so the existing suite cannot see this.",
+      "remediation": "Close the theme, not the line: make the disclosure conditional on the setting having been consumed by the builder that produced the view. Cheapest subtraction is `if (view.constraints.length > 0) return null;` at the top of separationShortfall (the same predicate App already uses at App.tsx:223 to pick the reroll polish budget), and correspondingly mark Min separation as not applying in SettingsControls when RosterModal has resolved rules — a control that cannot affect the output should not read as a request. Name the sibling before closing: exportGraph writes settings.minSeparation into a constrained file, recording a target that graph does not and never could meet; targetShortfall is NOT a sibling (buddies/k IS consumed by buildConstrainedBuddyGraph), and the import path is not one either (a reroll on an unconstrained import does consume minSeparation).",
+      "invariant": "separationShortfall(view) === null for every view with view.constraints.length > 0 — equivalently, for any two Settings differing only in minSeparation, if the builder for that view produces an identical edge list for every value in [SEPARATION_MIN, SEPARATION_MAX], no UI string may attribute a shortfall to minSeparation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "pre-parse-gate-bounds-bytes-not-shape",
+      "theme": "the size gate that is supposed to bound the import parse is calibrated in bytes, but the cost of JSON.parse is set by the file's shape, so an attacker-chosen shape costs an order of magnitude more than the gate's stated budget",
+      "file": "/home/user/ringweave/app/src/io/readFileText.ts",
+      "line": 7,
+      "summary": "MAX_FILE_BYTES is documented as bounding \"the cost of the read, the resulting string, and any parse that follows (JSON.parse / parseRoster run on the main thread)\". It bounds bytes, not parse shape. A well-formed maximum-size BuddyGraph file parses in ~96 ms, but other 8 MB files parse 5-18x slower and allocate hundreds of megabytes, all synchronously on the main thread and all before importGraph's first gate can look at the value. importGraph itself is not at fault - it rejects in 0 ms once it has the object; the entire cost is paid upstream of it, at App.tsx:286 `importGraph(JSON.parse(text))`.",
+      "failure": "Drop or select an 8,000,000-byte .json file whose contents are '[' x 3,900,000 followed by ']' x 3,900,000. readFileText's byte gate passes it (size == limit). JSON.parse succeeds (no RangeError) and blocks the main thread for 1,778 ms while allocating ~238 MB; importGraph then rejects it in 0 ms with \"Unsupported file version: undefined\". Other shapes inside the same 8 MB budget, measured in the same harness: 800k distinct object keys = 860 ms / 611 MB; 2M empty objects = 505 ms / 517 MB; 2M-deep arrays-with-siblings = 689 ms / 389 MB. Comparison point, a valid max-size graph (n=1000, m=6000): 96 ms to parse, 90 ms to import. During the freeze there is no spinner and no Cancel - the busy overlay is driven by the worker status, and import never touches the worker.",
+      "remediation": "Bound the shape before the parse, or move the parse off the main thread. Cheap version: a single linear scan of the already-in-memory text before JSON.parse that rejects on excessive structural depth and/or structural-character count (scanning 8 MB counting [{ }] depth costs a few ms, and is the same gate-before-the-expensive-step discipline importGraph already follows internally). Thorough version: route JSON.parse plus the allPairsSummary/girth re-measure through the generation worker, which app/CLAUDE.md already lists as the clean follow-on for the re-measure half - note that the parse, not the re-measure, is the dominant term (1778 ms vs 90 ms), so fixing only the documented half leaves the larger cost in place. Either way, correct readFileText's docblock, which today asserts a bound it does not deliver.",
+      "invariant": "For every byte string s with s.length <= MAX_FILE_BYTES, the synchronous main-thread time spent by the import path (JSON.parse plus importGraph, i.e. everything between the resolved readFileText promise and the first thrown ImportError or returned GraphView) must not exceed the app's own budget for a VALID maximum-size file by more than a fixed constant factor C. Machine-checkable as a budget assertion t(any s) <= C * t(valid max-size file), with C pinned in the test - so any shape that blows the constant fails whether or not it was anticipated, rather than a list of shapes to try.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "hover-state-rerenders-unrelated-panels",
+      "theme": "a single file-controlled number (the imported roster size) sets the per-mouse-move render cost of every panel in the app, not just of the graph the hover belongs to",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 81,
+      "summary": "`hovered` is App-level state written by GraphCanvas's onMouseEnter/onMouseLeave. Nothing below App is memoized and none of the callbacks passed down are stable (`onSelect={setSelected}` is a fresh arrow each render), so every hover transition re-renders BuddyList (n rows), Slips (n print cards, each recomputing buddyLabel), PathPanel and QualityPanel in addition to GraphCanvas - even though Slips and QualityPanel read neither `hovered` nor `selected`. n is controlled by the imported file up to MAX_IMPORT_N = 1000. app/CLAUDE.md records this cost as \"Hover highlight is O(n+m) per hover (recomputes neighbor sets + node/edge classes)\" and proposes memoizing the highlight - but that recompute is the smallest term (neighborhood() is bounded at ~144 set operations by the degree cap); the real cost is reconciling ~17,000 elements across three unmemoized subtrees.",
+      "failure": "Import a file at the import ceiling (1000 people, 6000 edges, per-vertex degree 12 - accepted by every importGraph gate) and move the pointer across the graph. Each node crossed fires two hover transitions. Measured per-component re-render cost for that view in jsdom: GraphCanvas hover re-render 168 ms, BuddyList re-render 70 ms, Slips re-render 46 ms - ~280 ms of synchronous work per transition, repeated for every node crossed, so one mouse sweep across the canvas queues seconds of uninterruptible main-thread work. (jsdom overstates DOM cost relative to a browser; the mechanism - three unmemoized O(n) subtrees re-rendering on a hover-only state change - is read directly from App.tsx and the panel sources and does not depend on the environment.)",
+      "remediation": "Stop letting a hover-only state change reach subtrees that do not read it: memoize Slips and BuddyList (React.memo) and give the callbacks passed to them stable identities via useCallback, or keep `hovered` inside GraphCanvas and lift only what other panels actually need. Also correct the app/CLAUDE.md follow-on, which names the highlight recompute as the cost and would send a fixer at the smallest of the three terms.",
+      "invariant": "A state change that alters only `hovered` must not re-render any component that does not read `hovered`. Machine-checkable with render counters: mount the panel tree with a view of any n, record each panel's render count, dispatch a hover change, and assert Slips' and QualityPanel's counts are unchanged and BuddyList's is unchanged - a property over all n, not a measurement at a chosen n.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "inert-setting-reported-as-unmet-request",
+      "theme": "a Settings value the active code path never consumes is displayed as a request the graph failed to meet",
+      "file": "app/src/model.ts",
+      "line": 342,
+      "summary": "separationShortfall fires on the constrained path, where the core documents minSeparation as \"ACCEPTED AND IGNORED\", so QualityPanel blames an inert control for a shortfall no value of that control can close.",
+      "failure": "Generate n=20, k=4 with one required rule and minSeparation=12. Measured (.review-scratch/probe/sep.probe.ts -> /tmp/sep.txt): girth is 3 for minSeparation in {2, 5, 12} — byte-identical graphs — yet separationShortfall returns {asked:12, got:2} and QualityPanel renders \"Buddies are 2 steps apart, not the 12 in Settings.\" The Advanced > Min separation field is fully editable throughout, so the organizer can lower it to 2, watch the message disappear, and conclude the graph changed when nothing did. lib/src/core/index.ts:241 states the option \"ACCEPTED AND IGNORED on this path... no value here can change the output\". The unconstrained path is correct and is the only one quality.test.ts's `viewAt` helper exercises, so the existing suite cannot see this.",
+      "remediation": "Close the theme, not the line: make the disclosure conditional on the setting having been consumed by the builder that produced the view. Cheapest subtraction is `if (view.constraints.length > 0) return null;` at the top of separationShortfall (the same predicate App already uses at App.tsx:223 to pick the reroll polish budget), and correspondingly mark Min separation as not applying in SettingsControls when RosterModal has resolved rules — a control that cannot affect the output should not read as a request. Name the sibling before closing: exportGraph writes settings.minSeparation into a constrained file, recording a target that graph does not and never could meet; targetShortfall is NOT a sibling (buddies/k IS consumed by buildConstrainedBuddyGraph), and the import path is not one either (a reroll on an unconstrained import does consume minSeparation).",
+      "invariant": "separationShortfall(view) === null for every view with view.constraints.length > 0 — equivalently, for any two Settings differing only in minSeparation, if the builder for that view produces an identical edge list for every value in [SEPARATION_MIN, SEPARATION_MAX], no UI string may attribute a shortfall to minSeparation.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "pre-parse-gate-bounds-bytes-not-shape",
+      "theme": "the size gate that is supposed to bound the import parse is calibrated in bytes, but the cost of JSON.parse is set by the file's shape, so an attacker-chosen shape costs an order of magnitude more than the gate's stated budget",
+      "file": "/home/user/ringweave/app/src/io/readFileText.ts",
+      "line": 7,
+      "summary": "MAX_FILE_BYTES is documented as bounding \"the cost of the read, the resulting string, and any parse that follows (JSON.parse / parseRoster run on the main thread)\". It bounds bytes, not parse shape. A well-formed maximum-size BuddyGraph file parses in ~96 ms, but other 8 MB files parse 5-18x slower and allocate hundreds of megabytes, all synchronously on the main thread and all before importGraph's first gate can look at the value. importGraph itself is not at fault - it rejects in 0 ms once it has the object; the entire cost is paid upstream of it, at App.tsx:286 `importGraph(JSON.parse(text))`.",
+      "failure": "Drop or select an 8,000,000-byte .json file whose contents are '[' x 3,900,000 followed by ']' x 3,900,000. readFileText's byte gate passes it (size == limit). JSON.parse succeeds (no RangeError) and blocks the main thread for 1,778 ms while allocating ~238 MB; importGraph then rejects it in 0 ms with \"Unsupported file version: undefined\". Other shapes inside the same 8 MB budget, measured in the same harness: 800k distinct object keys = 860 ms / 611 MB; 2M empty objects = 505 ms / 517 MB; 2M-deep arrays-with-siblings = 689 ms / 389 MB. Comparison point, a valid max-size graph (n=1000, m=6000): 96 ms to parse, 90 ms to import. During the freeze there is no spinner and no Cancel - the busy overlay is driven by the worker status, and import never touches the worker.",
+      "remediation": "Bound the shape before the parse, or move the parse off the main thread. Cheap version: a single linear scan of the already-in-memory text before JSON.parse that rejects on excessive structural depth and/or structural-character count (scanning 8 MB counting [{ }] depth costs a few ms, and is the same gate-before-the-expensive-step discipline importGraph already follows internally). Thorough version: route JSON.parse plus the allPairsSummary/girth re-measure through the generation worker, which app/CLAUDE.md already lists as the clean follow-on for the re-measure half - note that the parse, not the re-measure, is the dominant term (1778 ms vs 90 ms), so fixing only the documented half leaves the larger cost in place. Either way, correct readFileText's docblock, which today asserts a bound it does not deliver.",
+      "invariant": "For every byte string s with s.length <= MAX_FILE_BYTES, the synchronous main-thread time spent by the import path (JSON.parse plus importGraph, i.e. everything between the resolved readFileText promise and the first thrown ImportError or returned GraphView) must not exceed the app's own budget for a VALID maximum-size file by more than a fixed constant factor C. Machine-checkable as a budget assertion t(any s) <= C * t(valid max-size file), with C pinned in the test - so any shape that blows the constant fails whether or not it was anticipated, rather than a list of shapes to try.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "hover-state-rerenders-unrelated-panels",
+      "theme": "a single file-controlled number (the imported roster size) sets the per-mouse-move render cost of every panel in the app, not just of the graph the hover belongs to",
+      "file": "/home/user/ringweave/app/src/App.tsx",
+      "line": 81,
+      "summary": "`hovered` is App-level state written by GraphCanvas's onMouseEnter/onMouseLeave. Nothing below App is memoized and none of the callbacks passed down are stable (`onSelect={setSelected}` is a fresh arrow each render), so every hover transition re-renders BuddyList (n rows), Slips (n print cards, each recomputing buddyLabel), PathPanel and QualityPanel in addition to GraphCanvas - even though Slips and QualityPanel read neither `hovered` nor `selected`. n is controlled by the imported file up to MAX_IMPORT_N = 1000. app/CLAUDE.md records this cost as \"Hover highlight is O(n+m) per hover (recomputes neighbor sets + node/edge classes)\" and proposes memoizing the highlight - but that recompute is the smallest term (neighborhood() is bounded at ~144 set operations by the degree cap); the real cost is reconciling ~17,000 elements across three unmemoized subtrees.",
+      "failure": "Import a file at the import ceiling (1000 people, 6000 edges, per-vertex degree 12 - accepted by every importGraph gate) and move the pointer across the graph. Each node crossed fires two hover transitions. Measured per-component re-render cost for that view in jsdom: GraphCanvas hover re-render 168 ms, BuddyList re-render 70 ms, Slips re-render 46 ms - ~280 ms of synchronous work per transition, repeated for every node crossed, so one mouse sweep across the canvas queues seconds of uninterruptible main-thread work. (jsdom overstates DOM cost relative to a browser; the mechanism - three unmemoized O(n) subtrees re-rendering on a hover-only state change - is read directly from App.tsx and the panel sources and does not depend on the environment.)",
+      "remediation": "Stop letting a hover-only state change reach subtrees that do not read it: memoize Slips and BuddyList (React.memo) and give the callbacks passed to them stable identities via useCallback, or keep `hovered` inside GraphCanvas and lift only what other panels actually need. Also correct the app/CLAUDE.md follow-on, which names the highlight recompute as the cost and would send a fixer at the smallest of the three terms.",
+      "invariant": "A state change that alters only `hovered` must not re-render any component that does not read `hovered`. Machine-checkable with render counters: mount the panel tree with a view of any n, record each panel's render count, dispatch a hover change, and assert Slips' and QualityPanel's counts are unchanged and BuddyList's is unchanged - a property over all n, not a measurement at a chosen n.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "inert-focus-race",
+      "theme": "the busy-overlay focus rescue depends on the browser synchronously blurring focus off a descendant the instant its ancestor becomes `inert`, but that isn't guaranteed to have happened by the time the rescue's own precondition is checked",
+      "file": "app/src/state/useFocusRescue.ts",
+      "line": 58,
+      "summary": "App.tsx makes `#app` `inert` in the same commit that starts a reroll or opens 'Edit people' (`inert={modalOpen || bg.status === \"running\"}`, App.tsx:314), while the button the user just activated (e.g. `#rail button.btn-warm`, '↻ Different arrangement') stays mounted inside `#app` rather than being removed. `useFocusRescue`'s rescue only fires when `document.activeElement === document.body` (useFocusRescue.ts:60), and the code's own comments assume the browser enforces this as part of going inert. Driving the real built app in Chromium 141 (not jsdom, which doesn't implement inert's focus effects at all) shows this is not deterministic: across repeated runs of 'tab to → Different arrangement, press it', `document.activeElement` was sometimes still the (now-inert) reroll button — inside `#app`, `appInert: true` — immediately after the click, and only became `document.body` on other runs of the identical sequence.",
+      "failure": "Tab to the '↻ Different arrangement' button (focus it), press Enter. On some runs (observed ~1 in 4 with n=8, k=3 in the shipped build): `document.activeElement` remains the reroll button, which is now inside the inert `#app` subtree (excluded from the accessibility tree), instead of moving to `document.body`. `useFocusRescue`'s MutationObserver-driven rescue (triggered by the busy overlay mounting, which IS a childList insertion) checks `document.activeElement !== document.body` and no-ops, so the designed hand-off to the busy overlay's Cancel button never happens for that reroll. A sighted keyboard user recovers with one extra Tab press (verified: Tab still correctly skips the inert subtree and lands on Cancel, since native Tab order isn't gated by `document.activeElement`'s own inert status). A screen-reader user whose assistive technology tracks the DOM's actual focus target — rather than raw Tab traversal — is left with focus nominally on a node the accessibility tree no longer exposes, with no live-region cue pointing them at Cancel (the always-mounted 'Generating…' status region announces that a run started, but not that focus needs to move); how a given screen reader's virtual cursor behaves in that state was not independently verified against real AT software, hence PLAUSIBLE rather than CONFIRMED for the end-to-end user impact, though the underlying focus-target race is directly reproduced.",
+      "remediation": "Don't rely on the browser to blur focus as a side effect of `inert`. When dispatching a reroll/edit-people/generate action while the previously-focused element is about to become inert, explicitly move focus (e.g. to the busy overlay's Cancel button, or to `#app`'s soon-to-be-mounted RosterModal field) at the same call site that sets the state — the same 'ONE rescue at the commit boundary' philosophy `useFocusRescue` already uses, but triggered by the `inert` transition itself (observable via a `MutationObserver` on `{ attributeFilter: ['inert'] }`, or simply an explicit `.blur()`/`.focus()` call in the action handler) rather than assumed as a browser guarantee.",
+      "invariant": "Whenever a commit sets `inert` on an ancestor of `document.activeElement`, `document.activeElement` must, by the time any dependent focus-rescue logic runs, no longer be a descendant of that now-inert ancestor — this must hold synchronously/deterministically, not merely 'usually'."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 19,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": 19,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 3,
+      "lastRound": 19,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 3,
+      "lastRound": 19,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 19,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 765868,
+    "agents": 6,
+    "toolCalls": 254
+  }
+}

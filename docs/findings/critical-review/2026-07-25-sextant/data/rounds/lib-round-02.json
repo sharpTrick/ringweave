@@ -1,0 +1,234 @@
+{
+  "runId": "wf_c519e9f0-47e",
+  "target": "lib/src",
+  "round": 2,
+  "tokens": {
+    "subagentTokens": 401727,
+    "agents": 6,
+    "toolCalls": 135
+  },
+  "haltNote": "Session limit reached mid-round. 3 of 5 lenses died: critic-correctness, critic-maintainability, critic-interaction. This round CANNOT support a convergence or an absence claim \u2014 only the findings that were actually reported. Those are durable: a positive detection cannot be undone by a later halt.",
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 2,
+    "confirmed": 3,
+    "blocking": 2,
+    "deferrals": 1,
+    "plausible": 0,
+    "themes": 3
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 0,
+      "checked": "",
+      "errored": true,
+      "erroredReason": "agent returned null (died on a terminal API error)"
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of /home/user/ringweave/lib/src/core (graph.ts, greedy.ts, constrainedGreedy.ts, constraints.ts, metrics.ts, polish.ts, swap.ts, rng.ts, bounds.ts, index.ts) plus lib/test/*.test.ts, traced against the app's untrusted entry points (app/src/io/importGraph.ts, app/src/state/useBuddyGraph.ts, app/src/worker/generate.ts) to establish present-day reachability. Ran hostile inputs against a fresh `npm run build` of lib/dist: (a) n in {-0, 0, 1, 2, 1.5, NaN, Infinity, -1, 2^31} and k in {0,1,2,NaN,Infinity,1e9} through both builders \u2014 every malformed value throws or refuses correctly, and the MAX_CACHED_N/MAX_GREEDY_WORK/MAX_CONSTRAINED_N/MAX_CONSTRAINED_WORK gates all fire BEFORE the Int32Array allocation and before generation; (b) minSeparation in {NaN, +/-Infinity, -1e9, 0.5} and seed in {NaN, Infinity, -1, 2^53} \u2014 no hang, no unbounded loop (NaN/negative minSeparation is echoed into finalMinSeparation but only disables the soft separation preference); (c) mooreLowerBounds(1e6, {1,2,3}) \u2014 the denormal-shell infinite loop is genuinely closed; (d) refusal path allocation: buildConstrainedBuddyGraph(1_000_000, 4) refuses in 181 ms / 44 MB, so refusedResult's n-sized array is not a DoS; (e) validate(Constraints(5000) with a prohibited pair, 4) \u2014 the O(n^2) connectivity walk is 71 ms and is correctly gated behind MAX_CONSTRAINED_N, so no gate runs after the work it bounds there; (f) shortestPath's forward walk is bounded by the known distance and cannot spin given Graph's symmetry invariant; (g) girth/eccentricity/largestComponentFraction are uncapped but take a caller-built Graph, matching the documented boundary. The core has no name/text/CSV/clipboard surface at all, so the spreadsheet-injection lens has no sink here (the neutralization lives in app/src/io/importGraph.ts and app/src/io/parseRoster.ts). What did break: the polish stage's work budget, from two directions.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": true,
+      "findings": 0,
+      "checked": "Full-surface read of lib/src/core (graph.ts, metrics.ts, greedy.ts, constrainedGreedy.ts, constraints.ts, polish.ts, swap.ts, bounds.ts, index.ts) plus lib/test/optimizer.props.test.ts, against lib/CLAUDE.md's SOLID scope and docs/PROJECT_PLAN.md's M3/M4 roadmap.\n\nAttempted extension: traced what core surface M3 (F7 constraints UI, F8 fuzzy search/node explorer, F10 path finder) and M4 (F9 recalc) actually need, then grepped app/src for live callers. Result: the core already ships everything the committed app work touches \u2014 `shortestPath`/`eccentricity` (F8/F10, consumed by app/src/panels/PersonPanel.tsx and app/src/state/usePathFinder.ts), `largestComponentFraction`/`connected` (F5, consumed by app/src/model.ts, app/src/worker/generate.ts, app/src/io/importGraph.ts), and `Constraints.priorHard`/`priorWeight` (F9, landed in M1b per churn-priors-weight.md, no further core work needed). None of this round's changed files (metrics.ts, graph.ts, greedy.ts, index.ts, constrainedGreedy.ts) need to change for any of these, and none required touching the declared tag-policy seam.\n\nSpecifically probed the declared OCP seam: grepped for `fromTags` callers \u2014 none outside lib/test. app/CLAUDE.md independently confirms the tag UI (which would be the seam's real caller) is deferred with \"no caller\" for the same reason. Traced the two documented `fromTags` hazards (unguarded n, NaN-tag silent inversion) in lib/CLAUDE.md's \"Known limitations\" \u2014 both already correctly filed as deferred-not-fixed there (no live caller), so re-filing them here would be redundant with an already-accurate self-assessment, not a new finding.\n\nRe-verified the round-1 fragmentation fix (penalizedAspl's charged-mean-plus-flat-penalty in metrics.ts, the explicit `next.components > startComponents` revert guard in constrainedGreedy.ts's polishConstrained, and the by-construction (no explicit guard) argument in polish.ts) by re-running lib/test/optimizer.props.test.ts (18/18 passing, including the property test that runs `polish` directly on already-disconnected fast-check-generated graphs) and by hand-tracing why `best` in both polish paths can never regress past its start energy. The asymmetry between polish.ts (implicit, energy-shape proof) and constrainedGreedy.ts's polishConstrained (explicit per-move component guard) is justified by different preconditions (ringGreedy's ring seed is always connected; constrainedGreedy can leave residual disconnection) and is stated as such in both files' comments \u2014 engaged, not filed.\n\nChecked graph.ts hosting cross-cutting work-budget constants (MAX_ROSTER, MAX_CONSTRAINED_N/WORK, DEFAULT_MIN_SEPARATION) despite being \"the dependency leaf\" \u2014 a documented deliberate choice to avoid an import cycle, not an SRP leak in practice (each constant is consumed by exactly the entry points that need it).",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 0,
+      "checked": "",
+      "errored": true,
+      "erroredReason": "agent returned null (died on a terminal API error)"
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 0,
+      "checked": "",
+      "errored": true,
+      "erroredReason": "agent returned null (died on a terminal API error)"
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`resolveWantPolish` honours an explicit `polish: true` without ever consulting `MAX_POLISH_WORK`, so the single most expensive input on the default path \u2014 the exact 33 s case the constant was introduced to kill \u2014 is still reachable by setting one boolean."
+      ],
+      "remediation": "Make the budget the authority rather than a default-only heuristic: `resolveWantPolish` must return false (or, better, clamp the iteration count so the modelled work fits) whenever `polishWork(n, k, iters) > MAX_POLISH_WORK`, including when the caller passed `polish: true`. Honouring a direct instruction is not worth a 33 s stall the constant exists to prevent \u2014 if the request must be respected, respect it by deriving iterations from the budget, which is the follow-on already recorded in graph.ts's MAX_POLISH_WORK comment. Then delete the n-only `POLISH_MAX_N` mirror in app/src/state/useBuddyGraph.ts so there is exactly one gate and it cannot drift again."
+    },
+    {
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`checkedIterations` validates the TYPE of `polishIters` (integer, non-negative, finite) but never its MAGNITUDE, so any large finite integer passes the guard verbatim and becomes the polish loop bound \u2014 the sibling one boundary over from the Infinity case the guard was written for."
+      ],
+      "remediation": "Stop validating the budget in isolation and bound the WORK instead: clamp the resolved iteration count so `polishWork(n, k, iters) <= MAX_POLISH_WORK`, i.e. `iters = min(checkedIterations(...), floor(MAX_POLISH_WORK / (n * m)))`. That single change subsumes the existing type checks (Infinity/NaN/negative all fail the same comparison) and closes both this and the `polish: true` sibling with one rule, so the polish stage has one ceiling rather than a type guard plus a bypassable flag. Replace the [Infinity, NaN, -1, 1.5, -Infinity] case table with the invariant below."
+    },
+    {
+      "theme": "a size gate that runs after the work it is meant to bound \u2014 Constraints.fromTags builds O(n^2) pair keys inside the constructor, before validate can refuse anything",
+      "severity": "deferral",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "`Constraints.fromTags` takes `n` entirely on faith \u2014 unlike `degreeOf` in the same file, the `Graph` constructor and `validate`, all of which guard it \u2014 and then runs an unguarded `for (i < n) { for (j < n) }` materializing one Set key per same-tag pair, so the cost is paid before any cap can be consulted."
+      ],
+      "remediation": "When the tag UI lands (not before): validate `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, then pre-count group sizes in one O(n) pass and refuse against a pair cap (sum of C(size,2)) BEFORE the double loop runs, and reject non-finite/NaN tag values by normalizing them to null."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-bypassable-by-flag",
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 426,
+      "summary": "`resolveWantPolish` honours an explicit `polish: true` without ever consulting `MAX_POLISH_WORK`, so the single most expensive input on the default path \u2014 the exact 33 s case the constant was introduced to kill \u2014 is still reachable by setting one boolean.",
+      "failure": "Measured on a fresh build of lib/dist: `buildBuddyGraph(120, 12)` returns in 110 ms with `polished === false` (budget refuses it), while `buildBuddyGraph(120, 12, { polish: true })` runs for 32788 ms and returns `polished === true`. This is reachable today from a file, not just from the lib API: `app/src/io/importGraph.ts:54` passes `s.polish === true` through untouched, `sanitizeSettings` clamps `buddies` to BUDDY_MAX = 12, and the app's mirror guard at `app/src/state/useBuddyGraph.ts:121` is `names.length > POLISH_MAX_N` with POLISH_MAX_N = 120 \u2014 which is FALSE at exactly 120. So a hostile BuddyGraph JSON with 120 people, `settings.buddies: 12`, `settings.polish: true` costs 33 s of worker time per Generate and per re-roll. The app's mirror is n-only because it was written against the OLD `n <= 120` gate; the core's gate became k-aware and the mirror did not, and the core's explicit-true escape hatch means the mirror was the only thing left guarding it.",
+      "remediation": "Make the budget the authority rather than a default-only heuristic: `resolveWantPolish` must return false (or, better, clamp the iteration count so the modelled work fits) whenever `polishWork(n, k, iters) > MAX_POLISH_WORK`, including when the caller passed `polish: true`. Honouring a direct instruction is not worth a 33 s stall the constant exists to prevent \u2014 if the request must be respected, respect it by deriving iterations from the budget, which is the follow-on already recorded in graph.ts's MAX_POLISH_WORK comment. Then delete the n-only `POLISH_MAX_N` mirror in app/src/state/useBuddyGraph.ts so there is exactly one gate and it cannot drift again.",
+      "invariant": "For every (n, k, options) that buildBuddyGraph or buildConstrainedBuddyGraph returns from, if the result reports `polished === true` then `polishWork(n, k, iters_actually_run) <= MAX_POLISH_WORK`. No value of `options.polish` may make this false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-loop-bound-from-untrusted-number",
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 378,
+      "summary": "`checkedIterations` validates the TYPE of `polishIters` (integer, non-negative, finite) but never its MAGNITUDE, so any large finite integer passes the guard verbatim and becomes the polish loop bound \u2014 the sibling one boundary over from the Infinity case the guard was written for.",
+      "failure": "`JSON.parse('{\"polishIters\":1e15}').polishIters` is 1e15, for which `Number.isInteger` is true and `< 0` is false, so `checkedIterations` returns it unchanged and it lands in `polish(g, { maxIters: 1e15 })`. Reproduced: `buildBuddyGraph(30, 4)` with the default 20000 iterations completes in 1220 ms; `buildBuddyGraph(30, 4, { polishIters: 1e15 })` did not return within a 25 s timeout (exit 124) \u2014 extrapolating the measured rate that is ~2 years. The constrained path is identical via `DEFAULT_CONSTRAINED_POLISH_ITERS`. Note also that `resolveWantPolish` deliberately gates on the DEFAULT iteration budget, so a hostile `polishIters` cannot even turn the polish gate off \u2014 auto-polish stays on at n=30,k=4 and then runs the attacker's count. The ratchet from the round that added this guard, `lib/test/optimizer.props.test.ts:247` (`for (const bad of [Infinity, NaN, -1, 1.5, -Infinity])`), is a case table, and 1e15 passes it by construction \u2014 exactly the failure mode the protocol names.",
+      "remediation": "Stop validating the budget in isolation and bound the WORK instead: clamp the resolved iteration count so `polishWork(n, k, iters) <= MAX_POLISH_WORK`, i.e. `iters = min(checkedIterations(...), floor(MAX_POLISH_WORK / (n * m)))`. That single change subsumes the existing type checks (Infinity/NaN/negative all fail the same comparison) and closes both this and the `polish: true` sibling with one rule, so the polish stage has one ceiling rather than a type guard plus a bypassable flag. Replace the [Infinity, NaN, -1, 1.5, -Infinity] case table with the invariant below.",
+      "invariant": "For every (n, k, options), the number of polish iterations actually executed satisfies `polishWork(n, k, iters) <= MAX_POLISH_WORK` \u2014 for ALL values of `options.polishIters` and `options.polish`, not an enumerated set of malformed ones.",
+      "caseOnly": false
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "work-budget-bypassable-by-flag",
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 426,
+      "summary": "`resolveWantPolish` honours an explicit `polish: true` without ever consulting `MAX_POLISH_WORK`, so the single most expensive input on the default path \u2014 the exact 33 s case the constant was introduced to kill \u2014 is still reachable by setting one boolean.",
+      "failure": "Measured on a fresh build of lib/dist: `buildBuddyGraph(120, 12)` returns in 110 ms with `polished === false` (budget refuses it), while `buildBuddyGraph(120, 12, { polish: true })` runs for 32788 ms and returns `polished === true`. This is reachable today from a file, not just from the lib API: `app/src/io/importGraph.ts:54` passes `s.polish === true` through untouched, `sanitizeSettings` clamps `buddies` to BUDDY_MAX = 12, and the app's mirror guard at `app/src/state/useBuddyGraph.ts:121` is `names.length > POLISH_MAX_N` with POLISH_MAX_N = 120 \u2014 which is FALSE at exactly 120. So a hostile BuddyGraph JSON with 120 people, `settings.buddies: 12`, `settings.polish: true` costs 33 s of worker time per Generate and per re-roll. The app's mirror is n-only because it was written against the OLD `n <= 120` gate; the core's gate became k-aware and the mirror did not, and the core's explicit-true escape hatch means the mirror was the only thing left guarding it.",
+      "remediation": "Make the budget the authority rather than a default-only heuristic: `resolveWantPolish` must return false (or, better, clamp the iteration count so the modelled work fits) whenever `polishWork(n, k, iters) > MAX_POLISH_WORK`, including when the caller passed `polish: true`. Honouring a direct instruction is not worth a 33 s stall the constant exists to prevent \u2014 if the request must be respected, respect it by deriving iterations from the budget, which is the follow-on already recorded in graph.ts's MAX_POLISH_WORK comment. Then delete the n-only `POLISH_MAX_N` mirror in app/src/state/useBuddyGraph.ts so there is exactly one gate and it cannot drift again.",
+      "invariant": "For every (n, k, options) that buildBuddyGraph or buildConstrainedBuddyGraph returns from, if the result reports `polished === true` then `polishWork(n, k, iters_actually_run) <= MAX_POLISH_WORK`. No value of `options.polish` may make this false.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-loop-bound-from-untrusted-number",
+      "theme": "an attacker-supplied field in the options object turns the polish stage into unbounded work \u2014 the MAX_POLISH_WORK budget is advisory, not authoritative",
+      "file": "/home/user/ringweave/lib/src/core/index.ts",
+      "line": 378,
+      "summary": "`checkedIterations` validates the TYPE of `polishIters` (integer, non-negative, finite) but never its MAGNITUDE, so any large finite integer passes the guard verbatim and becomes the polish loop bound \u2014 the sibling one boundary over from the Infinity case the guard was written for.",
+      "failure": "`JSON.parse('{\"polishIters\":1e15}').polishIters` is 1e15, for which `Number.isInteger` is true and `< 0` is false, so `checkedIterations` returns it unchanged and it lands in `polish(g, { maxIters: 1e15 })`. Reproduced: `buildBuddyGraph(30, 4)` with the default 20000 iterations completes in 1220 ms; `buildBuddyGraph(30, 4, { polishIters: 1e15 })` did not return within a 25 s timeout (exit 124) \u2014 extrapolating the measured rate that is ~2 years. The constrained path is identical via `DEFAULT_CONSTRAINED_POLISH_ITERS`. Note also that `resolveWantPolish` deliberately gates on the DEFAULT iteration budget, so a hostile `polishIters` cannot even turn the polish gate off \u2014 auto-polish stays on at n=30,k=4 and then runs the attacker's count. The ratchet from the round that added this guard, `lib/test/optimizer.props.test.ts:247` (`for (const bad of [Infinity, NaN, -1, 1.5, -Infinity])`), is a case table, and 1e15 passes it by construction \u2014 exactly the failure mode the protocol names.",
+      "remediation": "Stop validating the budget in isolation and bound the WORK instead: clamp the resolved iteration count so `polishWork(n, k, iters) <= MAX_POLISH_WORK`, i.e. `iters = min(checkedIterations(...), floor(MAX_POLISH_WORK / (n * m)))`. That single change subsumes the existing type checks (Infinity/NaN/negative all fail the same comparison) and closes both this and the `polish: true` sibling with one rule, so the polish stage has one ceiling rather than a type guard plus a bypassable flag. Replace the [Infinity, NaN, -1, 1.5, -Infinity] case table with the invariant below.",
+      "invariant": "For every (n, k, options), the number of polish iterations actually executed satisfies `polishWork(n, k, iters) <= MAX_POLISH_WORK` \u2014 for ALL values of `options.polishIters` and `options.polish`, not an enumerated set of malformed ones.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "pre-gate-quadratic-materialization",
+      "theme": "a size gate that runs after the work it is meant to bound \u2014 Constraints.fromTags builds O(n^2) pair keys inside the constructor, before validate can refuse anything",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "`Constraints.fromTags` takes `n` entirely on faith \u2014 unlike `degreeOf` in the same file, the `Graph` constructor and `validate`, all of which guard it \u2014 and then runs an unguarded `for (i < n) { for (j < n) }` materializing one Set key per same-tag pair, so the cost is paid before any cap can be consulted.",
+      "failure": "`fromTags(1e15, [])` enters `for (let i = 0; i < 1e15; i++)` with no guard whatsoever and never returns; `fromTags(3000, Array(3000).fill('A'))` spends ~3.4 s building 4.5M keys and at tens of millions of pairs the Set construction throws before `validate`'s MAX_CONSTRAINED_N refusal is ever reached. Also `NaN` as a tag value never equals itself, so `prohibit_same` silently produces no constraints for that group. Filed as a deferral, not gating: `grep` finds no caller of `fromTags` outside `lib/test` \u2014 the tag UI is P2 and explicitly deferred in app/CLAUDE.md \u2014 so nothing untrusted reaches it in the current tree, and this is already recorded in lib/CLAUDE.md's known-limitations list. Repeating it here only so the log is complete for this round.",
+      "remediation": "When the tag UI lands (not before): validate `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, then pre-count group sizes in one O(n) pass and refuse against a pair cap (sum of C(size,2)) BEFORE the double loop runs, and reject non-finite/NaN tag values by normalizing them to null.",
+      "invariant": "`Constraints.fromTags(n, tags, policy)` returns or throws in time O(n + emitted pairs) with emitted pairs <= a stated cap, for all n and all tags \u2014 it never performs work proportional to an unvalidated n.",
+      "caseOnly": false
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-security",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "pre-gate-quadratic-materialization",
+      "theme": "a size gate that runs after the work it is meant to bound \u2014 Constraints.fromTags builds O(n^2) pair keys inside the constructor, before validate can refuse anything",
+      "file": "/home/user/ringweave/lib/src/core/constraints.ts",
+      "line": 105,
+      "summary": "`Constraints.fromTags` takes `n` entirely on faith \u2014 unlike `degreeOf` in the same file, the `Graph` constructor and `validate`, all of which guard it \u2014 and then runs an unguarded `for (i < n) { for (j < n) }` materializing one Set key per same-tag pair, so the cost is paid before any cap can be consulted.",
+      "failure": "`fromTags(1e15, [])` enters `for (let i = 0; i < 1e15; i++)` with no guard whatsoever and never returns; `fromTags(3000, Array(3000).fill('A'))` spends ~3.4 s building 4.5M keys and at tens of millions of pairs the Set construction throws before `validate`'s MAX_CONSTRAINED_N refusal is ever reached. Also `NaN` as a tag value never equals itself, so `prohibit_same` silently produces no constraints for that group. Filed as a deferral, not gating: `grep` finds no caller of `fromTags` outside `lib/test` \u2014 the tag UI is P2 and explicitly deferred in app/CLAUDE.md \u2014 so nothing untrusted reaches it in the current tree, and this is already recorded in lib/CLAUDE.md's known-limitations list. Repeating it here only so the log is complete for this round.",
+      "remediation": "When the tag UI lands (not before): validate `n` against MAX_ROSTER/MAX_CONSTRAINED_N as the first statement, then pre-count group sizes in one O(n) pass and refuse against a pair cap (sum of C(size,2)) BEFORE the double loop runs, and reject non-finite/NaN tag values by normalizing them to null.",
+      "invariant": "`Constraints.fromTags(n, tags, policy)` returns or throws in time O(n + emitted pairs) with emitted pairs <= a stated cap, for all n and all tags \u2014 it never performs work proportional to an unvalidated n.",
+      "caseOnly": false
+    }
+  ],
+  "plausible": [],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 1,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "{\"target\":\"lib/src (the ringweave core)\",\"round\":2,\"runId\":\"sextant-m3-lib\",\"changedPaths\":[\"lib/src/core/metrics.ts\",\"lib/src/core/graph.ts\",\"lib/src/core/greedy.ts\",\"lib/src/core/index.ts\",\"lib/src/core/constrainedGreedy.ts\",\"lib/test/optimizer.props.test.ts\"],\"saturation\":{\"critic-correctness\":{\"nothingFoundStreak\":0},\"critic-security\":{\"nothingFoundStreak\":0},\"critic-solid\":{\"nothingFoundStreak\":0},\"critic-maintainability\":{\"nothingFoundStreak\":0},\"critic-interaction\":{\"nothingFoundStreak\":1}}}",
+  "observations": [
+    {
+      "kind": "critic-side-effect",
+      "note": "A critic left a scratch harness in the working tree: an untracked `lib/test/zz_frag.test.ts` that vitest then picked up. It ran for 90 s and timed out, so on the next `npm test` it read as two FAILING tests. Critics have Bash access by design (that is what lets them measure rather than speculate), and nothing told this one to clean up. Had it been committed it would have broken CI; had it been trusted it would have looked like a regression in the round-1 fix. Deleted, and the run is preserved in the session scratchpad.",
+      "silverLining": "Its output is the strongest evidence available for the round-1 fix: 432,954 fragmenting double-edge swaps examined over randomly structured disconnected graphs, zero of which lowered the objective. Recorded in optimizer.props.test.ts's header."
+    },
+    {
+      "kind": "self-induction",
+      "note": "Both blocking findings this round are against the round-1 fix, not against pre-existing code: MAX_POLISH_WORK was consulted only on the auto path, so an explicit `polish: true` re-opened the exact 33 s case it was introduced to close; and the new iteration guard checked type but not magnitude, so 1e15 passed where Infinity was caught. This is E1's self-reference tail, observed live and attributable by construction \u2014 the code they criticise was written one round earlier in this same loop."
+    }
+  ]
+}

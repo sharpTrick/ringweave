@@ -1,0 +1,457 @@
+{
+  "target": "app/src",
+  "round": 2,
+  "modelOverride": null,
+  "converged": false,
+  "counts": {
+    "gating": 8,
+    "confirmed": 9,
+    "blocking": 6,
+    "deferrals": 1,
+    "plausible": 1,
+    "themes": 9
+  },
+  "byCritic": [
+    {
+      "critic": "critic-correctness",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 3,
+      "checked": "Full surface of app/src as it stands: App.tsx wiring; model.ts (metrics/quality/copy seams); constraints.ts; search.ts; neighborhood.ts; all panels (RosterModal, ConstraintsEditor, SettingsControls, QualityPanel, BuddyList, Slips, PersonPanel, PersonSearch, PathPanel, Notice, LayoutToggle); all state hooks (useBuddyGraph, useGenerationWorker, useGraph, usePathFinder, useExplorerHistory, useNotice, useEscape); graph/{layout,highlight,GraphCanvas}; io/{importGraph,exportGraph,schema,parseRoster,feasibility,constraintMessages,download,readFileText}; worker/{protocol,generate}. Cross-read against lib/src/core/{metrics,index,constraints,budgets,graph} for the contracts the app mirrors. Determinism: no Math.random/Date.now in app/src; every Set→array conversion is sorted (importGraph buddies, PersonPanel chips) or membership-only (highlight); shortestPath/bfs tie-breaks verified explicit in lib (`w < next`), so route rendering is order-stable; d3-force settle is ring-seeded and tick-count is a pure function of n. Ran `npx vitest run` in app/ (29 files, 249 tests, green before and after). Reproduced findings with throwaway React harnesses driving the real App with a stubbed worker hook (removed afterwards) and with direct core probes against lib/dist. Checked and did NOT find problems in: import/export round-trip metrics, quality=0 on disconnected/edgeless, largest-component floor at 99%, stale-response id correlation and worker swap, selection index clamping against a shorter view, edgeClass route reasoning (dist-distinct argument holds), search ranking totality, parseRoster/import name round-trip refusal set.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-security",
+      "model": "opus",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-solid",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Traced the concrete extension needed for F9 ('Recalculate with minimal disruption', PROJECT_PLAN.md F9 and app/CLAUDE.md's own 'priors/priorHard toggle stays deferred... Priors are F9/M4' note — the one still-open item from the plan's 'M3/M4 (next): ...recalc...' line, everything else in that list (constraints UI, fuzzy search, node explorer, path finder) is already built) through the real files: worker/protocol.ts, worker/generate.ts, worker/generate.worker.ts, state/useGenerationWorker.ts, state/useBuddyGraph.ts, constraints.ts, model.ts, App.tsx, RosterModal.tsx. Read all round-2 changed files in full (App.tsx, constraints.ts, ConstraintsEditor.tsx, PathPanel.tsx, PersonSearch.tsx, RosterModal.tsx, search.ts, PersonPanel.tsx, useExplorerHistory.ts, model.ts, worker/protocol.ts) plus useBuddyGraph.ts, useGenerationWorker.ts, generate.ts, generate.worker.ts, and lib/src/core/constraints.ts + index.ts (Constraints.addPrior/priorHard, buildConstrainedBuddyGraph, withHardPriors, ConstraintReport.priorsKeptFraction). Reproduced the specific hazard against the built lib (lib/dist) with a scratch script under .review-scratch/ before filing it, rather than filing on inspection alone.",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-maintainability",
+      "model": "haiku",
+      "nothingFound": false,
+      "findings": 1,
+      "checked": "",
+      "errored": false,
+      "erroredReason": null
+    },
+    {
+      "critic": "critic-interaction",
+      "model": "sonnet",
+      "nothingFound": false,
+      "findings": 2,
+      "checked": "Traced the full cold-load -> roster -> generate -> read quality -> search person -> buddies -> export -> error-recovery path across App.tsx, RosterModal.tsx, ConstraintsEditor.tsx, PersonSearch.tsx, PersonPanel.tsx, PathPanel.tsx, BuddyList.tsx, QualityPanel.tsx, LayoutToggle.tsx, Notice.tsx, useNotice.ts, useEscape.ts, useExplorerHistory.ts. Verified the `inert` cascade claim with a jsdom render test (test/__scratch_inert.test.tsx, run and removed) confirming div#app carries `inert` and contains #modal as a descendant. Grepped the whole app/src for `.focus(`, `autoFocus`, `activeElement` to check for any explicit focus-restoration logic (none found). Checked reduced-motion handling in GraphCanvas.tsx (unchanged, already gated by matchMedia) and confirmed it is not part of this round's regression surface.",
+      "errored": false,
+      "erroredReason": null
+    }
+  ],
+  "skipped": [],
+  "themes": [
+    {
+      "theme": "Regeneration ('reroll') reads the last-dispatched request state instead of the roster actually on screen, so a cancelled/errored generation attempt can get silently re-rolled instead of the displayed graph",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "handleGenerate commits names/settings/constraints at dispatch time, but view only updates on success; cancel and error paths leave those three states pointing at an abandoned generation. handleReroll then reads names/settings/constraints (not view.names/view.settings/view.constraints), so '↻ Different arrangement' regenerates the wrong roster and computes feasibility/rerollBlockReason against the wrong n. Untested by the existing suite."
+      ],
+      "remediation": "Delete the separate names/settings/constraints state as reroll's input source — have handleReroll build its request from view.names/view.settings/view.constraints exclusively, so there is only one place (the displayed view) that regeneration can read from."
+    },
+    {
+      "theme": "The app hardcodes a flat n threshold to predict the core's auto-polish behavior, instead of asking the core, so the UI's 'impossible to reroll' claim diverges from what the core would actually do at k != 4",
+      "severity": "blocking",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "POLISH_MAX_N is a flat 120, but the core's real auto-polish gate (resolveWantPolish/polishWork vs MAX_POLISH_WORK) is k-dependent (146 at k=2, 131 at k=3, 120 at k=4, 78 at k=12, and a different range again for the constrained builder up to 5000). Above 120 with k<4 the app refuses to dispatch even though the core would polish and vary the graph. app/test/reroll.test.ts only pins the boundary at k=4, so the rest of the band is untested."
+      ],
+      "remediation": "Remove POLISH_MAX_N and the app's private prediction of it entirely — export the core's own resolveWantPolish/polishWork decision as a single predicate and have rerollBlockReason call that directly, so there is no second copy of the threshold to drift."
+    },
+    {
+      "theme": "A builder result that means 'no graph was produced' (refusal) is mapped through the same path as a real success, so the view can render an empty/disconnected graph as fully rule-satisfied",
+      "severity": "suggestion",
+      "critics": [
+        "critic-correctness"
+      ],
+      "findingSummaries": [
+        "runGeneration maps buildConstrainedBuddyGraph's return into kind:\"ok\" without inspecting report.refusals; a refusal (empty buddy lists, zero edges, satisfied:false) flows through viewFromResult/assembleMetrics into a constraintSummary that only checks reqViolations+prohViolations===0 and prints 'all rules satisfied.' Currently unreachable in practice because the app's own pre-check makes builder refusals impossible, but the ok channel is the wrong place to discover that assumption breaking."
+      ],
+      "remediation": "Remove the implicit assumption that buildConstrainedBuddyGraph always succeeds when called — check report.refusals.length in runGeneration and route a non-empty result to the existing refused/error channel instead of kind:\"ok\", collapsing the two now-divergent notions of 'success' into one."
+    },
+    {
+      "theme": "Import-time size gates bound only aggregate/average quantities (total density, total characters), leaving a single vertex's degree or a single name's length unbounded, so one adversarial file can force megabytes of synchronous per-person work",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "importGraph's density gate (2*edges > BUDDY_MAX*people) bounds only average degree, so a star graph with one hub of degree n-1 passes trivially. The name-length gate bounds total roster characters, not any single name, so one name can be ~500,000 chars and becomes the buddy label repeated for every leaf across BuddyList, Slips, and toCsv. neighborhood.ts's documented invariant 'degree is capped at BUDDY_MAX=12' is false on this path."
+      ],
+      "remediation": "Remove the averaging gates as the sole check — replace/augment with a per-vertex maximum: after the edge loop, refuse when max degree exceeds BUDDY_MAX, and refuse per-name when a single name exceeds a fixed character cap, enforced in the one authority both parseRoster and importGraph already share."
+    },
+    {
+      "theme": "Untrusted file content reaches the on-screen error toast as a raw, unbounded interpolation with nothing between the throw and the DOM text node to cap it",
+      "severity": "blocking",
+      "critics": [
+        "critic-security"
+      ],
+      "findingSummaries": [
+        "ImportError messages interpolate untrusted values with no length bound (e.g. `Person \"${p.name}\" has id...` fires before the joined-length check even exists), and App's catch renders err.message directly into a toast text node with no truncation anywhere in the chain, so the entire 8MB file-byte budget is convertible into one DOM text node."
+      ],
+      "remediation": "Remove the untruncated interpolation sites — clamp all untrusted content once, at the single sink (useNotice's show/flash), rather than trusting each call site to bound its own message."
+    },
+    {
+      "theme": "Constraint-set construction/validation is duplicated across independent app call sites (main-thread RosterModal, worker-side pre-check in generate.ts) with no shared source of truth, so they can silently diverge from each other and from the builder's own promotion order",
+      "severity": "suggestion",
+      "critics": [
+        "critic-solid",
+        "critic-maintainability"
+      ],
+      "findingSummaries": [
+        "runGeneration's pre-check (validateDetailed) validates a raw, un-promoted Constraints object, while buildConstrainedBuddyGraph internally promotes priors to required before validating (withHardPriors) — the code's own comment already flags that this equivalence breaks the day priors exist.",
+        "The logic to build a Constraints object from pairs is duplicated between RosterModal (main thread, user-edit order) and generate.ts (worker, required-then-prohibited order); currently order-independent but a latent hazard as the two copies evolve separately."
+      ],
+      "remediation": "Delete the duplicate Constraints-building/validating logic in RosterModal and generate.ts's pre-check — route both through the one function (in constraints.ts) that also performs the builder's own promotion order, so there is exactly one place that turns pairs into a Constraints object."
+    },
+    {
+      "theme": "The worker protocol and constraint editor have no representation for priors/priorHard at all — flagged as necessary groundwork, not a present defect",
+      "severity": "deferral",
+      "critics": [
+        "critic-solid"
+      ],
+      "findingSummaries": [
+        "GenerateRequest.constraints only carries {required, prohibited}, GenerateOptions has no priorWeight/priorHard, and ConstraintPair has no 'prior' concept; building this ahead of a designed F9 feature (e.g. before deciding where a 'preserve current buddies' toggle lives) would be premature groundwork with no caller."
+      ],
+      "remediation": "Do nothing now — building this before F9 is designed would itself be the anti-pattern (an abstraction with no caller); defer until the feature that needs it is scheduled."
+    },
+    {
+      "theme": "The inert-attribute focus trap intended to lock users OUT of the app while a dialog is open instead nests the dialog inside the same subtree it marks inert, making the dialog itself unreachable — including on cold load",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "RosterModal is rendered inside div#app inert={modalOpen} rather than as the sibling the adjacent code comment claims it is. Because inert cascades to all descendants with no opt-out, the dialog is removed from the accessibility tree and unfocusable the moment modalOpen is true — which is the initial state, so a screen-reader/keyboard-only user gets nothing operable on first paint."
+      ],
+      "remediation": "Move the RosterModal render (and the busy overlay, same defect) out from inside the inert div entirely — render it as an actual sibling, matching what the existing comment already claims, instead of adding any inert-aware exception inside the nested subtree."
+    },
+    {
+      "theme": "Closing or clearing a panel unmounts the element that currently holds focus with nothing in the app ever calling .focus() on a replacement, so focus silently falls back to <body> and keyboard/AT users lose their place",
+      "severity": "blocking",
+      "critics": [
+        "critic-interaction"
+      ],
+      "findingSummaries": [
+        "PersonPanel's Close button and PathPanel's Clear button both unmount the very button that was just activated (via setSelected(null) / path.clear()), and the same applies to Escape-driven clears in useEscape; a repo-wide search found zero .focus()/autoFocus/activeElement usage outside GraphCanvas's own selection highlighting, so focus always defaults to <body> and Tab restarts from the top of the document."
+      ],
+      "remediation": "Remove the assumption that default browser focus behavior is acceptable — on every control whose activation unmounts its own containing panel, explicitly move focus to the stable control that opened it before the unmount happens, rather than leaving it unhandled."
+    }
+  ],
+  "gating": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-state-desync",
+      "theme": "the app's roster/settings/rules state describes the last ATTEMPTED generation rather than the graph currently on screen, so a button that promises to re-arrange THIS roster can silently swap in a different one",
+      "file": "app/src/App.tsx",
+      "line": 131,
+      "summary": "handleGenerate commits `names`/`settings`/`constraints` at DISPATCH time (lines 118-125), but the displayed `view` is only replaced when the worker result arrives. Cancel (`cancelGeneration`, line 149 — keeps the old view) and the error path (line 99-104 — reopens the modal only when there is no view) both leave those three states describing a roster that was never generated. `handleReroll` then reads `names`/`settings`/`constraints` instead of `view.names`/`view.settings`/`view.constraints`, so \"↻ Different arrangement\" regenerates the abandoned roster — and its feasibility/rerollBlockReason preflight is also computed against the wrong n. The existing suite does not cover it (249 tests pass with the bug present); appErrorRecovery.test.tsx exercises the error/refusal toasts but never a reroll afterwards.",
+      "failure": "Reproduced with a React harness driving the real App with a stubbed generation worker: generate roster A (5 people) → success, rail shows \"5\". Click \"Edit people\", type a 9-name roster, Generate, then either click Cancel in the busy overlay or let the worker report an error (no modal reopens because a view exists). Rail still shows \"5\". Now click \"↻ Different arrangement\": the dispatched request is {n:9,k:4}, not {n:5,k:4}, and when it returns the on-screen graph is replaced by the 9-person roster — from a control whose only stated effect is a different arrangement of the graph you are looking at. The refusal path is the same shape (names/constraints already switched to the refused input while graph A is displayed).",
+      "remediation": "Make the displayed view the single source for regeneration: `handleReroll` should build its request from `view.names`, `view.settings` and `view.constraints` (feasibility and rerollBlockReason included), or commit `names`/`settings`/`constraints` only when a result is adopted (i.e. derive them from `view` and keep the in-flight inputs in the pending ref that useBuddyGraph already owns). Add a regression test: after a cancelled/errored second generation, the next reroll must dispatch n === view.names.length.",
+      "invariant": "For every regeneration dispatched by the reroll control, the request's (n, k, constraints) equal (view.names.length, view.settings.buddies, view.constraints) of the view rendered at click time — a reroll can never change the roster identity of the displayed graph."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "wrong-user-facing-claim",
+      "theme": "a flat n threshold stands in for the core's real auto-polish decision, so the UI asserts a re-roll is impossible for rosters where the core would in fact vary the graph",
+      "file": "app/src/model.ts",
+      "line": 58,
+      "summary": "POLISH_MAX_N is a flat 120 and `rerollBlockReason` blocks every reroll above it with \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" But the core's auto-polish gate is no longer an n<=120 literal: `resolveWantPolish` compares `polishWork(n,k,defaultIters)` to MAX_POLISH_WORK, which is calibrated to reproduce 120 only at k=4. The real cutoff is k-dependent (unconstrained: 146 at k=2, 131 at k=3, 120 at k=4, 78 at k=12) and different again for the constrained builder (124-232, and MAX_CONSTRAINED_N=5000 so those sizes are all reachable in-app). Above 120 with k<4 the app therefore refuses to even dispatch, while the core would polish and the seed would change the graph. app/test/reroll.test.ts pins the boundary at k=4 only, so the whole k!=4 band is untested and the suite stays green.",
+      "failure": "Direct core probe (lib/dist, default polish iterations): buildBuddyGraph(125, 3, {seed:1}) vs {seed:2} → polished=true, edges DIFFER, aspl 4.711 vs 4.719. Also polished=true at n=131/140/146 for k=2-3, and false at n=121 for k=4. In the app, a 125-person roster with \"Buddies each\" = 3 clicking \"↻ Different arrangement\" gets the flash \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" and no request is ever sent — a false impossibility claim that also removes the feature for that band. (The same constant drives useBuddyGraph's polish:true→\"auto\" downgrade at line 121, which is harmless in the direction tested but rests on the same wrong predicate.)",
+      "remediation": "Take it lib-first: export the core's own auto-polish predicate (e.g. `autoPolishes(n, k, { constrained })` wrapping resolveWantPolish/polishWork) and have `rerollBlockReason` and the polish downgrade call it, deleting the flat POLISH_MAX_N. Then parameterize app/test/reroll.test.ts over k (not just k=4) so the app's block can never claim impossibility where the core polishes.",
+      "invariant": "For all n and settings, if rerollBlockReason(n, settings) returns the too-large reason then the core would not polish that configuration — i.e. buildBuddyGraph(n, settings.buddies, {polish: settings.polish, polishIters: 1}).polished === false (and the constrained equivalent when constraints are in force)."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-file",
+      "theme": "a small imported file materializes hundreds of megabytes of synchronous text on the main thread, because nothing bounds a single name's length or a single person's degree — only their aggregates",
+      "file": "app/src/io/importGraph.ts",
+      "line": 150,
+      "summary": "importGraph's two size gates bound only AVERAGES, so the product (degree of one person) x (length of one name) is unbounded. The density gate is `2 * f.edges.length > BUDDY_MAX * f.people.length` — average degree — so a star graph with one hub of degree n-1 (999 at n=1000) passes trivially (2*999 <= 12*1000). The name gate is `joined.length > MAX_PARSE_CHARS` — total roster characters — so a single name may be ~500,000 chars. Neither gate exists per-vertex or per-name. The hub's 480,000-char name is then the buddy label of all 999 leaves, and `buddyLabel` is called once per person by BuddyList (visible), Slips (always mounted, aria-hidden), and toCsv. Note `app/src/neighborhood.ts:10` explicitly documents the assumption \"Degree is capped at BUDDY_MAX = 12\", which is false on the import path.",
+      "failure": "A 512,696-byte JSON file (well under readFileText's 8 MB gate) — version 1, people[0].name = \"x\".repeat(480000), people[1..999] = \"p1\"..\"p999\", edges = [[0,1]..[0,999]] — is ACCEPTED by importGraph in 125 ms. Reproduced in .review-scratch/hub.probe.test.ts: the accepted view yields degreeMax 999 and Sum over i of buddyLabel(view,i).length = 479,525,884 characters. BuddyList and Slips each render that as DOM text on one synchronous React commit (~480 MB per subtree, ~960 MB across both); node RSS reached 1,065 MB. Pressing CSV builds a 480,015,788-character string (2.6 s in node, before Blob/download). This is a tab freeze/OOM from a half-megabyte file.",
+      "invariant": "For EVERY GraphView the app accepts (import or generate), the total text its buddy-label sinks (BuddyList, Slips, toCsv, clipboard copy) materialize is bounded by a file-independent constant: Sum over i<n of (names[i].length + buddyLabel(view,i).length) <= MAX_ROSTER_N * (BUDDY_MAX + 2) * MAX_NAME_CHARS. Enforceable as two per-element gates that must hold for every accepted file: (a) every name satisfies names[i].length <= MAX_NAME_CHARS, and (b) max over v of degree(v) <= BUDDY_MAX. Any accepted input violating the aggregate bound is a failure.",
+      "remediation": "Add a per-name length cap (e.g. `export const MAX_NAME_CHARS`) enforced in BOTH authorities — parseRoster (truncate or drop with a warning, so the round-trip check stays consistent) and importGraph (refuse: \"A name is too long\") — and add a per-vertex degree gate to importGraph alongside the existing density gate: after the edge loop, refuse when `degreeExtent(g.degrees())[1] > BUDDY_MAX` (\"someone has N buddies — more than a buddy graph allows\"). Both checks must run before `allPairsSummary`/view construction. Update neighborhood.ts's degree-cap note once (b) is real."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-file",
+      "theme": "raw content from an untrusted file is echoed verbatim and unbounded into the on-screen error toast",
+      "file": "app/src/io/importGraph.ts",
+      "line": 137,
+      "summary": "ImportError messages interpolate untrusted file values with no length bound, and App's catch renders them straight into the DOM: `flash(\\`Couldn't import that file: ${err.message}\\`)` (App.tsx:176) -> useNotice state -> `<button className=\"toast\">{message}</button>` (Notice.tsx:23) — a single text node in a styled, wrapping toast. Two reachable sites: `Unsupported file version: ${JSON.stringify(f.version)}` (importGraph.ts:137) and `Person \"${p.name}\" has id ${p.id}...` (importGraph.ts:168, which fires BEFORE the joined-length check at line 190, so the name is unbounded there). Nothing between the throw and the text node truncates. The whole file-byte budget (8 MB) is therefore convertible into one DOM text node, and the toast stays mounted for AUTO_CLEAR_MS = 4000 before a second layout pass removes it.",
+      "failure": "Reproduced in .review-scratch/echo.probe.test.ts: `{\"version\":\"AAAA...\"}` with a 7,900,000-character version string is 7,900,014 bytes — under readFileText's 8,000,000-byte gate — JSON.parses fine, and importGraph throws an ImportError whose `.message` is 7,900,042 characters. App's handler makes that a 7,900,069-character toast string handed to React as the sole child of the toast button. The id-mismatch path is equally unbounded: a 7,000,000-char `name` yields a 7,000,040-char message. Message length is measured; the resulting multi-second glyph-shaping/line-breaking block is inferred from the character count, not measured in a browser.",
+      "invariant": "Every string that reaches the Notice sink — i.e. every argument passed to useNotice's `show`/`flash`, including every `ImportError.message` — has length <= NOTICE_MAX_CHARS, a constant independent of the imported file's content. Equivalently: no untrusted value is interpolated into a user-facing message without first passing through a truncating quoter.",
+      "remediation": "Add one truncating quoter used at every interpolation of untrusted file content (e.g. `function quote(v: unknown, max = 80)` returning `JSON.stringify(v).slice(0, max)` plus an ellipsis) and apply it at importGraph.ts:137 and :168. Belt-and-braces: clamp in the single sink instead of/as well as at each site — truncate to NOTICE_MAX_CHARS inside `useNotice`'s `show`/`flash` (app/src/state/useNotice.ts), which bounds every present and future message producer rather than only the two known ones."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-validation-diverges-under-promotion",
+      "theme": "the app's structured pre-check (used to get a named, per-person refusal instead of the lib's prose) validates a different constraint set than the lib actually builds against, and the two are not kept in sync by any shared code path",
+      "file": "app/src/worker/generate.ts",
+      "line": 89,
+      "summary": "runGeneration's existing pattern for F7 (validate a raw Constraints up front so refusals can be structured Reason[] instead of prose, then trust buildConstrainedBuddyGraph to succeed) does not compose with F9/priorHard. buildConstrainedBuddyGraph internally promotes priors to required BEFORE validating (lib/src/core/index.ts:308, withHardPriors), but the app's pre-check at generate.ts:97 (validateDetailed(cons, k)) would run against the UN-promoted set if a straightforward F9 patch just adds cons.addPrior(...) + cons.priorHard = true to the same Constraints object the app already builds (mirroring how required/prohibited are added at lines 94-95). generate.ts's own comment at line 76-79 already flags this exact gap: '...checking first is what lets the refusal carry structured reasons... identical here, since the app has no priors to promote' — i.e. the code already knows this equivalence breaks the day priors exist, and nothing currently enforces re-deriving the pre-check from the same promotion path the builder uses.",
+      "failure": "Reproduced directly against lib/dist: n=4, k=2, cons.addPrior(0,1), addPrior(0,2), addPrior(0,3), cons.priorHard=true. validateDetailed(cons, k) on the unpromoted object returns [] (feasible) — this is what a naive F9 pre-check, following the existing required/prohibited pattern, would report. But buildConstrainedBuddyGraph(4, 2, cons, {}) internally promotes priors to required first and correctly refuses: report.refusals = ['person 0 has 3 required buddies but each person gets 2'], edges = [], buddies = [[],[],[],[]]. generate.ts's fromConstrained (line 48) packages this unconditionally as kind: 'ok' (runGeneration line 100) with no check of r.report.refusals.length — so the UI would render a graph where everyone has zero buddies, with no 'refused' overlay, no reopened editor, no named-person explanation — the exact silent-partial F7's acceptance criteria (PROJECT_PLAN.md:101, 'never a silent partial') were written to forbid, reintroduced by F9 through a channel F7 already closed for required/prohibited.",
+      "remediation": "When adding priors/priorHard, run the app's pre-check against the SAME promoted constraint set the builder will use — e.g. expose/call the promotion step (or just always run priors through cons.require(a,b) locally before validateDetailed when priorHard is set, mirroring withHardPriors) rather than validating the raw object. Alternatively, have runGeneration check result.report.refusals.length > 0 after calling buildConstrainedBuddyGraph and return a refused-shaped response (even if only with prose, since the builder's refusal path doesn't carry structured Reason[]) instead of trusting the pre-check to have already caught every case.",
+      "invariant": "For every Constraints cons and buddy count k the app hands to the worker: validateDetailed(cons_as_the_app_pre-checks_it, k).length === 0 must imply buildConstrainedBuddyGraph(n, k, cons, opts).report.refusals.length === 0. Currently false whenever cons.priorHard === true and promoting priors to required pushes some person's required-degree, or a required/prohibited conflict, past what k/prohibited pairs allow.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "maintainability-hazard-duplication",
+      "theme": "Constraint object building duplicated in two code paths with different input orderings",
+      "file": "app/src/panels/RosterModal.tsx and app/src/worker/generate.ts",
+      "line": 93,
+      "summary": "The logic to build a Constraints object from a set of pairs is duplicated in two locations that process constraints in different orders. The main thread (RosterModal) processes require/prohibit calls in the order the user edited them (potentially intermixed), while the worker (generate.ts) processes all required pairs first, then all prohibited pairs. This creates a latent maintenance hazard despite current order-independence.",
+      "failure": "Hypothetical: If the Constraints class implementation were optimized to depend on call order (e.g., early exit or greedy assignment based on prior choices), the main thread validation could report a rule set as feasible while the worker generates a refusal—a silent discrepancy. More immediately, a refactor that extracts a helper function in one location but forgets to update the other would diverge the implementations.",
+      "remediation": "Extract the constraint-building logic into a shared function that takes a ConstraintPair[] and preserves the normalized order (all required, then all prohibited) consistently across both paths. This ensures future maintainers can't accidentally diverge the implementations, and it documents the expected calling order explicitly. The function would live in constraints.ts, pair with resolveNamedPairs and splitPairs.",
+      "invariant": "For any set of buddy rules, the feasibility validation performed on the main thread (RosterModal, line 97) must produce identical results to the feasibility check performed in the worker (generate.ts, line 97), regardless of whether the constraints are added to a Constraints object in user-edit order or in separated required/prohibited order.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "inert-cascade-swallows-dialog",
+      "theme": "the focus trap meant to keep keyboard/AT users OUT of the app behind the dialog instead makes the dialog itself unreachable, because it nests the dialog inside the very subtree it marks inert",
+      "file": "app/src/App.tsx",
+      "line": 186,
+      "summary": "RosterModal (the roster-setup dialog, role=\"dialog\" aria-modal=\"true\") is rendered INSIDE <div id=\"app\" inert={modalOpen}> (inside <main>, lines 255-265), not as a sibling as the adjacent comment (lines 182-185) claims. `inert` cascades to all descendants per the HTML spec and browser implementations, with no way for a nested element to opt back in. So the moment modalOpen is true — including on cold load, since `modalOpen` is initialised to `true` (line 44) — div#app AND everything inside it, including RosterModal itself, is inert: removed from the accessibility tree and unfocusable/untabbable. A screen-reader-and-keyboard-only user gets a page that announces essentially nothing operable on first paint (no textarea, no Generate button reachable), and re-opening the modal later via \"Edit people\" has the same effect.",
+      "failure": "Cold load with a screen reader and no mouse: press Tab. Because #app (containing #modal) is inert, the roster textarea, \"choose a file\"/\"try example names\" links, the buddy-rules editor, settings controls, and \"Generate buddy graph\" button are all outside the accessibility tree and outside the tab order — Tab lands nowhere useful, and the dialog that is the ONLY thing on screen cannot be operated without a mouse. Verified structurally and with a jsdom render (`appDiv.hasAttribute('inert') === true` and `appDiv.contains(modalDiv) === true` both hold) in a scratch test at app/test/__scratch_inert.test.tsx (run then removed).",
+      "remediation": "Render RosterModal as an actual sibling of the inert div, outside `<div id=\"app\" inert={modalOpen}>` — e.g. move the `{modalOpen && <RosterModal .../>}` block (and ideally the busy overlay too, for the same reason) to sit alongside `<div id=\"app\">` in the top-level fragment, matching what the comment already says is the design.",
+      "invariant": "Whenever an element carrying `role=\"dialog\"`/`aria-modal=\"true\"` is open, that element and its descendants must never be a descendant of any element carrying the `inert` attribute (equivalently: `inertAncestor.contains(dialogElement)` must be false for every element with `inert` truthy)."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-lost-on-panel-removal",
+      "theme": "closing/replacing a panel unmounts the very element that had focus with no explicit refocus, so the browser drops focus to <body> and a keyboard/screen-reader user loses their place in the document",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 59,
+      "summary": "PersonPanel's \"Close\" button (`onClick={onClose}` -> `setSelected(null)` in App.tsx) and PathPanel's \"Clear\" button (`onClick={onClear}` -> `path.clear()`) both cause the panel — and the very button that was just activated — to unmount entirely (`{selected !== null && <PersonPanel .../>}` / `{path.active && <PathPanel .../>}` in App.tsx). Neither App.tsx nor any hook in the app (`useEscape`, `useExplorerHistory`, `usePathFinder`) ever calls `.focus()` on a replacement target — a whole-tree grep for `.focus(`, `autoFocus`, `activeElement` across app/src found zero occurrences outside GraphCanvas's own selection highlighting. When a focused element is removed from the DOM, focus moves to `<body>` (spec-defined), so the next Tab press restarts tab order from the top of the document instead of continuing near where the user was working. The same applies to Escape-driven clears (`useEscape` calling `path.clear()`/`explorer.select(null)`), which remove PathPanel/PersonPanel the same way.",
+      "failure": "Keyboard/screen-reader session: select a person (PersonPanel appears, focus e.g. on \"Find a path from here\"), start a path, then press the PathPanel's \"Clear\" button. PathPanel unmounts; focus is now on <body>. The next Tab press jumps to the header/brand area at the top of the page rather than back to PersonPanel or anything related to the person just being explored — the user has to re-navigate the whole page to resume.",
+      "remediation": "On any control whose activation removes its own containing panel (Close, Clear, Cancel-generation-that-reopens-modal, etc.), explicitly move focus to a stable anchor before/after the unmount — e.g. a ref on the triggering panel's sibling control (\"Edit people\", the search input, or the row in BuddyList that opened PersonPanel) — rather than relying on default browser behavior.",
+      "invariant": "For every control whose activation causes its own ancestor panel to unmount, `document.activeElement` immediately after the state update must be a specific, still-mounted, previously-identified element — never `document.body`."
+    }
+  ],
+  "confirmed": [
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "stale-state-desync",
+      "theme": "the app's roster/settings/rules state describes the last ATTEMPTED generation rather than the graph currently on screen, so a button that promises to re-arrange THIS roster can silently swap in a different one",
+      "file": "app/src/App.tsx",
+      "line": 131,
+      "summary": "handleGenerate commits `names`/`settings`/`constraints` at DISPATCH time (lines 118-125), but the displayed `view` is only replaced when the worker result arrives. Cancel (`cancelGeneration`, line 149 — keeps the old view) and the error path (line 99-104 — reopens the modal only when there is no view) both leave those three states describing a roster that was never generated. `handleReroll` then reads `names`/`settings`/`constraints` instead of `view.names`/`view.settings`/`view.constraints`, so \"↻ Different arrangement\" regenerates the abandoned roster — and its feasibility/rerollBlockReason preflight is also computed against the wrong n. The existing suite does not cover it (249 tests pass with the bug present); appErrorRecovery.test.tsx exercises the error/refusal toasts but never a reroll afterwards.",
+      "failure": "Reproduced with a React harness driving the real App with a stubbed generation worker: generate roster A (5 people) → success, rail shows \"5\". Click \"Edit people\", type a 9-name roster, Generate, then either click Cancel in the busy overlay or let the worker report an error (no modal reopens because a view exists). Rail still shows \"5\". Now click \"↻ Different arrangement\": the dispatched request is {n:9,k:4}, not {n:5,k:4}, and when it returns the on-screen graph is replaced by the 9-person roster — from a control whose only stated effect is a different arrangement of the graph you are looking at. The refusal path is the same shape (names/constraints already switched to the refused input while graph A is displayed).",
+      "remediation": "Make the displayed view the single source for regeneration: `handleReroll` should build its request from `view.names`, `view.settings` and `view.constraints` (feasibility and rerollBlockReason included), or commit `names`/`settings`/`constraints` only when a result is adopted (i.e. derive them from `view` and keep the in-flight inputs in the pending ref that useBuddyGraph already owns). Add a regression test: after a cancelled/errored second generation, the next reroll must dispatch n === view.names.length.",
+      "invariant": "For every regeneration dispatched by the reroll control, the request's (n, k, constraints) equal (view.names.length, view.settings.buddies, view.constraints) of the view rendered at click time — a reroll can never change the roster identity of the displayed graph."
+    },
+    {
+      "critic": "critic-correctness",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "wrong-user-facing-claim",
+      "theme": "a flat n threshold stands in for the core's real auto-polish decision, so the UI asserts a re-roll is impossible for rosters where the core would in fact vary the graph",
+      "file": "app/src/model.ts",
+      "line": 58,
+      "summary": "POLISH_MAX_N is a flat 120 and `rerollBlockReason` blocks every reroll above it with \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" But the core's auto-polish gate is no longer an n<=120 literal: `resolveWantPolish` compares `polishWork(n,k,defaultIters)` to MAX_POLISH_WORK, which is calibrated to reproduce 120 only at k=4. The real cutoff is k-dependent (unconstrained: 146 at k=2, 131 at k=3, 120 at k=4, 78 at k=12) and different again for the constrained builder (124-232, and MAX_CONSTRAINED_N=5000 so those sizes are all reachable in-app). Above 120 with k<4 the app therefore refuses to even dispatch, while the core would polish and the seed would change the graph. app/test/reroll.test.ts pins the boundary at k=4 only, so the whole k!=4 band is untested and the suite stays green.",
+      "failure": "Direct core probe (lib/dist, default polish iterations): buildBuddyGraph(125, 3, {seed:1}) vs {seed:2} → polished=true, edges DIFFER, aspl 4.711 vs 4.719. Also polished=true at n=131/140/146 for k=2-3, and false at n=121 for k=4. In the app, a 125-person roster with \"Buddies each\" = 3 clicking \"↻ Different arrangement\" gets the flash \"This group is too large to shuffle — a different arrangement is only possible for smaller groups.\" and no request is ever sent — a false impossibility claim that also removes the feature for that band. (The same constant drives useBuddyGraph's polish:true→\"auto\" downgrade at line 121, which is harmless in the direction tested but rests on the same wrong predicate.)",
+      "remediation": "Take it lib-first: export the core's own auto-polish predicate (e.g. `autoPolishes(n, k, { constrained })` wrapping resolveWantPolish/polishWork) and have `rerollBlockReason` and the polish downgrade call it, deleting the flat POLISH_MAX_N. Then parameterize app/test/reroll.test.ts over k (not just k=4) so the app's block can never claim impossibility where the core polishes.",
+      "invariant": "For all n and settings, if rerollBlockReason(n, settings) returns the too-large reason then the core would not polish that configuration — i.e. buildBuddyGraph(n, settings.buddies, {polish: settings.polish, polishIters: 1}).polished === false (and the constrained equivalent when constraints are in force)."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-file",
+      "theme": "a small imported file materializes hundreds of megabytes of synchronous text on the main thread, because nothing bounds a single name's length or a single person's degree — only their aggregates",
+      "file": "app/src/io/importGraph.ts",
+      "line": 150,
+      "summary": "importGraph's two size gates bound only AVERAGES, so the product (degree of one person) x (length of one name) is unbounded. The density gate is `2 * f.edges.length > BUDDY_MAX * f.people.length` — average degree — so a star graph with one hub of degree n-1 (999 at n=1000) passes trivially (2*999 <= 12*1000). The name gate is `joined.length > MAX_PARSE_CHARS` — total roster characters — so a single name may be ~500,000 chars. Neither gate exists per-vertex or per-name. The hub's 480,000-char name is then the buddy label of all 999 leaves, and `buddyLabel` is called once per person by BuddyList (visible), Slips (always mounted, aria-hidden), and toCsv. Note `app/src/neighborhood.ts:10` explicitly documents the assumption \"Degree is capped at BUDDY_MAX = 12\", which is false on the import path.",
+      "failure": "A 512,696-byte JSON file (well under readFileText's 8 MB gate) — version 1, people[0].name = \"x\".repeat(480000), people[1..999] = \"p1\"..\"p999\", edges = [[0,1]..[0,999]] — is ACCEPTED by importGraph in 125 ms. Reproduced in .review-scratch/hub.probe.test.ts: the accepted view yields degreeMax 999 and Sum over i of buddyLabel(view,i).length = 479,525,884 characters. BuddyList and Slips each render that as DOM text on one synchronous React commit (~480 MB per subtree, ~960 MB across both); node RSS reached 1,065 MB. Pressing CSV builds a 480,015,788-character string (2.6 s in node, before Blob/download). This is a tab freeze/OOM from a half-megabyte file.",
+      "invariant": "For EVERY GraphView the app accepts (import or generate), the total text its buddy-label sinks (BuddyList, Slips, toCsv, clipboard copy) materialize is bounded by a file-independent constant: Sum over i<n of (names[i].length + buddyLabel(view,i).length) <= MAX_ROSTER_N * (BUDDY_MAX + 2) * MAX_NAME_CHARS. Enforceable as two per-element gates that must hold for every accepted file: (a) every name satisfies names[i].length <= MAX_NAME_CHARS, and (b) max over v of degree(v) <= BUDDY_MAX. Any accepted input violating the aggregate bound is a failure.",
+      "remediation": "Add a per-name length cap (e.g. `export const MAX_NAME_CHARS`) enforced in BOTH authorities — parseRoster (truncate or drop with a warning, so the round-trip check stays consistent) and importGraph (refuse: \"A name is too long\") — and add a per-vertex degree gate to importGraph alongside the existing density gate: after the edge loop, refuse when `degreeExtent(g.degrees())[1] > BUDDY_MAX` (\"someone has N buddies — more than a buddy graph allows\"). Both checks must run before `allPairsSummary`/view construction. Update neighborhood.ts's degree-cap note once (b) is real."
+    },
+    {
+      "critic": "critic-security",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "unbounded-work-from-file",
+      "theme": "raw content from an untrusted file is echoed verbatim and unbounded into the on-screen error toast",
+      "file": "app/src/io/importGraph.ts",
+      "line": 137,
+      "summary": "ImportError messages interpolate untrusted file values with no length bound, and App's catch renders them straight into the DOM: `flash(\\`Couldn't import that file: ${err.message}\\`)` (App.tsx:176) -> useNotice state -> `<button className=\"toast\">{message}</button>` (Notice.tsx:23) — a single text node in a styled, wrapping toast. Two reachable sites: `Unsupported file version: ${JSON.stringify(f.version)}` (importGraph.ts:137) and `Person \"${p.name}\" has id ${p.id}...` (importGraph.ts:168, which fires BEFORE the joined-length check at line 190, so the name is unbounded there). Nothing between the throw and the text node truncates. The whole file-byte budget (8 MB) is therefore convertible into one DOM text node, and the toast stays mounted for AUTO_CLEAR_MS = 4000 before a second layout pass removes it.",
+      "failure": "Reproduced in .review-scratch/echo.probe.test.ts: `{\"version\":\"AAAA...\"}` with a 7,900,000-character version string is 7,900,014 bytes — under readFileText's 8,000,000-byte gate — JSON.parses fine, and importGraph throws an ImportError whose `.message` is 7,900,042 characters. App's handler makes that a 7,900,069-character toast string handed to React as the sole child of the toast button. The id-mismatch path is equally unbounded: a 7,000,000-char `name` yields a 7,000,040-char message. Message length is measured; the resulting multi-second glyph-shaping/line-breaking block is inferred from the character count, not measured in a browser.",
+      "invariant": "Every string that reaches the Notice sink — i.e. every argument passed to useNotice's `show`/`flash`, including every `ImportError.message` — has length <= NOTICE_MAX_CHARS, a constant independent of the imported file's content. Equivalently: no untrusted value is interpolated into a user-facing message without first passing through a truncating quoter.",
+      "remediation": "Add one truncating quoter used at every interpolation of untrusted file content (e.g. `function quote(v: unknown, max = 80)` returning `JSON.stringify(v).slice(0, max)` plus an ellipsis) and apply it at importGraph.ts:137 and :168. Belt-and-braces: clamp in the single sink instead of/as well as at each site — truncate to NOTICE_MAX_CHARS inside `useNotice`'s `show`/`flash` (app/src/state/useNotice.ts), which bounds every present and future message producer rather than only the two known ones."
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "duplicated-validation-diverges-under-promotion",
+      "theme": "the app's structured pre-check (used to get a named, per-person refusal instead of the lib's prose) validates a different constraint set than the lib actually builds against, and the two are not kept in sync by any shared code path",
+      "file": "app/src/worker/generate.ts",
+      "line": 89,
+      "summary": "runGeneration's existing pattern for F7 (validate a raw Constraints up front so refusals can be structured Reason[] instead of prose, then trust buildConstrainedBuddyGraph to succeed) does not compose with F9/priorHard. buildConstrainedBuddyGraph internally promotes priors to required BEFORE validating (lib/src/core/index.ts:308, withHardPriors), but the app's pre-check at generate.ts:97 (validateDetailed(cons, k)) would run against the UN-promoted set if a straightforward F9 patch just adds cons.addPrior(...) + cons.priorHard = true to the same Constraints object the app already builds (mirroring how required/prohibited are added at lines 94-95). generate.ts's own comment at line 76-79 already flags this exact gap: '...checking first is what lets the refusal carry structured reasons... identical here, since the app has no priors to promote' — i.e. the code already knows this equivalence breaks the day priors exist, and nothing currently enforces re-deriving the pre-check from the same promotion path the builder uses.",
+      "failure": "Reproduced directly against lib/dist: n=4, k=2, cons.addPrior(0,1), addPrior(0,2), addPrior(0,3), cons.priorHard=true. validateDetailed(cons, k) on the unpromoted object returns [] (feasible) — this is what a naive F9 pre-check, following the existing required/prohibited pattern, would report. But buildConstrainedBuddyGraph(4, 2, cons, {}) internally promotes priors to required first and correctly refuses: report.refusals = ['person 0 has 3 required buddies but each person gets 2'], edges = [], buddies = [[],[],[],[]]. generate.ts's fromConstrained (line 48) packages this unconditionally as kind: 'ok' (runGeneration line 100) with no check of r.report.refusals.length — so the UI would render a graph where everyone has zero buddies, with no 'refused' overlay, no reopened editor, no named-person explanation — the exact silent-partial F7's acceptance criteria (PROJECT_PLAN.md:101, 'never a silent partial') were written to forbid, reintroduced by F9 through a channel F7 already closed for required/prohibited.",
+      "remediation": "When adding priors/priorHard, run the app's pre-check against the SAME promoted constraint set the builder will use — e.g. expose/call the promotion step (or just always run priors through cons.require(a,b) locally before validateDetailed when priorHard is set, mirroring withHardPriors) rather than validating the raw object. Alternatively, have runGeneration check result.report.refusals.length > 0 after calling buildConstrainedBuddyGraph and return a refused-shaped response (even if only with prose, since the builder's refusal path doesn't carry structured Reason[]) instead of trusting the pre-check to have already caught every case.",
+      "invariant": "For every Constraints cons and buddy count k the app hands to the worker: validateDetailed(cons_as_the_app_pre-checks_it, k).length === 0 must imply buildConstrainedBuddyGraph(n, k, cons, opts).report.refusals.length === 0. Currently false whenever cons.priorHard === true and promoting priors to required pushes some person's required-degree, or a required/prohibited conflict, past what k/prohibited pairs allow.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "no-caller-abstraction",
+      "theme": "the worker protocol and constraint editor have no representation for priors/priorHard at all yet",
+      "file": "app/src/worker/protocol.ts",
+      "summary": "GenerateRequest.constraints only carries {required, prohibited} (protocol.ts:22-25) and GenerateOptions has no priorWeight/priorHard (protocol.ts:4-8); ConstraintPair/ConstraintKind (constraints.ts:12-23) has no 'prior' concept and priors aren't user-authored named rules anyway (they'd need to be derived from the PREVIOUS view's edges, resolved by name against the possibly-changed roster — there is no existing helper analogous to resolveNamedPairs for a plain edge list). None of this has a caller today; per the no-caller rule this is filed as a deferral, not a blocking gap — it's necessary groundwork for F9 but building it before F9 is designed (in particular before deciding where the 'preserve current buddies' toggle lives — RosterModal is the natural 'Edit people' surface but doesn't currently receive the live view's edges) would be exactly the anti-pattern app/CLAUDE.md already warns against (extension seam for an unbuilt feature).",
+      "failure": "grep for priorWeight, priorHard, or addPrior under app/src returns no hits outside this review — confirming no live reference exists yet.",
+      "remediation": "When F9 is scheduled: add priors: [number, number][] to GenerateRequest.constraints and priorWeight?/priorHard? to GenerateOptions; add a name-based prior-resolution helper alongside resolveNamedPairs/toNamedPairs in constraints.ts; thread the current view's edges into RosterModal (or wherever the toggle lands) as a new prop.",
+      "invariant": "n/a — no live caller to check a property against.",
+      "caseOnly": true
+    },
+    {
+      "critic": "critic-maintainability",
+      "severity": "suggestion",
+      "verdict": "CONFIRMED",
+      "class": "maintainability-hazard-duplication",
+      "theme": "Constraint object building duplicated in two code paths with different input orderings",
+      "file": "app/src/panels/RosterModal.tsx and app/src/worker/generate.ts",
+      "line": 93,
+      "summary": "The logic to build a Constraints object from a set of pairs is duplicated in two locations that process constraints in different orders. The main thread (RosterModal) processes require/prohibit calls in the order the user edited them (potentially intermixed), while the worker (generate.ts) processes all required pairs first, then all prohibited pairs. This creates a latent maintenance hazard despite current order-independence.",
+      "failure": "Hypothetical: If the Constraints class implementation were optimized to depend on call order (e.g., early exit or greedy assignment based on prior choices), the main thread validation could report a rule set as feasible while the worker generates a refusal—a silent discrepancy. More immediately, a refactor that extracts a helper function in one location but forgets to update the other would diverge the implementations.",
+      "remediation": "Extract the constraint-building logic into a shared function that takes a ConstraintPair[] and preserves the normalized order (all required, then all prohibited) consistently across both paths. This ensures future maintainers can't accidentally diverge the implementations, and it documents the expected calling order explicitly. The function would live in constraints.ts, pair with resolveNamedPairs and splitPairs.",
+      "invariant": "For any set of buddy rules, the feasibility validation performed on the main thread (RosterModal, line 97) must produce identical results to the feasibility check performed in the worker (generate.ts, line 97), regardless of whether the constraints are added to a Constraints object in user-edit order or in separated required/prohibited order.",
+      "caseOnly": false
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "inert-cascade-swallows-dialog",
+      "theme": "the focus trap meant to keep keyboard/AT users OUT of the app behind the dialog instead makes the dialog itself unreachable, because it nests the dialog inside the very subtree it marks inert",
+      "file": "app/src/App.tsx",
+      "line": 186,
+      "summary": "RosterModal (the roster-setup dialog, role=\"dialog\" aria-modal=\"true\") is rendered INSIDE <div id=\"app\" inert={modalOpen}> (inside <main>, lines 255-265), not as a sibling as the adjacent comment (lines 182-185) claims. `inert` cascades to all descendants per the HTML spec and browser implementations, with no way for a nested element to opt back in. So the moment modalOpen is true — including on cold load, since `modalOpen` is initialised to `true` (line 44) — div#app AND everything inside it, including RosterModal itself, is inert: removed from the accessibility tree and unfocusable/untabbable. A screen-reader-and-keyboard-only user gets a page that announces essentially nothing operable on first paint (no textarea, no Generate button reachable), and re-opening the modal later via \"Edit people\" has the same effect.",
+      "failure": "Cold load with a screen reader and no mouse: press Tab. Because #app (containing #modal) is inert, the roster textarea, \"choose a file\"/\"try example names\" links, the buddy-rules editor, settings controls, and \"Generate buddy graph\" button are all outside the accessibility tree and outside the tab order — Tab lands nowhere useful, and the dialog that is the ONLY thing on screen cannot be operated without a mouse. Verified structurally and with a jsdom render (`appDiv.hasAttribute('inert') === true` and `appDiv.contains(modalDiv) === true` both hold) in a scratch test at app/test/__scratch_inert.test.tsx (run then removed).",
+      "remediation": "Render RosterModal as an actual sibling of the inert div, outside `<div id=\"app\" inert={modalOpen}>` — e.g. move the `{modalOpen && <RosterModal .../>}` block (and ideally the busy overlay too, for the same reason) to sit alongside `<div id=\"app\">` in the top-level fragment, matching what the comment already says is the design.",
+      "invariant": "Whenever an element carrying `role=\"dialog\"`/`aria-modal=\"true\"` is open, that element and its descendants must never be a descendant of any element carrying the `inert` attribute (equivalently: `inertAncestor.contains(dialogElement)` must be false for every element with `inert` truthy)."
+    },
+    {
+      "critic": "critic-interaction",
+      "severity": "blocking",
+      "verdict": "CONFIRMED",
+      "class": "focus-lost-on-panel-removal",
+      "theme": "closing/replacing a panel unmounts the very element that had focus with no explicit refocus, so the browser drops focus to <body> and a keyboard/screen-reader user loses their place in the document",
+      "file": "app/src/panels/PersonPanel.tsx",
+      "line": 59,
+      "summary": "PersonPanel's \"Close\" button (`onClick={onClose}` -> `setSelected(null)` in App.tsx) and PathPanel's \"Clear\" button (`onClick={onClear}` -> `path.clear()`) both cause the panel — and the very button that was just activated — to unmount entirely (`{selected !== null && <PersonPanel .../>}` / `{path.active && <PathPanel .../>}` in App.tsx). Neither App.tsx nor any hook in the app (`useEscape`, `useExplorerHistory`, `usePathFinder`) ever calls `.focus()` on a replacement target — a whole-tree grep for `.focus(`, `autoFocus`, `activeElement` across app/src found zero occurrences outside GraphCanvas's own selection highlighting. When a focused element is removed from the DOM, focus moves to `<body>` (spec-defined), so the next Tab press restarts tab order from the top of the document instead of continuing near where the user was working. The same applies to Escape-driven clears (`useEscape` calling `path.clear()`/`explorer.select(null)`), which remove PathPanel/PersonPanel the same way.",
+      "failure": "Keyboard/screen-reader session: select a person (PersonPanel appears, focus e.g. on \"Find a path from here\"), start a path, then press the PathPanel's \"Clear\" button. PathPanel unmounts; focus is now on <body>. The next Tab press jumps to the header/brand area at the top of the page rather than back to PersonPanel or anything related to the person just being explored — the user has to re-navigate the whole page to resume.",
+      "remediation": "On any control whose activation removes its own containing panel (Close, Clear, Cancel-generation-that-reopens-modal, etc.), explicitly move focus to a stable anchor before/after the unmount — e.g. a ref on the triggering panel's sibling control (\"Edit people\", the search input, or the row in BuddyList that opened PersonPanel) — rather than relying on default browser behavior.",
+      "invariant": "For every control whose activation causes its own ancestor panel to unmount, `document.activeElement` immediately after the state update must be a specific, still-mounted, previously-identified element — never `document.body`."
+    }
+  ],
+  "deferrals": [
+    {
+      "critic": "critic-solid",
+      "severity": "deferral",
+      "verdict": "CONFIRMED",
+      "class": "no-caller-abstraction",
+      "theme": "the worker protocol and constraint editor have no representation for priors/priorHard at all yet",
+      "file": "app/src/worker/protocol.ts",
+      "summary": "GenerateRequest.constraints only carries {required, prohibited} (protocol.ts:22-25) and GenerateOptions has no priorWeight/priorHard (protocol.ts:4-8); ConstraintPair/ConstraintKind (constraints.ts:12-23) has no 'prior' concept and priors aren't user-authored named rules anyway (they'd need to be derived from the PREVIOUS view's edges, resolved by name against the possibly-changed roster — there is no existing helper analogous to resolveNamedPairs for a plain edge list). None of this has a caller today; per the no-caller rule this is filed as a deferral, not a blocking gap — it's necessary groundwork for F9 but building it before F9 is designed (in particular before deciding where the 'preserve current buddies' toggle lives — RosterModal is the natural 'Edit people' surface but doesn't currently receive the live view's edges) would be exactly the anti-pattern app/CLAUDE.md already warns against (extension seam for an unbuilt feature).",
+      "failure": "grep for priorWeight, priorHard, or addPrior under app/src returns no hits outside this review — confirming no live reference exists yet.",
+      "remediation": "When F9 is scheduled: add priors: [number, number][] to GenerateRequest.constraints and priorWeight?/priorHard? to GenerateOptions; add a name-based prior-resolution helper alongside resolveNamedPairs/toNamedPairs in constraints.ts; thread the current view's edges into RosterModal (or wherever the toggle lands) as a new prop.",
+      "invariant": "n/a — no live caller to check a property against.",
+      "caseOnly": true
+    }
+  ],
+  "plausible": [
+    {
+      "critic": "critic-correctness",
+      "severity": "suggestion",
+      "verdict": "PLAUSIBLE",
+      "class": "refusal-mapped-to-success",
+      "theme": "a result that carries \"no graph was produced\" can reach the view as a normal success and render as satisfied rules",
+      "file": "app/src/worker/generate.ts",
+      "line": 100,
+      "summary": "`runGeneration` maps whatever `buildConstrainedBuddyGraph` returns into kind:\"ok\" without inspecting `report.refusals`. That builder REFUSES rather than throws (lib/src/core/index.ts:289-310, refusedResult at 464): it returns n empty buddy lists, zero edges, aspl/diameter 0, connected:false, largestComponentFraction:0, satisfied:false, reqViolations:0, prohViolations:0, refusals:[...]. Fed through viewFromResult/assembleMetrics that becomes a view whose `constraintSummary` prints \"all N buddy rules satisfied\" (it tests reqViolations+prohViolations===0 and never looks at satisfied/refusals) over a graph with no edges. Today the app's own `validateDetailed` pre-check makes the builder's refusal branches unreachable (cons.n === n by construction, n <= 1000 << MAX_ROSTER), which is why this is PLAUSIBLE rather than reproduced — but the ok channel is the wrong place to discover that assumption broke, and the failure mode is the exact disconnected-reads-as-optimal class this app guards elsewhere.",
+      "failure": "If any builder refusal path is ever reachable (a new refusal reason in `validate` that `validateDetailed` gates differently, a future priors/tags path, or a caller of runGeneration that skips the pre-check), the response is kind:\"ok\" and the UI shows an edgeless graph with the rules line \"all 3 buddy rules satisfied\" and a 0% gauge, instead of the refusal toast that names the people involved.",
+      "remediation": "In `fromConstrained`/`runGeneration`, treat a non-empty `r.report.refusals` as the refusal channel (return kind:\"refused\", mapping the reasons, or kind:\"error\" if only prose is available), and/or have `constraintSummary` refuse to print \"satisfied\" for a report whose `satisfied` is false with zero violations. Cover it with a unit test on runGeneration's mapping.",
+      "invariant": "runGeneration never returns kind:\"ok\" for a result whose report.refusals is non-empty; and no GraphView with zero edges and n>1 ever renders a rules line asserting satisfaction."
+    }
+  ],
+  "saturation": {
+    "critic-correctness": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-security": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-solid": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-maintainability": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    },
+    "critic-interaction": {
+      "nothingFoundStreak": 0,
+      "lastRound": null,
+      "skipped": false
+    }
+  },
+  "targetRaw": "app/src (the BuddyGraph app)",
+  "tokens": {
+    "subagentTokens": 507917,
+    "agents": 6,
+    "toolCalls": 208
+  }
+}
